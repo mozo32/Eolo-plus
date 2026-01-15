@@ -71,7 +71,7 @@ class WalkAroundController extends Controller
             $query->whereDate('fecha', '<=', $request->fecha_fin);
         }
 
-        return response()->json($query->paginate(5));
+        return response()->json($query->paginate(10));
     }
 
     /**
