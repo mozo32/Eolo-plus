@@ -9,7 +9,7 @@ use App\Models\PernoctaDia;
 
 class PernoctaDiaController extends Controller
 {
-     public function store(Request $request)
+    public function store(Request $request)
     {
         $data = $request->all();
 
@@ -32,15 +32,21 @@ class PernoctaDiaController extends Controller
                     )
                     ->first();
 
+                if (!$infoMatricula) {
+                    throw new \Exception(
+                        "La aeronave con matrícula {$item['matricula']} no está registrada"
+                    );
+                }
+
                 PernoctaDia::create([
                     'fecha'         => $item['fecha'],
                     'matricula'     => $item['matricula'],
                     'nombre'        => $item['nombre'],
                     'observaciones' => $item['observaciones'] ?? null,
                     'ubicacion'     => $item['ubicacion'],
-                    'aeronave'      => $infoMatricula?->tipo,
-                    'tipo_cliente'  => $infoMatricula?->estatus,
-                    'categoria'     => $infoMatricula?->categoria,
+                    'aeronave'      => $infoMatricula->tipo,
+                    'tipo_cliente'  => $infoMatricula->estatus,
+                    'categoria'     => $infoMatricula->categoria,
                 ]);
             }
 
@@ -55,11 +61,11 @@ class PernoctaDiaController extends Controller
             DB::rollBack();
 
             return response()->json([
-                'message' => 'Error al guardar pernoctas',
-                'error'   => $e->getMessage(),
-            ], 500);
+                'message' => $e->getMessage(),
+            ], 422);
         }
     }
+
     public function buscar(Request $request)
     {
         $q = $request->get('q');

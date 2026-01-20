@@ -4,6 +4,7 @@ import { NavUser } from '@/components/nav-user'
 import { getNavModules, type AuthUser, type Href, type NavModule } from './navigation'
 import { type BreadcrumbItem } from '@/types'
 import { Link, usePage } from '@inertiajs/react'
+import { ChevronDown, Menu } from 'lucide-react'
 
 function hrefToString(href: Href): string {
     return typeof href === 'string' ? href : href.url
@@ -21,46 +22,51 @@ export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[]
     const NAV_MODULES = useMemo(() => getNavModules(auth.user), [auth.user])
 
     const [selectedModule, setSelectedModule] = useState<NavModule | null>(null)
+    const [activeSub, setActiveSub] = useState<string | null>(null)
     const [mobileOpen, setMobileOpen] = useState(false)
     const [moduleOpen, setModuleOpen] = useState(false)
 
     useEffect(() => {
         if (!NAV_MODULES.length) return
-
         const saved = localStorage.getItem('activeModule')
         const found = NAV_MODULES.find(m => String(m.key) === saved)
-
         setSelectedModule(found ?? NAV_MODULES[0])
     }, [NAV_MODULES])
 
     useEffect(() => {
         if (!selectedModule) return
-
         localStorage.setItem('activeModule', String(selectedModule.key))
+        localStorage.removeItem('activeSubmodule')
+        setActiveSub(null)
     }, [selectedModule])
+
+    useEffect(() => {
+        const savedSub = localStorage.getItem('activeSubmodule')
+        if (savedSub) setActiveSub(savedSub)
+    }, [])
 
     const homeHref = NAV_MODULES?.[0]?.items?.[0]?.href
     const homeUrl = homeHref ? hrefToString(homeHref) : '/'
 
     return (
-        <header className="sticky top-0 z-40 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
-            <div className="mx-auto max-w-7xl px-4 sm:px-6 h-14 flex items-center justify-between">
-                <div className="flex items-center gap-4">
+        <header className="sticky top-0 z-50 bg-background border-b border-border">
+            <div className="mx-auto max-w-7xl h-[72px] px-6 flex items-center justify-between">
+                <div className="flex items-center gap-6 min-w-0">
                     <Link href={homeUrl} prefetch>
                         <AppLogo />
                     </Link>
 
-                    <div className="relative hidden md:block">
+                    <div className="relative hidden lg:block">
                         <button
                             onClick={() => setModuleOpen(v => !v)}
-                            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold bg-gray-50 dark:bg-gray-800 dark:border-gray-700"
+                            className="flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground transition"
                         >
                             {selectedModule?.module ?? 'Módulos'}
-                            <span className="text-xs">▼</span>
+                            <ChevronDown size={16} />
                         </button>
 
                         {moduleOpen && (
-                            <div className="absolute mt-2 w-56 rounded-xl shadow-lg bg-white dark:bg-gray-900 border dark:border-gray-700 z-50">
+                            <div className="absolute mt-3 w-64 rounded-xl border border-border bg-popover shadow-lg z-50 overflow-hidden">
                                 {NAV_MODULES.map(mod => (
                                     <button
                                         key={mod.key}
@@ -68,12 +74,11 @@ export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[]
                                             setSelectedModule(mod)
                                             setModuleOpen(false)
                                         }}
-                                        className={
-                                            'w-full text-left px-4 py-2 text-sm transition ' +
-                                            (selectedModule?.key === mod.key
-                                                ? 'bg-primary text-white'
-                                                : 'hover:bg-gray-100 dark:hover:bg-gray-800')
-                                        }
+                                        className={`w-full px-5 py-3 text-left text-sm transition ${
+                                            selectedModule?.key === mod.key
+                                                ? 'bg-primary text-primary-foreground'
+                                                : 'hover:bg-muted'
+                                        }`}
                                     >
                                         {mod.module}
                                     </button>
@@ -81,51 +86,50 @@ export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[]
                             </div>
                         )}
                     </div>
-                </div>
 
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => setMobileOpen(v => !v)}
-                        className="md:hidden rounded-lg border px-3 py-2 text-sm dark:border-gray-700"
-                    >
-                        ☰
-                    </button>
-                    <NavUser />
-                </div>
-            </div>
-
-            {selectedModule && (
-                <div className="hidden md:block border-t border-gray-100 dark:border-gray-800">
-                    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-2">
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                    {selectedModule && (
+                        <div className="hidden lg:flex gap-2 overflow-x-auto whitespace-nowrap scroll-smooth">
                             {selectedModule.items.map(item => {
-                                const active =
-                                    isActive(currentUrl, item.href) &&
-                                    item.moduleKey === selectedModule.key
+                                const isSelected =
+                                    activeSub === item.title ||
+                                    isActive(currentUrl, item.href)
 
                                 return (
                                     <Link
                                         key={item.title}
                                         href={hrefToString(item.href)}
                                         prefetch
-                                        className={
-                                            'rounded-lg px-3 py-2 text-sm font-medium transition ' +
-                                            (active
-                                                ? 'bg-primary text-white'
-                                                : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700')
-                                        }
+                                        onClick={() => {
+                                            setActiveSub(item.title)
+                                            localStorage.setItem('activeSubmodule', item.title)
+                                        }}
+                                        className={`flex-shrink-0 rounded-full px-6 py-2.5 text-sm font-semibold transition-all ${
+                                            isSelected
+                                                ? 'bg-primary text-primary-foreground shadow-md scale-[1.02]'
+                                                : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                                        }`}
                                     >
                                         {item.title}
                                     </Link>
                                 )
                             })}
                         </div>
-                    </div>
+                    )}
                 </div>
-            )}
+
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setMobileOpen(v => !v)}
+                        className="lg:hidden p-2 rounded-lg hover:bg-muted transition"
+                    >
+                        <Menu size={22} />
+                    </button>
+                    <NavUser />
+                </div>
+            </div>
 
             {breadcrumbs.length > 0 && (
-                <div className="mx-auto max-w-7xl px-4 sm:px-6 pb-2 text-xs text-gray-500 dark:text-gray-400">
+                <div className="mx-auto max-w-7xl px-6 py-2 text-xs text-muted-foreground">
                     {breadcrumbs.map((b, idx) => (
                         <span key={b.title}>
                             {idx > 0 && ' / '}
@@ -134,7 +138,7 @@ export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[]
                                     {b.title}
                                 </Link>
                             ) : (
-                                <span>{b.title}</span>
+                                b.title
                             )}
                         </span>
                     ))}
@@ -142,31 +146,33 @@ export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[]
             )}
 
             {mobileOpen && (
-                <div className="md:hidden border-t border-gray-200 dark:border-gray-800">
-                    <div className="px-4 py-3 space-y-4">
+                <div className="lg:hidden border-t border-border bg-background">
+                    <div className="px-4 py-5 space-y-5">
                         {NAV_MODULES.map(mod => (
                             <div key={mod.key}>
-                                <div className="text-xs font-semibold uppercase text-gray-500 mb-2">
+                                <div className="text-xs font-semibold uppercase text-muted-foreground mb-3">
                                     {mod.module}
                                 </div>
-                                <div className="space-y-1">
+                                <div className="space-y-2">
                                     {mod.items.map(item => {
                                         const active =
-                                            isActive(currentUrl, item.href) &&
-                                            item.moduleKey === mod.key
+                                            isActive(currentUrl, item.href)
 
                                         return (
                                             <Link
                                                 key={item.title}
                                                 href={hrefToString(item.href)}
                                                 prefetch
-                                                onClick={() => setMobileOpen(false)}
-                                                className={
-                                                    'block rounded-lg px-3 py-2 text-sm ' +
-                                                    (active
-                                                        ? 'bg-primary text-white'
-                                                        : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800')
-                                                }
+                                                onClick={() => {
+                                                    setActiveSub(item.title)
+                                                    localStorage.setItem('activeSubmodule', item.title)
+                                                    setMobileOpen(false)
+                                                }}
+                                                className={`block px-4 py-3 rounded-lg text-sm transition ${
+                                                    active
+                                                        ? 'bg-primary text-primary-foreground'
+                                                        : 'hover:bg-muted'
+                                                }`}
                                             >
                                                 {item.title}
                                             </Link>

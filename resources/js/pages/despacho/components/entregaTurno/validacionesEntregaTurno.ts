@@ -26,12 +26,6 @@ export function validarEntregaTurno({
     const faltantes: string[] = [];
 
     if (step >= 1) {
-        if (!nombre.trim()) {
-            faltantes.push("• Nombre (quien recibe)");
-        }
-    }
-
-    if (step >= 2) {
         const equiposSinCargado = EQUIPOS_COMUNICACION
             .filter(({ equipo }) => {
                 const item = checklistComunicacion.items[equipo];
@@ -46,7 +40,7 @@ export function validarEntregaTurno({
         }
     }
 
-    if (step >= 4) {
+    if (step >= 3) {
         if (!copiadoras.funciona) {
             faltantes.push("• Copiadora: indicar si funciona");
         }
@@ -56,7 +50,7 @@ export function validarEntregaTurno({
         }
     }
 
-    if (step >= 5) {
+    if (step >= 4) {
         const fondo = fondoDocumentacion;
 
         if (fondo.fondoRecibido === "") faltantes.push("• Fondo recibido");
@@ -83,7 +77,7 @@ export function validarEntregaTurno({
         }
     }
 
-    if (step >= 6) {
+    if (step >= 5) {
         if (!nombreQuienEntrega.trim()) {
             faltantes.push("• Nombre de quien entrega");
         }

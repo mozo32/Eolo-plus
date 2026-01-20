@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import Swal from "sweetalert2";
-
+import { captureModelScreenshot,capturePointsScreenshots } from "./ModelCapturer";
 import {
     Document,
     Page,
@@ -471,10 +471,14 @@ function WalkAroundPdfDoc({
     detalle,
     firmasBase64,
     evidenciasBase64,
+    screenshot3d,
+    fotos3D,
 }: {
-    detalle: WalkAroundDetalle;
-    firmasBase64: { responsable: string | null; jefe_area: string | null; fbo: string | null };
+    detalle: any;
+    firmasBase64: any;
     evidenciasBase64: string[];
+    screenshot3d: string;
+    fotos3D: string[];
 }) {
     const isAvion = detalle.tipo === "avion";
     const checklist = isAvion
@@ -482,7 +486,7 @@ function WalkAroundPdfDoc({
         : detalle.checklists?.checklist_helicoptero ?? {};
 
     const imageSrc = isAvion ? avionImg : helipImg;
-    const watermarkUrl = `${window.location.origin}/storage/6e611b3e-6b18-4232-9946-2c340de5c753.jpg`;
+    const watermarkUrl = `${window.location.origin}/1c463caa-e3a1-4093-a00b-1c0da40795f6.jpg`;
 
     const marcas = Array.isArray(detalle.marcas_danio) ? detalle.marcas_danio : [];
 
@@ -613,26 +617,6 @@ function WalkAroundPdfDoc({
                 </View>
 
                 <View style={styles.body}>
-                    <View style={styles.leftCol}>
-                        <View style={styles.box}>
-                            <Text style={styles.boxTitle}>Diagrama de daños</Text>
-
-                            <PdfMapaReact
-                                imageSrc={imageSrc}
-                                points={marcas.map((m: any) => ({
-                                    x: m.x,
-                                    y: m.y,
-                                }))}
-                            />
-
-                            <Text style={styles.muted}>
-                                Total marcas:{" "}
-                                <Text style={{ fontWeight: 900 as any }}>
-                                    {marcas.length}
-                                </Text>
-                            </Text>
-                        </View>
-                    </View>
                     <View style={styles.rightCol}>
                         <View style={styles.box}>
                             <Text style={styles.boxTitle}>Parte de la aeronave</Text>
@@ -680,7 +664,28 @@ function WalkAroundPdfDoc({
                         </View>
                     </View>
                 </View>
+                <View style={[styles.box, { marginTop: 8 }]}>
+                    <Text style={styles.boxTitle}>Detalle de Daños</Text>
 
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                        {/* Usamos el encadenamiento opcional y validamos que sea Array */}
+                        {Array.isArray(fotos3D) && fotos3D.map((imgUri: string, index: number) => (
+                            <View key={index} style={{ width: '30%', marginBottom: 10 }}>
+                                <Image
+                                    src={imgUri}
+                                    style={{ border: '1px solid #eee', borderRadius: 4 }}
+                                />
+                                <Text style={{ fontSize: 7, textAlign: 'center', marginTop: 2 }}>
+                                    Marca #{index + 1}
+                                </Text>
+                            </View>
+                        ))}
+
+                        {(!fotos3D || fotos3D.length === 0) && (
+                            <Text style={{ fontSize: 8, color: 'gray' }}>No hay capturas de daños disponibles.</Text>
+                        )}
+                    </View>
+                </View>
                 {/* Observaciones */}
                 <View style={[styles.box, { marginTop: 8 }]}>
                     <Text style={styles.boxTitle}>Observaciones adicionales</Text>
@@ -845,9 +850,11 @@ type Props = { id: number | null; onDone: () => void };
 
 export default function WalkAroundPdfExporterReactPdf({ id, onDone }: Props) {
     const [detalle, setDetalle] = useState<WalkAroundDetalle | null>(null);
+    const [loading, setLoading] = useState(false);
+
+    // 1. Cargar datos del detalle
     useEffect(() => {
         if (!id) return;
-
         (async () => {
             try {
                 const data = await fetchWalkaroundDetalle(id);
@@ -857,14 +864,37 @@ export default function WalkAroundPdfExporterReactPdf({ id, onDone }: Props) {
                 onDone();
             }
         })();
-    }, [id, onDone]);
+    }, [id]);
 
+    // 2. Procesar Multimedia y Generar PDF
     useEffect(() => {
         if (!detalle) return;
 
         (async () => {
+            setLoading(true);
+
+            Swal.fire({
+                title: "Generando PDF",
+                text: "Procesando información y capturas 3D...",
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                },
+            });
             try {
-                // Firmas
+                // --- A. CAPTURA DEL MODELO 3D ---
+                // Ajusta la ruta a tu archivo .obj
+                const MODEL_BY_TIPO: Record<string, string> = {
+                    avion: "/models/Avion.obj",
+                    helicoptero: "/models/18706 Fighter Helicopter_v1.obj",
+                };
+
+                const modelUrl = MODEL_BY_TIPO[detalle.tipo] ?? "/models/18706 Fighter Helicopter_v1.obj";
+                const marcas3D = Array.isArray(detalle.marcas_danio) ? detalle.marcas_danio : [];
+                const fotos3D = await capturePointsScreenshots(modelUrl, marcas3D);
+                const screenshot3d = await captureModelScreenshot(modelUrl, marcas3D);
+
+                // --- B. PROCESAMIENTO DE FIRMAS (Copiado de tu código original) ---
                 const fResp = getFirmaByRol(detalle, "responsable");
                 const fJefe = getFirmaByRol(detalle, "jefe_area");
                 const fFbo = getFirmaByRol(detalle, "fbo");
@@ -875,12 +905,12 @@ export default function WalkAroundPdfExporterReactPdf({ id, onDone }: Props) {
                     fbo: fFbo?.url ? await urlToDataUrl(fFbo.url) : null,
                 };
 
-                const evidenciasRaw =
-                    Array.isArray((detalle as any).imagenes)
-                        ? (detalle as any).imagenes
-                        : Array.isArray((detalle as any).evidencias)
-                            ? (detalle as any).evidencias
-                            : [];
+                // --- C. PROCESAMIENTO DE EVIDENCIAS (Copiado de tu código original) ---
+                const evidenciasRaw = Array.isArray((detalle as any).imagenes)
+                    ? (detalle as any).imagenes
+                    : Array.isArray((detalle as any).evidencias)
+                        ? (detalle as any).evidencias
+                        : [];
 
                 const evidenciasUrls: string[] = evidenciasRaw
                     .map((x: any) => x?.url)
@@ -890,36 +920,43 @@ export default function WalkAroundPdfExporterReactPdf({ id, onDone }: Props) {
                     evidenciasUrls.slice(0, 12).map((u) => urlToDataUrl(u))
                 );
 
+                // --- D. GENERACIÓN DEL PDF ---
                 const blob = await pdf(
                     <WalkAroundPdfDoc
                         detalle={detalle}
                         firmasBase64={firmasBase64}
                         evidenciasBase64={evidenciasBase64}
+                        screenshot3d={screenshot3d}
+                        fotos3D={fotos3D}
                     />
                 ).toBlob();
 
-                const filename = `WalkAround_${detalle.id}_${(detalle.matricula || "")
-                    .replace(/\s+/g, "_")}_${(detalle.fecha || "").replace(/\s+/g, "_")}.pdf`;
-
+                // --- E. DESCARGA ---
+                const filename = `WalkAround_${detalle.id}_${(detalle.matricula || "").replace(/\s+/g, "_")}.pdf`;
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
                 a.download = filename;
                 a.click();
                 URL.revokeObjectURL(url);
+
                 await Swal.fire({
                     icon: "success",
                     title: "PDF generado",
-                    text: "El archivo se descargó correctamente.",
+                    text: "El archivo con captura 3D se descargó correctamente.",
                     timer: 2000,
                     showConfirmButton: false,
                 });
             } catch (e: any) {
-                Swal.fire("Error", e?.message || "No se pudo generar el PDF", "error");
+                console.error(e);
+                Swal.fire("Error", e?.message || "Error al procesar el PDF", "error");
             } finally {
+                setLoading(false);
+                Swal.close();
                 onDone();
             }
         })();
-    }, [detalle, onDone]);
+    }, [detalle]);
+
     return null;
 }

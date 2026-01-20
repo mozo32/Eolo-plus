@@ -1,3 +1,5 @@
+import Swal from "sweetalert2";
+
 function getXsrfToken(): string {
     const match = document.cookie
         .split('; ')
@@ -8,12 +10,13 @@ function getXsrfToken(): string {
 
 export async function guardarPernoctaDiaApi(form: any) {
     const xsrf = getXsrfToken();
+
     const res = await fetch("/api/PernoctaDia", {
         method: "POST",
         headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'X-XSRF-TOKEN': xsrf,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "X-XSRF-TOKEN": xsrf,
         },
         body: JSON.stringify(form),
         credentials: "same-origin",
@@ -22,8 +25,20 @@ export async function guardarPernoctaDiaApi(form: any) {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-        throw new Error(data?.message || "Error al guardar la Pernocta del día");
+        Swal.fire({
+            icon: "error",
+            title: "Error",
+            text: data?.message || "Error al guardar la pernocta del día",
+        });
+
+        throw new Error(data?.message || "Error al guardar la pernocta del día");
     }
+
+    Swal.fire({
+        icon: "success",
+        title: "Proceso exitoso",
+        text: data.message,
+    });
 
     return data;
 }

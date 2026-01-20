@@ -382,7 +382,7 @@ export default function WalkAround() {
                                                             </path><circle cx="12" cy="12" r="3"></circle>
                                                             </svg>
                                                         </button>
-                                                        {(userRol === 'FBO' || userRol === 'Jefe de Área') && (
+                                                        {(user?.isAdmin || userRol === 'FBO' || userRol === 'Jefe de Área') && (
                                                             <button
                                                                 type="button"
                                                                 className="rounded p-1 hover:bg-gray-200 dark:hover:bg-gray-700"

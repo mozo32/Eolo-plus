@@ -41,7 +41,7 @@ interface GestionTurnoFormProps {
     isEdit?: boolean;
 }
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6;
+type Step = 1 | 2 | 3 | 4 | 5;
 type Role = {
     slug: string;
     nombre: string;
@@ -98,12 +98,11 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
 
     const progressLabel = useMemo(() => {
         const map: Record<Step, string> = {
-            1: "Generales",
-            2: "Comunicación",
-            3: "Oficina",
-            4: "Copiadoras",
-            5: "Fondo/Caja",
-            6: "Responsables",
+            1: "Comunicación",
+            2: "Oficina",
+            3: "Copiadoras",
+            4: "Fondo/Caja",
+            5: "Responsables",
         };
         return map[step];
     }, [step]);
@@ -150,7 +149,7 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
 
     const nextStep = () => {
         if (!canGoNext()) return;
-        setStep((s) => (s < 6 ? ((s + 1) as Step) : s));
+        setStep((s) => (s < 5 ? ((s + 1) as Step) : s));
     };
 
     const prevStep = () => setStep((s) => (s > 1 ? ((s - 1) as Step) : s));
@@ -159,7 +158,7 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
         e.preventDefault();
 
         const faltantes = validarEntregaTurno({
-            step: 6,
+            step: 5,
             nombre: form.nombre,
             nombreQuienEntrega: form.nombreQuienEntrega,
             nombreJefeTurnoDespacho: form.nombreJefeTurnoDespacho,
@@ -223,72 +222,24 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
                     <div>
                         <h2 className="text-base font-semibold">Entrega de turno</h2>
                         <p className="text-xs text-gray-500">
-                            Paso {step} / 6 · {progressLabel}
+                            Paso {step} / 5 · {progressLabel}
                         </p>
                     </div>
-                    <span className="rounded-full bg-gray-200 px-3 py-1 text-xs dark:bg-gray-800">
-                        Fecha: {form.fecha}
+                    <span className="rounded-full bg-gray-200 px-3 py-1 text-xs">
+                        👤 {form.nombre} · 📅 {form.fecha}
                     </span>
                 </div>
 
                 <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
                     <div
                         className="h-full bg-gray-900 dark:bg-gray-100"
-                        style={{ width: `${(step / 6) * 100}%` }}
+                        style={{ width: `${(step / 5) * 100}%` }}
                     />
                 </div>
             </div>
 
-            {/* STEP 1: Generales */}
+            {/* STEP 1: Comunicación */}
             {step === 1 && (
-                <section className="rounded-xl border border-gray-200 bg-slate-50/70 p-4 shadow-sm dark:border-gray-700 dark:bg-slate-900/40">
-                    <div className="mb-3">
-                        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                            Datos generales
-                        </h2>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                            Registre la fecha y el nombre de la persona que recibe el turno.
-                        </p>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        <div className="grid gap-1">
-                            <label htmlFor="fecha" className="text-sm font-medium text-gray-800 dark:text-gray-100">
-                                Fecha (hoy)
-                            </label>
-                            <input
-                                id="fecha"
-                                type="date"
-                                value={form.fecha}
-                                disabled
-                                className="w-full cursor-not-allowed rounded-lg border border-gray-300 bg-gray-100 px-3 py-2
-                text-sm text-gray-600 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                            />
-                            <input type="hidden" name="fecha" value={form.fecha} />
-                        </div>
-
-                        <div className="grid gap-1">
-                            <label htmlFor="nombre" className="text-sm font-medium text-gray-800 dark:text-gray-100">
-                                Nombre (quien recibe)
-                            </label>
-                            <input
-                                id="nombre"
-                                name="nombre"
-                                type="text"
-                                value={form.nombre}
-                                onChange={handleChange}
-                                disabled
-                                className="w-full cursor-not-allowed rounded-lg border border-gray-300 bg-gray-100 px-3 py-2
-                                text-sm text-gray-600 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                                placeholder="Nombre completo"
-                            />
-                        </div>
-                    </div>
-                </section>
-            )}
-
-            {/* STEP 2: Comunicación */}
-            {step === 2 && (
                 <section className="rounded-xl border border-gray-200 bg-slate-50/70 p-4 shadow-sm dark:border-gray-700 dark:bg-slate-900/40">
                     <ChecklistComunicacion
                         value={form.checklistComunicacion}
@@ -303,8 +254,8 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
                 </section>
             )}
 
-            {/* STEP 3: Oficina */}
-            {step === 3 && (
+            {/* STEP 2: Oficina */}
+            {step === 2 && (
                 <section className="rounded-xl border border-gray-200 bg-slate-50/70 p-4 shadow-sm dark:border-gray-700 dark:bg-slate-900/40">
                     <EquipoOficina
                         value={form.equipoOficina}
@@ -313,8 +264,8 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
                 </section>
             )}
 
-            {/* STEP 4: Copiadoras */}
-            {step === 4 && (
+            {/* STEP 3: Copiadoras */}
+            {step === 3 && (
                 <section className="rounded-xl border border-gray-200 bg-slate-50/70 p-4 shadow-sm dark:border-gray-700 dark:bg-slate-900/40">
                     <Copiadoras
                         value={form.copiadoras}
@@ -329,8 +280,8 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
                 </section>
             )}
 
-            {/* STEP 5: Fondo + Caja */}
-            {step === 5 && (
+            {/* STEP 4: Fondo + Caja */}
+            {step === 4 && (
                 <section className="space-y-4">
                     <div className="rounded-xl border border-gray-200 bg-slate-50/70 p-4 shadow-sm dark:border-gray-700 dark:bg-slate-900/40">
                         <FondoDocumentacion
@@ -348,8 +299,8 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
                 </section>
             )}
 
-            {/* STEP 6: Responsables */}
-            {step === 6 && (
+            {/* STEP 5: Responsables */}
+            {step === 5 && (
                 <section className="rounded-xl border border-gray-200 bg-slate-50/70 p-4 shadow-sm dark:border-gray-700 dark:bg-slate-900/40">
                     <h2 className="mb-3 text-base font-semibold text-gray-900 dark:text-gray-100">
                         Responsables de la entrega
@@ -430,7 +381,7 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
                 </div>
 
                 <div className="flex gap-2">
-                    {step < 6 && (
+                    {step < 5 && (
                         <button
                             type="button"
                             onClick={nextStep}
@@ -440,7 +391,7 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
                         </button>
                     )}
 
-                    {step === 6 && (
+                    {step === 5 && (
                         <button
                             type="submit"
                             className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white"

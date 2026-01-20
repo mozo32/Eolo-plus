@@ -15,8 +15,20 @@ export default function PernoctaDia() {
     const [success, setSuccess] = useState(false);
 
     const handleAdd = (item: PernoctaDiaItem) => {
-        setItems((prev) => [...prev, item]);
-        setSuccess(false); // reset mensaje si agregan de nuevo
+        const existe = items.some(
+            i => i.matricula.toUpperCase() === item.matricula.toUpperCase()
+        );
+
+        if (existe) {
+            Swal.fire({
+                icon: "warning",
+                title: "Matrícula duplicada",
+                text: "Esta matrícula ya fue agregada a la lista.",
+            });
+            return;
+        }
+
+        setItems(prev => [...prev, item]);
     };
 
     const handleRemove = (index: number) => {
