@@ -4,7 +4,10 @@ import { dashboard,
     gestionarAeronaves,
     gestionUsuarios,
     pernoctadia,
-    pernoctames
+    pernoctames,
+    estacionamiento,
+    entregaTurnoR,
+    asistenciaPersonal
 } from '@/routes'
 import { LayoutGrid } from 'lucide-react'
 
@@ -78,13 +81,16 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                 key: 3,
                 items: [
                     { title: 'Pernocta del día', href: pernoctadia(), icon: LayoutGrid },
+                    { title: 'Estacionamiento SubTerraneo', href: estacionamiento(), icon: LayoutGrid },
+                    { title: 'Pernocta por Mes', href: pernoctames(), icon: LayoutGrid },
                 ],
             },
             {
-                module: 'Comercio',
+                module: 'Rampa',
                 key: 4,
                 items: [
-                    { title: 'Pernocta por Mes', href: pernoctames(), icon: LayoutGrid },
+                    { title: 'Entrega Turno de Rampa', href: entregaTurnoR(), icon: LayoutGrid },
+                    { title: 'Asistencia de Personal', href: asistenciaPersonal(), icon: LayoutGrid },
                 ],
             },
         ]

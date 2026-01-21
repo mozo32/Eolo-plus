@@ -41,6 +41,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('pernoctames', function () {
         return Inertia::render('comercial/PernoctaMes');
     })->name('pernoctames');
+
+    Route::get('estacionamiento', function () {
+        return Inertia::render('seguridad/EstacionamientoSubTerraneo');
+    })->name('estacionamiento');
+
+    Route::get('entregaTurnoR', function () {
+        return Inertia::render('Rampa/EntregaTurnoR');
+    })->name('entregaTurnoR');
+
+    Route::get('asistenciaPersonal', function () {
+        return Inertia::render('Rampa/AsistenciaPersonal');
+    })->name('asistenciaPersonal');
 });
 
 require __DIR__.'/settings.php';

@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\UserDepartamentoController;
 use App\Http\Controllers\Api\EntregaTurnoController;
 use App\Http\Controllers\Api\PernoctaDiaController;
 use App\Http\Controllers\Api\PernoctaMesController;
+use App\Http\Controllers\Api\EstacionamientoSubterraneoController;
 
 Route::post('/despacho', [DespachoController::class, 'store']);
 Route::get('/aeronaves/autocomplete', [AeronaveController::class, 'autocomplete']);
@@ -59,4 +60,10 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('PernoctaMes')->group(functio
     Route::get('/pernocta-mes', [PernoctaMesController::class, 'index']);
 });
 
+Route::middleware(['api', 'auth:sanctum'])->prefix('EstacionamientoSubTerraneo')->group(function () {
+        Route::get('/',[EstacionamientoSubterraneoController::class, 'index'])->name('estacionamiento.index');
+        Route::post('/',[EstacionamientoSubterraneoController::class, 'store'])->name('estacionamiento.store');
+        Route::put('/{estacionamiento}/salida',[EstacionamientoSubterraneoController::class, 'updateSalida'])->name('estacionamiento.salida');
+        Route::get('/{estacionamiento}',[EstacionamientoSubterraneoController::class, 'show'])->name('estacionamiento.show');
+});
 
