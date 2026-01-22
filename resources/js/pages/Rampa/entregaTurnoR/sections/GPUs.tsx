@@ -31,7 +31,7 @@ export default function GPUs({ form, updateField }: any) {
                     <label className="label">Limpia</label>
                     <select
                         className={select}
-                        value={form.gpus.detalle[key].limpia}
+                        value={form.gpus[key].limpia}
                         onChange={(e) =>
                             updateField(`${path}.limpia`, e.target.value)
                         }
@@ -47,7 +47,7 @@ export default function GPUs({ form, updateField }: any) {
                     <input
                         className={input}
                         placeholder="28"
-                        value={form.gpus.detalle[key].voltaje}
+                        value={form.gpus[key].voltaje}
                         onChange={(e) =>
                             updateField(`${path}.voltaje`, e.target.value)
                         }
@@ -59,7 +59,7 @@ export default function GPUs({ form, updateField }: any) {
                     <input
                         className={input}
                         placeholder="No. GPU"
-                        value={form.gpus.detalle[key].numero}
+                        value={form.gpus[key].numero}
                         onChange={(e) =>
                             updateField(`${path}.numero`, e.target.value)
                         }
@@ -70,7 +70,7 @@ export default function GPUs({ form, updateField }: any) {
                     <label className="label">Enchufe</label>
                     <select
                         className={select}
-                        value={form.gpus.detalle[key].enchufe}
+                        value={form.gpus[key].enchufe}
                         onChange={(e) =>
                             updateField(`${path}.enchufe`, e.target.value)
                         }
@@ -85,7 +85,7 @@ export default function GPUs({ form, updateField }: any) {
                     <label className="label">Llantas</label>
                     <select
                         className={select}
-                        value={form.gpus.detalle[key].llantas}
+                        value={form.gpus[key].llantas}
                         onChange={(e) =>
                             updateField(`${path}.llantas`, e.target.value)
                         }
@@ -101,7 +101,7 @@ export default function GPUs({ form, updateField }: any) {
                     <input
                         className={input}
                         placeholder="Observaciones"
-                        value={form.gpus.detalle[key].obs ?? ""}
+                        value={form.gpus[key].obs ?? ""}
                         onChange={(e) =>
                             updateField(`${path}.obs`, e.target.value)
                         }
@@ -113,75 +113,23 @@ export default function GPUs({ form, updateField }: any) {
 
     return (
         <Section title="GPU's">
-            {/* ================= RESUMEN ================= */}
-            <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-5">
-                <input
-                    className={input}
-                    placeholder="Total GPU"
-                    value={form.gpus.total}
-                    onChange={(e) =>
-                        updateField("gpus.total", e.target.value)
-                    }
-                />
-
-                <select
-                    className={select}
-                    value={form.gpus.limpias}
-                    onChange={(e) =>
-                        updateField("gpus.limpias", e.target.value)
-                    }
-                >
-                    <option value="">Elija una opción</option>
-                    <option value="Si">Sí</option>
-                    <option value="No">No</option>
-                </select>
-
-                <input
-                    className={input}
-                    placeholder="Voltaje general"
-                    value={form.gpus.voltaje}
-                    onChange={(e) =>
-                        updateField("gpus.voltaje", e.target.value)
-                    }
-                />
-
-                <select
-                    className={select}
-                    value={form.gpus.enchufe}
-                    onChange={(e) =>
-                        updateField("gpus.enchufe", e.target.value)
-                    }
-                >
-                    <option value="">Elija una opción</option>
-                    <option value="Bien">Bien</option>
-                    <option value="Mal">Mal</option>
-                </select>
-
-                <select
-                    className={select}
-                    value={form.gpus.llantas}
-                    onChange={(e) =>
-                        updateField("gpus.llantas", e.target.value)
-                    }
-                >
-                    <option value="">Elija una opción</option>
-                    <option value="Bien">Bien</option>
-                    <option value="Mal">Mal</option>
-                </select>
-            </div>
-
-            {/* ================= DETALLE ================= */}
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                {gpuCard(
+                    "gpu115",
+                    "GPU 115",
+                    "gpus.gpu115"
+                )}
+
                 {gpuCard(
                     "hobart600",
                     "GPU Hobart 600",
-                    "gpus.detalle.hobart600"
+                    "gpus.hobart600"
                 )}
 
                 {gpuCard(
                     "foxtronics",
                     "GPU Foxtronics",
-                    "gpus.detalle.foxtronics"
+                    "gpus.foxtronics"
                 )}
             </div>
         </Section>

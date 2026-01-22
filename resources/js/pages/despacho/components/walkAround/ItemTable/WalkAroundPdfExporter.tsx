@@ -462,7 +462,7 @@ function Watermark({ src }: { src: string }) {
                 left: 50,
                 width: 500,
                 height: 500,
-                opacity: 0.30,
+                opacity: 0.20,
             }}
         />
     );

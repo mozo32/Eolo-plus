@@ -1,3 +1,4 @@
+import { validarStep } from "./validacionEntregaTurnoR";
 import { useState } from "react";
 import Encabezado from "./sections/Encabezado";
 import EquipoComunicaciones from "./sections/EquipoComunicaciones";
@@ -7,7 +8,7 @@ import GPUs from "./sections/GPUs";
 import CarritoGolf from "./sections/CarritoGolf";
 import Aeronaves from "./sections/Aeronaves";
 import Firmas from "./sections/Firmas";
-import Acciones from "./sections/Acciones";
+import Swal from "sweetalert2";
 
 export default function EntregaTurnoRForm() {
     const [step, setStep] = useState(1);
@@ -44,19 +45,11 @@ export default function EntregaTurnoRForm() {
         },
 
         gpus: {
-            total: "",
-            limpias: "",
-            voltaje: "",
-            enchufe: "",
-            llantas: "",
-            detalle: {
-                hobart600: { limpia: "", voltaje: "", numero: "", enchufe: "", llantas: "" },
-                foxtronics: { limpia: "", voltaje: "", numero: "", enchufe: "", llantas: "" },
+                gpu115: { limpia: "", voltaje: "", numero: "", enchufe: "", llantas: "", obs: "" },
+                hobart600: { limpia: "", voltaje: "", numero: "", enchufe: "", llantas: "", obs: "" },
+                foxtronics: { limpia: "", voltaje: "", numero: "", enchufe: "", llantas: "", obs: "" },
             },
-        },
         carritoGolf: {
-            "004": { limpieza: "", carga: "", llantas: "", luces: "", frenos: "", obs: "" },
-            "006": { limpieza: "", carga: "", llantas: "", luces: "", frenos: "", obs: "" },
             "005": { limpieza: "", carga: "", llantas: "", luces: "", frenos: "", obs: "" },
         },
         aeronaves: {
@@ -66,6 +59,25 @@ export default function EntregaTurnoRForm() {
         },
     });
     const nextStep = () => {
+        const resultado = validarStep(step, form);
+
+        // if (!resultado.ok) {
+        //     Swal.fire({
+        //         icon: "warning",
+        //         title: resultado.message,
+        //         html: `
+        //         <ul style="text-align:left;">
+        //             ${resultado.faltantes
+        //                 ?.map((f) => `<li>• ${f}</li>`)
+        //                 .join("")}
+        //         </ul>
+        //     `,
+        //         confirmButtonText: "Aceptar",
+        //         confirmButtonColor: "#ea580c",
+        //     });
+        //     return;
+        // }
+
         if (step < totalSteps) setStep(step + 1);
     };
 
@@ -110,8 +122,8 @@ export default function EntregaTurnoRForm() {
                         <div
                             key={i}
                             className={`h-2 w-6 rounded-full ${step === i + 1
-                                    ? "bg-orange-600"
-                                    : "bg-slate-300"
+                                ? "bg-orange-600"
+                                : "bg-slate-300"
                                 }`}
                         />
                     ))}

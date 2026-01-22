@@ -7,7 +7,12 @@ import { dashboard,
     pernoctames,
     estacionamiento,
     entregaTurnoR,
-    asistenciaPersonal
+    asistenciaPersonal,
+    checkListEquipo,
+    checkListTurno,
+    controlMedicamento,
+    operacionesDiarias,
+    servicioComisariato,
 } from '@/routes'
 import { LayoutGrid } from 'lucide-react'
 
@@ -91,6 +96,17 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                 items: [
                     { title: 'Entrega Turno de Rampa', href: entregaTurnoR(), icon: LayoutGrid },
                     { title: 'Asistencia de Personal', href: asistenciaPersonal(), icon: LayoutGrid },
+                    { title: 'checkList Equipo de Seguridad', href: checkListEquipo(), icon: LayoutGrid },
+                ],
+            },
+            {
+                module: 'Trafico',
+                key: 5,
+                items: [
+                    { title: 'checkList de Turno', href: checkListTurno(), icon: LayoutGrid },
+                    { title: 'Control de Medicamento', href: controlMedicamento(), icon: LayoutGrid },
+                    { title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },
+                    { title: 'Servicio de Comisariato', href: servicioComisariato(), icon: LayoutGrid },
                 ],
             },
         ]

@@ -53,6 +53,26 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('asistenciaPersonal', function () {
         return Inertia::render('Rampa/AsistenciaPersonal');
     })->name('asistenciaPersonal');
+
+    Route::get('checkListEquipo', function () {
+        return Inertia::render('Rampa/CheckListEquipo');
+    })->name('checkListEquipo');
+
+    Route::get('checkListTurno', function () {
+        return Inertia::render('Trafico/CheckListTurno');
+    })->name('checkListTurno');
+
+    Route::get('controlMedicamento', function () {
+        return Inertia::render('Trafico/ControlMedicamento');
+    })->name('controlMedicamento');
+
+    Route::get('operacionesDiarias', function () {
+        return Inertia::render('Trafico/OperacionesDiarias');
+    })->name('operacionesDiarias');
+
+    Route::get('servicioComisariato', function () {
+        return Inertia::render('Trafico/ServicioComisariato');
+    })->name('servicioComisariato');
 });
 
 require __DIR__.'/settings.php';

@@ -13,7 +13,7 @@ export default function BarrasRemolque({ form, updateField }: Props) {
         "w-full rounded-lg border-2 border-slate-400 bg-slate-100 px-4 py-2 text-sm font-bold focus:border-slate-600 focus:outline-none";
 
     const select =
-        "w-full rounded-lg border-2 border-orange-400 bg-orange-50 px-4 py-2 text-sm font-bold focus:border-orange-600 focus:outline-none";
+        "w-full rounded-lg border-2 border-slate-400 bg-slate-100 px-4 py-2 text-sm font-bold focus:border-slate-600 focus:outline-none";
 
     const card =
         "rounded-xl border border-slate-300 bg-white p-5 shadow-sm";
