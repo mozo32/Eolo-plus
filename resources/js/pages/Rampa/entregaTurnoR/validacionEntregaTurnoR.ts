@@ -111,6 +111,8 @@ function validarVehiculos(form: any): ResultadoValidacion {
         const vehiculo = form.vehiculos[unidad];
 
         for (const campo in vehiculo) {
+            if (campo === "obs") continue;
+
             if (!vehiculo[campo]) {
                 faltantes.push(
                     `Vehículo ${unidad.toUpperCase()} – ${labels.vehiculos[campo]}`
@@ -151,6 +153,8 @@ function validarBarrasYGpus(form: any): ResultadoValidacion {
         const gpu = form.gpus.detalle[gpuKey];
 
         for (const campo in gpu) {
+            if (campo === "obs") continue;
+
             if (!gpu[campo]) {
                 faltantes.push(
                     `${gpuKey.toUpperCase()} – ${labels.gpusDetalle[campo]}`
@@ -177,6 +181,8 @@ function validarCarritoGolf(form: any): ResultadoValidacion {
         const carrito = form.carritoGolf[id];
 
         for (const campo in carrito) {
+            if (campo === "obs") continue;
+
             if (!carrito[campo]) {
                 faltantes.push(
                     `Carrito ${id} – ${labels.carritoGolf[campo]}`

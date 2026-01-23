@@ -14,6 +14,9 @@ use App\Http\Controllers\Api\EntregaTurnoController;
 use App\Http\Controllers\Api\PernoctaDiaController;
 use App\Http\Controllers\Api\PernoctaMesController;
 use App\Http\Controllers\Api\EstacionamientoSubterraneoController;
+use App\Http\Controllers\Api\ChecklistEquipoSeguridadController;
+use App\Http\Controllers\Api\UsuarioController;
+use App\Http\Controllers\Api\EntregaTurnoRController;
 
 Route::post('/despacho', [DespachoController::class, 'store']);
 Route::get('/aeronaves/autocomplete', [AeronaveController::class, 'autocomplete']);
@@ -21,7 +24,9 @@ Route::get('/aeronaves/buscar/{matricula}', [AeronaveController::class, 'buscarP
 Route::get('/tipo-aeronaves', [TipoAeronaveController::class, 'index']);
 Route::post('/aeronaves', [AeronaveController::class, 'store']);
 Route::post('/nuevo-tipo-aeronaves', [TipoAeronaveController::class, 'newTipoAeronave']);
-
+Route::middleware(['auth:sanctum'])->get(
+    '/usuarios/buscar',[UsuarioController::class, 'buscar']
+);
 Route::prefix('walkarounds')->group(function () {
     Route::get('/basurero', [WalkAroundController::class, 'basurero']);
     Route::get('/bitacora', [WalkAroundController::class, 'bitacora']);
@@ -61,9 +66,19 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('PernoctaMes')->group(functio
 });
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('EstacionamientoSubTerraneo')->group(function () {
-        Route::get('/',[EstacionamientoSubterraneoController::class, 'index'])->name('estacionamiento.index');
-        Route::post('/',[EstacionamientoSubterraneoController::class, 'store'])->name('estacionamiento.store');
-        Route::put('/{estacionamiento}/salida',[EstacionamientoSubterraneoController::class, 'updateSalida'])->name('estacionamiento.salida');
-        Route::get('/{estacionamiento}',[EstacionamientoSubterraneoController::class, 'show'])->name('estacionamiento.show');
+    Route::get('/',[EstacionamientoSubterraneoController::class, 'index'])->name('estacionamiento.index');
+    Route::post('/',[EstacionamientoSubterraneoController::class, 'store'])->name('estacionamiento.store');
+    Route::put('/{estacionamiento}/salida',[EstacionamientoSubterraneoController::class, 'updateSalida'])->name('estacionamiento.salida');
+    Route::get('/{estacionamiento}',[EstacionamientoSubterraneoController::class, 'show'])->name('estacionamiento.show');
+});
+Route::middleware(['api', 'auth:sanctum'])->prefix('ChecklistEquipoSeguridad')->group(function () {
+    Route::post('/',[ChecklistEquipoSeguridadController::class, 'store']);
+    Route::get('/{ChecklistEquipoSeguridad}', [ChecklistEquipoSeguridadController::class, 'show']);
 });
 
+Route::middleware(['api', 'auth:sanctum'])->prefix('EntregaTurnoR')->group(function () {
+    Route::post('/',[EntregaTurnoRController::class, 'store']);
+    Route::get('/',[EntregaTurnoRController::class, 'index']);
+    Route::get('/{entregaTurnoR}', [EntregaTurnoRController::class, 'show']);
+    Route::put('/{entregaTurnoR}', [EntregaTurnoRController::class, 'update']);
+});

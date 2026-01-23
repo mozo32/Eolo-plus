@@ -43,13 +43,13 @@ export default function GPUs({ form, updateField }: any) {
                 </div>
 
                 <div>
-                    <label className="label">Voltaje</label>
+                    <label className="label">Horometro</label>
                     <input
                         className={input}
                         placeholder="28"
-                        value={form.gpus[key].voltaje}
+                        value={form.gpus[key].horometro}
                         onChange={(e) =>
-                            updateField(`${path}.voltaje`, e.target.value)
+                            updateField(`${path}.horometro`, e.target.value)
                         }
                     />
                 </div>
@@ -59,9 +59,9 @@ export default function GPUs({ form, updateField }: any) {
                     <input
                         className={input}
                         placeholder="No. GPU"
-                        value={form.gpus[key].numero}
+                        value={form.gpus[key].cantidad}
                         onChange={(e) =>
-                            updateField(`${path}.numero`, e.target.value)
+                            updateField(`${path}.cantidad`, e.target.value)
                         }
                     />
                 </div>

@@ -1,12 +1,6 @@
 export default function Aeronaves({ form, updateField }: any) {
-    const inputMain =
-        "w-full rounded-xl border-2 border-orange-500 bg-orange-50 px-6 py-4 text-2xl font-extrabold text-center focus:bg-white focus:outline-none";
-
     const inputSub =
         "w-full rounded-lg border-2 border-slate-400 bg-slate-100 px-4 py-3 text-xl font-bold text-center focus:border-orange-500 focus:bg-white focus:outline-none";
-
-    const labelMain =
-        "mb-2 text-xs font-bold uppercase tracking-widest text-orange-700 text-center";
 
     const labelSub =
         "mb-1 text-xs font-bold uppercase tracking-wide text-slate-600 text-center";
@@ -17,41 +11,56 @@ export default function Aeronaves({ form, updateField }: any) {
                 Aeronaves
             </h3>
 
-            {/* TOTAL */}
-            <div className="mb-8 rounded-xl border-2 border-orange-500 bg-orange-100 p-6">
-                <div className={labelMain}>Total de Aeronaves</div>
-                <input
-                    className={inputMain}
-                    placeholder="0"
-                    value={form.aeronaves.total}
-                    onChange={(e) =>
-                        updateField("aeronaves.total", e.target.value)
-                    }
-                />
-            </div>
-
             {/* DISTRIBUCIÓN */}
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                {/* HANGAR 1 */}
                 <div className="rounded-lg border-2 border-slate-400 bg-slate-50 p-4">
-                    <div className={labelSub}>Posición H1</div>
+                    <div className={labelSub}>Hangar 1</div>
                     <input
                         className={inputSub}
                         placeholder="0"
-                        value={form.aeronaves.h1}
+                        value={form.aeronaves.hangar1}
                         onChange={(e) =>
-                            updateField("aeronaves.h1", e.target.value)
+                            updateField("aeronaves.hangar1", e.target.value)
                         }
                     />
                 </div>
 
+                {/* HANGAR 2 */}
                 <div className="rounded-lg border-2 border-slate-400 bg-slate-50 p-4">
-                    <div className={labelSub}>Posición H2</div>
+                    <div className={labelSub}>Hangar 2</div>
                     <input
                         className={inputSub}
                         placeholder="0"
-                        value={form.aeronaves.h2}
+                        value={form.aeronaves.hangar2}
                         onChange={(e) =>
-                            updateField("aeronaves.h2", e.target.value)
+                            updateField("aeronaves.hangar2", e.target.value)
+                        }
+                    />
+                </div>
+
+                {/* PLATAFORMA H1 */}
+                <div className="rounded-lg border-2 border-slate-400 bg-slate-50 p-4">
+                    <div className={labelSub}>Plataforma H1</div>
+                    <input
+                        className={inputSub}
+                        placeholder="0"
+                        value={form.aeronaves.plataforma_h1}
+                        onChange={(e) =>
+                            updateField("aeronaves.plataforma_h1", e.target.value)
+                        }
+                    />
+                </div>
+
+                {/* PLATAFORMA H2 */}
+                <div className="rounded-lg border-2 border-slate-400 bg-slate-50 p-4">
+                    <div className={labelSub}>Plataforma H2</div>
+                    <input
+                        className={inputSub}
+                        placeholder="0"
+                        value={form.aeronaves.plataforma_h2}
+                        onChange={(e) =>
+                            updateField("aeronaves.plataforma_h2", e.target.value)
                         }
                     />
                 </div>
@@ -59,7 +68,7 @@ export default function Aeronaves({ form, updateField }: any) {
 
             {/* AYUDA */}
             <div className="mt-6 text-center text-xs font-medium text-slate-600">
-                Captura el total de aeronaves y su distribución por posición
+                Captura la distribución de aeronaves por hangar y plataforma
             </div>
         </div>
     );

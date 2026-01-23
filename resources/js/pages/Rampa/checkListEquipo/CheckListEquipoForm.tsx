@@ -1,6 +1,8 @@
 import { useState } from "react";
-
-
+import { usePage } from "@inertiajs/react";
+import { guardarCheckListEquipoSeguridadApi, buscarUsuariosApi } from "@/stores/apiCheckListEquipoSeguridad";
+import Swal from "sweetalert2";
+import { fetchCheckUser } from "@/stores/apiCheckListEquipoSeguridad";
 const MESES = [
     "Enero",
     "Febrero",
@@ -31,32 +33,108 @@ const EQUIPOS = [
     "Tenis",
     "Botas de hule",
 ];
-
+const now = new Date();
+const MES_ACTUAL = MESES[now.getMonth()];
+const ANIO_ACTUAL = now.getFullYear();
+type Role = {
+    slug: string;
+    nombre: string;
+};
+export type AuthUser = {
+    id: number;
+    name: string;
+    email: string;
+    isAdmin: boolean;
+    roles: Role[];
+    departamentos: {
+        id: number;
+        nombre: string;
+        subdepartamentos: {
+            id: number;
+            nombre: string;
+            route: string;
+        }[];
+    }[];
+};
 export default function CheckListEquipoForm() {
-    const [mesActivo, setMesActivo] = useState<string>("Enero");
-
+    const [usuarios, setUsuarios] = useState<any[]>([]);
+    const [bloqueado, setBloqueado] = useState(false);
+    const [buscando, setBuscando] = useState(false);
+    const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
     const [form, setForm] = useState<any>({
+        user_id: "",
         nombre: "",
         checklist: {},
         observaciones: "",
     });
+    console.log(auth);
 
     const toggleEquipo = (equipo: string) => {
         setForm((prev: any) => ({
             ...prev,
             checklist: {
                 ...prev.checklist,
-                [mesActivo]: {
-                    ...(prev.checklist[mesActivo] || {}),
-                    [equipo]: !prev.checklist?.[mesActivo]?.[equipo],
+                [MES_ACTUAL]: {
+                    ...(prev.checklist[MES_ACTUAL] || {}),
+                    [equipo]: !prev.checklist?.[MES_ACTUAL]?.[equipo],
                 },
             },
         }));
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        console.log("CHECKLIST EQUIPO DE SEGURIDAD:", form);
+
+        try {
+            await guardarCheckListEquipoSeguridadApi(form);
+            await Swal.fire({
+                icon: "success",
+                title: "CheckList guardado",
+            });
+        } catch (error: any) {
+            Swal.fire({
+                icon: "error",
+                title: "Error",
+                text: error?.message || "Error al guardar",
+            });
+        }
+    };
+    const consultNombre = async (id: number) => {
+        try {
+            const res = await fetchCheckUser(id);
+
+            if (res.message) {
+                Swal.fire({
+                    icon: res.alreadyCheckedThisMonth ? "info" : "warning",
+                    title: "Aviso",
+                    text: res.message,
+                });
+            }
+
+            if (res.data) {
+                setForm((prev: any) => ({
+                    ...prev,
+                    user_id: res.data.user_id,
+                    nombre: res.data.nombre,
+                    checklist: res.data.checklist || {},
+                    observaciones: res.data.observaciones || "",
+                }));
+            }
+
+            const esAdmin = !!auth?.user?.isAdmin;
+
+            setBloqueado(
+                !!res.alreadyCheckedThisMonth && !esAdmin
+            );
+
+        } catch (error) {
+            console.error(error);
+            Swal.fire({
+                icon: "error",
+                title: "Error",
+                text: "No se pudo consultar el checklist",
+            });
+        }
     };
 
     return (
@@ -64,63 +142,99 @@ export default function CheckListEquipoForm() {
             onSubmit={handleSubmit}
             className="mx-auto max-w-6xl space-y-8 rounded-xl border border-slate-300 bg-white p-8 shadow-md"
         >
-            {/* ===== ENCABEZADO ===== */}
             <div className="border-b pb-4">
                 <h2 className="text-center text-2xl font-extrabold uppercase tracking-wider text-[#00677F]">
                     Checklist de Equipo de Seguridad
                 </h2>
             </div>
 
-            {/* ===== DATOS DEL EMPLEADO ===== */}
             <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                <div className="md:col-span-2">
+                <div className="md:col-span-2 relative">
                     <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
                         Nombre del empleado
                     </label>
+
                     <input
                         className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold focus:border-[#00677F] focus:outline-none"
                         placeholder="Nombre completo"
                         value={form.nombre}
-                        onChange={(e) =>
-                            setForm({ ...form, nombre: e.target.value })
-                        }
+                        onChange={async (e) => {
+                            const value = e.target.value;
+                            setForm({ ...form, nombre: value });
+
+                            if (value.length < 2) {
+                                setUsuarios([]);
+                                return;
+                            }
+
+                            setBuscando(true);
+                            try {
+                                const data = await buscarUsuariosApi(value);
+                                setUsuarios(data);
+                            } catch {
+                                setUsuarios([]);
+                            } finally {
+                                setBuscando(false);
+                            }
+                        }}
                     />
+
+                    {/* LISTA DESPLEGABLE */}
+                    {usuarios.length > 0 && (
+                        <ul className="absolute z-10 mt-1 w-full rounded-md border bg-white shadow">
+                            {usuarios.map((u) => (
+                                <li
+                                    key={u.id}
+                                    onClick={() => {
+                                        setForm({
+                                            ...form,
+                                            nombre: u.name,
+                                            user_id: u.id,
+                                        });
+                                        setUsuarios([]);
+                                        consultNombre(u.id);
+                                    }}
+                                    className="cursor-pointer px-4 py-2 text-sm hover:bg-[#E6F2F6]"
+                                >
+                                    <div className="font-semibold">{u.name}</div>
+                                    <div className="text-xs text-slate-500">
+                                        {u.clave} · {u.puesto}
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+
+                    {buscando && (
+                        <div className="absolute right-3 top-10 text-xs text-slate-400">
+                            Buscando...
+                        </div>
+                    )}
                 </div>
 
-                <div className="flex items-center justify-center rounded-md border border-[#00677F] bg-[#E6F2F6]">
-                    <span className="text-sm font-extrabold uppercase tracking-wide text-[#00677F]">
-                        Registro mensual
+                <div className="flex flex-col items-center justify-center rounded-md border border-[#00677F] bg-[#E6F2F6] py-3">
+                    <span className="text-xs font-bold uppercase tracking-wide text-[#00677F]">
+                        Registro mensual del {ANIO_ACTUAL}
+                    </span>
+                    <span className="text-sm font-extrabold uppercase text-[#004B5C]">
+                        {MES_ACTUAL}
                     </span>
                 </div>
+
             </div>
 
-            {/* ===== SELECTOR DE MES ===== */}
-            <div className="rounded-md border border-slate-300 bg-slate-100 p-3">
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-                    {MESES.map((mes) => (
-                        <button
-                            key={mes}
-                            type="button"
-                            onClick={() => setMesActivo(mes)}
-                            className={`rounded-md px-3 py-2 text-xs font-extrabold uppercase tracking-wide transition
-                            ${mesActivo === mes
-                                    ? "bg-[#00677F] text-white shadow"
-                                    : "bg-white text-slate-700 hover:bg-slate-200"
-                                }`}
-                        >
-                            {mes}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            {/* ===== CHECKLIST ===== */}
             <div className="rounded-xl border-2 border-[#00677F] bg-[#E6F2F6] p-6">
                 <h3 className="mb-5 text-sm font-extrabold uppercase tracking-widest text-[#00677F]">
-                    {mesActivo}
+                    {MES_ACTUAL} {ANIO_ACTUAL}
                 </h3>
-
+                {bloqueado && (
+                    <div className="rounded-md border border-blue-400 bg-blue-50 p-3 text-sm text-blue-700">
+                        Este checklist ya fue realizado este mes y no puede modificarse.
+                    </div>
+                )}
+                <br />
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+
                     {EQUIPOS.map((equipo) => (
                         <label
                             key={equipo}
@@ -128,11 +242,11 @@ export default function CheckListEquipoForm() {
                         >
                             <input
                                 type="checkbox"
-                                checked={
-                                    !!form.checklist?.[mesActivo]?.[equipo]
-                                }
+                                disabled={bloqueado}
+                                checked={!!form.checklist?.[MES_ACTUAL]?.[equipo]}
                                 onChange={() => toggleEquipo(equipo)}
-                                className="h-5 w-5 accent-[#00677F]"
+                                className={`h-5 w-5 accent-[#00677F] ${bloqueado ? "cursor-not-allowed opacity-50" : ""
+                                    }`}
                             />
                             {equipo}
                         </label>
@@ -140,20 +254,18 @@ export default function CheckListEquipoForm() {
                 </div>
             </div>
 
-            {/* ===== OBSERVACIONES ===== */}
             <div>
                 <label className="mb-2 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
                     Observaciones generales
                 </label>
                 <textarea
-                    className="w-full min-h-[140px] rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-medium focus:border-[#00677F] focus:outline-none"
-                    placeholder="Anotar cualquier observación relevante del equipo de seguridad"
+                    disabled={bloqueado}
+                    className={`w-full min-h-[140px] rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-medium focus:outline-none
+                        ${bloqueado ? "opacity-60 cursor-not-allowed" : "focus:border-[#00677F]"}
+                    `}
                     value={form.observaciones}
                     onChange={(e) =>
-                        setForm({
-                            ...form,
-                            observaciones: e.target.value,
-                        })
+                        setForm({ ...form, observaciones: e.target.value })
                     }
                 />
             </div>
@@ -162,7 +274,12 @@ export default function CheckListEquipoForm() {
             <div className="flex justify-end">
                 <button
                     type="submit"
-                    className="rounded-md bg-[#00677F] px-10 py-3 text-sm font-extrabold uppercase tracking-wide text-white hover:bg-[#00586D]"
+                    disabled={bloqueado}
+                    className={`rounded-md px-10 py-3 text-sm font-extrabold uppercase tracking-wide text-white
+                        ${bloqueado
+                            ? "bg-slate-400 cursor-not-allowed"
+                            : "bg-[#00677F] hover:bg-[#00586D]"
+                        }`}
                 >
                     Guardar Checklist
                 </button>
