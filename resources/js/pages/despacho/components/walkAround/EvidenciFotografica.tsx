@@ -8,6 +8,35 @@ interface EvidenciFotograficaProps {
     value: FotoItem[];
     onChange: (fotos: FotoItem[]) => void;
 }
+const compressCanvasImage = (
+    canvas: HTMLCanvasElement,
+    maxWidth = 640,
+    quality = 0.35
+): string => {
+    const ratio = canvas.width / canvas.height;
+
+    let targetWidth = canvas.width;
+    let targetHeight = canvas.height;
+
+    if (canvas.width > maxWidth) {
+        targetWidth = maxWidth;
+        targetHeight = Math.round(maxWidth / ratio);
+    }
+
+    const resizedCanvas = document.createElement("canvas");
+    resizedCanvas.width = targetWidth;
+    resizedCanvas.height = targetHeight;
+
+    const ctx = resizedCanvas.getContext("2d")!;
+
+    // 🔥 Fondo blanco (evita basura visual)
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, targetWidth, targetHeight);
+
+    ctx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
+
+    return resizedCanvas.toDataURL("image/jpeg", quality);
+};
 
 const EvidenciFotografica: React.FC<EvidenciFotograficaProps> = ({
     value,
@@ -54,7 +83,11 @@ const EvidenciFotografica: React.FC<EvidenciFotograficaProps> = ({
                 }
 
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { ideal: "environment" } },
+                    video: {
+                        facingMode: { ideal: "environment" },
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                    },
                     audio: false,
                 });
 
@@ -108,16 +141,21 @@ const EvidenciFotografica: React.FC<EvidenciFotograficaProps> = ({
         const video = videoRef.current;
         const canvas = document.createElement("canvas");
 
-        canvas.width = video.videoWidth || 640;
-        canvas.height = video.videoHeight || 480;
+        canvas.width = video.videoWidth || 1280;
+        canvas.height = video.videoHeight || 720;
 
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
-        onChange([...value, { kind: "new", dataUrl }]);
+        const optimizedDataUrl = compressCanvasImage(
+            canvas,
+            640,  // 🔥 clave
+            0.35  // 🔥 clave
+        );
+
+        onChange([...value, { kind: "new", dataUrl: optimizedDataUrl }]);
 
         stopCamera();
     };
@@ -171,7 +209,7 @@ const EvidenciFotografica: React.FC<EvidenciFotograficaProps> = ({
                 onClick={startCamera}
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
             >
-                📷 Tomar fotografía
+                📷 Tomar fotografíassss
             </button>
 
             {error && <p className="text-xs text-red-500">{error}</p>}
