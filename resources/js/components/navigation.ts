@@ -56,7 +56,8 @@ const ROUTE_MAP: Record<string, () => Href> = {
     walkaround: walkAround,
     usuarios: gestionUsuarios,
     pernoctadia: pernoctadia,
-    pernoctames: pernoctames
+    pernoctames: pernoctames,
+    estacionamiento: estacionamiento
 }
 
 export function getNavModules(user: AuthUser | null): NavModule[] {

@@ -209,7 +209,7 @@ const EvidenciFotografica: React.FC<EvidenciFotograficaProps> = ({
                 onClick={startCamera}
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
             >
-                📷 Tomar fotografíassss
+                📷 Tomar fotografía
             </button>
 
             {error && <p className="text-xs text-red-500">{error}</p>}
