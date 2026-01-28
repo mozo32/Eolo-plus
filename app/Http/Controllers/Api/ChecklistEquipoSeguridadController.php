@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\ChecklistEquipoSeguridad;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class ChecklistEquipoSeguridadController extends Controller
 {
@@ -14,11 +15,14 @@ class ChecklistEquipoSeguridadController extends Controller
         $request->validate([
             'user_id' => 'required|exists:users,id',
             'nombre' => 'required|string',
-            'checklist' => 'required|array',
+        ],
+        [
+            'user_id.required' => 'Debes seleccionar un usuario o el usuario no esta registrado.',
+            'user_id.exists'   => 'El usuario seleccionado no es válido.',
+            'nombre.required' => 'El nombre es obligatorio.',
         ]);
 
         $now = Carbon::now();
-
         $registro = ChecklistEquipoSeguridad::where('user_id', $request->user_id)
             ->whereYear('created_at', $now->year)
             ->whereMonth('created_at', $now->month)
@@ -57,26 +61,75 @@ class ChecklistEquipoSeguridadController extends Controller
 
         $checklist = ChecklistEquipoSeguridad::where('user_id', $userId)
             ->whereYear('created_at', $now->year)
+            ->whereMonth('created_at', $now->month)
             ->latest()
             ->first();
 
         if (!$checklist) {
             return response()->json([
-                'message' => 'El usuario no tiene checklist este año',
-                'data' => null,
+                'message' => 'El usuario no tiene checklist este mes',
                 'alreadyCheckedThisMonth' => false,
-            ], 404);
+                'data' => null,
+            ], 200);
         }
 
-        $sameMonth = $checklist->created_at->month === $now->month;
-
         return response()->json([
-            'message' => $sameMonth
-                ? 'Ya se hizo el checklist de este mes'
-                : 'Checklist encontrado (mes anterior)',
-            'alreadyCheckedThisMonth' => $sameMonth,
+            'message' => 'Ya se hizo el checklist de este mes',
+            'alreadyCheckedThisMonth' => true,
             'data' => $checklist,
         ]);
     }
+    public function index(Request $request)
+    {
 
+        $query = ChecklistEquipoSeguridad::query();
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('nombre_empleado', 'like', "%{$search}%");
+            });
+        }
+
+        $perPage = $request->get('per_page', 10);
+
+        return response()->json(
+            $query->orderBy('created_at', 'desc')
+                ->paginate($perPage)
+        );
+    }
+    public function update(Request $request, ChecklistEquipoSeguridad $ChecklistEquipoSeguridad)
+    {
+         DB::beginTransaction();
+
+        try {
+            $validated = $request->validate([
+                'user_id' => 'required|exists:users,id',
+                'nombre' => 'required|string',
+                'checklist' => 'required|array',
+            ]);
+
+            $ChecklistEquipoSeguridad->update([
+                'user_id' => $validated['user_id'],
+                'nombre' => $validated['nombre'],
+                'checklist' => $validated['checklist'] ?? null,
+                'observaciones' => $request->observaciones,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Checklist actualizado correctamente',
+                'data' => $ChecklistEquipoSeguridad,
+            ]);
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'message' => 'Error al actualizar checklist',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

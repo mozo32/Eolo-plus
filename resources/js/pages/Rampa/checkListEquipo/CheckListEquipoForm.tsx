@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePage } from "@inertiajs/react";
-import { guardarCheckListEquipoSeguridadApi, buscarUsuariosApi } from "@/stores/apiCheckListEquipoSeguridad";
+import { guardarCheckListEquipoSeguridadApi, buscarUsuariosApi, actualizarCheckListEquipoApi } from "@/stores/apiCheckListEquipoSeguridad";
 import Swal from "sweetalert2";
 import { fetchCheckUser } from "@/stores/apiCheckListEquipoSeguridad";
 const MESES = [
@@ -56,18 +56,33 @@ export type AuthUser = {
         }[];
     }[];
 };
-export default function CheckListEquipoForm() {
+type Props = {
+    isEdit: boolean;
+    data?: any;
+    open: boolean;
+    onSuccess?: () => void;
+};
+const getInitialForm = (data?: any) => ({
+    user_id: data?.user_id ?? "",
+    nombre: data?.nombre ?? "",
+    checklist: data?.checklist ?? {},
+    observaciones: data?.observaciones ?? "",
+});
+export default function CheckListEquipoForm({
+    isEdit,
+    data,
+    open,
+    onSuccess,
+}: Props) {
     const [usuarios, setUsuarios] = useState<any[]>([]);
     const [bloqueado, setBloqueado] = useState(false);
     const [buscando, setBuscando] = useState(false);
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
-    const [form, setForm] = useState<any>({
-        user_id: "",
-        nombre: "",
-        checklist: {},
-        observaciones: "",
-    });
-    console.log(auth);
+
+    const [form, setForm] = useState(() => getInitialForm(data));
+    useEffect(() => {
+        setForm(getInitialForm(isEdit ? data : undefined));
+    }, [data, isEdit]);
 
     const toggleEquipo = (equipo: string) => {
         setForm((prev: any) => ({
@@ -86,17 +101,36 @@ export default function CheckListEquipoForm() {
         e.preventDefault();
 
         try {
-            await guardarCheckListEquipoSeguridadApi(form);
+            if (isEdit && data?.id) {
+                await actualizarCheckListEquipoApi(data.id, form);
+
+            } else {
+                await guardarCheckListEquipoSeguridadApi(form);
+            }
             await Swal.fire({
                 icon: "success",
                 title: "CheckList guardado",
             });
+            onSuccess?.();
         } catch (error: any) {
-            Swal.fire({
-                icon: "error",
-                title: "Error",
-                text: error?.message || "Error al guardar",
-            });
+
+            if (error?.errors) {
+                const messages = Object.values(error.errors)
+                    .flat()
+                    .join("<br>");
+
+                Swal.fire({
+                    icon: "error",
+                    title: "Error",
+                    html: messages,
+                });
+            } else {
+                Swal.fire({
+                    icon: "error",
+                    title: "Error",
+                    text: error?.message || "Error inesperado",
+                });
+            }
         }
     };
     const consultNombre = async (id: number) => {
@@ -281,7 +315,7 @@ export default function CheckListEquipoForm() {
                             : "bg-[#00677F] hover:bg-[#00586D]"
                         }`}
                 >
-                    Guardar Checklist
+                    {isEdit ? "Actualizar Checklist" : " Guardar Checklist"}
                 </button>
             </div>
         </form>

@@ -1,268 +1,182 @@
 import { useState } from "react";
+import TimePicker24 from "@/pages/TimePicker24";
+import { guardarOperacionesDiariasApi } from "@/stores/apiOperacionesDiarias";
+import Swal from "sweetalert2";
 
-type Operacion = {
-    llegada: {
-        matricula: string;
-        equipo: string;
-        hora: string;
-        procedencia: string;
-        pax: string;
-    };
-    salida: {
-        matricula: string;
-        equipo: string;
-        hora: string;
-        destino: string;
-        pax: string;
-    };
+type TipoOperacion = "llegada" | "salida";
+
+type OperacionForm = {
+    fecha: string;
+    tipo: TipoOperacion;
+    matricula: string;
+    equipo: string;
+    hora: string;
+    lugar: string;
+    pax: string;
 };
+type Props = {
+    onSuccess?: () => void;
+};
+export default function OperacionesDiariasForm({
+    onSuccess,
+}: Props)  {
+    const [form, setForm] = useState<OperacionForm>({
+        fecha: "",
+        tipo: "llegada",
+        matricula: "",
+        equipo: "",
+        hora: "",
+        lugar: "",
+        pax: "",
+    });
 
-export default function OperacionesDiariasForm() {
-    const [fecha, setFecha] = useState("");
-    const [operaciones, setOperaciones] = useState<Operacion[]>([
-        {
-            llegada: {
-                matricula: "",
-                equipo: "",
-                hora: "",
-                procedencia: "",
-                pax: "",
-            },
-            salida: {
-                matricula: "",
-                equipo: "",
-                hora: "",
-                destino: "",
-                pax: "",
-            },
-        },
-    ]);
-
-    const agregarFila = () => {
-        setOperaciones((prev) => [
-            ...prev,
-            {
-                llegada: {
-                    matricula: "",
-                    equipo: "",
-                    hora: "",
-                    procedencia: "",
-                    pax: "",
-                },
-                salida: {
-                    matricula: "",
-                    equipo: "",
-                    hora: "",
-                    destino: "",
-                    pax: "",
-                },
-            },
-        ]);
+    const updateField = (campo: keyof OperacionForm, value: string) => {
+        setForm((prev) => ({ ...prev, [campo]: value }));
     };
 
-    const updateField = (
-        index: number,
-        tipo: "llegada" | "salida",
-        campo: string,
-        value: string
-    ) => {
-        setOperaciones((prev) => {
-            const copia = [...prev];
-            copia[index] = {
-                ...copia[index],
-                [tipo]: {
-                    ...copia[index][tipo],
-                    [campo]: value,
-                },
-            };
-            return copia;
-        });
-    };
-
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async(e: React.FormEvent) => {
         e.preventDefault();
-        console.log({
-            fecha,
-            operaciones,
+
+        console.log("Registro guardado:", form);
+
+        try {
+            Swal.fire({ title: "Procesando...", didOpen: () => Swal.showLoading() });
+
+            // if (isEdit && data?.id) {
+            //     await actualizarServicioComisariatoApi(data.id, form);
+
+            // } else {
+            //     await guardarServicioComisariatoApi(form);
+            // }
+            await guardarOperacionesDiariasApi(form);
+            Swal.fire({
+                icon: "success",
+                // title: isEdit ? "Servicio de Comisariato actualizado" : "Servicio de Comisariato Guardado",
+                title: "Operación Guardado",
+            });
+            onSuccess?.();
+
+        } catch (error: any) {
+            Swal.fire({
+                icon: "error",
+                title: "Error",
+                text: error?.message || "Error al guardar",
+            });
+        }
+        setForm({
+            fecha: "",
+            tipo: "llegada",
+            matricula: "",
+            equipo: "",
+            hora: "",
+            lugar: "",
+            pax: "",
         });
     };
 
     return (
         <form
             onSubmit={handleSubmit}
-            className="mx-auto max-w-7xl space-y-6 rounded-xl border border-slate-300 bg-white p-6 shadow"
+            className="mx-auto max-w-3xl rounded-xl border border-slate-300 bg-white p-6 shadow space-y-6"
         >
             {/* ENCABEZADO */}
-            <div className="text-center space-y-2">
-                <h2 className="text-lg font-extrabold uppercase">
-                    Registro de Operaciones Diarias
+            <div className="text-center border-b pb-4">
+                <h2 className="text-lg font-extrabold uppercase text-slate-800">
+                    Registro de Operación
                 </h2>
-                <p className="text-sm font-semibold uppercase text-slate-600">
+                <p className="text-sm font-semibold uppercase text-slate-500">
                     Área de Tráfico
                 </p>
             </div>
 
-            <div className="flex justify-start max-w-xs">
-                <input
-                    type="date"
-                    value={fecha}
-                    onChange={(e) => setFecha(e.target.value)}
-                    className="w-full rounded-md border-2 border-slate-400 px-4 py-2 text-sm font-bold focus:border-[#00677F] focus:outline-none"
+            {/* SECCIÓN 1 */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                    <label className="text-xs font-semibold text-slate-600">Fecha</label>
+                    <input
+                        type="date"
+                        className="w-full rounded-md border px-3 py-2"
+                        value={form.fecha}
+                        onChange={(e) => updateField("fecha", e.target.value)}
+                    />
+                </div>
+
+                <div>
+                    <label className="text-xs font-semibold text-slate-600">Tipo</label>
+                    <select
+                        className="w-full rounded-md border px-3 py-2 font-semibold"
+                        value={form.tipo}
+                        onChange={(e) => updateField("tipo", e.target.value)}
+                    >
+                        <option value="llegada">Entrada</option>
+                        <option value="salida">Salida</option>
+                    </select>
+                </div>
+            </div>
+
+            {/* SECCIÓN 2 */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                    <label className="text-xs font-semibold text-slate-600">Matrícula</label>
+                    <input
+                        className="w-full rounded-md border px-3 py-2"
+                        value={form.matricula}
+                        onChange={(e) => updateField("matricula", e.target.value)}
+                    />
+                </div>
+
+                <div>
+                    <label className="text-xs font-semibold text-slate-600">Equipo</label>
+                    <input
+                        className="w-full rounded-md border px-3 py-2"
+                        value={form.equipo}
+                        onChange={(e) => updateField("equipo", e.target.value)}
+                    />
+                </div>
+            </div>
+
+            {/* SECCIÓN HORA */}
+            <div className="rounded-lg border bg-slate-50 p-4">
+                <label className="mb-2 block text-xs font-semibold text-slate-600">
+                    Hora (24 horas)
+                </label>
+                <TimePicker24
+                    value={form.hora}
+                    onChange={(value) => updateField("hora", value)}
                 />
             </div>
 
-            {/* TABLA */}
-            <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-sm">
-                    <thead>
-                        <tr className="bg-[#E6F2F6]">
-                            <th colSpan={5} className="border px-3 py-2 text-center font-bold">
-                                LLEGADA
-                            </th>
-                            <th className="border px-2 py-2 bg-slate-100"></th>
-                            <th colSpan={5} className="border px-3 py-2 text-center font-bold">
-                                SALIDA
-                            </th>
-                        </tr>
-                        <tr className="bg-slate-50">
-                            {["Matrícula", "Equipo", "Hora", "Procedencia", "Pax"].map((h) => (
-                                <th key={h} className="border px-2 py-1">
-                                    {h}
-                                </th>
-                            ))}
-                            <th className="border bg-slate-100"></th>
-                            {["Matrícula", "Equipo", "Hora", "Destino", "Pax"].map((h) => (
-                                <th key={h} className="border px-2 py-1">
-                                    {h}
-                                </th>
-                            ))}
-                        </tr>
-                    </thead>
+            {/* SECCIÓN FINAL */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                    <label className="text-xs font-semibold text-slate-600">
+                        {form.tipo === "llegada" ? "Procedencia" : "Destino"}
+                    </label>
+                    <input
+                        className="w-full rounded-md border px-3 py-2"
+                        value={form.lugar}
+                        onChange={(e) => updateField("lugar", e.target.value)}
+                    />
+                </div>
 
-                    <tbody>
-                        {operaciones.map((op, index) => (
-                            <tr key={index}>
-                                {/* LLEGADA */}
-                                <td className="border">
-                                    <input
-                                        className="w-full px-2 py-1"
-                                        value={op.llegada.matricula}
-                                        onChange={(e) =>
-                                            updateField(index, "llegada", "matricula", e.target.value)
-                                        }
-                                    />
-                                </td>
-                                <td className="border">
-                                    <input
-                                        className="w-full px-2 py-1"
-                                        value={op.llegada.equipo}
-                                        onChange={(e) =>
-                                            updateField(index, "llegada", "equipo", e.target.value)
-                                        }
-                                    />
-                                </td>
-                                <td className="border">
-                                    <input
-                                        type="time"
-                                        className="w-full px-2 py-1"
-                                        value={op.llegada.hora}
-                                        onChange={(e) =>
-                                            updateField(index, "llegada", "hora", e.target.value)
-                                        }
-                                    />
-                                </td>
-                                <td className="border">
-                                    <input
-                                        className="w-full px-2 py-1"
-                                        value={op.llegada.procedencia}
-                                        onChange={(e) =>
-                                            updateField(index, "llegada", "procedencia", e.target.value)
-                                        }
-                                    />
-                                </td>
-                                <td className="border">
-                                    <input
-                                        type="number"
-                                        className="w-full px-2 py-1"
-                                        value={op.llegada.pax}
-                                        onChange={(e) =>
-                                            updateField(index, "llegada", "pax", e.target.value)
-                                        }
-                                    />
-                                </td>
-
-                                {/* SEPARADOR */}
-                                <td className="border bg-slate-100"></td>
-
-                                {/* SALIDA */}
-                                <td className="border">
-                                    <input
-                                        className="w-full px-2 py-1"
-                                        value={op.salida.matricula}
-                                        onChange={(e) =>
-                                            updateField(index, "salida", "matricula", e.target.value)
-                                        }
-                                    />
-                                </td>
-                                <td className="border">
-                                    <input
-                                        className="w-full px-2 py-1"
-                                        value={op.salida.equipo}
-                                        onChange={(e) =>
-                                            updateField(index, "salida", "equipo", e.target.value)
-                                        }
-                                    />
-                                </td>
-                                <td className="border">
-                                    <input
-                                        type="time"
-                                        className="w-full px-2 py-1"
-                                        value={op.salida.hora}
-                                        onChange={(e) =>
-                                            updateField(index, "salida", "hora", e.target.value)
-                                        }
-                                    />
-                                </td>
-                                <td className="border">
-                                    <input
-                                        className="w-full px-2 py-1"
-                                        value={op.salida.destino}
-                                        onChange={(e) =>
-                                            updateField(index, "salida", "destino", e.target.value)
-                                        }
-                                    />
-                                </td>
-                                <td className="border">
-                                    <input
-                                        type="number"
-                                        className="w-full px-2 py-1"
-                                        value={op.salida.pax}
-                                        onChange={(e) =>
-                                            updateField(index, "salida", "pax", e.target.value)
-                                        }
-                                    />
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+                <div>
+                    <label className="text-xs font-semibold text-slate-600">Pax</label>
+                    <input
+                        type="number"
+                        className="w-full rounded-md border px-3 py-2"
+                        value={form.pax}
+                        onChange={(e) => updateField("pax", e.target.value)}
+                    />
+                </div>
             </div>
 
-            {/* ACCIONES */}
-            <div className="flex justify-between">
-                <button
-                    type="button"
-                    onClick={agregarFila}
-                    className="rounded-md border px-4 py-2 text-sm font-semibold"
-                >
-                    + Agregar fila
-                </button>
-
+            {/* ACCIÓN */}
+            <div className="flex justify-end border-t pt-4">
                 <button
                     type="submit"
-                    className="rounded-md bg-[#00677F] px-8 py-2 text-sm font-bold text-white hover:bg-[#00586D]"
+                    className="rounded-md bg-[#00677F] px-10 py-2 text-sm font-bold text-white hover:bg-[#00586D]"
                 >
-                    Guardar Registro
+                    Guardar Operación
                 </button>
             </div>
         </form>

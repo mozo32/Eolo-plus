@@ -12,7 +12,13 @@ function hrefToString(href: Href): string {
 
 function isActive(currentUrl: string, href: Href) {
     const target = hrefToString(href)
-    return currentUrl === target || (target !== '/' && currentUrl.startsWith(target))
+
+    if (target === '/') return currentUrl === '/'
+
+    return (
+        currentUrl === target ||
+        currentUrl.startsWith(target + '/')
+    )
 }
 
 export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[] }) {

@@ -1,29 +1,84 @@
-import { useState } from "react";
+import { validarServicioComisariato } from "./validacion";
+import { useState, useEffect } from "react";
+import TimePicker24 from "@/pages/TimePicker24";
+import { guardarServicioComisariatoApi, actualizarServicioComisariatoApi } from "@/stores/apiServicioComisariato";
+import Swal from "sweetalert2";
+type Props = {
+    isEdit: boolean;
+    data?: any;
+    open: boolean;
+    onSuccess?: () => void;
+};
+const getInitialForm = (data?: any) => ({
+    catering: data?.catering ?? "",
+    formaPago: data?.forma_pago ?? "",
+    fechaEntrega: data?.fecha_entrega
+        ? data.fecha_entrega.split("T")[0]
+        : new Date().toISOString().split("T")[0],
+    horaEntrega: data?.hora_entrega ?? "",
+    matricula: data?.matricula ?? "",
+    detalle: data?.detalle ?? "",
+    solicitadoPor: data?.solicitado_por ?? "",
+    atendio: data?.atendio ?? "",
+    subtotal: data?.subtotal ?? "",
+    total: data?.total ?? "",
+});
+export default function ServicioComisariatoForm({
+    isEdit,
+    data,
+    open,
+    onSuccess,
+}: Props) {
 
-export default function ServicioComisariatoForm() {
-    const [form, setForm] = useState({
-        catering: "",
-        formaPago: "",
-        fechaEntrega: "",
-        horaEntrega: "",
-        matricula: "",
-        detalle: "",
-        solicitadoPor: "",
-        atendio: "",
-        subtotal: "",
-        total: "",
-    });
-
+    const [form, setForm] = useState(() => getInitialForm(data));
+    useEffect(() => {
+        setForm(getInitialForm(isEdit ? data : undefined));
+    }, [data, isEdit]);
     const updateField = (key: string, value: any) => {
         setForm((prev) => ({ ...prev, [key]: value }));
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        console.log("SERVICIO COMISARIATO:", form);
+        const { valid, errores } = validarServicioComisariato(form);
+
+        if (!valid) {
+            Swal.fire({
+                icon: "warning",
+                title: "Formulario incompleto",
+                html: `
+                    <ul style="text-align:left">
+                        ${errores.map(e => `<li>• ${e}</li>`).join("")}
+                    </ul>
+                `,
+            });
+            return;
+        }
+        try {
+            Swal.fire({ title: "Procesando...", didOpen: () => Swal.showLoading() });
+
+            if (isEdit && data?.id) {
+                await actualizarServicioComisariatoApi(data.id, form);
+
+            } else {
+                await guardarServicioComisariatoApi(form);
+            }
+
+            Swal.fire({
+                icon: "success",
+                title: isEdit ? "Servicio de Comisariato actualizado" : "Servicio de Comisariato Guardado",
+            });
+            onSuccess?.();
+
+        } catch (error: any) {
+            Swal.fire({
+                icon: "error",
+                title: "Error",
+                text: error?.message || "Error al guardar",
+            });
+        }
     };
 
-    /* ================= ESTILOS ================= */
     const input =
         "w-full rounded-lg border-2 border-slate-300 bg-slate-50 px-4 py-3 " +
         "text-sm font-semibold text-slate-700 shadow-sm " +
@@ -41,7 +96,6 @@ export default function ServicioComisariatoForm() {
             onSubmit={handleSubmit}
             className="mx-auto max-w-6xl space-y-8 rounded-2xl border border-slate-300 bg-white p-8 shadow-lg"
         >
-            {/* ================= HEADER ================= */}
             <div className="flex items-center justify-between rounded-lg bg-[#00677F] px-6 py-4 text-white">
                 <h2 className="text-lg font-extrabold uppercase tracking-wide">
                     Servicio de Comisariato
@@ -49,7 +103,6 @@ export default function ServicioComisariatoForm() {
                 <span className="text-xs opacity-80">Área Operativa</span>
             </div>
 
-            {/* ================= DATOS GENERALES ================= */}
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="rounded-xl border bg-slate-50 p-5">
                     <h4 className="mb-4 text-xs font-extrabold uppercase tracking-widest text-[#00677F]">
@@ -57,63 +110,81 @@ export default function ServicioComisariatoForm() {
                     </h4>
 
                     <div className="space-y-4">
-                        <input
-                            className={input}
-                            placeholder="Catering"
-                            value={form.catering}
-                            onChange={(e) =>
-                                updateField("catering", e.target.value)
-                            }
-                        />
+                        {/* CATERING */}
+                        <div>
+                            <label className="mb-1 block text-xs font-extrabold uppercase text-slate-600">
+                                Catering
+                            </label>
+                            <input
+                                className={input}
+                                value={form.catering}
+                                onChange={(e) =>
+                                    updateField("catering", e.target.value)
+                                }
+                            />
+                        </div>
 
-                        <input
-                            className={input}
-                            placeholder="Forma de pago"
-                            value={form.formaPago}
-                            onChange={(e) =>
-                                updateField("formaPago", e.target.value)
-                            }
-                        />
+                        {/* FORMA DE PAGO */}
+                        <div>
+                            <label className="mb-1 block text-xs font-extrabold uppercase text-slate-600">
+                                Forma de pago
+                            </label>
+                            <input
+                                className={input}
+                                value={form.formaPago}
+                                onChange={(e) =>
+                                    updateField("formaPago", e.target.value)
+                                }
+                            />
+                        </div>
 
-                        <input
-                            className={input}
-                            placeholder="Matrícula"
-                            value={form.matricula}
-                            onChange={(e) =>
-                                updateField("matricula", e.target.value)
-                            }
-                        />
+                        {/* MATRÍCULA */}
+                        <div>
+                            <label className="mb-1 block text-xs font-extrabold uppercase text-slate-600">
+                                Matrícula
+                            </label>
+                            <input
+                                className={input}
+                                value={form.matricula}
+                                onChange={(e) =>
+                                    updateField("matricula", e.target.value)
+                                }
+                            />
+                        </div>
+
+                        {/* FECHA ENTREGA */}
+                        <div>
+                            <label className="mb-1 block text-xs font-extrabold uppercase text-slate-600">
+                                Fecha de entrega
+                            </label>
+                            <input
+                                type="date"
+                                className={input}
+                                value={form.fechaEntrega}
+                                onChange={(e) =>
+                                    updateField("fechaEntrega", e.target.value)
+                                }
+                            />
+                        </div>
                     </div>
                 </div>
 
                 <div className="rounded-xl border bg-slate-50 p-5">
                     <h4 className="mb-4 text-xs font-extrabold uppercase tracking-widest text-[#00677F]">
-                        Entrega
+                        Hora de entrega
                     </h4>
 
                     <div className="space-y-4">
-                        <input
-                            type="date"
-                            className={input}
-                            value={form.fechaEntrega}
-                            onChange={(e) =>
-                                updateField("fechaEntrega", e.target.value)
-                            }
-                        />
 
-                        <input
-                            type="time"
-                            className={input}
+
+                        <TimePicker24
                             value={form.horaEntrega}
-                            onChange={(e) =>
-                                updateField("horaEntrega", e.target.value)
-                            }
+                            onChange={(value) => updateField("horaEntrega", value)}
                         />
                     </div>
                 </div>
             </div>
 
-            {/* ================= DETALLE ================= */}
             <div className="rounded-xl border bg-white p-6">
                 <h4 className="mb-3 text-xs font-extrabold uppercase tracking-widest text-[#00677F]">
                     Detalle del servicio
@@ -129,7 +200,6 @@ export default function ServicioComisariatoForm() {
                 />
             </div>
 
-            {/* ================= RESUMEN ================= */}
             <div className="grid grid-cols-1 gap-6 md:grid-cols-4 rounded-xl border bg-slate-50 p-5">
                 <input
                     className={input}
@@ -175,7 +245,7 @@ export default function ServicioComisariatoForm() {
                     type="submit"
                     className="rounded-lg bg-[#00677F] px-12 py-3 text-sm font-extrabold uppercase tracking-wide text-white hover:bg-[#00586D]"
                 >
-                    Guardar Servicio
+                    {isEdit ? "Actualizar Servicio" : " Guardar Servicio"}
                 </button>
             </div>
         </form>

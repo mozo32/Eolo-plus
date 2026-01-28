@@ -51,14 +51,44 @@ export type NavModule = {
     }[]
 }
 
-const ROUTE_MAP: Record<string, () => Href> = {
-    entregaturno: entregaTurno,
-    walkaround: walkAround,
-    usuarios: gestionUsuarios,
-    pernoctadia: pernoctadia,
-    pernoctames: pernoctames,
-    estacionamiento: estacionamiento
+const ROUTE_CONFIG: Record<
+    string,
+    { href: () => Href; title: string }
+> = {
+    entregaturno: {
+        href: entregaTurno,
+        title: 'Entrega de Turno',
+    },
+    walkaround: {
+        href: walkAround,
+        title: 'Walk Around',
+    },
+    usuarios: {
+        href: gestionUsuarios,
+        title: 'Usuarios',
+    },
+    pernoctadia: {
+        href: pernoctadia,
+        title: 'Pernocta del día',
+    },
+    pernoctames: {
+        href: pernoctames,
+        title: 'Pernocta por mes',
+    },
+    estacionamiento: {
+        href: estacionamiento,
+        title: 'Estacionamiento Subterráneo',
+    },
+    entregaturnor: {
+        href: entregaTurnoR,
+        title: 'Entrega de Turno de Rampa',
+    },
+    checklistequipo: {
+        href: checkListEquipo,
+        title: 'Checklist de Equipo de Seguridad',
+    },
 }
+
 
 export function getNavModules(user: AuthUser | null): NavModule[] {
     if (!user) return []
@@ -69,7 +99,6 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                 module: 'Despacho',
                 key: 1,
                 items: [
-                    { title: 'Dashboard', href: dashboard(), icon: LayoutGrid },
                     { title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
                     { title: 'Entrega Turno', href: entregaTurno(), icon: LayoutGrid },
                     { title: 'Gestionar Aeronaves', href: gestionarAeronaves(), icon: LayoutGrid },
@@ -118,13 +147,14 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
             const items = dep.subdepartamentos
                 .map((sub) => {
                     if (!sub.route) return null
-
                     const routeKey = sub.route.split('.').pop()
-                    if (!routeKey || !ROUTE_MAP[routeKey]) return null
+                    if (!routeKey || !ROUTE_CONFIG[routeKey]) return null
+
+                    const config = ROUTE_CONFIG[routeKey]
 
                     return {
-                        title: sub.nombre,
-                        href: ROUTE_MAP[routeKey](),
+                        title: config.title,
+                        href: config.href(),
                         icon: LayoutGrid,
                         moduleKey: dep.id,
                     }
