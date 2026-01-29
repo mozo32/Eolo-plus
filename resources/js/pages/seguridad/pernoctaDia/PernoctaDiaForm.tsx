@@ -35,7 +35,7 @@ export type AuthUser = {
     }[];
 };
 const PernoctaDiaForm: React.FC<Props> = ({ onAdd }) => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toLocaleDateString("en-CA");
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
 
     const [form, setForm] = useState<PernoctaDiaItem>({
