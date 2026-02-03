@@ -73,6 +73,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('servicioComisariato', function () {
         return Inertia::render('Trafico/ServicioComisariato');
     })->name('servicioComisariato');
+
+    Route::get('movimientoAvionesCSAE', function () {
+        return Inertia::render('seguridad/MovimientoAvionesCSAE');
+    })->name('movimientoAvionesCSAE');
 });
 
 require __DIR__.'/settings.php';

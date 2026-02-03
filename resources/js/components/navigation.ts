@@ -13,6 +13,7 @@ import { dashboard,
     controlMedicamento,
     operacionesDiarias,
     servicioComisariato,
+    movimientoAvionesCSAE,
 } from '@/routes'
 import { LayoutGrid } from 'lucide-react'
 
@@ -87,6 +88,10 @@ const ROUTE_CONFIG: Record<
         href: checkListEquipo,
         title: 'Checklist de Equipo de Seguridad',
     },
+    movimientoAvionesCSAE: {
+        href: movimientoAvionesCSAE,
+        title: 'Movimiento de Aviones CSAE',
+    },
 }
 
 
@@ -118,6 +123,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                     { title: 'Pernocta del día', href: pernoctadia(), icon: LayoutGrid },
                     { title: 'Estacionamiento SubTerraneo', href: estacionamiento(), icon: LayoutGrid },
                     { title: 'Pernocta por Mes', href: pernoctames(), icon: LayoutGrid },
+                    { title: 'Movimiento de Aviones CSAE', href: movimientoAvionesCSAE(), icon: LayoutGrid },
                 ],
             },
             {

@@ -21,10 +21,12 @@ use App\Http\Controllers\Api\ChecklistTurnoController;
 use App\Http\Controllers\Api\ControlMedicamentoController;
 use App\Http\Controllers\Api\ServicioComisariatoController;
 use App\Http\Controllers\Api\OperacionesDiariasController;
+use App\Http\Controllers\Api\MovimientoCSAEController;
 
 Route::post('/despacho', [DespachoController::class, 'store']);
 Route::get('/aeronaves/autocomplete', [AeronaveController::class, 'autocomplete']);
 Route::get('/aeronaves/buscar/{matricula}', [AeronaveController::class, 'buscarPorMatricula']);
+Route::get('/aeronaves/tipo/{matricula}', [AeronaveController::class, 'tipoAeronave']);
 Route::get('/tipo-aeronaves', [TipoAeronaveController::class, 'index']);
 Route::post('/aeronaves', [AeronaveController::class, 'store']);
 Route::post('/nuevo-tipo-aeronaves', [TipoAeronaveController::class, 'newTipoAeronave']);
@@ -111,4 +113,10 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('ServicioComisariato')->group
 Route::middleware(['api', 'auth:sanctum'])->prefix('OperacionesDiarias')->group(function () {
     Route::post('/',[OperacionesDiariasController::class, 'store']);
     Route::get('/', [OperacionesDiariasController::class, 'index']);
+});
+Route::middleware(['api', 'auth:sanctum'])->prefix('MovimientosCSAE')->group(function () {
+    Route::post('/',[MovimientoCSAEController::class, 'store']);
+    Route::get('/',[MovimientoCSAEController::class, 'index']);
+    Route::get('/{movimientoCSAE}', [MovimientoCSAEController::class, 'show']);
+    Route::put('/{movimientoCSAE}',[MovimientoCSAEController::class, 'salida']);
 });

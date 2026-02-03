@@ -113,4 +113,16 @@ class AeronaveController extends Controller
 
         return response()->json($aeronave, 201);
     }
+
+    public function tipoAeronave(string $matricula){
+        $tipoAeronaveDb = DB::connection('remota')
+            ->table('tb_matricula as m')
+            ->leftJoin('tb_tipo as t', 't.id_tipo', '=', 'm.id_tipo')
+            ->where('m.matricula', $matricula)
+            ->select(
+                't.tipo',
+            )
+            ->first();
+        return response()->json($tipoAeronaveDb);
+    }
 }
