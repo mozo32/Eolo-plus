@@ -39,9 +39,10 @@ export default function InputMatricula({
                     type="text"
                     value={value}
                     onChange={(e) => {
-                        setMatricula(e.target.value);
-                        buscar(e.target.value);
-                        onSelect(e.target.value); // ← mantiene sincronía
+                        const val = e.target.value;
+                        setMatricula(val);
+                        buscar(val);
+                        onSelect(val); // ← mantiene sincronía
                     }}
                     disabled={disabled}
                     required={required}

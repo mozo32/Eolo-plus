@@ -14,6 +14,7 @@ import { dashboard,
     operacionesDiarias,
     servicioComisariato,
     movimientoAvionesCSAE,
+    movimientosVehiculoEolo,
 } from '@/routes'
 import { LayoutGrid } from 'lucide-react'
 
@@ -45,6 +46,7 @@ export type NavModule = {
     module: string
     key: number
     items: {
+        id: string
         title: string
         href: Href
         moduleKey?: number
@@ -92,6 +94,10 @@ const ROUTE_CONFIG: Record<
         href: movimientoAvionesCSAE,
         title: 'Movimiento de Aviones CSAE',
     },
+    movimientosVehiculoEolo: {
+        href: movimientosVehiculoEolo,
+        title: 'Movimientos de Vehiculos EOLO',
+    },
 }
 
 
@@ -104,45 +110,47 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                 module: 'Despacho',
                 key: 1,
                 items: [
-                    { title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
-                    { title: 'Entrega Turno', href: entregaTurno(), icon: LayoutGrid },
-                    { title: 'Gestionar Aeronaves', href: gestionarAeronaves(), icon: LayoutGrid },
+                    { id: 'despacho-around',title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
+                    { id: 'despacho-turno',title: 'Entrega Turno', href: entregaTurno(), icon: LayoutGrid },
+                    { id: 'despacho-aeronaves',title: 'Gestionar Aeronaves', href: gestionarAeronaves(), icon: LayoutGrid },
                 ],
             },
             {
                 module: 'Administración',
                 key: 2,
                 items: [
-                    { title: 'Usuarios', href: gestionUsuarios(), icon: LayoutGrid },
+                    { id: 'administración-usuarios', title: 'Usuarios', href: gestionUsuarios(), icon: LayoutGrid },
                 ],
             },
             {
                 module: 'Seguridad',
                 key: 3,
                 items: [
-                    { title: 'Pernocta del día', href: pernoctadia(), icon: LayoutGrid },
-                    { title: 'Estacionamiento SubTerraneo', href: estacionamiento(), icon: LayoutGrid },
-                    { title: 'Pernocta por Mes', href: pernoctames(), icon: LayoutGrid },
-                    { title: 'Movimiento de Aviones CSAE', href: movimientoAvionesCSAE(), icon: LayoutGrid },
+                    { id: 'seguridad-pernocta', title: 'Pernocta del día', href: pernoctadia(), icon: LayoutGrid },
+                    { id: 'seguridad-subTerraneo', title: 'Estacionamiento SubTerraneo', href: estacionamiento(), icon: LayoutGrid },
+                    { id: 'seguridad-Pernocta-mes', title: 'Pernocta por Mes', href: pernoctames(), icon: LayoutGrid },
+                    { id: 'seguridad-csae', title: 'Movimiento de Aviones CSAE', href: movimientoAvionesCSAE(), icon: LayoutGrid },
+                    { id: 'seguridad-vehiculos', title: 'Movimientos de Vehiculos EOLO', href: movimientosVehiculoEolo(), icon: LayoutGrid },
                 ],
             },
             {
                 module: 'Rampa',
                 key: 4,
                 items: [
-                    { title: 'Entrega Turno de Rampa', href: entregaTurnoR(), icon: LayoutGrid },
-                    { title: 'Asistencia de Personal', href: asistenciaPersonal(), icon: LayoutGrid },
-                    { title: 'checkList Equipo de Seguridad', href: checkListEquipo(), icon: LayoutGrid },
+                    { id: 'rampa-turno', title: 'Entrega Turno de Rampa', href: entregaTurnoR(), icon: LayoutGrid },
+                    { id: 'rampa-personal', title: 'Asistencia de Personal', href: asistenciaPersonal(), icon: LayoutGrid },
+                    { id: 'rampa-seguridad', title: 'checkList Equipo de Seguridad', href: checkListEquipo(), icon: LayoutGrid },
+                    { id: 'rampa-operaciones', title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },
                 ],
             },
             {
                 module: 'Trafico',
                 key: 5,
                 items: [
-                    { title: 'checkList de Turno', href: checkListTurno(), icon: LayoutGrid },
-                    { title: 'Control de Medicamento', href: controlMedicamento(), icon: LayoutGrid },
-                    { title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },
-                    { title: 'Servicio de Comisariato', href: servicioComisariato(), icon: LayoutGrid },
+                    { id: 'trafico-turno', title: 'checkList de Turno', href: checkListTurno(), icon: LayoutGrid },
+                    { id: 'trafico-medicamento', title: 'Control de Medicamento', href: controlMedicamento(), icon: LayoutGrid },
+                    { id: 'trafico-operaciones', title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },
+                    { id: 'trafico-comisariato', title: 'Servicio de Comisariato', href: servicioComisariato(), icon: LayoutGrid },
                 ],
             },
         ]

@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\ControlMedicamentoController;
 use App\Http\Controllers\Api\ServicioComisariatoController;
 use App\Http\Controllers\Api\OperacionesDiariasController;
 use App\Http\Controllers\Api\MovimientoCSAEController;
+use App\Http\Controllers\Api\VehiculoEoloController;
 
 Route::post('/despacho', [DespachoController::class, 'store']);
 Route::get('/aeronaves/autocomplete', [AeronaveController::class, 'autocomplete']);
@@ -111,12 +112,21 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('ServicioComisariato')->group
     Route::put('/{servicioComisariato}',[ServicioComisariatoController::class, 'update']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('OperacionesDiarias')->group(function () {
-    Route::post('/',[OperacionesDiariasController::class, 'store']);
     Route::get('/', [OperacionesDiariasController::class, 'index']);
+    Route::put('/{id}', [OperacionesDiariasController::class, 'update']);
+    Route::post('/',[OperacionesDiariasController::class, 'store']);
+    Route::get('/autocomplete', [OperacionesDiariasController::class, 'autocomplete']);
+    Route::get('/buscar/{matricula}', [OperacionesDiariasController::class, 'buscarPorMatricula']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('MovimientosCSAE')->group(function () {
     Route::post('/',[MovimientoCSAEController::class, 'store']);
     Route::get('/',[MovimientoCSAEController::class, 'index']);
     Route::get('/{movimientoCSAE}', [MovimientoCSAEController::class, 'show']);
     Route::put('/{movimientoCSAE}',[MovimientoCSAEController::class, 'salida']);
+});
+Route::middleware(['api', 'auth:sanctum'])->prefix('VehiculoEolo')->group(function () {
+    Route::get('/', [VehiculoEoloController::class, 'index']);
+    Route::post('/movimientos', [VehiculoEoloController::class, 'registrarMovimiento']);
+    Route::get('/vehiculos/{id}/movimientos', [VehiculoEoloController::class, 'obtenerHistorial']);
+    Route::post('/', [VehiculoEoloController::class, 'store']);
 });

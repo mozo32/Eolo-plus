@@ -1,139 +1,122 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link, usePage } from '@inertiajs/react'
+import { MegaMenu } from 'primereact/megamenu'
+import { Ripple } from 'primereact/ripple'
 import AppLogo from '@/components/app-logo'
 import { NavUser } from '@/components/nav-user'
-import { getNavModules, type AuthUser, type Href, type NavModule } from './navigation'
+import { getNavModules, type AuthUser, type NavModule } from './navigation'
 import { type BreadcrumbItem } from '@/types'
-import { Link, usePage } from '@inertiajs/react'
-import { ChevronDown, Menu } from 'lucide-react'
-
-function hrefToString(href: Href): string {
-    return typeof href === 'string' ? href : href.url
-}
-
-function isActive(currentUrl: string, href: Href) {
-    const target = hrefToString(href)
-
-    if (target === '/') return currentUrl === '/'
-
-    return (
-        currentUrl === target ||
-        currentUrl.startsWith(target + '/')
-    )
-}
 
 export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[] }) {
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props
-    const currentUrl = usePage().url
 
-    const NAV_MODULES = useMemo(() => getNavModules(auth.user), [auth.user])
+    const NAV_MODULES = useMemo(
+        () => getNavModules(auth.user),
+        [auth.user]
+    )
 
-    const [selectedModule, setSelectedModule] = useState<NavModule | null>(null)
+    const [activeModule, setActiveModule] = useState<string | null>(null)
     const [activeSub, setActiveSub] = useState<string | null>(null)
     const [mobileOpen, setMobileOpen] = useState(false)
-    const [moduleOpen, setModuleOpen] = useState(false)
+    const [openMobileModule, setOpenMobileModule] = useState<string | null>(null)
 
+    /* ---------------------------
+     * Restaurar estado
+     * --------------------------- */
     useEffect(() => {
-        if (!NAV_MODULES.length) return
-        const saved = localStorage.getItem('activeModule')
-        const found = NAV_MODULES.find(m => String(m.key) === saved)
-        setSelectedModule(found ?? NAV_MODULES[0])
-    }, [NAV_MODULES])
-
-    useEffect(() => {
-        if (!selectedModule) return
-        localStorage.setItem('activeModule', String(selectedModule.key))
-        localStorage.removeItem('activeSubmodule')
-        setActiveSub(null)
-    }, [selectedModule])
-
-    useEffect(() => {
-        const savedSub = localStorage.getItem('activeSubmodule')
-        if (savedSub) setActiveSub(savedSub)
+        setActiveModule(localStorage.getItem('activeModule'))
+        setActiveSub(localStorage.getItem('activeSubmodule'))
     }, [])
 
-    const homeHref = NAV_MODULES?.[0]?.items?.[0]?.href
-    const homeUrl = homeHref ? hrefToString(homeHref) : '/'
+    /* ---------------------------
+     * Renderer MegaMenu
+     * --------------------------- */
+    const itemTemplate = (item: any, options: any) => {
+        if (item.root) {
+            return (
+                <a
+                    className="flex align-items-center px-4 py-2 cursor-pointer font-semibold text-sm uppercase p-ripple"
+                    style={{ borderRadius: '2rem' }}
+                    onClick={(e) => options.onClick(e)}
+                >
+                    <span>{item.label}</span>
+                    <Ripple />
+                </a>
+            )
+        }
+
+        return (
+            <Link
+                href={item.href}
+                className="flex align-items-center gap-3 p-3 cursor-pointer"
+                onClick={() => {
+                    localStorage.setItem('activeModule', item.moduleKey)
+                    localStorage.setItem('activeSubmodule', item.id)
+                    setActiveModule(item.moduleKey)
+                    setActiveSub(item.id)
+                }}
+            >
+                <span className="font-medium">{item.label}</span>
+            </Link>
+        )
+    }
+
+    /* ---------------------------
+     * Módulos → MegaMenu
+     * --------------------------- */
+    const menuModel = NAV_MODULES.map((mod: NavModule) => ({
+        label: mod.module,
+        root: true,
+        template: itemTemplate,
+        items: [
+            [
+                {
+                    items: mod.items.map(sub => ({
+                        label: sub.title,
+                        href: typeof sub.href === 'string' ? sub.href : sub.href.url,
+                        id: sub.id,
+                        moduleKey: String(mod.key),
+                        template: itemTemplate
+                    }))
+                }
+            ]
+        ]
+    }))
 
     return (
-        <header className="sticky top-0 z-50 bg-background border-b border-border">
-            <div className="mx-auto max-w-7xl h-[72px] px-6 flex items-center justify-between">
-                <div className="flex items-center gap-6 min-w-0">
-                    <Link href={homeUrl} prefetch>
-                        <AppLogo />
-                    </Link>
+        <header className="sticky top-0 z-50 border-b border-border bg-background">
+            {/* ================= DESKTOP + HEADER ================= */}
+            <div className="mx-auto max-w-7xl px-4 flex items-center justify-between h-16">
+                {/* Logo */}
+                <Link href="/" className="flex items-center gap-3">
+                    <AppLogo />
+                </Link>
 
-                    <div className="relative hidden lg:block">
-                        <button
-                            onClick={() => setModuleOpen(v => !v)}
-                            className="flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground transition"
-                        >
-                            {selectedModule?.module ?? 'Módulos'}
-                            <ChevronDown size={16} />
-                        </button>
-
-                        {moduleOpen && (
-                            <div className="absolute mt-3 w-64 rounded-xl border border-border bg-popover shadow-lg z-50 overflow-hidden">
-                                {NAV_MODULES.map(mod => (
-                                    <button
-                                        key={mod.key}
-                                        onClick={() => {
-                                            setSelectedModule(mod)
-                                            setModuleOpen(false)
-                                        }}
-                                        className={`w-full px-5 py-3 text-left text-sm transition ${
-                                            selectedModule?.key === mod.key
-                                                ? 'bg-primary text-primary-foreground'
-                                                : 'hover:bg-muted'
-                                        }`}
-                                    >
-                                        {mod.module}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    {selectedModule && (
-                        <div className="hidden lg:flex gap-2 overflow-x-auto whitespace-nowrap scroll-smooth">
-                            {selectedModule.items.map(item => {
-                                const isSelected =
-                                    activeSub === item.title ||
-                                    isActive(currentUrl, item.href)
-
-                                return (
-                                    <Link
-                                        key={item.title}
-                                        href={hrefToString(item.href)}
-                                        prefetch
-                                        onClick={() => {
-                                            setActiveSub(item.title)
-                                            localStorage.setItem('activeSubmodule', item.title)
-                                        }}
-                                        className={`flex-shrink-0 rounded-full px-6 py-2.5 text-sm font-semibold transition-all ${
-                                            isSelected
-                                                ? 'bg-primary text-primary-foreground shadow-md scale-[1.02]'
-                                                : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                                        }`}
-                                    >
-                                        {item.title}
-                                    </Link>
-                                )
-                            })}
-                        </div>
-                    )}
+                {/* Desktop MegaMenu */}
+                <div className="hidden lg:block flex-1 px-6">
+                    <MegaMenu
+                        model={menuModel}
+                        orientation="horizontal"
+                        breakpoint="960px"
+                        className="surface-0"
+                        style={{ borderRadius: '3rem' }}
+                    />
                 </div>
 
-                <div className="flex items-center gap-3">
+                {/* Right */}
+                <div className="flex items-center gap-2">
                     <button
-                        onClick={() => setMobileOpen(v => !v)}
-                        className="lg:hidden p-2 rounded-lg hover:bg-muted transition"
+                        onClick={() => setMobileOpen(true)}
+                        className="lg:hidden p-2 rounded-lg hover:bg-muted"
+                        aria-label="Abrir menú"
                     >
-                        <Menu size={22} />
+                        ☰
                     </button>
                     <NavUser />
                 </div>
             </div>
 
+            {/* ================= BREADCRUMBS ================= */}
             {breadcrumbs.length > 0 && (
                 <div className="mx-auto max-w-7xl px-6 py-2 text-xs text-muted-foreground">
                     {breadcrumbs.map((b, idx) => (
@@ -151,40 +134,75 @@ export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[]
                 </div>
             )}
 
+            {/* ================= MOBILE DRAWER ================= */}
             {mobileOpen && (
-                <div className="lg:hidden border-t border-border bg-background">
-                    <div className="px-4 py-5 space-y-5">
-                        {NAV_MODULES.map(mod => (
-                            <div key={mod.key}>
-                                <div className="text-xs font-semibold uppercase text-muted-foreground mb-3">
-                                    {mod.module}
-                                </div>
-                                <div className="space-y-2">
-                                    {mod.items.map(item => {
-                                        const active =
-                                            isActive(currentUrl, item.href)
+                <div className="fixed inset-0 z-50 lg:hidden">
+                    {/* Overlay */}
+                    <div
+                        className="absolute inset-0 bg-black/40"
+                        onClick={() => setMobileOpen(false)}
+                    />
 
-                                        return (
+                    {/* Drawer */}
+                    <div className="absolute left-0 top-0 h-full w-80 bg-background shadow-xl p-4 overflow-y-auto">
+                        <div className="flex items-center justify-between mb-4">
+                            <AppLogo />
+                            <button
+                                onClick={() => setMobileOpen(false)}
+                                className="text-xl"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {NAV_MODULES.map(mod => (
+                            <div key={mod.key} className="mb-3">
+                                {/* Módulo */}
+                                <button
+                                    className="w-full flex justify-between items-center px-3 py-2 rounded-lg font-semibold hover:bg-muted"
+                                    onClick={() =>
+                                        setOpenMobileModule(
+                                            openMobileModule === String(mod.key)
+                                                ? null
+                                                : String(mod.key)
+                                        )
+                                    }
+                                >
+                                    {mod.module}
+                                    <span>
+                                        {openMobileModule === String(mod.key) ? '−' : '+'}
+                                    </span>
+                                </button>
+
+                                {/* Submódulos */}
+                                {openMobileModule === String(mod.key) && (
+                                    <div className="mt-2 space-y-1 pl-2">
+                                        {mod.items.map(sub => (
                                             <Link
-                                                key={item.title}
-                                                href={hrefToString(item.href)}
-                                                prefetch
+                                                key={sub.id}
+                                                href={
+                                                    typeof sub.href === 'string'
+                                                        ? sub.href
+                                                        : sub.href.url
+                                                }
+                                                className="block px-3 py-2 rounded-md text-sm hover:bg-accent"
                                                 onClick={() => {
-                                                    setActiveSub(item.title)
-                                                    localStorage.setItem('activeSubmodule', item.title)
+                                                    localStorage.setItem(
+                                                        'activeModule',
+                                                        String(mod.key)
+                                                    )
+                                                    localStorage.setItem(
+                                                        'activeSubmodule',
+                                                        sub.id
+                                                    )
                                                     setMobileOpen(false)
                                                 }}
-                                                className={`block px-4 py-3 rounded-lg text-sm transition ${
-                                                    active
-                                                        ? 'bg-primary text-primary-foreground'
-                                                        : 'hover:bg-muted'
-                                                }`}
                                             >
-                                                {item.title}
+                                                {sub.title}
                                             </Link>
-                                        )
-                                    })}
-                                </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>

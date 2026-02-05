@@ -77,6 +77,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('movimientoAvionesCSAE', function () {
         return Inertia::render('seguridad/MovimientoAvionesCSAE');
     })->name('movimientoAvionesCSAE');
+
+    Route::get('movimientosVehiculoEolo', function () {
+        return Inertia::render('seguridad/MovimientosVehiculoEolo');
+    })->name('movimientosVehiculoEolo');
 });
 
 require __DIR__.'/settings.php';

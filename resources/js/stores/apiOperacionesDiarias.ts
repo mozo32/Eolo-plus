@@ -7,8 +7,12 @@ function getXsrfToken(): string {
 }
 export async function guardarOperacionesDiariasApi(form: any) {
     const xsrf = getXsrfToken();
-    const res = await fetch("/api/OperacionesDiarias", {
-        method: "POST",
+
+    const url = form.id ? `/api/OperacionesDiarias/${form.id}` : "/api/OperacionesDiarias";
+    const method = form.id ? "PUT" : "POST";
+
+    const res = await fetch(url, {
+        method: method,
         headers: {
             Accept: 'application/json',
             'Content-Type': 'application/json',
@@ -19,11 +23,7 @@ export async function guardarOperacionesDiariasApi(form: any) {
     });
 
     const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-        throw new Error(data?.message || "Error al guardar Registro");
-    }
-
+    if (!res.ok) throw new Error(data?.message || "Error en el servidor");
     return data;
 }
 export async function fetchOperacionesDiarias(params: {
@@ -60,5 +60,54 @@ export async function fetchOperacionesDiarias(params: {
         throw new Error(data?.message || "Error al obtener operaciones diarias");
     }
 
+    return data;
+}
+
+export async function obtenerOperacionesDiariasApi(filtros = {}) {
+    const params = new URLSearchParams(filtros).toString();
+
+    const res = await fetch(`/api/OperacionesDiarias?${params}`, {
+        method: "GET",
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+        },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || "Error al obtener registros");
+    return data;
+}
+
+export async function autocompleteMatriculaApi(query: string) {
+    const xsrf = getXsrfToken();
+    const res = await fetch(`/api/OperacionesDiarias/autocomplete?q=${encodeURIComponent(query)}`, {
+        method: "GET",
+        headers: {
+            Accept: 'application/json',
+            'X-XSRF-TOKEN': xsrf,
+        },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json().catch(() => []);
+    if (!res.ok) throw new Error("Error en autocompletado");
+    return data;
+}
+
+export async function obtenerInfoMatriculaApi(matricula: string) {
+    const xsrf = getXsrfToken();
+    const res = await fetch(`/api/OperacionesDiarias/buscar/${encodeURIComponent(matricula)}`, {
+        method: "GET",
+        headers: {
+            Accept: 'application/json',
+            'X-XSRF-TOKEN': xsrf,
+        },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error("Error al buscar información de matrícula");
     return data;
 }

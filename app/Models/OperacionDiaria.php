@@ -24,15 +24,16 @@ class OperacionDiaria extends Model
         'hora',
         'lugar',
         'pax',
+        'departamento',
+        'validaciones',
     ];
 
     /**
      * Casts de atributos
      */
     protected $casts = [
+        'validaciones' => 'array',
         'fecha' => 'date',
-        'hora'  => 'datetime:H:i',
-        'pax'   => 'integer',
     ];
 
     /**
