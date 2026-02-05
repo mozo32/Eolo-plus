@@ -90,11 +90,11 @@ const ROUTE_CONFIG: Record<
         href: checkListEquipo,
         title: 'Checklist de Equipo de Seguridad',
     },
-    movimientoAvionesCSAE: {
+    movimientoavionescsae: {
         href: movimientoAvionesCSAE,
         title: 'Movimiento de Aviones CSAE',
     },
-    movimientosVehiculoEolo: {
+    movimientosvehiculoeolo: {
         href: movimientosVehiculoEolo,
         title: 'Movimientos de Vehiculos EOLO',
     },
@@ -174,7 +174,11 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                     }
                 })
                 .filter(Boolean) as NavModule['items']
-
+                const pg= {
+                    module: dep.nombre,
+                    key: dep.id,
+                    items,
+                }
             return {
                 module: dep.nombre,
                 key: dep.id,
