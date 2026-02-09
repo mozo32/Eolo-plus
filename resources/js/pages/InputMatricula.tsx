@@ -39,15 +39,18 @@ export default function InputMatricula({
                     type="text"
                     value={value}
                     onChange={(e) => {
-                        const val = e.target.value;
-                        setMatricula(val);
-                        buscar(val);
-                        onSelect(val); // ← mantiene sincronía
+                        // Transformamos a mayúsculas inmediatamente
+                        const valUpper = e.target.value.toUpperCase();
+
+                        setMatricula(valUpper);
+                        buscar(valUpper);
+                        onSelect(valUpper); // Envía la mayúscula al componente padre
                     }}
                     disabled={disabled}
                     required={required}
                     placeholder={placeholder}
-                    className="w-full rounded-lg border px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    // Agregamos 'uppercase' para que visualmente no haya "brincos"
+                    className="w-full rounded-lg border px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 uppercase"
                 />
 
                 {loading && (
@@ -63,14 +66,17 @@ export default function InputMatricula({
                         <li
                             key={item.id}
                             onClick={() => {
-                                setMatricula(item.matricula);
-                                obtenerTipo(item.matricula);
-                                onSelect(item.matricula);
+                                // Aseguramos mayúsculas también al hacer click en una sugerencia
+                                const matriculaUpper = item.matricula.toUpperCase();
+
+                                setMatricula(matriculaUpper);
+                                obtenerTipo(matriculaUpper);
+                                onSelect(matriculaUpper);
                                 clear();
                             }}
                             className="px-4 py-2 text-sm hover:bg-blue-50 cursor-pointer"
                         >
-                            {item.matricula}
+                            {item.matricula.toUpperCase()}
                         </li>
                     ))}
                 </ul>

@@ -24,7 +24,37 @@ class ServicioComisariatoController extends Controller
             'subtotal'       => ['required', 'numeric', 'min:0'],
             'total'          => ['required', 'numeric', 'min:0'],
         ]);
+        $infoMatricula = DB::connection('remota')
+                    ->table('tb_matricula as m')
+                    ->leftJoin('tb_estatus as e', 'e.id_estatus', '=', 'm.id_estatus')
+                    ->leftJoin('tb_tipo as t', 't.id_tipo', '=', 'm.id_tipo')
+                    ->leftJoin('tb_categoria as c', 'c.id_categoria', '=', 'm.id_categoria')
+                    ->where('m.matricula', $validated['matricula'])
+                    ->select(
+                        'm.matricula',
+                        'e.estatus',
+                        't.tipo',
+                        'c.categoria'
+                    )
+                    ->first();
 
+        if (!$infoMatricula) {
+            DB::connection('remota')
+            ->table('tb_matricula')
+            ->insert([
+                'matricula' => $validated['matricula'],
+                'id_estatus'     => 1,
+                'id_tipo'        => 0,
+                'id_categoria'   => 0,
+                'id_motor'       => 0,
+                'id_aterrizaje'  => 0,
+                'id_transito2h'  => 0,
+                'id_transito12h' => 0,
+                'id_pernocta'    => 0,
+                'd_vuelos'       => 0,
+            ]);
+
+        }
         $servicio = ServicioComisariato::create([
             'user_id'        => Auth::id(),
             'catering'       => $validated['catering'] ?? null,
@@ -59,7 +89,7 @@ class ServicioComisariatoController extends Controller
         $perPage = $request->get('per_page', 10);
 
         return response()->json(
-            $query->orderBy('created_at', 'asc')
+            $query->orderBy('created_at', 'desc')
                 ->paginate($perPage)
         );
     }

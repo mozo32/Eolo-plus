@@ -28,7 +28,7 @@ const getInitialForm = (data?: any) => {
 
         fecha_hora_salida: data?.fecha_hora_salida ?? "",
         observaciones_salida: data?.observaciones_salida ?? "",
-
+        quien_recibe: data?.quien_recibe ?? "",
         firma_entrada: firmaEntrada?.url ?? "",
         firma_salida: firmaSalida?.url ?? "",
     };

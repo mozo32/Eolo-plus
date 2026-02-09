@@ -311,17 +311,36 @@ class WalkAroundController extends Controller
         DB::beginTransaction();
 
         try {
+            $tipoExistente = DB::connection('remota')
+                ->table('tb_tipo')
+                ->where('tipo', $request->tipoAeronave)
+                ->first();
+
+            if (!$tipoExistente) {
+                $idTipo = DB::connection('remota')->table('tb_tipo')->insertGetId([
+                    'tipo' => $request->tipoAeronave
+                ]);
+            } else {
+                $idTipo = $tipoExistente->id_tipo;
+            }
             $dbMatricula = DB::connection('remota')
                 ->table('tb_matricula as m')
                 ->where('m.matricula', $request->matricula)
                 ->first();
 
-            if (! $dbMatricula) {
-                DB::connection('remota')
-                    ->table('tb_matricula')
-                    ->insert([
-                        'matricula' => $request->matricula,
-                    ]);
+            if (!$dbMatricula) {
+                DB::connection('remota')->table('tb_matricula')->insert([
+                    'matricula'      => $request->matricula,
+                    'id_estatus'     => 1,
+                    'id_tipo'        => $idTipo,
+                    'id_categoria'   => 0,
+                    'id_motor'       => 0,
+                    'id_aterrizaje'  => 0,
+                    'id_transito2h'  => 0,
+                    'id_transito12h' => 0,
+                    'id_pernocta'    => 0,
+                    'd_vuelos'       => 0,
+                ]);
             }
 
             $walkAround = WalkAround::create([

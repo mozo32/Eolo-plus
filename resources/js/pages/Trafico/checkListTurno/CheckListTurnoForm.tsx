@@ -49,7 +49,9 @@ type Props = {
 
 const getInitialForm = (data?: any) => ({
     nombreEmpleado: data?.nombre_empleado ?? "",
-    fecha: data?.fecha ?? new Date().toISOString().split("T")[0],
+    fecha: data?.fecha
+    ? new Date(data.fecha).toISOString().split("T")[0]
+    : new Date().toISOString().split("T")[0],
     recibeTurnoCon: data?.recibe_turno_con ?? {},
     observaciones_recibe: data?.observaciones_recibe ?? "",
     revisionSalas: data?.revision_salas ?? {},

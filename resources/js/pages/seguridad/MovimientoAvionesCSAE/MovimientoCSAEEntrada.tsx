@@ -62,7 +62,7 @@ export default function MovimientoCSAEEntrada({ data, onChange, updateField }: P
 
             <header className="text-center">
                 <h2 className="text-lg font-bold">
-                    MOVIMIENTO DE AVIONES CSAE
+                    AVIONES DE CSAE GUARDA
                 </h2>
                 <p className="text-sm text-gray-600">
                     Registro de entrada
@@ -105,8 +105,11 @@ export default function MovimientoCSAEEntrada({ data, onChange, updateField }: P
                         type="text"
                         name="tipo_aeronave"
                         value={data.tipo_aeronave}
-                        onChange={onChange}
-                        className="w-full border rounded p-2 mt-1"
+                        onChange={(e) => {
+                            e.target.value = e.target.value.toUpperCase();
+                            onChange(e);
+                        }}
+                        className="w-full border rounded p-2 mt-1 uppercase"
                     />
                 </div>
             </div>
@@ -149,6 +152,18 @@ export default function MovimientoCSAEEntrada({ data, onChange, updateField }: P
                     name="observaciones_entrada"
                     rows={3}
                     value={data.observaciones_entrada}
+                    onChange={onChange}
+                    className="w-full border rounded p-2 mt-1"
+                />
+            </div>
+            <div>
+                <label className="block text-xs font-semibold uppercase">
+                    Quien Recibe
+                </label>
+                <input
+                    type="text"
+                    name="quien_recibe"
+                    value={data.quien_recibe}
                     onChange={onChange}
                     className="w-full border rounded p-2 mt-1"
                 />

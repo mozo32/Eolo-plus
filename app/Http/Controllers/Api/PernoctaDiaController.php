@@ -33,9 +33,24 @@ class PernoctaDiaController extends Controller
                     ->first();
 
                 if (!$infoMatricula) {
-                    throw new \Exception(
-                        "La aeronave con matrícula {$item['matricula']} no está registrada"
-                    );
+                    DB::connection('remota')->table('tb_matricula')->insert([
+                        'matricula'      => $item['matricula'],
+                        'id_estatus'     => 1,
+                        'id_tipo'        => 0,
+                        'id_categoria'   => 0,
+                        'id_motor'       => 0,
+                        'id_aterrizaje'  => 0,
+                        'id_transito2h'  => 0,
+                        'id_transito12h' => 0,
+                        'id_pernocta'    => 0,
+                        'd_vuelos'       => 0,
+                    ]);
+
+                    $infoMatricula = (object) [
+                        'tipo'      => '',
+                        'estatus'   => '',
+                        'categoria' => ''
+                    ];
                 }
 
                 PernoctaDia::create([

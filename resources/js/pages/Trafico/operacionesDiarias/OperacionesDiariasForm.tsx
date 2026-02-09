@@ -37,8 +37,6 @@ export default function OperacionesDiariasForm({
     const handleSubmit = async(e: React.FormEvent) => {
         e.preventDefault();
 
-        console.log("Registro guardado:", form);
-
         try {
             Swal.fire({ title: "Procesando...", didOpen: () => Swal.showLoading() });
 

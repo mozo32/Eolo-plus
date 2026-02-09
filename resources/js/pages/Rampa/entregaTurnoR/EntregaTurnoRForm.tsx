@@ -103,7 +103,6 @@ export default function EntregaTurnoRForm({
         const firmasMap = Object.fromEntries(
             (initialData.firmas ?? []).map((f) => [f.rol, f.url])
         );
-        console.log('initialData: ', initialData.id);
 
         setForm({
             ...initialFormState,

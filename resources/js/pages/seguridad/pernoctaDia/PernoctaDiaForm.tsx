@@ -54,14 +54,15 @@ const PernoctaDiaForm: React.FC<Props> = ({ onAdd }) => {
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
     ) => {
         const { name, value } = e.target;
-        setForm({ ...form, [name]: value });
+        const finalValue = name === "matricula" ? value.toUpperCase() : value;
+        setForm({ ...form, [name]: finalValue });
 
         if (errors[name]) {
             setErrors({ ...errors, [name]: "" });
         }
 
         if (name === "matricula") {
-            buscarMatriculas(value);
+            buscarMatriculas(finalValue);
         }
     };
     const buscarMatriculas = async (value: string) => {
@@ -161,7 +162,7 @@ const PernoctaDiaForm: React.FC<Props> = ({ onAdd }) => {
                         onChange={handleChange}
                         placeholder="Ej. XA-ABC"
                         autoComplete="off"
-                        className={inputClass(!!errors.matricula)}
+                        className={`${inputClass(!!errors.matricula)} uppercase`}
                     />
 
                     {loadingMatricula && (

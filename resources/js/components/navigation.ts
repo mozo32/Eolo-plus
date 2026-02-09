@@ -98,6 +98,22 @@ const ROUTE_CONFIG: Record<
         href: movimientosVehiculoEolo,
         title: 'Movimientos de Vehiculos EOLO',
     },
+    operacionesdiarias: {
+        href: operacionesDiarias,
+        title: 'Operaciones Diarias',
+    },
+    controlmedicamento: {
+        href: controlMedicamento,
+        title: 'Control de Medicamento',
+    },
+    serviciocomisariato: {
+        href: servicioComisariato,
+        title: 'Servicio de Comisariato',
+    },
+    checklistturno: {
+        href: checkListTurno,
+        title: 'CheckList de Turno',
+    },
 }
 
 
@@ -131,6 +147,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                     { id: 'seguridad-Pernocta-mes', title: 'Pernocta por Mes', href: pernoctames(), icon: LayoutGrid },
                     { id: 'seguridad-csae', title: 'Movimiento de Aviones CSAE', href: movimientoAvionesCSAE(), icon: LayoutGrid },
                     { id: 'seguridad-vehiculos', title: 'Movimientos de Vehiculos EOLO', href: movimientosVehiculoEolo(), icon: LayoutGrid },
+                    { id: 'seguridad-operaciones', title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },
                 ],
             },
             {
@@ -174,11 +191,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                     }
                 })
                 .filter(Boolean) as NavModule['items']
-                const pg= {
-                    module: dep.nombre,
-                    key: dep.id,
-                    items,
-                }
+
             return {
                 module: dep.nombre,
                 key: dep.id,

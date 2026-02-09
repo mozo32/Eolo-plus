@@ -34,8 +34,11 @@ export default function ServicioComisariatoForm({
     useEffect(() => {
         setForm(getInitialForm(isEdit ? data : undefined));
     }, [data, isEdit]);
-    const updateField = (key: string, value: any) => {
-        setForm((prev) => ({ ...prev, [key]: value }));
+    const updateField = (key: string, value: any, forceUpper: boolean = false) => {
+        const finalValue = (forceUpper && typeof value === 'string')
+            ? value.toUpperCase()
+            : value;
+        setForm((prev) => ({ ...prev, [key]: finalValue }));
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -146,9 +149,7 @@ export default function ServicioComisariatoForm({
                             <input
                                 className={input}
                                 value={form.matricula}
-                                onChange={(e) =>
-                                    updateField("matricula", e.target.value)
-                                }
+                                onChange={(e) => updateField("matricula", e.target.value, true)}
                             />
                         </div>
 

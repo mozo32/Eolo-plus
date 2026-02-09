@@ -12,128 +12,87 @@ class EstacionamientoSubterraneoController extends Controller
 {
     public function index(Request $request)
     {
-        $query = EstacionamientoSubterraneo::query()
-            ->with('user')
-            ->orderByDesc('fecha_ingreso');
+        $mes = $request->query('mes');
+        $anio = $request->query('anio');
 
-        if ($request->filled('search')) {
-            $search = $request->search;
+        $query = EstacionamientoSubterraneo::selectRaw("
+                DISTINCT(DATE_FORMAT(fecha_ingreso, '%Y-%m-01')) as mes_completo
+            ");
 
-            $query->where(function ($q) use ($search) {
-                $q->where('placas', 'like', "%{$search}%")
-                  ->orWhere('vehiculo', 'like', "%{$search}%")
-                  ->orWhere('responsable', 'like', "%{$search}%");
+        $query->when($anio, function ($q) use ($anio) {
+            return $q->whereYear('fecha_ingreso', $anio);
+        });
+        $query->when($mes, function ($q) use ($mes) {
+            return $q->whereMonth('fecha_ingreso', $mes);
+        });
+
+        $meses = $query->orderBy('mes_completo', 'desc')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'valor' => \Carbon\Carbon::parse($item->mes_completo)->format('Y-m'),
+                    'label' => \Carbon\Carbon::parse($item->mes_completo)
+                                ->locale('es')
+                                ->isoFormat('MMMM YYYY')
+                ];
             });
-        }
 
-        $registros = $query->paginate(10);
-
-        return response()->json($registros);
+        return response()->json($meses);
     }
 
     public function store(Request $request)
     {
-        $validated = $request->validate(
-            [
-                'vehiculo' => [
-                    'required',
-                    'string',
-                    'max:100',
-                ],
-
-                'color' => [
-                    'nullable',
-                    'string',
-                    'max:50',
-                ],
-
-                'placas' => [
-                    'required',
-                    'string',
-                    'max:20',
-                    Rule::unique('estacionamiento_subterraneos', 'placas')
-                        ->whereNull('fecha_salida'),
-                ],
-
-                'matricula' => [
-                    'nullable',
-                    'string',
-                    'max:50',
-                    Rule::unique('estacionamiento_subterraneos', 'matricula')
-                        ->whereNull('fecha_salida'),
-                ],
-
-                'responsable' => [
-                    'required',
-                    'string',
-                    'max:150',
-                ],
-
-                'fecha_ingreso' => [
-                    'required',
-                    'date',
-                ],
-
-                'fecha_salida' => [
-                    'nullable',
-                    'date',
-                    'after_or_equal:fecha_ingreso',
-                ],
-
-                'oficial' => [
-                    'required',
-                    'string',
-                    'max:150',
-                ],
-            ],
-            [
-                'vehiculo.required' => 'El campo vehículo es obligatorio.',
-                'vehiculo.max' => 'El vehículo no debe exceder los 100 caracteres.',
-                'color.max' => 'El color no debe exceder los 50 caracteres.',
-                'placas.required' => 'Las placas son obligatorias.',
-                'placas.max' => 'Las placas no deben exceder los 20 caracteres.',
-                'placas.unique' =>
-                    'Estas placas ya se encuentran registradas y no tienen fecha de salida.',
-                'matricula.max' => 'La matrícula no debe exceder los 50 caracteres.',
-                'matricula.unique' =>
-                    'Esta matrícula ya se encuentra registrada y no tiene fecha de salida.',
-                'responsable.required' => 'El responsable es obligatorio.',
-                'responsable.max' => 'El responsable no debe exceder los 150 caracteres.',
-                'fecha_ingreso.required' => 'La fecha de ingreso es obligatoria.',
-                'fecha_ingreso.date' => 'La fecha de ingreso no es válida.',
-                'fecha_salida.date' => 'La fecha de salida no es válida.',
-                'fecha_salida.after_or_equal' =>
-                    'La fecha de salida debe ser igual o posterior a la fecha de ingreso.',
-                'oficial.required' => 'El nombre del oficial es obligatorio.',
-                'oficial.max' => 'El nombre del oficial no debe exceder los 150 caracteres.',
-            ]
-        );
-
-        EstacionamientoSubterraneo::create([
-            ...$validated,
-            'user_id' => Auth::id(),
-        ]);
-
-        return back()->with('success', 'Vehículo registrado correctamente.');
-    }
-
-    public function updateSalida(Request $request, EstacionamientoSubterraneo $estacionamiento)
-    {
         $request->validate([
-            'fecha_salida' => ['required', 'date', 'after_or_equal:fecha_ingreso'],
+            'vehiculos' => 'required|array',
+            'vehiculos.*.placas' => 'required|string',
+            'oficial' => 'required|string'
         ]);
 
-        $estacionamiento->update([
-            'fecha_salida' => $request->fecha_salida,
-        ]);
+        $oficial = $request->oficial;
+        $userId = Auth::id();
+        $registrados = 0;
+
+        foreach ($request->vehiculos as $item) {
+            $ultimo = EstacionamientoSubterraneo::where('placas', $item['placas'])
+                ->latest()
+                ->first();
+
+            EstacionamientoSubterraneo::create([
+                'placas'      => strtoupper($item['placas']),
+                'vehiculo'    => $item['vehiculo'] ?? ($ultimo->vehiculo ?? 'N/A'),
+                'color'       => $item['color'] ?? ($ultimo->color ?? 'N/A'),
+                'responsable' => $item['responsable'] ?? ($ultimo->responsable ?? 'N/A'),
+                'matricula'   => $item['matricula'] ?? ($ultimo->matricula ?? 'N/A'),
+                'fecha_ingreso' => now(),
+                'oficial'     => $oficial,
+                'user_id'     => $userId,
+            ]);
+
+            $registrados++;
+        }
 
         return response()->json([
-            'message' => 'Salida registrada correctamente.',
-            'data' =>  $estacionamiento
+            'message' => "Ronda completada: $registrados vehículos registrados correctamente."
         ]);
     }
-    public function show(EstacionamientoSubterraneo $estacionamiento)
+
+    public function show($fecha)
     {
-        return response()->json($estacionamiento);
+        $registros = EstacionamientoSubterraneo::whereRaw("DATE_FORMAT(fecha_ingreso, '%Y-%m') = ?", [$fecha])
+            ->select('placas', 'vehiculo', 'matricula')
+            ->selectRaw("GROUP_CONCAT(DISTINCT DAY(fecha_ingreso)) as dias_asistencia")
+            ->groupBy('placas', 'vehiculo', 'matricula')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'id' => $item->placas,
+                    'nombre' => $item->vehiculo,
+                    'matricula' => $item->matricula,
+                    'asistencias' => array_map('intval', explode(',', $item->dias_asistencia))
+                ];
+            });
+
+        return response()->json($registros);
     }
+
 }

@@ -53,78 +53,37 @@ export async function guardarEstaSubTerraneo(form: any) {
 
     return data;
 }
-export async function actualizarEstaSubTerraneo(id: number, form: any) {
-    await fetch("/sanctum/csrf-cookie", { credentials: "same-origin" });
 
-    const xsrf = getXsrfToken();
+export async function listarEstaSubTerraneo(mes = '', anio = ''): Promise<{ data: any[] }> {
+    const params = new URLSearchParams();
+    if (mes) params.append('mes', mes);
+    if (anio) params.append('anio', anio);
 
-    const res = await fetch(
-        `/api/EstacionamientoSubTerraneo/${id}/salida`,
-        {
-            method: "PUT",
-            headers: {
-                Accept: "application/json",
-                "Content-Type": "application/json",
-                "X-XSRF-TOKEN": xsrf,
-            },
-            body: JSON.stringify(form),
-            credentials: "same-origin",
-        }
-    );
-
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-        throw new Error(data?.message || "No se pudo actualizar");
-    }
-
-    return data;
-}
-
-export async function listarEstacionamientoSubTerraneo(
-    params?: {
-        search?: string;
-        page?: number;
-    }
-): Promise<EstacionamientoResponse<EstacionamientoItem>> {
-
-    const query = new URLSearchParams();
-
-    if (params?.search) query.append("search", params.search);
-    if (params?.page) query.append("page", params.page.toString());
-
-    const res = await fetch(
-        `/api/EstacionamientoSubTerraneo?${query.toString()}`,
-        {
-            method: "GET",
-            headers: {
-                Accept: "application/json",
-            },
-            credentials: "same-origin",
-        }
-    );
-
-    const data = await res.json();
-
-    if (!res.ok) {
-        throw new Error(data?.message || "Error al obtener registros");
-    }
-
-    return data;
-}
-export async function fetchEstacionamientoDetalle(id: number) {
-    console.log(id);
-
-    const res = await fetch(`/api/EstacionamientoSubTerraneo/${id}`, {
+    const res = await fetch(`/api/EstacionamientoSubTerraneo?${params.toString()}`, {
+        method: "GET",
         headers: {
-            Accept: "application/json",
-            "X-Requested-With": "XMLHttpRequest",
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
         },
         credentials: "same-origin",
     });
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.message || "No se pudo cargar el detalle");
-
-    return data as EstacionamientoItem;
+    if (!res.ok) throw new Error("Error al obtener los registros");
+    return await res.json();
 }
+export const obtenerDetalleVehiculo = async (fecha: string) => {
+    const response = await fetch(`/api/EstacionamientoSubTerraneo/detalle/${fecha}`, {
+        method: "GET",
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+        },
+        credentials: "same-origin",
+    });
+
+    if (!response.ok) {
+        throw new Error('Error en la petición');
+    }
+
+    return await response.json();
+};

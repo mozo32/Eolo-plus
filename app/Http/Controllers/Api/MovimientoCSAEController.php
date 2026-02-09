@@ -31,6 +31,45 @@ class MovimientoCSAEController extends Controller
                 'observaciones_entrada' => 'nullable|string',
             ]);
 
+            $ver = MovimientoCSAE::where('matricula', $validated['matricula'])
+                                    ->whereNull('fecha_hora_salida')
+                                    ->first();
+            if ($ver) {
+                return response()->json(['message' => 'Ya hay un registro activo de esta matrícula'], 422);
+            }
+
+            $tipoExistente = DB::connection('remota')
+                ->table('tb_tipo')
+                ->where('tipo', $validated['tipo_aeronave'])
+                ->first();
+
+            if (!$tipoExistente) {
+                $idTipo = DB::connection('remota')->table('tb_tipo')->insertGetId([
+                    'tipo' => $validated['tipo_aeronave']
+                ]);
+            } else {
+                $idTipo = $tipoExistente->id_tipo;
+            }
+            $infoMatricula = DB::connection('remota')
+                ->table('tb_matricula as m')
+                ->where('m.matricula', $validated['matricula'])
+                ->first();
+
+            if (!$infoMatricula) {
+                DB::connection('remota')->table('tb_matricula')->insert([
+                    'matricula'      => $validated['matricula'],
+                    'id_estatus'     => 1,
+                    'id_tipo'        => $idTipo,
+                    'id_categoria'   => 0,
+                    'id_motor'       => 0,
+                    'id_aterrizaje'  => 0,
+                    'id_transito2h'  => 0,
+                    'id_transito12h' => 0,
+                    'id_pernocta'    => 0,
+                    'd_vuelos'       => 0,
+                ]);
+            }
+
             $movimiento = MovimientoCSAE::create([
                 'fecha_hora_entrada'    => $validated['fecha_hora_entrada'],
                 'matricula'             => $validated['matricula'],
@@ -41,11 +80,7 @@ class MovimientoCSAEController extends Controller
                 'user_entrada_id'       => Auth::id(),
             ]);
 
-            $this->guardarFirmaBase64(
-                $request->firma_entrada,
-                'firma_entrada',
-                $movimiento
-            );
+            $this->guardarFirmaBase64($request->firma_entrada, 'firma_entrada', $movimiento);
 
             DB::commit();
 
@@ -56,7 +91,6 @@ class MovimientoCSAEController extends Controller
 
         } catch (\Throwable $e) {
             DB::rollBack();
-
             return response()->json([
                 'message' => 'Error al guardar movimiento',
                 'error' => $e->getMessage(),

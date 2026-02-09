@@ -57,7 +57,17 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion }: {
             });
             if (alCerrar) alCerrar();
         } catch (error) {
-            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo guardar' });
+            let mensaje = 'Ocurrió un error inesperado';
+
+            if (error instanceof Error) {
+                mensaje = error.message;
+            }
+
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: mensaje,
+            });
         }
     };
 

@@ -25,6 +25,47 @@ class OperacionesDiariasController extends Controller
             'destino'      => ['nullable', 'string', 'max:100'],
         ]);
 
+        $ver = OperacionDiaria::where('matricula', $validated['matricula'])
+                                ->where('tipo', $validated['movimiento'])
+                                ->first();
+
+        if ($ver) {
+            return response()->json([
+                'message' => 'ya hay un registro de esta matricula',
+                'data' => null,
+            ], 422);
+        }
+        $tipoExistente = DB::connection('remota')
+                ->table('tb_tipo')
+                ->where('tipo', $validated['equipo'])
+                ->first();
+
+        if (!$tipoExistente) {
+            $idTipo = DB::connection('remota')->table('tb_tipo')->insertGetId([
+                'tipo' => $validated['equipo']
+            ]);
+        } else {
+            $idTipo = $tipoExistente->id_tipo;
+        }
+        $infoMatricula = DB::connection('remota')
+                ->table('tb_matricula as m')
+                ->where('m.matricula', $validated['matricula'])
+                ->first();
+
+        if (!$infoMatricula) {
+            DB::connection('remota')->table('tb_matricula')->insert([
+                'matricula'      => $validated['matricula'],
+                'id_estatus'     => 1,
+                'id_tipo'        => $idTipo,
+                'id_categoria'   => 0,
+                'id_motor'       => 0,
+                'id_aterrizaje'  => 0,
+                'id_transito2h'  => 0,
+                'id_transito12h' => 0,
+                'id_pernocta'    => 0,
+                'd_vuelos'       => 0,
+            ]);
+        }
         $operacion = OperacionDiaria::create([
             'user_id'      => Auth::id(),
             'fecha'        => $validated['fecha'],

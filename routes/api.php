@@ -73,10 +73,9 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('PernoctaMes')->group(functio
 });
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('EstacionamientoSubTerraneo')->group(function () {
-    Route::get('/',[EstacionamientoSubterraneoController::class, 'index'])->name('estacionamiento.index');
+    Route::get('/',[EstacionamientoSubterraneoController::class, 'index']);
     Route::post('/',[EstacionamientoSubterraneoController::class, 'store'])->name('estacionamiento.store');
-    Route::put('/{estacionamiento}/salida',[EstacionamientoSubterraneoController::class, 'updateSalida'])->name('estacionamiento.salida');
-    Route::get('/{estacionamiento}',[EstacionamientoSubterraneoController::class, 'show'])->name('estacionamiento.show');
+    Route::get('/detalle/{fecha}',[EstacionamientoSubterraneoController::class, 'show']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('ChecklistEquipoSeguridad')->group(function () {
     Route::post('/',[ChecklistEquipoSeguridadController::class, 'store']);
