@@ -48,6 +48,18 @@ export async function actualizarEntregaTurnoRApi(id: number, form: any) {
 
     return data;
 }
+export async function EntregaTurnoR() {
+
+    const res = await fetch(`/api/EntregaTurnoR`, {
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message);
+
+    return data;
+}
 
 export async function fetchEntregaTurnoR(params: {
     page?: number;

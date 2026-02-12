@@ -15,6 +15,8 @@ import { dashboard,
     servicioComisariato,
     movimientoAvionesCSAE,
     movimientosVehiculoEolo,
+    reporteEntregaTurno,
+    verificacionEstadoAutotanque
 } from '@/routes'
 import { LayoutGrid } from 'lucide-react'
 
@@ -114,6 +116,14 @@ const ROUTE_CONFIG: Record<
         href: checkListTurno,
         title: 'CheckList de Turno',
     },
+    reporteentregaturno: {
+        href: reporteEntregaTurno,
+        title: 'Entrega Turno Autotanque',
+    },
+    verificacionestadoautotanque: {
+        href: verificacionEstadoAutotanque,
+        title: 'Verificacion Estado Autotanque',
+    },
 }
 
 
@@ -158,6 +168,8 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                     { id: 'rampa-personal', title: 'Asistencia de Personal', href: asistenciaPersonal(), icon: LayoutGrid },
                     { id: 'rampa-seguridad', title: 'checkList Equipo de Seguridad', href: checkListEquipo(), icon: LayoutGrid },
                     { id: 'rampa-operaciones', title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },
+                    { id: 'rampa-autotanque', title: 'Entrega Turno Autotanque', href: reporteEntregaTurno(), icon: LayoutGrid },
+                    { id: 'rampa-verificacion', title: 'Verificacion Estado Autotanque', href: verificacionEstadoAutotanque(), icon: LayoutGrid },
                 ],
             },
             {

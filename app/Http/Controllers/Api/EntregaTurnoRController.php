@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\EntregaTurnoR;
 use App\Models\Firma;
 use App\Models\Bitacora;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -19,18 +20,23 @@ class EntregaTurnoRController extends Controller
 
         try {
             $entrega = EntregaTurnoR::create([
-                'encabezado'      => $request->encabezado,
-                'comunicaciones'  => $request->comunicaciones,
-                'vehiculos'       => $request->vehiculos,
-                'barras_remolque' => $request->barrasRemolque,
-                'gpus'            => $request->gpus,
-                'carrito_golf'    => $request->carritoGolf,
-                'aeronaves'       => $request->aeronaves,
+                'encabezado'        => $request->formData['encabezado'],
+                'comunicaciones'    => $request->formData['comunicaciones'],
+                'vehiculos'         => $request->vehiculos,
+                'barras_remolque'   => $request->barrasRemolque,
+                'gpus'              => $request->gpus,
+                'carrito_golf'      => $request->carritoGolf,
+                'aeronaves'         => $request->aeronaves,
+                'nombre_entrega'    => $request->firmas['entrega']['nombre'] ?? null,
+                'nombre_jefe_area'  => $request->firmas['jefe']['nombre'] ?? null,
+                'nombre_recibe'     => $request->firmas['recibe']['nombre'] ?? null,
+                'user_id'           => Auth::id(),
+
             ]);
 
-            $this->guardarFirmaBase64($request->firmas['quienEntrega'] ?? '', 'quien_entrega', $entrega);
-            $this->guardarFirmaBase64($request->firmas['jefeRampa'] ?? '', 'jefe_rampa', $entrega);
-            $this->guardarFirmaBase64($request->firmas['quienRecibe'] ?? '', 'quien_recibe', $entrega);
+            $this->guardarFirmaBase64($request->firmas['entrega']['firma'] ?? '', 'quien_entrega', $entrega);
+            $this->guardarFirmaBase64($request->firmas['jefe']['firma'] ?? '', 'jefe_rampa', $entrega);
+            $this->guardarFirmaBase64($request->firmas['recibe']['firma'] ?? '', 'quien_recibe', $entrega);
 
             /*
             Bitacora::log(
@@ -123,25 +129,30 @@ class EntregaTurnoRController extends Controller
         };
     }
 
-    public function index(Request $request)
+    public function index()
     {
-        $query = EntregaTurnoR::query();
+        $entrega = EntregaTurnoR::with([
+            'firmas' => function ($q) {
+                $q->withPivot(['rol', 'tag', 'orden', 'status']);
+            },
+        ])
+        ->latest()
+        ->first();
 
-        if ($request->filled('search')) {
-            $search = $request->search;
-
-            $query->where(function ($q) use ($search) {
-                $q->where('encabezado->jefeTurno', 'like', "%{$search}%")
-                ->orWhere('encabezado->fecha', 'like', "%{$search}%");
-            });
+        if (!$entrega) {
+            return response()->json(null);
         }
 
-        $perPage = $request->get('per_page', 10);
+        $firmasRequeridas = $entrega->firmas->filter(function ($firma) {
+            return $firma->pivot->status === 'A' &&
+                in_array($firma->pivot->rol, ['quien_entrega', 'quien_recibe']);
+        })->count();
 
-        return response()->json(
-            $query->orderBy('created_at', 'desc')
-                ->paginate($perPage)
-        );
+        if ($firmasRequeridas < 2) {
+            return response()->json($entrega);
+        }
+
+        return response()->json(null);
     }
 
     public function show(EntregaTurnoR $entregaTurnoR)
@@ -196,32 +207,22 @@ class EntregaTurnoRController extends Controller
 
         try {
             $entregaTurnoR->update([
-                'encabezado'      => $request->encabezado,
-                'comunicaciones'  => $request->comunicaciones,
+                'encabezado'      => $request->formData['encabezado'],
+                'comunicaciones'  => $request->formData['comunicaciones'],
                 'vehiculos'       => $request->vehiculos,
                 'barras_remolque' => $request->barrasRemolque,
                 'gpus'            => $request->gpus,
                 'carrito_golf'    => $request->carritoGolf,
                 'aeronaves'       => $request->aeronaves,
+                'nombre_entrega'    => $request->firmas['entrega']['nombre'] ?? null,
+                'nombre_jefe_area'  => $request->firmas['jefe']['nombre'] ?? null,
+                'nombre_recibe'     => $request->firmas['recibe']['nombre'] ?? null,
+                'user_id'           => Auth::id(),
             ]);
 
-            $this->guardarFirmaBase64(
-                $request->firmas['quienEntrega'] ?? '',
-                'quien_entrega',
-                $entregaTurnoR
-            );
-
-            $this->guardarFirmaBase64(
-                $request->firmas['jefeRampa'] ?? '',
-                'jefe_rampa',
-                $entregaTurnoR
-            );
-
-            $this->guardarFirmaBase64(
-                $request->firmas['quienRecibe'] ?? '',
-                'quien_recibe',
-                $entregaTurnoR
-            );
+            $this->guardarFirmaBase64($request->firmas['entrega']['firma'] ?? '', 'quien_entrega', $entregaTurnoR);
+            $this->guardarFirmaBase64($request->firmas['jefe']['firma'] ?? '', 'jefe_rampa', $entregaTurnoR);
+            $this->guardarFirmaBase64($request->firmas['recibe']['firma'] ?? '', 'quien_recibe', $entregaTurnoR);
 
             DB::commit();
 
@@ -236,6 +237,28 @@ class EntregaTurnoRController extends Controller
             return response()->json([
                 'message' => 'Error al actualizar entrega de turno',
                 'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+    public function reportesPendientesJefe()
+    {
+        try {
+            $reportes = EntregaTurnoR::whereDoesntHave('firmas', function ($query) {
+                    $query->where('firmables.rol', 'jefe_rampa')
+                        ->where('firmables.status', 'A');
+                })
+                ->with(['usuario'])
+                ->latest()
+                ->get();
+            $reportes->load([
+                'firmas' => fn ($q) => $q->withPivot(['rol', 'tag', 'orden', 'status']),
+            ]);
+            return response()->json($reportes);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error al consultar reportes',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

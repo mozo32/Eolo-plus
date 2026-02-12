@@ -4,6 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+use Illuminate\Database\Eloquent\Relations\BelongsTo; // <--- AGREGAR ESTO
+use App\Models\User;
+
 class EntregaTurnoR extends Model
 {
     protected $table = 'entrega_turno_r';
@@ -16,6 +19,10 @@ class EntregaTurnoR extends Model
         'gpus',
         'carrito_golf',
         'aeronaves',
+        'nombre_entrega',
+        'nombre_jefe_area',
+        'nombre_recibe',
+        'user_id',
     ];
 
     protected $casts = [
@@ -29,7 +36,10 @@ class EntregaTurnoR extends Model
     ];
 
     /* ================= FIRMAS ================= */
-
+    public function usuario(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
     public function firmas()
     {
         return $this->morphToMany(
@@ -43,8 +53,8 @@ class EntregaTurnoR extends Model
 
     public function firmasAll()
     {
-        return $this->morphToMany(Firma::class, 'firmable')
-            ->withPivot(['rol', 'tag', 'orden', 'status']);
+        return $this->morphToMany(Firma::class, 'firmable', 'firmables')
+        ->withPivot(['rol', 'tag', 'orden', 'status']);
     }
 }
 

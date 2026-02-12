@@ -81,6 +81,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('movimientosVehiculoEolo', function () {
         return Inertia::render('seguridad/MovimientosVehiculoEolo');
     })->name('movimientosVehiculoEolo');
+
+    Route::get('reporteEntregaTurno', function () {
+        return Inertia::render('Rampa/ReporteEntregaTurno');
+    })->name('reporteEntregaTurno');
+
+    Route::get('verificacionEstadoAutotanque', function () {
+        return Inertia::render('Rampa/VerificacionEstadoAutotanque');
+    })->name('verificacionEstadoAutotanque');
 });
 
 require __DIR__.'/settings.php';

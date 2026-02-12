@@ -86,9 +86,11 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('ChecklistEquipoSeguridad')->
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('EntregaTurnoR')->group(function () {
     Route::post('/',[EntregaTurnoRController::class, 'store']);
-    Route::get('/',[EntregaTurnoRController::class, 'index']);
+    Route::get('/entrega-turno-rampa', [EntregaTurnoRController::class, 'index'])->name('entrega.rampa.index');
+    Route::get('/pendientes-jefe', [EntregaTurnoRController::class, 'reportesPendientesJefe']);
     Route::get('/{entregaTurnoR}', [EntregaTurnoRController::class, 'show']);
     Route::put('/{entregaTurnoR}', [EntregaTurnoRController::class, 'update']);
+
 });
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('CheckListTurno')->group(function () {

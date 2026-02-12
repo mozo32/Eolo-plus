@@ -1,222 +1,71 @@
-const labels: any = {
-    encabezado: {
-        fecha: "Fecha del turno",
-        jefeTurno: "Jefe de turno",
-    },
-    comunicaciones: {
-        radios: "Número de radios",
-        radioFrecuencia: "Radiofrecuencia",
-    },
-    vehiculos: {
-        limpieza: "Limpieza",
-        nivel: "Nivel",
-        llantas: "Llantas",
-        frenos: "Frenos",
-        obs: "Observaciones",
-    },
-    barrasRemolque: {
-        total: "Número total de barras",
-        limpieza: "Limpieza de barras",
-        estado: "Estado de barras",
-        cabezales: "Total de cabezales",
-        cabezalesEstado: "Estado de cabezales",
-        escalerasCantidad: "Cantidad de escaleras",
-        escalerasEstado: "Estado de escaleras",
-        hamburgueseraLimpieza: "Limpieza de hamburguesera",
-        hamburgueseraLlantas: "Llantas de hamburguesera",
-    },
-    gpus: {
-        total: "Total de GPU",
-        limpias: "GPU limpias",
-        voltaje: "Voltaje general",
-        enchufe: "Enchufe",
-        llantas: "Llantas",
-    },
-    gpusDetalle: {
-        limpia: "Limpieza",
-        voltaje: "Voltaje",
-        numero: "Número de GPU",
-        enchufe: "Enchufe",
-        llantas: "Llantas",
-    },
-    carritoGolf: {
-        limpieza: "Limpieza",
-        carga: "Nivel de carga",
-        llantas: "Llantas",
-        luces: "Luces",
-        frenos: "Frenos",
-        obs: "Observaciones",
-    },
-    aeronaves: {
-        total: "Total de aeronaves",
-        h1: "Aeronaves en H1",
-        h2: "Aeronaves en H2",
-    },
-};
+// resources/js/pages/Rampa/entregaTurnoR/utils/validacionEntregaTurnoR.ts
 
-type ResultadoValidacion = {
-    ok: boolean;
-    message?: string;
-    faltantes?: string[];
-};
+export const getStepErrors = (
+    step: number,
+    formData: any,
+    vehiculos: any,
+    barrasRemolque: any,
+    gpus: any,
+    carritoGolf: any,
+    aeronaves: any,
+    firmas: any
+): string[] => {
+    const errors: string[] = [];
 
-export function validarStep(step: number, form: any): ResultadoValidacion {
     switch (step) {
         case 1:
-            return validarEncabezado(form);
+            if (!formData.encabezado.jefeTurno) errors.push("Nombre del Jefe de Turno");
+            if (!formData.comunicaciones.radios) errors.push("Cantidad de Radios");
+            if (!formData.comunicaciones.radioFrecuencia) errors.push("Frecuencia de Radio");
+            break;
+
         case 2:
-            return validarVehiculos(form);
+            Object.entries(vehiculos).forEach(([id, v]: [string, any]) => {
+                if (!v.limpieza) errors.push(`Limpieza de ${id.toUpperCase()}`);
+                if (!v.llantas) errors.push(`Llantas de ${id.toUpperCase()}`);
+                if ('nivel' in v && !v.nivel) errors.push(`Nivel de ${id.toUpperCase()}`);
+                if ('frenos' in v && !v.frenos) errors.push(`Frenos de ${id.toUpperCase()}`);
+                if ('luces' in v && !v.luces) errors.push(`Luces de ${id.toUpperCase()}`);
+            });
+            break;
+
         case 3:
-            return validarBarrasYGpus(form);
+            if (!barrasRemolque.total) errors.push("Cantidad de Barras de Remolque");
+            if (!barrasRemolque.limpieza) errors.push("Limpieza de Barras de Remolque");
+            if (!barrasRemolque.estado) errors.push("Estado físico de Barras de Remolque");
+            if (!barrasRemolque.cabezales) errors.push("Cantidad de Cabezales");
+            if (!barrasRemolque.cabezalesEstado) errors.push("Estado de Cabezales");
+            if (!barrasRemolque.escalerasCantidad) errors.push("Cantidad de Escaleras");
+            if (!barrasRemolque.escalerasEstado) errors.push("Estado de Escaleras");
+            if (!barrasRemolque.hamburgueseraLimpieza) errors.push("Limpieza de Hamburguesera");
+            if (!barrasRemolque.hamburgueseraLlantas) errors.push("Llantas de Hamburguesera");
+
+            Object.entries(gpus).forEach(([id, g]: [string, any]) => {
+                if (!g.limpia) errors.push(`Limpieza de ${id.toUpperCase()}`);
+                if (!g.horometro) errors.push(`Nivel del horometro de ${id.toUpperCase()}`);
+                if (!g.cantidad) errors.push(`Cantidad del horometro de ${id.toUpperCase()}`);
+                if (!g.enchufe) errors.push(`Estado del Enchufe de ${id.toUpperCase()}`);
+                if (!g.llantas) errors.push(`Estado de las llantas de ${id.toUpperCase()}`);
+            });
+            break;
+
         case 4:
-            return validarCarritoGolf(form);
-        case 5:
-            return validarAeronavesYFirmas(form);
-        default:
-            return { ok: true };
-    }
-}
+            if (!aeronaves.hangar1) errors.push("Número de aeronaves del hangar 1");
+            if (!aeronaves.hangar2) errors.push("Número de aeronaves del hangar 2");
+            if (!aeronaves.plataforma_h1) errors.push("Número de aeronaves de la plataforma del hangar 1");
+            if (!aeronaves.plataforma_h2) errors.push("Número de aeronaves de la plataforma del hangar 2");
 
-/* ================= STEP 1 ================= */
-function validarEncabezado(form: any): ResultadoValidacion {
-    const faltantes: string[] = [];
+            Object.entries(carritoGolf).forEach(([id, g]: [string, any]) => {
+                if (!g.limpieza) errors.push(`Limpieza de ${id.toUpperCase()}`);
+                if (!g.carga) errors.push(`Carga del carrito de ${id.toUpperCase()}`);
+                if (!g.llantas) errors.push(`Estado de las llantas del carrito ${id.toUpperCase()}`);
+                if (!g.luces) errors.push(`Estado de las luces del carrito ${id.toUpperCase()}`);
+                if (!g.frenos) errors.push(`Estado de los frenos del carrito ${id.toUpperCase()}`);
+            });
 
-    for (const campo in form.encabezado) {
-        if (!form.encabezado[campo]) {
-            faltantes.push(labels.encabezado[campo]);
-        }
-    }
-
-    for (const campo in form.comunicaciones) {
-        if (campo !== "radiosFuncionando" && !form.comunicaciones[campo]) {
-            faltantes.push(labels.comunicaciones[campo]);
-        }
+            if (!firmas.entrega.nombre) errors.push("Nombre de quien Entrega");
+            break;
     }
 
-    return faltantes.length
-        ? {
-            ok: false,
-            message: "Faltan campos por completar",
-            faltantes,
-        }
-        : { ok: true };
-}
-
-
-/* ================= STEP 2 ================= */
-function validarVehiculos(form: any): ResultadoValidacion {
-    const faltantes: string[] = [];
-
-    for (const unidad in form.vehiculos) {
-        const vehiculo = form.vehiculos[unidad];
-
-        for (const campo in vehiculo) {
-            if (campo === "obs") continue;
-
-            if (!vehiculo[campo]) {
-                faltantes.push(
-                    `Vehículo ${unidad.toUpperCase()} – ${labels.vehiculos[campo]}`
-                );
-            }
-        }
-    }
-
-    return faltantes.length
-        ? {
-            ok: false,
-            message: "Faltan campos en vehículos",
-            faltantes,
-        }
-        : { ok: true };
-}
-
-
-/* ================= STEP 3 ================= */
-function validarBarrasYGpus(form: any): ResultadoValidacion {
-    const faltantes: string[] = [];
-
-    for (const campo in form.barrasRemolque) {
-        if (!form.barrasRemolque[campo]) {
-            faltantes.push(
-                `Barras de remolque – ${labels.barrasRemolque[campo]}`
-            );
-        }
-    }
-
-    for (const campo in form.gpus) {
-        if (campo !== "detalle" && !form.gpus[campo]) {
-            faltantes.push(`GPU – ${labels.gpus[campo]}`);
-        }
-    }
-
-    for (const gpuKey in form.gpus.detalle) {
-        const gpu = form.gpus.detalle[gpuKey];
-
-        for (const campo in gpu) {
-            if (campo === "obs") continue;
-
-            if (!gpu[campo]) {
-                faltantes.push(
-                    `${gpuKey.toUpperCase()} – ${labels.gpusDetalle[campo]}`
-                );
-            }
-        }
-    }
-
-    return faltantes.length
-        ? {
-            ok: false,
-            message: "Faltan campos en Barras de Remolque y GPU's",
-            faltantes,
-        }
-        : { ok: true };
-}
-
-
-/* ================= STEP 4 ================= */
-function validarCarritoGolf(form: any): ResultadoValidacion {
-    const faltantes: string[] = [];
-
-    for (const id in form.carritoGolf) {
-        const carrito = form.carritoGolf[id];
-
-        for (const campo in carrito) {
-            if (campo === "obs") continue;
-
-            if (!carrito[campo]) {
-                faltantes.push(
-                    `Carrito ${id} – ${labels.carritoGolf[campo]}`
-                );
-            }
-        }
-    }
-
-    return faltantes.length
-        ? {
-            ok: false,
-            message: "Faltan campos en Carrito de Golf",
-            faltantes,
-        }
-        : { ok: true };
-}
-
-
-/* ================= STEP 5 ================= */
-function validarAeronavesYFirmas(form: any): ResultadoValidacion {
-    const faltantes: string[] = [];
-
-    for (const campo in form.aeronaves) {
-        if (!form.aeronaves[campo]) {
-            faltantes.push(labels.aeronaves[campo]);
-        }
-    }
-
-    return faltantes.length
-        ? {
-            ok: false,
-            message: "Faltan campos en Aeronaves",
-            faltantes,
-        }
-        : { ok: true };
-}
-
+    return errors;
+};
