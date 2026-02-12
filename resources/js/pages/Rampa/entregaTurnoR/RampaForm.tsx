@@ -22,6 +22,15 @@ interface FirmasState {
     jefe: FirmaData;
     recibe: FirmaData;
 }
+interface VehiculoData {
+    limpieza: string;
+    nivel?: string;
+    llantas: string;
+    frenos?: string;
+    obs: string;
+    luces?: string;
+    estado?: 'Operativo' | 'Mantenimiento' | '';
+}
 const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
     const [step, setStep] = useState(1);
     const [saving, setSaving] = useState(false);
@@ -32,13 +41,14 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
         comunicaciones: { radios: "", radioFrecuencia: "", radiosFuncionando: true }
     });
 
-    const [vehiculos, setVehiculos] = useState({
-        nissan012: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "" },
-        nissan015: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "" },
-        tractor005: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "" },
-        lektro003: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "" },
-        lektro007: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "" },
-        aguasNegras008: { limpieza: "", llantas: "", obs: "" }
+    const [vehiculos, setVehiculos] = useState<Record<string, VehiculoData>>({
+        nissan012: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
+        nissan015: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
+        tractor005: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
+        lektro003: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
+        lektro007: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
+        aguasNegras008: { limpieza: "", llantas: "", obs: "", estado: "Operativo" },
+        aguaPotable: { limpieza: "", llantas: "", obs: "", estado: "Operativo" }
     });
 
     const [barrasRemolque, setBarrasRemolque] = useState({
@@ -47,13 +57,13 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
     });
 
     const [gpus, setGpus] = useState({
-        gpu115: { limpia: "", horometro: "", cantidad: "", enchufe: "", llantas: "", obs: "" },
-        hobart600: { limpia: "", horometro: "", cantidad: "", enchufe: "", llantas: "", obs: "" },
-        foxtronics: { limpia: "", horometro: "", cantidad: "", enchufe: "", llantas: "", obs: "" }
+        gpu115: { limpia: "", horometro: "", enchufe: "", llantas: "", cableado: "", obs: "" },
+        hobart600: { limpia: "", numPlantas: "", enchufe: "", llantas: "", obs: "" },
+        foxtronics: { limpia: "", numPlantas: "", enchufe: "", llantas: "", obs: "" }
     });
 
     const [carritoGolf, setCarritoGolf] = useState({
-        "005": { limpieza: "", carga: "0", llantas: "", luces: "", frenos: "", obs: "" }
+        "005": { limpieza: "", carga: "0", llantas: "", luces: "", frenos: "", obs: "", estado: "Operativo" }
     });
 
     const [aeronaves, setAeronaves] = useState({
@@ -107,12 +117,13 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
             }
         }
         if (initialData.id) {
-            setStep(4);
+            setStep(1);
         }
 
     }, [initialData]);
 
-    const handleNext = () => {
+    const handleNext = (e?: React.MouseEvent) => {
+        if (e) e.preventDefault();
         const errors = getStepErrors(
             step,
             formData,
@@ -137,7 +148,9 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
             });
             return;
         }
-        setStep(prev => prev + 1);
+        if (step < totalSteps) {
+            setStep(prev => prev + 1);
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -245,8 +258,8 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
                                 <section className="space-y-6">
                                     <h2 className="text-2xl font-black italic uppercase text-slate-800 border-t pt-8">Comunicaciones</h2>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <input type="number" placeholder="Cant. Radios" className="p-4 bg-slate-50 rounded-2xl font-bold outline-none border border-transparent focus:border-blue-500" value={formData.comunicaciones.radios} onChange={e => handleUpdate(setFormData, 'comunicaciones', 'radios', e.target.value)} />
-                                        <input type="text" placeholder="Frecuencia" className="p-4 bg-slate-50 rounded-2xl font-bold outline-none border border-transparent focus:border-blue-500" value={formData.comunicaciones.radioFrecuencia} onChange={e => handleUpdate(setFormData, 'comunicaciones', 'radioFrecuencia', e.target.value)} />
+                                        <input type="number" placeholder="Cant. Radios Interinos " className="p-4 bg-slate-50 rounded-2xl font-bold outline-none border border-transparent focus:border-blue-500" value={formData.comunicaciones.radios} onChange={e => handleUpdate(setFormData, 'comunicaciones', 'radios', e.target.value)} />
+                                        <input type="number" placeholder="Cant. Radios Frecuencia" className="p-4 bg-slate-50 rounded-2xl font-bold outline-none border border-transparent focus:border-blue-500" value={formData.comunicaciones.radioFrecuencia} onChange={e => handleUpdate(setFormData, 'comunicaciones', 'radioFrecuencia', e.target.value)} />
                                     </div>
                                     <button type="button" onClick={() => handleUpdate(setFormData, 'comunicaciones', 'radiosFuncionando', !formData.comunicaciones.radiosFuncionando)}
                                         className={`w-full p-4 rounded-2xl font-black border-2 transition-all ${formData.comunicaciones.radiosFuncionando ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>

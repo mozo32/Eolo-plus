@@ -21,11 +21,13 @@ export const getStepErrors = (
 
         case 2:
             Object.entries(vehiculos).forEach(([id, v]: [string, any]) => {
-                if (!v.limpieza) errors.push(`Limpieza de ${id.toUpperCase()}`);
-                if (!v.llantas) errors.push(`Llantas de ${id.toUpperCase()}`);
-                if ('nivel' in v && !v.nivel) errors.push(`Nivel de ${id.toUpperCase()}`);
-                if ('frenos' in v && !v.frenos) errors.push(`Frenos de ${id.toUpperCase()}`);
-                if ('luces' in v && !v.luces) errors.push(`Luces de ${id.toUpperCase()}`);
+                if (v.estado == 'Operativo') {
+                    if (!v.limpieza) errors.push(`Limpieza de ${id.toUpperCase()}`);
+                    if (!v.llantas) errors.push(`Llantas de ${id.toUpperCase()}`);
+                    if ('nivel' in v && !v.nivel) errors.push(`Nivel de ${id.toUpperCase()}`);
+                    if ('frenos' in v && !v.frenos) errors.push(`Frenos de ${id.toUpperCase()}`);
+                    if ('luces' in v && !v.luces) errors.push(`Luces de ${id.toUpperCase()}`);
+                }
             });
             break;
 
@@ -42,10 +44,14 @@ export const getStepErrors = (
 
             Object.entries(gpus).forEach(([id, g]: [string, any]) => {
                 if (!g.limpia) errors.push(`Limpieza de ${id.toUpperCase()}`);
-                if (!g.horometro) errors.push(`Nivel del horometro de ${id.toUpperCase()}`);
-                if (!g.cantidad) errors.push(`Cantidad del horometro de ${id.toUpperCase()}`);
                 if (!g.enchufe) errors.push(`Estado del Enchufe de ${id.toUpperCase()}`);
                 if (!g.llantas) errors.push(`Estado de las llantas de ${id.toUpperCase()}`);
+                if (id === 'gpu115') {
+                    if (!g.horometro) errors.push(`Horómetro de ${id.toUpperCase()}`);
+                    if (!g.cableado) errors.push(`Estado del cableado de ${id.toUpperCase()}`);
+                } else if (id === 'hobart600' || id === 'foxtronics') {
+                    if (!g.numPlantas) errors.push(`Número de plantas de ${id.toUpperCase()}`);
+                }
             });
             break;
 
@@ -56,11 +62,14 @@ export const getStepErrors = (
             if (!aeronaves.plataforma_h2) errors.push("Número de aeronaves de la plataforma del hangar 2");
 
             Object.entries(carritoGolf).forEach(([id, g]: [string, any]) => {
-                if (!g.limpieza) errors.push(`Limpieza de ${id.toUpperCase()}`);
-                if (!g.carga) errors.push(`Carga del carrito de ${id.toUpperCase()}`);
-                if (!g.llantas) errors.push(`Estado de las llantas del carrito ${id.toUpperCase()}`);
-                if (!g.luces) errors.push(`Estado de las luces del carrito ${id.toUpperCase()}`);
-                if (!g.frenos) errors.push(`Estado de los frenos del carrito ${id.toUpperCase()}`);
+                if(g.estado == 'Operativo'){
+                    if (!g.limpieza) errors.push(`Limpieza de ${id.toUpperCase()}`);
+                    if (!g.carga) errors.push(`Carga del carrito de ${id.toUpperCase()}`);
+                    if (!g.llantas) errors.push(`Estado de las llantas del carrito ${id.toUpperCase()}`);
+                    if (!g.luces) errors.push(`Estado de las luces del carrito ${id.toUpperCase()}`);
+                    if (!g.frenos) errors.push(`Estado de los frenos del carrito ${id.toUpperCase()}`);
+                }
+
             });
 
             if (!firmas.entrega.nombre) errors.push("Nombre de quien Entrega");

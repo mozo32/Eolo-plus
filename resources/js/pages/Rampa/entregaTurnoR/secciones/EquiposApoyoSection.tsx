@@ -8,7 +8,6 @@ interface EquiposProps {
 
 const EquiposApoyoSection: React.FC<EquiposProps> = ({ data, onChange }) => {
 
-    // Mini componente para switches de estado elegantes
     const StateToggle = ({ field, label, options }: { field: string, label: string, options: string[] }) => (
         <div className="flex flex-col gap-1.5">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</span>
@@ -32,15 +31,11 @@ const EquiposApoyoSection: React.FC<EquiposProps> = ({ data, onChange }) => {
 
     return (
         <div className="grid grid-cols-12 gap-4">
-
-            {/* 1. BARRAS DE REMOLQUE (6 COLUMNAS) */}
             <div className="col-span-12 lg:col-span-6 bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col justify-between min-h-[180px]">
                 <div className="flex justify-between items-start">
                     <div className="bg-blue-600 p-2.5 rounded-2xl text-white">
                         <Anchor size={20} />
                     </div>
-
-                    {/* Campo de Entrada del Total */}
                     <div className="flex flex-col items-end">
                         <span className="text-[10px] font-bold text-blue-600 uppercase tracking-tighter bg-blue-50 px-2 py-0.5 rounded-md mb-1">
                             Cantidad Total
@@ -68,7 +63,6 @@ const EquiposApoyoSection: React.FC<EquiposProps> = ({ data, onChange }) => {
                 </div>
             </div>
 
-            {/* 2. CABEZALES (3 COLUMNAS) */}
             <div className="col-span-6 lg:col-span-3 bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100 flex flex-col items-center text-center gap-3">
                 <Settings className="text-indigo-600" size={24} />
                 <h3 className="font-bold text-indigo-900 text-xs uppercase tracking-widest">Cabezales</h3>
@@ -81,7 +75,6 @@ const EquiposApoyoSection: React.FC<EquiposProps> = ({ data, onChange }) => {
                 <StateToggle field="cabezalesEstado" label="Estado" options={["Bien", "Mal"]} />
             </div>
 
-            {/* 3. ESCALERAS (3 COLUMNAS) */}
             <div className="col-span-6 lg:col-span-3 bg-orange-50 p-6 rounded-[2rem] border border-orange-100 flex flex-col items-center text-center gap-3">
                 <Layers className="text-orange-600" size={24} />
                 <h3 className="font-bold text-orange-900 text-xs uppercase tracking-widest">Escaleras</h3>
@@ -94,21 +87,17 @@ const EquiposApoyoSection: React.FC<EquiposProps> = ({ data, onChange }) => {
                 <StateToggle field="escalerasEstado" label="Estado" options={["Bien", "Mal"]} />
             </div>
 
-            {/* 4. HAMBURGUESERA (TARJETA HEROICA - 12 COLUMNAS) */}
             <div className="col-span-12 bg-white rounded-[2.5rem] p-8 border-2 border-slate-100 shadow-sm relative overflow-hidden group hover:border-emerald-200 transition-colors duration-500">
-                {/* Decoración sutil de fondo */}
                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full -mr-10 -mt-10 blur-2xl group-hover:bg-emerald-100/50 transition-all"></div>
 
                 <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-
-                    {/* Lado Izquierdo: Info de Equipo */}
                     <div className="flex items-start gap-5">
                         <div className="bg-emerald-50 p-4 rounded-3xl">
                             <Layout className="text-emerald-600" size={32} />
                         </div>
                         <div>
                             <h3 className="text-slate-800 font-black text-2xl uppercase tracking-tight leading-none">
-                                Hamburguesera
+                                Carro Equipajero
                             </h3>
                             <div className="flex items-center gap-2 mt-3 bg-slate-50 w-fit px-3 py-1 rounded-full border border-slate-100">
                                 <Gauge size={14} className="text-emerald-500" />
@@ -118,11 +107,7 @@ const EquiposApoyoSection: React.FC<EquiposProps> = ({ data, onChange }) => {
                             </div>
                         </div>
                     </div>
-
-                    {/* Lado Derecho: Controles de Estado */}
                     <div className="flex flex-col sm:flex-row gap-8 lg:gap-12">
-
-                        {/* Control: Higiene */}
                         <div className="space-y-4">
                             <span className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2 ml-1">
                                 <CheckCircle2 size={12} className="text-emerald-500" /> Higiene
@@ -143,8 +128,6 @@ const EquiposApoyoSection: React.FC<EquiposProps> = ({ data, onChange }) => {
                                 ))}
                             </div>
                         </div>
-
-                        {/* Control: Neumáticos */}
                         <div className="space-y-4">
                             <span className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2 ml-1">
                                 <CheckCircle2 size={12} className="text-emerald-500" /> Neumáticos

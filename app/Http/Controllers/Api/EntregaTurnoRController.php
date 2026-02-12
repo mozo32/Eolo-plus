@@ -136,6 +136,7 @@ class EntregaTurnoRController extends Controller
                 $q->withPivot(['rol', 'tag', 'orden', 'status']);
             },
         ])
+        ->where('user_id', Auth::id())
         ->latest()
         ->first();
 

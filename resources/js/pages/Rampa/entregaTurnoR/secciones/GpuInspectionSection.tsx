@@ -1,5 +1,5 @@
 import React from 'react';
-import { BatteryCharging, Clock, Hash, MessageSquare, Sparkles, Settings2 } from 'lucide-react';
+import { BatteryCharging, Clock, Hash, MessageSquare, Zap, Settings2 } from 'lucide-react';
 
 interface GpuProps {
     data: any;
@@ -23,14 +23,13 @@ const GpuInspectionSection: React.FC<GpuProps> = ({ data, onChange }) => {
                 </span>
             </div>
 
-            {/* GRID LAYOUT: 1 columna en móvil, 2 en desktop */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {gpuKeys.map((key, index) => {
                     const gpu = data[key];
-                    const isSystemCritical = gpu.enchufe === 'Mal' || gpu.llantas === 'Mal';
-
-                    // Lógica para que si es el último y es impar, ocupe las 2 columnas
+                    const isSystemCritical = gpu.enchufe === 'Mal' || gpu.llantas === 'Mal' || gpu.cableado === 'Mal';
                     const isLastAndOdd = index === gpuKeys.length - 1 && gpuKeys.length % 2 !== 0;
+                    const isGpu115 = key === 'gpu115';
+                    const isPlantBased = key === 'hobart600' || key === 'foxtronics';
 
                     return (
                         <div
@@ -43,7 +42,7 @@ const GpuInspectionSection: React.FC<GpuProps> = ({ data, onChange }) => {
                                 : 'border-slate-100 shadow-sm hover:shadow-md'
                             }`}
                         >
-                            {/* Cabecera de la Tarjeta */}
+                            {/* Cabecera */}
                             <div className="flex justify-between items-start mb-6">
                                 <div className="flex items-center gap-3">
                                     <div className={`p-3 rounded-2xl ${isSystemCritical ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-900 text-white'}`}>
@@ -55,7 +54,6 @@ const GpuInspectionSection: React.FC<GpuProps> = ({ data, onChange }) => {
                                     </div>
                                 </div>
 
-                                {/* Toggle Limpieza Compacto */}
                                 <div className="flex flex-col items-end gap-1.5">
                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">¿Limpia?</span>
                                     <div className="flex p-1 bg-slate-100 rounded-xl">
@@ -66,8 +64,8 @@ const GpuInspectionSection: React.FC<GpuProps> = ({ data, onChange }) => {
                                                 onClick={() => onChange(key, 'limpia', opt)}
                                                 className={`px-4 py-1 rounded-lg text-[10px] font-black transition-all ${
                                                     gpu.limpia === opt
-                                                        ? (opt === 'No' ? 'bg-orange-500 text-white shadow-sm' : 'bg-white text-slate-900 shadow-sm')
-                                                        : 'text-slate-400 hover:text-slate-600'
+                                                    ? (opt === 'No' ? 'bg-orange-500 text-white shadow-sm' : 'bg-white text-slate-900 shadow-sm')
+                                                    : 'text-slate-400 hover:text-slate-600'
                                                 }`}
                                             >
                                                 {opt}
@@ -77,39 +75,51 @@ const GpuInspectionSection: React.FC<GpuProps> = ({ data, onChange }) => {
                                 </div>
                             </div>
 
-                            {/* Cuerpo: Inputs y Selectores */}
+                            {/* Cuerpo */}
                             <div className="grid grid-cols-2 gap-4">
-                                {/* Columna Izquierda: Números */}
                                 <div className="space-y-3">
+                                    {/* Campo Dinámico 1: Horómetro o Número de Plantas */}
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">Horómetro</label>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">
+                                            {isPlantBased ? 'Nº Plantas' : 'Horómetro'}
+                                        </label>
                                         <div className="flex items-center gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-100 focus-within:bg-white focus-within:border-blue-400 transition-all">
-                                            <Clock size={16} className="text-blue-500" />
+                                            {isPlantBased ? <Hash size={16} className="text-purple-500" /> : <Clock size={16} className="text-blue-500" />}
                                             <input
                                                 type="number"
-                                                value={gpu.horometro}
-                                                onChange={(e) => onChange(key, 'horometro', e.target.value)}
-                                                className="bg-transparent w-full outline-none font-black text-slate-700"
-                                                placeholder="0.0"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">Combustible (Lts)</label>
-                                        <div className="flex items-center gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-100 focus-within:bg-white focus-within:border-blue-400 transition-all">
-                                            <Hash size={16} className="text-emerald-500" />
-                                            <input
-                                                type="number"
-                                                value={gpu.cantidad}
-                                                onChange={(e) => onChange(key, 'cantidad', e.target.value)}
+                                                value={isPlantBased ? gpu.numPlantas : gpu.horometro}
+                                                onChange={(e) => onChange(key, isPlantBased ? 'numPlantas' : 'horometro', e.target.value)}
                                                 className="bg-transparent w-full outline-none font-black text-slate-700"
                                                 placeholder="0"
                                             />
                                         </div>
                                     </div>
+
+                                    {/* Campo Dinámico 2: Solo para GPU115 (Cableado) */}
+                                    {isGpu115 && (
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">Cableado</label>
+                                            <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+                                                {['Bien', 'Mal'].map(opt => (
+                                                    <button
+                                                        key={opt}
+                                                        type='button'
+                                                        onClick={() => onChange(key, 'cableado', opt)}
+                                                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all ${
+                                                            gpu.cableado === opt
+                                                            ? (opt === 'Mal' ? 'bg-red-500 text-white' : 'bg-blue-600 text-white')
+                                                            : 'text-slate-400'
+                                                        }`}
+                                                    >
+                                                        {opt}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
-                                {/* Columna Derecha: Estado Físico */}
+                                {/* Estado Físico (Enchufe y Llantas) */}
                                 <div className="bg-slate-50 rounded-[2rem] p-4 flex flex-col justify-around border border-slate-100">
                                     <div className="flex flex-col gap-2">
                                         <div className="flex justify-between items-center px-1">
@@ -159,7 +169,7 @@ const GpuInspectionSection: React.FC<GpuProps> = ({ data, onChange }) => {
                                 </div>
                             </div>
 
-                            {/* Observaciones: Full Width Abajo */}
+                            {/* Observaciones */}
                             <div className="mt-4 relative group">
                                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors">
                                     <MessageSquare size={16} />
