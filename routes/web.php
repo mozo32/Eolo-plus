@@ -29,7 +29,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('despacho/GestionAeronaves');
     })->name('gestionarAeronaves');
 
-    //administración
     Route::get('gestionUsuarios', function () {
         return Inertia::render('administracion/GestionUsuarios');
     })->name('gestionUsuarios');
@@ -89,6 +88,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('verificacionEstadoAutotanque', function () {
         return Inertia::render('Rampa/VerificacionEstadoAutotanque');
     })->name('verificacionEstadoAutotanque');
+
+    Route::get('registroVisitantes', function () {
+        return Inertia::render('seguridad/RegistroVisitantes');
+    })->name('registroVisitantes');
 });
 
 require __DIR__.'/settings.php';

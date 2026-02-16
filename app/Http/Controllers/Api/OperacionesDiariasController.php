@@ -22,6 +22,8 @@ class OperacionesDiariasController extends Controller
             'pax'          => ['required', 'integer', 'min:0'],
             'departamento' => ['required', 'string'],
             'procedencia'  => ['nullable', 'string', 'max:100'],
+            'equipaje'     => ['nullable','integer'],
+            'observaciones'=> ['nullable','string'],
             'destino'      => ['nullable', 'string', 'max:100'],
         ]);
 
@@ -76,6 +78,8 @@ class OperacionesDiariasController extends Controller
             'lugar'        => $request->procedencia ?? $request->destino,
             'pax'          => $validated['pax'],
             'departamento' => $validated['departamento'],
+            'equipaje' => $validated['equipaje'],
+            'observaciones' => $validated['observaciones'],
             'validaciones' => [$validated['departamento']],
         ]);
 
@@ -122,6 +126,8 @@ class OperacionesDiariasController extends Controller
             'lugar'        => $request->procedencia ?? $request->destino,
             'pax'          => $request->pax,
             'validaciones' => array_values($validaciones),
+            'equipaje'     => $request->equipaje,
+            'observaciones'=> $request->observaciones,
         ]);
 
         return response()->json($operacion);

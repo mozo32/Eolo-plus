@@ -25,6 +25,8 @@ class OperacionDiaria extends Model
         'lugar',
         'pax',
         'departamento',
+        'equipaje',
+        'observaciones',
         'validaciones',
     ];
 

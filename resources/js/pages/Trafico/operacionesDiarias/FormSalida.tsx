@@ -17,10 +17,12 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion }: {
         equipo: datosEdicion?.equipo || '',
         hora: datosEdicion?.hora?.substring(0, 5) || '',
         destino: datosEdicion?.lugar || '',
-        pax: datosEdicion?.pax || 0,
+        pax: datosEdicion?.pax || null,
         departamento: moduloNombre,
+        equipaje: datosEdicion?.equipaje || null,
         movimiento: 'Salida',
-        fecha: datosEdicion?.fecha || new Date().toISOString().split('T')[0]
+        fecha: datosEdicion?.fecha || new Date().toISOString().split('T')[0],
+        observaciones: datosEdicion?.observaciones || ''
     });
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -122,15 +124,37 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion }: {
                         />
                     </div>
                 </div>
-
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Pax</label>
+                        <input
+                            type="number"
+                            value={formData.pax}
+                            placeholder="0"
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+                            onChange={(e) => setFormData({ ...formData, pax: parseInt(e.target.value) || 0 })}
+                        />
+                    </div>
+                    {moduloNombre == 'Trafico' && (
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Equipaje</label>
+                            <input
+                                type="text"
+                                value={formData.equipaje}
+                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                onChange={(e) => handleFieldChange("equipaje", e.target.value.toUpperCase())}
+                                required
+                            />
+                        </div>
+                    )}
+                </div>
                 <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Pax</label>
-                    <input
-                        type="number"
-                        value={formData.pax}
-                        placeholder="0"
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
-                        onChange={(e) => setFormData({ ...formData, pax: parseInt(e.target.value) || 0 })}
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Observaciones</label>
+                    <textarea
+                        value={formData.observaciones}
+                        placeholder="Notas adicionales sobre el vuelo..."
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none resize-none min-h-[80px]"
+                        onChange={(e) => handleFieldChange("observaciones", e.target.value)}
                     />
                 </div>
 
