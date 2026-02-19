@@ -12,6 +12,8 @@ use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 
 class FortifyServiceProvider extends ServiceProvider
 {
@@ -28,6 +30,22 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Fortify::authenticateUsing(function (Request $request) {
+            $username = strtolower($request->input('name'));
+            $password = $request->password;
+            $users = User::where(function($query) use ($username) {
+                $query->whereRaw('LOWER(name) = ?', [$username])
+                    ->orWhereRaw('LOWER(initials) = ?', [$username]);
+            })->get();
+
+            foreach ($users as $user) {
+                if (Hash::check($password, $user->password)) {
+                    return $user;
+                }
+            }
+
+            return null;
+        });
         $this->configureActions();
         $this->configureViews();
         $this->configureRateLimiting();

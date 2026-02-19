@@ -569,7 +569,7 @@ export default function WalkAroundForm({
                                                 value="entrada"
                                                 checked={form.movimiento === "entrada"}
                                                 onChange={handleChange}
-                                                disabled={!form.esNuevaMatricula}
+                                                //disabled={!form.esNuevaMatricula}
                                             />
                                             Entrada
                                         </label>
@@ -581,7 +581,7 @@ export default function WalkAroundForm({
                                                 value="salida"
                                                 checked={form.movimiento === "salida"}
                                                 onChange={handleChange}
-                                                disabled={!form.esNuevaMatricula}
+                                                //disabled={!form.esNuevaMatricula}
                                             />
                                             Salida
                                         </label>
@@ -701,8 +701,7 @@ export default function WalkAroundForm({
                                     id="fecha"
                                     type="date"
                                     value={fechaDateInput}
-                                    disabled
-                                    className="w-full cursor-not-allowed rounded-lg border border-gray-300 bg-gray-100 px-3 py-2
+                                    className="w-full rounded-lg border px-3 py-2
                                     text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
                                 />
                                 <input type="hidden" name="fecha" value={fechaDateInput} />

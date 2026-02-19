@@ -4,6 +4,7 @@ import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import EntregarTurnoAutotanque from './Autotanque/EntregarTurnoAutotanque';
+import EoloForm from './Autotanque/EoloForm';
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'ReporteEntregaTurno',

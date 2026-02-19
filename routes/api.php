@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\OperacionesDiariasController;
 use App\Http\Controllers\Api\MovimientoCSAEController;
 use App\Http\Controllers\Api\VehiculoEoloController;
 use App\Http\Controllers\Api\RegistroVisitantesController;
+use App\Http\Controllers\Api\RemisionController;
 
 Route::post('/despacho', [DespachoController::class, 'store']);
 Route::get('/aeronaves/autocomplete', [AeronaveController::class, 'autocomplete']);
@@ -102,6 +103,11 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('CheckListTurno')->group(func
 
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('ControlMedicamento')->group(function () {
+    Route::get('/ultimosMovimientos',[ControlMedicamentoController::class, 'ultimosMovimientos']);
+    Route::get('/medicamentos',[ControlMedicamentoController::class, 'medicamentos']);
+    Route::post('/entregaMedicamento',[ControlMedicamentoController::class, 'storeEntrega']);
+    Route::put('/medicamento/{id}',[ControlMedicamentoController::class, 'reabastecer']);
+
     Route::post('/',[ControlMedicamentoController::class, 'store']);
     Route::get('/index',[ControlMedicamentoController::class, 'index']);
     Route::get('/current',[ControlMedicamentoController::class, 'current']);
@@ -135,4 +141,9 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('VehiculoEolo')->group(functi
 Route::middleware(['api', 'auth:sanctum'])->prefix('RegistroVisitantes')->group(function () {
     Route::post('/', [RegistroVisitantesController::class, 'store']);
     Route::get('/', [RegistroVisitantesController::class, 'index']);
+    Route::put('/{registroVisitante}', [RegistroVisitantesController::class, 'salida']);
+});
+Route::middleware(['api', 'auth:sanctum'])->prefix('Remision')->group(function () {
+    Route::post('/remisiones', [RemisionController::class, 'store']);
+    Route::get('/remisiones', [RemisionController::class, 'index']);
 });

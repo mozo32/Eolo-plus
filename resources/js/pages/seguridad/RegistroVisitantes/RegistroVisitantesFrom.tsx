@@ -4,10 +4,15 @@ import { Clock, User, Building2, ShieldCheck, CreditCard, CheckCircle2, ChevronR
 import { guardarRegistroVisitantes } from '@/stores/apiRegistroVisitantes';
 import Swal from 'sweetalert2';
 
+interface Props {
+    onSuccess?: () => void;
+}
+
 type Role = {
     slug: string;
     nombre: string;
 };
+
 export type AuthUser = {
     id: number;
     name: string;
@@ -24,7 +29,8 @@ export type AuthUser = {
         }[];
     }[];
 };
-const RegistroVisitantesForm = () => {
+
+const RegistroVisitantesForm = ({ onSuccess }: Props) => {
     const [currentTime, setCurrentTime] = useState(new Date());
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
     const [formData, setFormData] = useState({
@@ -49,7 +55,7 @@ const RegistroVisitantesForm = () => {
         }));
     };
 
-    const handleSubmit = async(e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const dataForm = {
             ...formData,
@@ -66,6 +72,9 @@ const RegistroVisitantesForm = () => {
                 timer: 1200,
                 showConfirmButton: false,
             });
+            if (onSuccess) {
+                onSuccess();
+            }
         } catch (e: any) {
             Swal.fire({ icon: 'error', title: 'Error', text: e.message });
         }
@@ -81,6 +90,7 @@ const RegistroVisitantesForm = () => {
         { label: '¿Quién te recibe?', icon: ShieldCheck, placeholder: 'Persona a quien visita', name: 'a_quien_visita' },
         { label: 'N. de Gafete', icon: CreditCard, placeholder: 'Asignado por seguridad', name: 'gafete' }
     ];
+
     return (
         <div className="min-h-screen bg-slate-50 p-6 flex items-center justify-center font-sans">
             <div className="max-w-5xl w-full flex flex-col lg:flex-row gap-8">
@@ -95,10 +105,6 @@ const RegistroVisitantesForm = () => {
                             <div className="h-2 w-16 bg-yellow-400 rounded-full mb-8"></div>
                         </div>
                         <div className="relative z-10 space-y-6">
-                            <div>
-                                <p className="text-blue-200 text-xs font-bold uppercase tracking-widest mb-1">Hora Actual</p>
-                                <p className="text-4xl font-mono font-bold tabular-nums">{timeString}</p>
-                            </div>
                             <div className="bg-blue-700/50 backdrop-blur-md rounded-2xl p-4 border border-blue-500/30">
                                 <p className="text-xs font-medium text-blue-100 italic">
                                     "Tu seguridad es nuestra prioridad en Eolo Plus."
@@ -107,6 +113,7 @@ const RegistroVisitantesForm = () => {
                         </div>
                     </div>
                 </div>
+
                 <div className="lg:w-2/3 space-y-6">
                     <div className="bg-white rounded-[3rem] p-8 md:p-12 shadow-sm border border-slate-200">
                         <div className="flex justify-between items-center mb-10">

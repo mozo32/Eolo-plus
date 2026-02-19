@@ -7,6 +7,7 @@ import { Head } from '@inertiajs/react';
 import MovimientoCSAEForm from './MovimientoAvionesCSAE/MovimientoCSAEForm';
 import { useState, useEffect } from 'react';
 import { fetchMovimientoCSAE, fetchShowMovimientoCSAE } from '@/stores/apiMovimientoCSAE';
+import { Activity, Plane, X } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -150,66 +151,29 @@ export default function MovimientoAvionesCSAE() {
             </div>
 
             {openForm && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-                    onClick={() => {
-                        setOpenForm(false);
-                        setIsEdit(false);
-                        setDetalle(null);
-                    }}
-                >
-                    <div
-                        onClick={(e) => e.stopPropagation()}
-                        className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl dark:bg-gray-900"
-                    >
-                        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4 shadow-sm dark:border-gray-700 dark:bg-gray-900"
-                        >
-                            <div className="flex items-center gap-3">
-                                <div
-                                    className={`flex h-10 w-10 items-center justify-center rounded-full
-                                                ${isEdit
-                                            ? 'bg-orange-100 text-orange-600'
-                                            : 'bg-[#00677F]/10 text-[#00677F]'}
-                                                `}
-                                >
-                                    {isEdit ? (
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            className="h-5 w-5"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                        >
-                                            <path d="M12 20h9" />
-                                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
-                                        </svg>
-                                    ) : (
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            className="h-5 w-5"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                        >
-                                            <path d="M12 5v14" />
-                                            <path d="M5 12h14" />
-                                        </svg>
-                                    )}
-                                </div>
+                <div className="fixed inset-0 z-50 flex flex-col bg-slate-50/80 backdrop-blur-2xl dark:bg-slate-950/90 animate-in fade-in duration-300">
+                    <header className="flex items-center justify-between px-8 py-4 border-b border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50">
+                        <div className="flex items-center gap-6">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black tracking-[0.3em] text-blue-600 dark:text-blue-400 uppercase">
+                                    Terminal Operativa
+                                </span>
+                                <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                    {isEdit ? 'Actualización de Manifiesto' : 'Nuevo Registro de Movimiento'}
+                                    <span className="ml-2 px-2 py-0.5 rounded text-[9px] bg-slate-200 dark:bg-slate-700 text-slate-500">
+                                        v2.4
+                                    </span>
+                                </h2>
+                            </div>
+                        </div>
 
-                                <div>
-                                    <h3 className="text-lg font-extrabold text-slate-800 dark:text-white">
-                                        {isEdit
-                                            ? 'Actualizar Movimiento de Aviones CSAE'
-                                            : 'Nuevo Movimiento de Aviones CSAE'}
-                                    </h3>
-                                </div>
+                        <div className="flex items-center gap-4">
+                            <div className="hidden lg:flex flex-col items-end mr-4 border-r border-slate-300 dark:border-slate-700 pr-4">
+                                <span className="text-[9px] text-slate-400 uppercase font-medium">Estado del Sistema</span>
+                                <span className="text-[10px] text-green-500 font-bold flex items-center gap-1">
+                                    <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-ping" />
+                                    Sincronizado
+                                </span>
                             </div>
 
                             <button
@@ -218,39 +182,64 @@ export default function MovimientoAvionesCSAE() {
                                     setIsEdit(false);
                                     setDetalle(null);
                                 }}
-                                className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30"
-                                aria-label="Cerrar"
+                                className="group flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-red-600 dark:hover:bg-red-500 dark:hover:text-white transition-all duration-300"
                             >
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-5 w-5"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                >
-                                    <path d="M18 6L6 18" />
-                                    <path d="M6 6l12 12" />
-                                </svg>
+                                <span className="text-xs font-bold uppercase tracking-wider">Cancelar</span>
+                                <X size={18} className="group-hover:rotate-90 transition-transform" />
                             </button>
                         </div>
+                    </header>
+                    <main className="flex-1 overflow-hidden flex flex-col lg:flex-row">
+                        <aside className="lg:w-72 p-8 border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20 hidden lg:block">
+                            <div className="space-y-8">
+                                <div>
+                                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4 italic">Protocolo</h4>
+                                    <ul className="space-y-4">
+                                        {['Verificación de Matrícula', 'Estado de Aeronave', 'Firma de Responsable'].map((item, i) => (
+                                            <li key={i} className="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400">
+                                                <div className="h-5 w-5 rounded-full border border-blue-500 flex items-center justify-center text-[10px] font-bold text-blue-500">
+                                                    {i + 1}
+                                                </div>
+                                                {item}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
 
-                        <div className="p-6">
-                            <MovimientoCSAEForm
-                                isEdit={isEdit}
-                                data={detalle}
-                                open={openForm}
-                                onSuccess={() => {
-                                    setOpenForm(false);
-                                    setIsEdit(false);
-                                    setDetalle(null);
-                                    cargarDatos();
-                                }}
-                            />
-                        </div>
-                    </div>
+                                <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800">
+                                    <p className="text-[11px] text-blue-700 dark:text-blue-300 leading-relaxed font-medium">
+                                        <strong>Nota:</strong> Los datos registrados aquí se sincronizan automáticamente con el servidor central de CSAE.
+                                    </p>
+                                </div>
+                            </div>
+                        </aside>
+                        <section className="flex-1 overflow-y-auto bg-white/40 dark:bg-transparent backdrop-blur-sm">
+                            <div className="max-w-4xl mx-auto p-8 lg:p-16">
+                                <div className="mb-12">
+                                    <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight mb-2">
+                                        {isEdit ? 'Modificar Registro' : 'Iniciando Registro'}
+                                    </h1>
+                                    <p className="text-slate-500 dark:text-slate-400 font-medium">
+                                        Complete los campos técnicos requeridos para la operación de aviación.
+                                    </p>
+                                </div>
+
+                                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-2xl shadow-slate-200/50 dark:shadow-none">
+                                    <MovimientoCSAEForm
+                                        isEdit={isEdit}
+                                        data={detalle}
+                                        open={openForm}
+                                        onSuccess={() => {
+                                            setOpenForm(false);
+                                            setIsEdit(false);
+                                            setDetalle(null);
+                                            cargarDatos();
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        </section>
+                    </main>
                 </div>
             )}
         </AppLayout>

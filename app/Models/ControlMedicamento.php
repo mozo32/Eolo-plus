@@ -12,11 +12,13 @@ class ControlMedicamento extends Model
         'responsable',
         'fecha',
         'dia',
+        'aparatos',
         'medicamentos',
         'user_id',
     ];
 
     protected $casts = [
+        'aparatos' => 'array',
         'fecha' => 'date',
         'medicamentos' => 'array',
     ];
