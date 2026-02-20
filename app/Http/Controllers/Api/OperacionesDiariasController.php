@@ -13,6 +13,7 @@ class OperacionesDiariasController extends Controller
 {
     public function store(Request $request)
     {
+
         $validated = $request->validate([
             'fecha'        => ['required', 'date'],
             'movimiento'   => ['required', 'in:Llegada,Salida'],
@@ -25,6 +26,9 @@ class OperacionesDiariasController extends Controller
             'equipaje'     => ['nullable','integer'],
             'observaciones'=> ['nullable','string'],
             'destino'      => ['nullable', 'string', 'max:100'],
+            'tipo_cliente' => ['nullable', 'string', 'max:100'],
+            'nombre'       => ['nullable', 'string', 'max:100'],
+            'impulso'      => ['nullable', 'string', 'max:100'],
         ]);
 
         $ver = OperacionDiaria::where('matricula', $validated['matricula'])
@@ -78,9 +82,12 @@ class OperacionesDiariasController extends Controller
             'lugar'        => $request->procedencia ?? $request->destino,
             'pax'          => $validated['pax'],
             'departamento' => $validated['departamento'],
-            'equipaje' => $validated['equipaje'],
-            'observaciones' => $validated['observaciones'],
+            'equipaje'     => $validated['equipaje'],
+            'observaciones'=> $validated['observaciones'],
             'validaciones' => [$validated['departamento']],
+            'impulso'      => $validated['impulso'],
+            'nombre'       => $validated['nombre'],
+            'tipo_cliente' => $validated['tipo_cliente'],
         ]);
 
         return response()->json([
@@ -101,8 +108,9 @@ class OperacionesDiariasController extends Controller
         if ($request->has('fecha') && $request->fecha != '') {
             $query->whereDate('created_at', $request->fecha);
         }
-        $registros = $query->orderBy('created_at', 'desc')
-                        ->paginate(10);
+        $registros = $query->orderBy('fecha', 'desc')
+                   ->orderBy('hora', 'desc')
+                   ->paginate(10);
 
         return response()->json($registros);
     }
@@ -128,6 +136,9 @@ class OperacionesDiariasController extends Controller
             'validaciones' => array_values($validaciones),
             'equipaje'     => $request->equipaje,
             'observaciones'=> $request->observaciones,
+            'tipo_cliente' => $request->tipo_cliente,
+            'nombre'       => $request->nombre,
+            'impulso'      => $request->impulso,
         ]);
 
         return response()->json($operacion);

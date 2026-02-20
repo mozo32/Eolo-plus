@@ -27,6 +27,9 @@ class OperacionDiaria extends Model
         'departamento',
         'equipaje',
         'observaciones',
+        'impulso',
+        'nombre',
+        'tipo_cliente',
         'validaciones',
     ];
 

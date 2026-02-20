@@ -18,11 +18,14 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion }: {
         hora: datosEdicion?.hora?.substring(0, 5) || '',
         destino: datosEdicion?.lugar || '',
         pax: datosEdicion?.pax || null,
+        tipo_cliente: datosEdicion?.tipo_cliente || '',
         departamento: moduloNombre,
         equipaje: datosEdicion?.equipaje || null,
         movimiento: 'Salida',
         fecha: datosEdicion?.fecha || new Date().toISOString().split('T')[0],
-        observaciones: datosEdicion?.observaciones || ''
+        observaciones: datosEdicion?.observaciones || '',
+        nombre: datosEdicion?.nombre || '',
+        impulso: datosEdicion?.impulso || ''
     });
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -131,6 +134,7 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion }: {
                             type="number"
                             value={formData.pax}
                             placeholder="0"
+                            required
                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
                             onChange={(e) => setFormData({ ...formData, pax: parseInt(e.target.value) || 0 })}
                         />
@@ -148,6 +152,67 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion }: {
                         </div>
                     )}
                 </div>
+                {moduloNombre === 'Trafico' && (
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tipo Cliente</label>
+                        <select
+                            value={formData.tipo_cliente}
+                            className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+                            onChange={(e) => handleFieldChange("tipo_cliente", e.target.value)}
+                            required
+                        >
+                            <option value="">Seleccione una opción...</option>
+                            <option value="TRAFICO">TRAFICO</option>
+                            <option value="GUARDA">GUARDA</option>
+                            <option value="AEROTAXI">AEROTAXI</option>
+                        </select>
+                    </div>
+                )}
+                {moduloNombre === 'Seguridad' && (
+                    <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 space-y-4">
+                        <div>
+                            <label className="block text-[10px] font-bold text-blue-600 uppercase mb-2">Tipo de Movimiento</label>
+                            <div className="flex gap-8">
+                                <label className="flex items-center cursor-pointer group">
+                                    <input
+                                        type="radio"
+                                        name="impulso"
+                                        value="Propio Impulso"
+                                        checked={formData.impulso === 'Propio Impulso'}
+                                        onChange={(e) => handleFieldChange("impulso", e.target.value)}
+                                        className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                                        required
+                                    />
+                                    <span className="ml-2 text-sm font-semibold text-slate-700">Propio Impulso</span>
+                                </label>
+                                <label className="flex items-center cursor-pointer group">
+                                    <input
+                                        type="radio"
+                                        name="impulso"
+                                        value="Remolcado"
+                                        checked={formData.impulso === 'Remolcado'}
+                                        onChange={(e) => handleFieldChange("impulso", e.target.value)}
+                                        className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                                        required
+                                    />
+                                    <span className="ml-2 text-sm font-semibold text-slate-700">Remolcado</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-bold text-blue-600 uppercase mb-1">Nombre del piloto o remolcador</label>
+                            <input
+                                type="text"
+                                value={formData.nombre}
+                                placeholder="ESCRIBA EL NOMBRE COMPLETO..."
+                                className="w-full p-3 bg-white border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none uppercase font-semibold"
+                                onChange={(e) => handleFieldChange("nombre", e.target.value.toUpperCase())}
+                                required
+                            />
+                        </div>
+                    </div>
+                )}
                 <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Observaciones</label>
                     <textarea
