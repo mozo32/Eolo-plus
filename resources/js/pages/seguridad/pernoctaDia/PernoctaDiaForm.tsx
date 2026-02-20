@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { validatePernoctaDia } from "./validation";
 import { usePage } from "@inertiajs/react";
 
@@ -46,6 +46,7 @@ const PernoctaDiaForm: React.FC<Props> = ({ onAdd }) => {
         observaciones: "",
         nombre: auth?.user?.name ?? "",
     });
+
     const [sugerencias, setSugerencias] = useState<string[]>([]);
     const [loadingMatricula, setLoadingMatricula] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -93,7 +94,6 @@ const PernoctaDiaForm: React.FC<Props> = ({ onAdd }) => {
 
         onAdd({
             ...form,
-            fecha: today,
             hora: new Date().toLocaleTimeString("es-MX", {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -144,9 +144,16 @@ const PernoctaDiaForm: React.FC<Props> = ({ onAdd }) => {
                     </p>
                 </div>
 
-                <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-200">
-                    Fecha: {form.fecha}
-                </span>
+                <div className="flex flex-col items-end gap-1">
+                    <label className="text-[10px] font-bold uppercase text-gray-400">Fecha de Registro</label>
+                    <input
+                        type="date"
+                        name="fecha"
+                        value={form.fecha}
+                        onChange={handleChange}
+                        className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 outline-none ring-primary/30 focus:ring-2 dark:bg-gray-800 dark:text-gray-200"
+                    />
+                </div>
             </div>
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

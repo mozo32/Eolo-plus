@@ -34,8 +34,8 @@ class MovimientoCSAE extends Model
      * Casts para manejo correcto de fechas
      */
     protected $casts = [
-        'fecha_hora_entrada' => 'datetime',
-        'fecha_hora_salida'  => 'datetime',
+        'fecha_hora_entrada' => 'datetime:Y-m-d H:i:s',
+        'fecha_hora_salida'  => 'datetime:Y-m-d H:i:s',
     ];
      public function firmas()
     {

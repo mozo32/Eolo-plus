@@ -19,7 +19,6 @@ const formatFechaSalida = (fecha?: string | null) => {
 };
 export default function MovimientoCSAESalida({ data, onChange, updateField }: Props) {
     const [openFirma, setOpenFirma] = useState<null | "firma_salida">(null);
-
     return (
         <section className="mx-auto max-w-5xl space-y-4 p-2">
             <div className="flex items-end justify-between px-4 py-2 border-b-2 border-slate-900 mb-6">
@@ -57,7 +56,7 @@ export default function MovimientoCSAESalida({ data, onChange, updateField }: Pr
                             <div className="flex justify-between items-center">
                                 <span className="text-[10px] uppercase font-medium text-slate-500">Arribo:</span>
                                 <span className="text-xs font-mono text-blue-400">
-                                    {formatFechaSalida(data.fecha_hora_entrada)}
+                                    {data.fecha_hora_entrada?.slice(0, 16)}
                                 </span>
                             </div>
                             <div className="pt-2">

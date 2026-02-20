@@ -17,15 +17,14 @@ interface DateTimeModalSliderInputProps {
  */
 const formatFechaHora = (fecha?: string) => {
     if (!fecha) return "";
-
     const match = fecha.match(
-        /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/
+        /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/
     );
 
     if (!match) return "";
 
     const [, y, m, d, h, min] = match;
-    return `${d}/${m}/${y} ${h}:${min}`;
+    return `${y}-${m}-${d} ${h}:${min}`;
 };
 
 export default function DateTimeModalSliderInput({
@@ -47,8 +46,9 @@ export default function DateTimeModalSliderInput({
     useEffect(() => {
         if (!open || !value) return;
 
+        // Acepta "2026-02-20 07:27:00" o "2026-02-20T07:27..."
         const match = value.match(
-            /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/
+            /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/
         );
 
         if (!match) return;

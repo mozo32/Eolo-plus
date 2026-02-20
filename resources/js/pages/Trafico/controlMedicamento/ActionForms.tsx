@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { usePage } from '@inertiajs/react';
-import { Save, PackagePlus, Archive, ClipboardCheck } from 'lucide-react';
+import { Save, PackagePlus, Archive, ClipboardCheck, Eraser, Activity } from 'lucide-react';
 import { ViewType, Medicamento, AuthUser } from './types';
 import { guardarEntregaMedicamentoApi, revastecimientoMedicamentos, guardarControlMedicamentoApi } from '@/stores/apiControlMedicamento';
 import Swal from 'sweetalert2';
@@ -22,98 +22,91 @@ const ActionForms: React.FC<Props> = ({ view, medicamentos, onSuccess }) => {
         medicamentoId: '',
         cantidad: 1
     })
+
     const handleReabastecer = async (e: React.FormEvent) => {
         e.preventDefault();
-
         if (!inventarioData.medicamentoId) {
             Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona un medicamento' });
             return;
         }
-
         try {
             Swal.fire({ title: 'Actualizando stock...', didOpen: () => Swal.showLoading() });
-
-            await revastecimientoMedicamentos(
-                Number(inventarioData.medicamentoId),
-                { cantidad: inventarioData.cantidad }
-            );
-
-            await Swal.fire({
-                icon: 'success',
-                title: 'Stock actualizado',
-                timer: 1200,
-                showConfirmButton: false,
-            });
-
+            await revastecimientoMedicamentos(Number(inventarioData.medicamentoId), { cantidad: inventarioData.cantidad });
+            await Swal.fire({ icon: 'success', title: 'Stock actualizado', timer: 1200, showConfirmButton: false });
             setInventarioData({ medicamentoId: '', cantidad: 0 });
             onSuccess();
         } catch (e: any) {
             Swal.fire({ icon: 'error', title: 'Error', text: e.message });
         }
     };
+
     const handleConfirmarEntrega = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
             Swal.fire({ title: 'Procesando...', didOpen: () => Swal.showLoading() });
-
             await guardarEntregaMedicamentoApi(entregaData);
-
-            await Swal.fire({
-                icon: 'success',
-                title: 'Guardado correctamente',
-                timer: 1200,
-                showConfirmButton: false,
-            });
+            await Swal.fire({ icon: 'success', title: 'Guardado correctamente', timer: 1200, showConfirmButton: false });
             setEntregaData({ medicamentoId: '', recibe: '', cantidad: 1 });
             onSuccess();
         } catch (e: any) {
             Swal.fire({ icon: 'error', title: 'Error', text: e.message });
         }
     };
+
     const handleCierreTurno = async () => {
         const { value: formValues } = await Swal.fire({
-            title: 'Cierre de Turno',
+            title: 'Protocolo de Cierre de Turno',
             html: `
-            <p class="text-sm text-slate-500 mb-4">Seleccione los aparatos presentes y firme debajo:</p>
-            <div class="flex flex-col gap-3 text-left max-w-xs mx-auto">
-                <label class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors">
-                    <input type="checkbox" id="swal-aparato-1" class="w-5 h-5 accent-orange-500">
-                    <span class="font-semibold text-slate-700">Aparato 1</span>
-                </label>
-                <label class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors">
-                    <input type="checkbox" id="swal-aparato-2" class="w-5 h-5 accent-orange-500">
-                    <span class="font-semibold text-slate-700">Aparato 2</span>
-                </label>
-                <label class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors">
-                    <input type="checkbox" id="swal-aparato-3" class="w-5 h-5 accent-orange-500">
-                    <span class="font-semibold text-slate-700">Aparato 3</span>
-                </label>
-            </div>
+            <div class="text-left mt-4">
+                <p class="text-xs font-black text-slate-400 uppercase mb-3 tracking-widest">Inventario de Equipos</p>
+                <div class="grid grid-cols-1 gap-2 mb-6">
+                    <label class="flex items-center justify-between p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-all border border-transparent has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50 group">
+                        <span class="font-bold text-slate-700 group-has-[:checked]:text-orange-700">Oxímetro</span>
+                        <input type="checkbox" id="swal-oximetro" class="w-5 h-5 accent-orange-500">
+                    </label>
+                    <label class="flex items-center justify-between p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-all border border-transparent has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50 group">
+                        <span class="font-bold text-slate-700 group-has-[:checked]:text-orange-700">Baumanómetro</span>
+                        <input type="checkbox" id="swal-baumanometro" class="w-5 h-5 accent-orange-500">
+                    </label>
+                    <label class="flex items-center justify-between p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-all border border-transparent has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50 group">
+                        <span class="font-bold text-slate-700 group-has-[:checked]:text-orange-700">Monitor de Presión</span>
+                        <input type="checkbox" id="swal-monitor" class="w-5 h-5 accent-orange-500">
+                    </label>
+                    <label class="flex items-center justify-between p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-all border border-transparent has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50 group">
+                        <span class="font-bold text-slate-700 group-has-[:checked]:text-orange-700">Estetoscopio</span>
+                        <input type="checkbox" id="swal-estetoscopio" class="w-5 h-5 accent-orange-500">
+                    </label>
+                </div>
 
-            <div class="mt-4">
-                <label class="block text-sm font-medium text-slate-700 mb-1 text-left ml-4">Firma de responsabilidad:</label>
-                <canvas id="signature-canvas"
-                        class="border-2 border-dashed border-slate-300 rounded-lg bg-white touch-none"
-                        width="300" height="150"
-                        style="cursor: crosshair;"></canvas>
-                <button type="button" id="clear-signature" class="mt-2 text-xs text-orange-600 underline">Limpiar firma</button>
+                <p class="text-xs font-black text-slate-400 uppercase mb-2 tracking-widest">Firma de Conformidad</p>
+                <div class="relative bg-white rounded-xl border-2 border-slate-200 overflow-hidden">
+                    <canvas id="signature-canvas" width="400" height="180" class="w-full h-auto touch-none cursor-crosshair"></canvas>
+                    <button type="button" id="clear-signature" class="absolute bottom-2 right-2 p-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                    </button>
+                </div>
             </div>
-        `,
+            `,
+            customClass: {
+                container: 'rounded-3xl',
+                popup: 'rounded-[2rem] p-6',
+                confirmButton: 'rounded-2xl font-black uppercase text-sm tracking-widest px-8 py-4',
+                cancelButton: 'rounded-2xl font-black uppercase text-sm tracking-widest'
+            },
+            width: '450px',
             focusConfirm: false,
             showCancelButton: true,
-            confirmButtonText: 'Confirmar Cierre',
-            cancelButtonText: 'Cancelar',
+            confirmButtonText: 'Finalizar Jornada',
+            cancelButtonText: 'Volver',
             confirmButtonColor: '#f97316',
             didOpen: () => {
                 const canvas = document.getElementById('signature-canvas') as HTMLCanvasElement;
                 const ctx = canvas.getContext('2d');
                 let drawing = false;
-
                 if (!ctx) return;
 
-                // Estilos de la línea
-                ctx.strokeStyle = "#334155";
-                ctx.lineWidth = 2;
+                ctx.strokeStyle = "#0f172a";
+                ctx.lineWidth = 3;
                 ctx.lineJoin = "round";
                 ctx.lineCap = "round";
 
@@ -153,9 +146,10 @@ const ActionForms: React.FC<Props> = ({ view, medicamentos, onSuccess }) => {
 
                 return {
                     aparatos: {
-                        aparato1: (document.getElementById('swal-aparato-1') as HTMLInputElement).checked,
-                        aparato2: (document.getElementById('swal-aparato-2') as HTMLInputElement).checked,
-                        aparato3: (document.getElementById('swal-aparato-3') as HTMLInputElement).checked,
+                        oximetro: (document.getElementById('swal-oximetro') as HTMLInputElement).checked,
+                        baumanometro: (document.getElementById('swal-baumanometro') as HTMLInputElement).checked,
+                        monitor_presion: (document.getElementById('swal-monitor') as HTMLInputElement).checked,
+                        estetoscopio: (document.getElementById('swal-estetoscopio') as HTMLInputElement).checked,
                     },
                     firma: firma
                 };
@@ -164,9 +158,7 @@ const ActionForms: React.FC<Props> = ({ view, medicamentos, onSuccess }) => {
 
         if (formValues) {
             const fechaActual = new Date();
-            const fechaFormateada = fechaActual.toLocaleDateString('es-ES');
             const diaSemana = fechaActual.toLocaleDateString('es-ES', { weekday: 'long' });
-
             const reporteMedicamentos: Record<string, { inicio: number, final: number }> = {};
 
             medicamentos.forEach(m => {
@@ -176,61 +168,59 @@ const ActionForms: React.FC<Props> = ({ view, medicamentos, onSuccess }) => {
                     final: m.cantidad
                 };
             });
-            const fechaISO = new Date().toISOString().split('T')[0];
+
             const datosCierre = {
                 responsable: auth?.user?.name ?? "Sin identificar",
-                fecha: fechaISO,
+                fecha: new Date().toISOString().split('T')[0],
                 dia: diaSemana,
                 aparatos: formValues.aparatos,
                 firma: formValues.firma,
                 medicamentos: reporteMedicamentos
             };
+
             try {
                 Swal.fire({ title: 'Procesando cierre...', didOpen: () => Swal.showLoading() });
                 await guardarControlMedicamentoApi(datosCierre);
-                await Swal.fire({
-                    icon: 'success',
-                    title: 'Cierre registrado',
-                    text: 'Los datos se han impreso en consola.',
-                    timer: 2000,
-                    showConfirmButton: false
-                });
+                await Swal.fire({ icon: 'success', title: 'Cierre registrado', timer: 2000, showConfirmButton: false });
                 onSuccess();
             } catch (error: any) {
                 Swal.fire({ icon: 'error', title: 'Error', text: error.message });
             }
         }
     };
+
     return (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-2 h-full bg-blue-600"></div>
+            <div className={`absolute top-0 left-0 w-2 h-full transition-colors duration-500 ${
+                view === 'entrega' ? 'bg-blue-600' : view === 'inventario' ? 'bg-emerald-600' : 'bg-orange-500'
+            }`}></div>
 
             {view === 'entrega' && (
                 <form onSubmit={handleConfirmarEntrega} className="space-y-6">
-                    <h2 className="text-xl font-black uppercase tracking-tight">Registro de Entrega</h2>
+                    <h2 className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
+                        <Activity className="text-blue-600" /> Registro de Entrega
+                    </h2>
                     <div className="space-y-4">
                         <div>
-                            <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Medicamento</label>
+                            <label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Medicamento</label>
                             <select
-                                className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 rounded-2xl py-4 px-4 outline-none font-semibold"
+                                className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 rounded-2xl py-4 px-4 outline-none font-bold transition-all"
                                 value={entregaData.medicamentoId}
                                 onChange={(e) => setEntregaData({ ...entregaData, medicamentoId: e.target.value })}
                                 required
                             >
                                 <option value="">Seleccionar...</option>
                                 {medicamentos.map(m => (
-                                    <option key={m.id} value={m.id}>
-                                        {m.nombre} ({m.cantidad} disp.)
-                                    </option>
+                                    <option key={m.id} value={m.id}>{m.nombre} ({m.cantidad} disp.)</option>
                                 ))}
                             </select>
                         </div>
                         <div>
-                            <label className="text-[10px] font-black text-slate-400 uppercase ml-2">¿Quién recibe?</label>
+                            <label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">¿Quién recibe?</label>
                             <input
                                 type="text"
-                                placeholder="Nombre completo"
-                                className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 rounded-2xl py-4 px-4 outline-none font-semibold"
+                                placeholder="Nombre completo del paciente"
+                                className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 rounded-2xl py-4 px-4 outline-none font-bold"
                                 value={entregaData.recibe}
                                 onChange={(e) => setEntregaData({ ...entregaData, recibe: e.target.value })}
                                 required
@@ -238,25 +228,22 @@ const ActionForms: React.FC<Props> = ({ view, medicamentos, onSuccess }) => {
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Cantidad</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Cantidad</label>
                                 <input
                                     type="number"
                                     min="1"
-                                    className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 rounded-2xl py-4 px-4 outline-none font-semibold"
+                                    className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 rounded-2xl py-4 px-4 outline-none font-bold"
                                     value={entregaData.cantidad}
                                     onChange={(e) => setEntregaData({ ...entregaData, cantidad: parseInt(e.target.value) })}
                                     required
                                 />
                             </div>
                             <div>
-                                <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Entrega</label>
-                                <input type="text" readOnly value={auth?.user?.name ?? ""} className="w-full bg-slate-100 border-2 border-transparent rounded-2xl py-4 px-4 font-semibold text-slate-500" />
+                                <label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Enfermero(a)</label>
+                                <input type="text" readOnly value={auth?.user?.name ?? ""} className="w-full bg-slate-100 border-2 border-transparent rounded-2xl py-4 px-4 font-bold text-slate-500" />
                             </div>
                         </div>
-                        <button
-                            type="submit"
-                            className="w-full bg-blue-600 hover:bg-slate-900 text-white font-black py-5 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-sm"
-                        >
+                        <button type="submit" className="w-full bg-blue-600 hover:bg-slate-900 text-white font-black py-5 rounded-2xl shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs">
                             Confirmar Entrega <Save size={18} />
                         </button>
                     </div>
@@ -268,39 +255,32 @@ const ActionForms: React.FC<Props> = ({ view, medicamentos, onSuccess }) => {
                     <h2 className="text-xl font-black uppercase tracking-tight text-emerald-600">Reabastecer Stock</h2>
                     <div className="space-y-4">
                         <div>
-                            <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Medicamento</label>
+                            <label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Medicamento</label>
                             <select
-                                className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 rounded-2xl py-4 px-4 outline-none font-semibold"
+                                className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 rounded-2xl py-4 px-4 outline-none font-bold"
                                 value={inventarioData.medicamentoId}
                                 onChange={(e) => setInventarioData({ ...inventarioData, medicamentoId: e.target.value })}
                                 required
                             >
                                 <option value="">Seleccionar...</option>
                                 {medicamentos.map(m => (
-                                    <option key={m.id} value={m.id}>
-                                        {m.nombre} ({m.cantidad} actuales)
-                                    </option>
+                                    <option key={m.id} value={m.id}>{m.nombre} ({m.cantidad} actuales)</option>
                                 ))}
                             </select>
                         </div>
-
                         <div>
-                            <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Cantidad que ingresa</label>
+                            <label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Cantidad que ingresa</label>
                             <input
                                 type="number"
                                 min="1"
                                 placeholder="0"
-                                className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 rounded-2xl py-4 px-4 outline-none font-semibold"
+                                className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 rounded-2xl py-4 px-4 outline-none font-bold"
                                 value={inventarioData.cantidad}
                                 onChange={(e) => setInventarioData({ ...inventarioData, cantidad: parseInt(e.target.value) })}
                                 required
                             />
                         </div>
-
-                        <button
-                            type="submit"
-                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-5 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-sm"
-                        >
+                        <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-5 rounded-2xl shadow-lg shadow-emerald-200 transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs">
                             Añadir al Inventario <PackagePlus size={18} />
                         </button>
                     </div>
@@ -308,17 +288,37 @@ const ActionForms: React.FC<Props> = ({ view, medicamentos, onSuccess }) => {
             )}
 
             {view === 'cierre' && (
-                <div className="space-y-6 text-center">
-                    <Archive className="mx-auto text-orange-500" size={48} />
-                    <h2 className="text-xl font-black uppercase tracking-tight">Cierre de Turno</h2>
-                    <p className="text-sm text-slate-500 font-medium">
-                        Se generará un reporte comparando el stock inicial vs el stock final del día.
-                    </p>
+                <div className="space-y-6 text-center py-4">
+                    <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <Archive className="text-orange-600" size={32} />
+                    </div>
+                    <div className="space-y-2">
+                        <h2 className="text-2xl font-black uppercase tracking-tight text-slate-800">Cierre de Jornada</h2>
+                        <p className="text-sm text-slate-500 font-medium px-4">
+                            Al finalizar, se registrará el stock final de medicamentos y el estado de los equipos médicos.
+                        </p>
+                    </div>
+
+                    <div className="bg-slate-50 border border-slate-100 rounded-3xl p-6 text-left space-y-3 mx-2">
+                        <div className="flex items-center gap-3 text-slate-600">
+                            <ClipboardCheck size={18} className="text-orange-500" />
+                            <span className="text-xs font-bold uppercase tracking-wider">Verificación de insumos</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-slate-600">
+                            <Activity size={18} className="text-orange-500" />
+                            <span className="text-xs font-bold uppercase tracking-wider">Estado de equipos</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-slate-600">
+                            <Eraser size={18} className="text-orange-500" />
+                            <span className="text-xs font-bold uppercase tracking-wider">Limpieza de registros diarios</span>
+                        </div>
+                    </div>
+
                     <button
                         onClick={handleCierreTurno}
-                        className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-5 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-sm"
+                        className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-5 rounded-2xl shadow-lg shadow-orange-200 transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs"
                     >
-                        Cerrar y Limpiar Día <ClipboardCheck size={18} />
+                        Iniciar Protocolo de Cierre <ClipboardCheck size={18} />
                     </button>
                 </div>
             )}
