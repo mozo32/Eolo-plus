@@ -99,7 +99,6 @@ class OperacionesDiariasController extends Controller
     public function index(Request $request)
     {
         $query = OperacionDiaria::with('user');
-
         if ($request->has('buscar') && $request->buscar != '') {
             $query->where('matricula', 'LIKE', '%' . $request->buscar . '%');
         }
@@ -107,27 +106,11 @@ class OperacionesDiariasController extends Controller
             $query->where('tipo', $request->tipo);
         }
         if ($request->has('fecha') && $request->fecha != '') {
-            $query->whereDate('fecha', $request->fecha);
+            $query->whereDate('created_at', $request->fecha);
         }
-
-        if ($request->filled('fecha')) {
-            $fechaSujeto = $request->fecha;
-            $fechaSiguiente = date('Y-m-d', strtotime($fechaSujeto . ' +1 day'));
-
-            $query->where(function($q) use ($fechaSujeto, $fechaSiguiente) {
-                $q->where(function($sub) use ($fechaSujeto) {
-                    $sub->where('fecha', $fechaSujeto)
-                        ->where('hora', '>=', '08:00:00');
-                })->orWhere(function($sub) use ($fechaSiguiente) {
-                    $sub->where('fecha', $fechaSiguiente)
-                        ->where('hora', '<=', '07:59:59');
-                });
-            });
-        }
-        $registros = $query->orderBy('fecha', 'asc')
-            ->orderByRaw("CASE WHEN hora < '08:00:00' THEN 1 ELSE 0 END ASC")
-            ->orderBy('hora', 'asc')
-            ->paginate(100);
+        $registros = $query->orderBy('fecha', 'desc')
+                   ->orderBy('hora', 'desc')
+                   ->paginate(100);
 
         return response()->json($registros);
     }
