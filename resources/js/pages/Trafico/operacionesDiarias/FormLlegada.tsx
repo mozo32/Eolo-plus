@@ -4,10 +4,11 @@ import { guardarOperacionesDiariasApi } from "@/stores/apiOperacionesDiarias";
 import InputMatricula from "@/pages/InputMatricula";
 import { useMatriculaAutocompleteStore } from "./useMatriculaAutocompleteStore";
 
-export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion }: {
+export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura = false }: {
     alCerrar?: () => void,
     moduloNombre?: string,
-    datosEdicion?: any
+    datosEdicion?: any,
+    soloLectura?: boolean
 }) => {
     const { obtenerTipo } = useMatriculaAutocompleteStore();
 
@@ -87,7 +88,11 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion }: {
                 </div>
                 <button type="button" onClick={alCerrar} className="text-slate-300 hover:text-slate-600 text-xl font-bold">✕</button>
             </div>
-
+            {soloLectura && (
+                <div className="mb-4 p-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold rounded-lg flex items-center gap-2">
+                    <span>🔒 REGISTRO VALIDADO POR {moduloNombre?.toUpperCase()} - SOLO LECTURA</span>
+                </div>
+            )}
             <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                     <InputMatricula
@@ -95,6 +100,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion }: {
                         value={formData.matricula}
                         onSelect={handleMatriculaSelect}
                         required
+                        disabled={soloLectura}
                     />
                     <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Equipo</label>
@@ -104,6 +110,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion }: {
                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                             onChange={(e) => handleFieldChange("equipo", e.target.value.toUpperCase())}
                             required
+                            disabled={soloLectura}
                         />
                     </div>
                 </div>
@@ -117,6 +124,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion }: {
                             value={formData.hora}
                             maxLength={5}
                             required
+                            disabled={soloLectura}
                             onChange={(e) => {
                                 let val = e.target.value.replace(/\D/g, "");
                                 if (val.length >= 1 && parseInt(val[0]) > 2) val = "";
@@ -134,6 +142,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion }: {
                         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Procedencia</label>
                         <input
                             type="text"
+                            disabled={soloLectura}
                             value={formData.procedencia}
                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                             onChange={(e) => handleFieldChange("procedencia", e.target.value.toUpperCase())}
@@ -146,6 +155,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion }: {
                         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Pax</label>
                         <input
                             type="number"
+                            disabled={soloLectura}
                             value={formData.pax}
                             required
                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
@@ -157,6 +167,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion }: {
                             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Equipaje</label>
                             <input
                                 type="text"
+                                disabled={soloLectura}
                                 value={formData.equipaje}
                                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                                 onChange={(e) => handleFieldChange("equipaje", e.target.value.toUpperCase())}
@@ -173,6 +184,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion }: {
                             className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
                             onChange={(e) => handleFieldChange("tipo_cliente", e.target.value)}
                             required
+                            disabled={soloLectura}
                         >
                             <option value="">Seleccione una opción...</option>
                             <option value="TRAFICO">TRAFICO</option>
@@ -189,9 +201,9 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion }: {
                                 <label className="flex items-center cursor-pointer group">
                                     <input
                                         type="radio"
+                                        disabled={soloLectura}
                                         name="impulso"
                                         value="Propio Impulso"
-                                        required
                                         checked={formData.impulso === 'Propio Impulso'}
                                         onChange={(e) => handleFieldChange("impulso", e.target.value)}
                                         className="w-4 h-4 text-blue-600 focus:ring-blue-500"
@@ -201,9 +213,9 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion }: {
                                 <label className="flex items-center cursor-pointer group">
                                     <input
                                         type="radio"
+                                        disabled={soloLectura}
                                         name="impulso"
                                         value="Remolcado"
-                                        required
                                         checked={formData.impulso === 'Remolcado'}
                                         onChange={(e) => handleFieldChange("impulso", e.target.value)}
                                         className="w-4 h-4 text-blue-600 focus:ring-blue-500"
@@ -214,15 +226,50 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion }: {
                         </div>
 
                         <div>
-                            <label className="block text-[10px] font-bold text-blue-600 uppercase mb-1">Nombre del piloto o remolcador</label>
-                            <input
-                                type="text"
-                                value={formData.nombre}
-                                placeholder="ESCRIBA EL NOMBRE COMPLETO..."
-                                className="w-full p-3 bg-white border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none uppercase font-semibold"
-                                onChange={(e) => handleFieldChange("nombre", e.target.value.toUpperCase())}
-                                required
-                            />
+                            <label className="block text-[10px] font-bold text-blue-600 uppercase mb-2 tracking-wider">
+                                Responsable del Movimiento
+                            </label>
+
+                            <div className="group relative flex items-center bg-slate-50 border border-blue-200 rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all shadow-sm">
+                                <div className="relative border-r border-blue-100 bg-white">
+                                    <select
+                                        value={formData.nombre.startsWith("CAPITAN. ") ? "CAPITAN. " : ""}
+                                        disabled={soloLectura}
+                                        onChange={(e) => {
+                                            const nuevoPrefijo = e.target.value;
+                                            const nombreLimpio = formData.nombre.replace(/^CAPITAN\.\s/, "");
+                                            handleFieldChange("nombre", `${nuevoPrefijo}${nombreLimpio}`);
+                                        }}
+                                        className="appearance-none pl-4 pr-8 py-3 bg-transparent font-bold text-xs text-blue-600 cursor-pointer outline-none uppercase"
+                                    >
+                                        <option value="">Personal</option>
+                                        <option value="CAPITAN. ">Capitán</option>
+                                    </select>
+                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-blue-400">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </div>
+                                </div>
+                                <input
+                                    type="text"
+                                    value={formData.nombre.replace(/^CAPITAN\.\s/, "")}
+                                    placeholder="Escriba nombre y apellido..."
+                                    className="flex-1 p-3 bg-transparent outline-none uppercase font-semibold text-slate-700 placeholder:text-slate-300 placeholder:font-normal placeholder:normal-case"
+                                    required
+                                    disabled={soloLectura}
+                                    onChange={(e) => {
+                                        const tienePrefijo = formData.nombre.startsWith("CAPITAN. ");
+                                        const prefijo = tienePrefijo ? "CAPITAN. " : "";
+                                        handleFieldChange("nombre", `${prefijo}${e.target.value.toUpperCase()}`);
+                                    }}
+                                />
+                            </div>
+                            <div className="flex justify-end mt-2">
+                                <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-600 text-[9px] font-bold border border-blue-200 uppercase">
+                                    {formData.nombre || 'Sin nombre'}
+                                </span>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -231,6 +278,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion }: {
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Observaciones</label>
                     <textarea
                         value={formData.observaciones}
+                        disabled={soloLectura}
                         placeholder="Notas adicionales..."
                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none resize-none min-h-[80px]"
                         onChange={(e) => handleFieldChange("observaciones", e.target.value)}
@@ -241,9 +289,11 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion }: {
                     <button type="button" onClick={alCerrar} className="flex-1 px-4 py-3 font-bold text-slate-500 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
                         Cancelar
                     </button>
-                    <button type="submit" className="flex-1 bg-blue-600 text-white px-4 py-3 rounded-lg font-bold shadow-lg hover:bg-blue-700 active:scale-95 transition-all">
-                        {datosEdicion ? 'Guardar Cambios' : 'Confirmar Registro'}
-                    </button>
+                    {!soloLectura && (
+                        <button type="submit" className="flex-1 bg-blue-600 text-white px-4 py-3 rounded-lg font-bold shadow-lg hover:bg-blue-700 active:scale-95 transition-all">
+                            {datosEdicion ? 'Guardar Cambios' : 'Confirmar Registro'}
+                        </button>
+                    )}
                 </div>
             </div>
         </form>
