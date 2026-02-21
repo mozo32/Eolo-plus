@@ -43,7 +43,7 @@ const EoloForm = () => {
     const handleFinalizar = async () => {
         const payload = {
             folio: "#8942",
-            fecha: new Date().toISOString().split('T')[0],
+            fecha: new Date().toLocaleDateString('en-CA'),
             es_vuelo: esVuelo === "si",
             cliente_vuelo: esVuelo === "si" ? datosVuelo.cliente : null,
             requisicion: esVuelo === "si" ? datosVuelo.requisicion : null,

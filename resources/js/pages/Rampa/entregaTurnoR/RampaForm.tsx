@@ -37,7 +37,7 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
     const totalSteps = 4;
 
     const [formData, setFormData] = useState({
-        encabezado: { fecha: new Date().toISOString().split('T')[0], jefeTurno: "" },
+        encabezado: { fecha: new Date().toLocaleDateString('en-CA'), jefeTurno: "" },
         comunicaciones: { radios: "", radioFrecuencia: "", radiosFuncionando: true }
     });
 

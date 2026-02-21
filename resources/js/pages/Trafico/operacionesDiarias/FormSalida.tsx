@@ -23,7 +23,7 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion, soloLectura =
         departamento: moduloNombre,
         equipaje: datosEdicion?.equipaje || null,
         movimiento: 'Salida',
-        fecha: datosEdicion?.fecha || new Date().toISOString().split('T')[0],
+        fecha: datosEdicion?.fecha || new Date().toLocaleDateString('en-CA'),
         observaciones: datosEdicion?.observaciones || '',
         nombre: datosEdicion?.nombre || '',
         impulso: datosEdicion?.impulso || ''

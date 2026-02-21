@@ -171,7 +171,7 @@ const ActionForms: React.FC<Props> = ({ view, medicamentos, onSuccess }) => {
 
             const datosCierre = {
                 responsable: auth?.user?.name ?? "Sin identificar",
-                fecha: new Date().toISOString().split('T')[0],
+                fecha: new Date().toLocaleDateString('en-CA'),
                 dia: diaSemana,
                 aparatos: formValues.aparatos,
                 firma: formValues.firma,

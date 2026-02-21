@@ -18,7 +18,7 @@ const OperacionesCards = ({ moduloNombre }: OperacionesCardsProps) => {
     const [filtros, setFiltros] = useState({
         buscar: '',
         tipo: '',
-        fecha: new Date().toISOString().split('T')[0]
+        fecha: new Date().toLocaleDateString('en-CA')
     });
 
     const obtenerDiaOperativo = (fechaStr: string, horaStr: string) => {
@@ -145,7 +145,7 @@ const OperacionesCards = ({ moduloNombre }: OperacionesCardsProps) => {
                     <div className="text-center py-10 text-slate-400">Cargando operaciones...</div>
                 ) : (
                     registros.map((op, index) => {
-                        const fechaSegura = op.fecha || new Date().toISOString().split('T')[0];
+                        const fechaSegura = op.fecha || new Date().toLocaleDateString('en-CA');
                         const horaSegura = op.hora || "00:00:00";
                         const diaOperativoActual = obtenerDiaOperativo(fechaSegura, horaSegura);
                         const diaOperativoAnterior = index > 0

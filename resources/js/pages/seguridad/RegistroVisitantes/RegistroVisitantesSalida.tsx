@@ -14,7 +14,7 @@ interface Visitante {
 const RegistroVisitantesSalida = () => {
     const [visitantes, setVisitantes] = useState<Visitante[]>([]);
     const [busqueda, setBusqueda] = useState('');
-    const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
+    const [fecha, setFecha] = useState(new Date().toLocaleDateString('en-CA'));
     const [seleccionado, setSeleccionado] = useState<Visitante | null>(null);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [verFormulario, setVerFormulario] = useState(false);

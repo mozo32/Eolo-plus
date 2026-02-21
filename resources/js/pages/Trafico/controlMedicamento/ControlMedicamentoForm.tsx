@@ -169,7 +169,7 @@ export default function ControlMedicamentoForm({
 
         return {
             responsable: initialData?.responsable ?? user?.name ?? '',
-            fecha: new Date().toISOString().split('T')[0],
+            fecha: new Date().toLocaleDateString('en-CA'),
             dia: initialData?.dia ?? getDiaActual(),
             firma: initialData?.firmas[0].url ?? '',
             medicamentos: meds,

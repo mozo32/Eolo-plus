@@ -23,11 +23,13 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
         tipo_cliente: datosEdicion?.tipo_cliente || '',
         departamento: moduloNombre,
         movimiento: 'Llegada',
-        fecha: datosEdicion?.fecha || new Date().toISOString().split('T')[0],
+        fecha: datosEdicion?.fecha || new Date().toLocaleDateString('en-CA'),
         observaciones: datosEdicion?.observaciones || '',
         nombre: datosEdicion?.nombre || '',
         impulso: datosEdicion?.impulso || ''
     });
+    console.log(new Date().toLocaleDateString('en-CA'),);
+    console.log(new Date().toLocaleDateString('en-CA'),);
 
     const handleFieldChange = (name: string, value: any) => {
         setFormData(prev => ({ ...prev, [name]: value }));
