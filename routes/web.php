@@ -89,6 +89,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('Rampa/VerificacionEstadoAutotanque');
     })->name('verificacionEstadoAutotanque');
 
+    Route::get('remision', function () {
+        return Inertia::render('Rampa/Remision');
+    })->name('remision');
+
     Route::get('registroVisitantes', function () {
         return Inertia::render('seguridad/RegistroVisitantes');
     })->name('registroVisitantes');

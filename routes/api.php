@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\MovimientoCSAEController;
 use App\Http\Controllers\Api\VehiculoEoloController;
 use App\Http\Controllers\Api\RegistroVisitantesController;
 use App\Http\Controllers\Api\RemisionController;
+use App\Http\Controllers\Api\TurnoAutotanqueController;
 
 Route::post('/despacho', [DespachoController::class, 'store']);
 Route::get('/aeronaves/autocomplete', [AeronaveController::class, 'autocomplete']);
@@ -145,5 +146,9 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('RegistroVisitantes')->group(
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('Remision')->group(function () {
     Route::post('/remisiones', [RemisionController::class, 'store']);
-    Route::get('/remisiones', [RemisionController::class, 'index']);
+    Route::get('/', [RemisionController::class, 'index']);
+});
+Route::middleware(['api', 'auth:sanctum'])->prefix('TurnoAutoTanque')->group(function () {
+    Route::post('/', [TurnoAutotanqueController::class, 'store']);
+    Route::get('/check-active', [TurnoAutotanqueController::class, 'checkActiveTurno']);
 });

@@ -9,31 +9,26 @@ class Remision extends Model
     protected $table = 'remisiones';
 
     protected $fillable = [
-        'folio',
-        'fecha',
-        'es_vuelo',
-        'cliente_vuelo',
-        'requisicion',
-        'forma_pago',
-        'tipo_aeronave',
-        'matricula',
-        'destino',
-        'hora_llegada',
-        'hora_inicio',
-        'hora_final',
-        'lectura_inicial',
-        'lectura_final',
-        'total_litros',
-        'observaciones',
-        'nombre_cliente_firma',
-        'nombre_operador_firma',
+        'folio','fecha', 'operador', 'cliente', 'requisicion', 'forma_pago',
+        'aeronave_tipo', 'matricula', 'destino', 'hora_llegada',
+        'hora_inicial', 'hora_final', 'lectura_inicial',
+        'lectura_final', 'total_litros'
     ];
+    public function firmas()
+    {
+        return $this->morphToMany(
+            Firma::class,
+            'firmable',
+            'firmables'
+        )->withPivot(['rol', 'tag', 'orden', 'status'])
+        ->wherePivot('status', 'A')
+        ->withTimestamps();
+    }
 
-    protected $casts = [
-        'es_vuelo' => 'boolean',
-        'fecha' => 'date',
-        'lectura_inicial' => 'integer',
-        'lectura_final' => 'integer',
-        'total_litros' => 'integer',
-    ];
+    public function firmasAll()
+    {
+        return $this->morphToMany(Firma::class, 'firmable', 'firmables')
+        ->withPivot(['rol', 'tag', 'orden', 'status']);
+    }
+
 }

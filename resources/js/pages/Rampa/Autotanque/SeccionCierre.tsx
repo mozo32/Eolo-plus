@@ -1,6 +1,6 @@
 import React from 'react';
 import { TABLA_CALIBRACION } from './tablaCalibracion';
-
+import { Clock, Calendar } from 'lucide-react';
 interface SeccionCierreProps {
     nombreCierre: string; // Nombre de quien recibe
     fechaCierre: string;
@@ -18,7 +18,23 @@ export const SeccionCierre = ({
     totalizadorCierre,
     onUpdate
 }: SeccionCierreProps) => {
+    const handleTimeInput = (val: string) => {
+        const digits = val.replace(/\D/g, '');
+        let formatted = digits;
 
+        if (digits.length >= 3) {
+            formatted = `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
+        }
+
+        let [hours, minutes] = formatted.split(':');
+        if (hours && parseInt(hours) > 23) hours = '23';
+        if (minutes && parseInt(minutes) > 59) minutes = '59';
+
+        const finalTime = minutes !== undefined ? `${hours}:${minutes}` : hours;
+        const datePart = fechaCierre.split('T')[0] || new Date().toISOString().split('T')[0];
+
+        onUpdate('fechaCierre', `${datePart}T${finalTime.slice(0, 5)}`);
+    };
     const handleCmChange = (cm: number) => {
         onUpdate('cmCierre', cm);
         if (TABLA_CALIBRACION[cm] !== undefined) {
@@ -31,7 +47,43 @@ export const SeccionCierre = ({
             <h2 className="text-blue-800 font-bold border-b-2 border-blue-100 mb-4 pb-1 uppercase">
                 Datos al Cierre de Turno
             </h2>
+            <div>
+                <label className="block text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2 ml-1">
+                    Cronología de Cierre
+                </label>
+                <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-100 group focus-within:border-blue-300 transition-all shadow-sm">
 
+                    {/* Fecha */}
+                    <div className="flex items-center gap-2 flex-1 px-2">
+                        <Calendar size={16} className="text-blue-500" />
+                        <input
+                            type="date"
+                            value={fechaCierre ? fechaCierre.split('T')[0] : ''}
+                            onChange={(e) => {
+                                const time = fechaCierre.split('T')[1] || '00:00';
+                                onUpdate('fechaCierre', `${e.target.value}T${time}`);
+                            }}
+                            className="bg-transparent text-sm font-bold text-slate-700 outline-none w-full cursor-pointer"
+                        />
+                    </div>
+
+                    <div className="h-6 w-[1px] bg-slate-200"></div>
+
+                    {/* Hora Escribible */}
+                    <div className="flex items-center gap-2 flex-1 px-2">
+                        <Clock size={16} className="text-blue-500" />
+                        <input
+                            type="text"
+                            placeholder="HH:MM"
+                            maxLength={5}
+                            value={fechaCierre ? fechaCierre.split('T')[1]?.substring(0, 5) : ''}
+                            onChange={(e) => handleTimeInput(e.target.value)}
+                            className="bg-transparent text-sm font-mono font-bold text-slate-700 outline-none w-full placeholder:text-slate-300"
+                        />
+                    </div>
+                </div>
+            </div>
+            <br />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Fila 1: Identificación de Cierre */}
                 <div>
@@ -44,17 +96,21 @@ export const SeccionCierre = ({
                         placeholder="Nombre de quien recibe"
                     />
                 </div>
+                {/* Fila 3: Totalizador */}
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase">Fecha y Hora de Cierre</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase">
+                        Lectura Totalizador Final
+                    </label>
                     <input
-                        type="datetime-local"
-                        value={fechaCierre}
-                        onChange={(e) => onUpdate('fechaCierre', e.target.value)}
-                        className="w-full border-b-2 border-gray-200 focus:border-blue-500 outline-none py-1"
+                        type="number"
+                        value={totalizadorCierre || ''}
+                        onChange={(e) => onUpdate('totalizadorCierre', Number(e.target.value))}
+                        className="w-full border-b-2 border-gray-200 focus:border-blue-500 outline-none py-1 font-mono text-lg"
+                        placeholder="000000"
                     />
                 </div>
-
-                {/* Fila 2: Toma Física de Cierre */}
+            </div>
+            {/* Fila 2: Toma Física de Cierre */}
                 <div className="md:col-span-1">
                     <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
                         Toma Física Final
@@ -82,21 +138,6 @@ export const SeccionCierre = ({
                         </div>
                     </div>
                 </div>
-
-                {/* Fila 3: Totalizador */}
-                <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase">
-                        Lectura Totalizador Final
-                    </label>
-                    <input
-                        type="number"
-                        value={totalizadorCierre || ''}
-                        onChange={(e) => onUpdate('totalizadorCierre', Number(e.target.value))}
-                        className="w-full border-b-2 border-gray-200 focus:border-blue-500 outline-none py-1 font-mono text-lg"
-                        placeholder="000000"
-                    />
-                </div>
-            </div>
         </section>
     );
 };

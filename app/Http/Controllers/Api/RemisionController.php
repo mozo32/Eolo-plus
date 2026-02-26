@@ -7,67 +7,130 @@ use App\Models\Remision;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
+use App\Models\Firma;
 
 class RemisionController extends Controller
 {
     public function store(Request $request)
     {
         try {
-            $validatedData = $request->validate([
-                'folio' => 'required|string',
-                'fecha' => 'required|date',
-                'es_vuelo' => 'required|boolean',
-                'cliente_vuelo' => 'required_if:es_vuelo,true|nullable|string',
-                'requisicion' => 'required_if:es_vuelo,true|nullable|string',
-                'forma_pago' => 'required_if:es_vuelo,true|nullable|string',
-
-                'tipo_aeronave' => 'required|string',
-                'matricula' => 'required|string',
-                'destino' => 'required|string',
-
-                'hora_llegada' => 'nullable',
-                'hora_inicio' => 'nullable',
-                'hora_final' => 'nullable',
-
-                'lectura_inicial' => 'required|numeric',
-                'lectura_final' => 'required|numeric|gte:lectura_inicial',
-                'total_litros' => 'required|numeric',
-
-                'observaciones' => 'nullable|string',
-                'nombre_cliente_firma' => 'required|string',
-                'nombre_operador_firma' => 'required|string',
+            $validated = $request->validate([
+                'fecha'          => 'required|date',
+                'operador'       => 'required|string',
+                'cliente'        => 'required|string',
+                'formaPago'      => 'required|string',
+                'matricula'      => 'required|string',
+                'horaLlegada'    => 'required|string|max:5',
+                'lecturaInicial' => 'required|numeric',
+                'lecturaFinal'   => 'required|numeric',
             ]);
+            return DB::transaction(function () use ($request) {
+                $ultimoId = Remision::max('id') ?? 0;
+                $nuevoFolio = "EOLO-" . str_pad($ultimoId + 1, 4, '0', STR_PAD_LEFT);
+                $remision = Remision::create([
+                    'folio'           => $nuevoFolio,
+                    'fecha'           => $request->fecha,
+                    'operador'        => $request->operador,
+                    'cliente'         => $request->cliente,
+                    'requisicion'     => $request->requisicion,
+                    'forma_pago'      => $request->formaPago,
+                    'aeronave_tipo'   => $request->aeronaveTipo,
+                    'matricula'       => $request->matricula,
+                    'destino'         => $request->destino,
+                    'hora_llegada'    => $request->horaLlegada,
+                    'hora_inicial'    => $request->horaInicial,
+                    'hora_final'      => $request->horaFinal,
+                    'lectura_inicial' => $request->lecturaInicial,
+                    'lectura_final'   => $request->lecturaFinal,
+                    'total_litros'    => (float)$request->lecturaFinal - (float)$request->lecturaInicial,
+                ]);
 
-            $remision = DB::transaction(function () use ($validatedData) {
-                return Remision::create($validatedData);
+                $this->guardarFirmaBase64($request->firmaCliente ?? '', 'cliente', $remision);
+                $this->guardarFirmaBase64($request->firmaOperador ?? '', 'operador', $remision);
+
+                return response()->json([
+                    'message' => 'Remisión guardada con éxito',
+                    'id'      => $remision->id
+                ], 201);
             });
 
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Remisión guardada correctamente',
-                'data' => $remision
-            ], 201);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Error de validación',
-                'errors' => $e->errors()
-            ], 422);
         } catch (\Exception $e) {
-            Log::error("Error al guardar remisión: " . $e->getMessage());
             return response()->json([
-                'status' => 'error',
-                'message' => 'Error interno del servidor'
+                'message' => 'Error al procesar el registro',
+                'error'   => $e->getMessage()
             ], 500);
         }
     }
-    public function index()
+
+    public function index(Request $request)
     {
-        $remisiones = Remision::whereDate('fecha', now()->toDateString())
-            ->orderBy('created_at', 'desc')
+        $fecha = $request->query('fecha', now()->toDateString());
+        $remisiones = Remision::whereDate('fecha', $fecha)
+            ->orderBy('fecha', 'desc')
             ->get();
 
         return response()->json($remisiones);
+    }
+    private function guardarFirmaBase64(string $value, string $rol, Remision $entrega): void
+    {
+        if (trim($value) === '') return;
+        if (!str_contains($value, 'base64,')) {
+            return;
+        }
+        $entrega->firmas()
+            ->newPivotStatement()
+            ->where('firmable_type', Remision::class)
+            ->where('firmable_id', $entrega->id)
+            ->where('rol', $rol)
+            ->where('status', 'A')
+            ->update(['status' => 'N']);
+
+        $firma = $this->guardarFirmaArchivoBase64(
+            $value,
+            'firmas/Remision/' . now()->format('Y/m')
+        );
+
+        $entrega->firmas()->attach($firma->id, [
+            'rol'    => $rol,
+            'tag'    => $this->humanizeRol($rol),
+            'orden'  => 0,
+            'status' => 'A',
+        ]);
+    }
+    private function guardarFirmaArchivoBase64(string $base64, string $folder): Firma
+    {
+        if (!str_contains($base64, ',')) {
+            throw new \Exception('Formato base64 inválido');
+        }
+
+        [$meta, $content] = explode(',', $base64);
+        preg_match('/data:(.*?);base64/', $meta, $matches);
+
+        $mime = $matches[1] ?? 'image/png';
+        $extension = explode('/', $mime)[1] ?? 'png';
+
+        $fileName = Str::uuid() . '.' . $extension;
+        $path = $folder . '/' . $fileName;
+
+        Storage::disk('public')->put($path, base64_decode($content));
+
+        return Firma::create([
+            'disk'          => 'public',
+            'path'          => $path,
+            'original_name' => $fileName,
+            'mime'          => $mime,
+            'size'          => Storage::disk('public')->size($path),
+            'sha1'          => sha1_file(Storage::disk('public')->path($path)),
+        ]);
+    }
+    private function humanizeRol(string $rol): string
+    {
+        return match ($rol) {
+            'cliente' => 'Firma de cliente',
+            'operador'    => 'Firma del operdor',
+            default         => ucfirst(str_replace('_', ' ', $rol)),
+        };
     }
 }

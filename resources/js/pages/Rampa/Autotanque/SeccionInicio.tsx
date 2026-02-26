@@ -1,6 +1,6 @@
 import React from 'react';
 import { TABLA_CALIBRACION } from './tablaCalibracion';
-;
+import { Calendar, Clock } from 'lucide-react';
 
 interface SeccionInicioProps {
     nombre: string;
@@ -20,14 +20,26 @@ export const SeccionInicio = ({
     onUpdate
 }: SeccionInicioProps) => {
 
-    // Función que maneja el cambio en CM y busca los litros
     const handleCmChange = (cm: number) => {
         onUpdate('cmIni', cm);
-
-        // Si el valor existe en la tabla, actualizamos litros automáticamente
         if (TABLA_CALIBRACION[cm] !== undefined) {
             onUpdate('litrosIni', TABLA_CALIBRACION[cm]);
         }
+    };
+    const handleTimeInput = (val: string) => {
+        const digits = val.replace(/\D/g, '');
+        let formatted = digits;
+
+        if (digits.length >= 3) {
+            formatted = `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
+        }
+        let [hours, minutes] = formatted.split(':');
+        if (hours && parseInt(hours) > 23) hours = '23';
+        if (minutes && parseInt(minutes) > 59) minutes = '59';
+
+        const finalValue = minutes !== undefined ? `${hours}:${minutes}` : hours;
+        const date = fecha.split('T')[0] || new Date().toISOString().split('T')[0];
+        onUpdate('fecha', `${date}T${finalValue.slice(0, 5)}`);
     };
 
     return (
@@ -46,13 +58,40 @@ export const SeccionInicio = ({
                     />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase">Fecha y Hora de Entrega</label>
-                    <input
-                        type="datetime-local"
-                        value={fecha}
-                        onChange={(e) => onUpdate('fecha', e.target.value)}
-                        className="w-full border-b-2 border-gray-200 focus:border-blue-500 outline-none py-1"
-                    />
+                    <label className="block text-xs font-semibold text-gray-500 uppercase">Cronología de Turno</label>
+                    <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-100 group focus-within:border-blue-300 transition-all shadow-sm">
+                        <div className="flex items-center gap-2 flex-1 px-2">
+                            <Calendar size={16} className="text-blue-500" />
+                            <input
+                                type="date"
+                                value={fecha ? fecha.split('T')[0] : ''}
+                                onChange={(e) => {
+                                    const time = fecha.split('T')[1] || '00:00';
+                                    onUpdate('fecha', `${e.target.value}T${time}`);
+                                }}
+                                className="bg-transparent text-sm font-bold text-slate-700 outline-none w-full cursor-pointer"
+                            />
+                        </div>
+
+                        <div className="h-6 w-[1px] bg-slate-200"></div>
+
+                        {/* HORA (ESCRIBIBLE) */}
+                        <div className="flex items-center gap-2 flex-1 px-2">
+                            <Clock size={16} className="text-blue-500" />
+                            <input
+                                type="text"
+                                placeholder="HH:MM"
+                                maxLength={5}
+                                value={fecha ? fecha.split('T')[1]?.substring(0, 5) : ''}
+                                onChange={(e) => handleTimeInput(e.target.value)}
+                                className="bg-transparent text-sm font-mono font-bold text-slate-700 outline-none w-full placeholder:text-slate-300"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex justify-between mt-1 px-1">
+                        <p className="text-[9px] text-slate-400 font-medium uppercase">Día / Mes / Año</p>
+                        <p className="text-[9px] text-slate-400 font-medium uppercase">Formato 24h</p>
+                    </div>
                 </div>
 
                 <div className="md:col-span-1">
