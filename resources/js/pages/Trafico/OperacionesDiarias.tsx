@@ -29,10 +29,7 @@ export default function OperacionesDiarias() {
             })
         );
     }, [auth.user]);
-    useEffect(() => {
-        console.log(activeModule);
 
-    }, [activeModule]);
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Operaciones Diarias" />

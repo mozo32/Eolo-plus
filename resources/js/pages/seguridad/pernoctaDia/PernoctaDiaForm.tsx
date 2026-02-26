@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import { validatePernoctaDia } from "./validation";
 import { usePage } from "@inertiajs/react";
 
@@ -50,12 +50,47 @@ const PernoctaDiaForm: React.FC<Props> = ({ onAdd }) => {
     const [sugerencias, setSugerencias] = useState<string[]>([]);
     const [loadingMatricula, setLoadingMatricula] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const aplicarFormatoMatricula = (input: string, prev: string): string => {
+        let val = input.toUpperCase().replace(/\s/g, "");
+        if (val.length < prev.length) return val; // Permitir borrar
+
+        const prefijos2 = ["XA", "XB", "XC", "EC", "CC", "LV", "LQ", "HK", "HJ", "TG", "TI", "HC", "YV", "ZP", "OB"];
+
+        if (val.length === 2 && prefijos2.includes(val)) {
+            return `${val}-`;
+        }
+        if (val.length > 2 && !val.includes("-")) {
+            const possiblePrefix = val.substring(0, 2);
+            if (prefijos2.includes(possiblePrefix)) {
+                return `${possiblePrefix}-${val.substring(2)}`;
+            }
+        }
+        return val;
+    };
+
+    // --- LÓGICA DE VALIDACIÓN VISUAL ---
+    const statusMatricula = useMemo(() => {
+        const val = form.matricula;
+        if (!val) return { ok: true, msg: "" };
+        const regexGeneral = /^[A-Z0-9]{1,3}-[A-Z0-9]{1,5}$/;
+        const regexUSA = /^N[1-9][0-9A-Z]{0,4}$/;
+
+        if (regexGeneral.test(val) || regexUSA.test(val)) return { ok: true, msg: "Formato correcto" };
+        if (val.startsWith("N")) return { ok: true, msg: "Formato USA detectado" };
+        if (val.length <= 3) return { ok: true, msg: "Ingresa el prefijo..." };
+        return { ok: false, msg: "Formato inválido (Ej: XA-ABC o N12345)" };
+    }, [form.matricula]);
 
     const handleChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
     ) => {
         const { name, value } = e.target;
-        const finalValue = name === "matricula" ? value.toUpperCase() : value;
+
+        // Aplicar formato especial si es matrícula
+        const finalValue = name === "matricula"
+            ? aplicarFormatoMatricula(value, form.matricula)
+            : value;
+
         setForm({ ...form, [name]: finalValue });
 
         if (errors[name]) {
@@ -103,7 +138,7 @@ const PernoctaDiaForm: React.FC<Props> = ({ onAdd }) => {
         });
 
         setForm({
-            fecha: today,
+            fecha: form.fecha,
             hora: "",
             matricula: "",
             ubicacion: "",
@@ -157,9 +192,10 @@ const PernoctaDiaForm: React.FC<Props> = ({ onAdd }) => {
             </div>
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                {/* Matrícula */}
                 <div className="relative space-y-1">
-                    <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                    <label className={`text-xs font-medium transition-colors ${
+                        !statusMatricula.ok && form.matricula.length > 3 ? 'text-red-600' : 'text-gray-600 dark:text-gray-300'
+                    }`}>
                         Matrícula *
                     </label>
 
@@ -169,25 +205,33 @@ const PernoctaDiaForm: React.FC<Props> = ({ onAdd }) => {
                         onChange={handleChange}
                         placeholder="Ej. XA-ABC"
                         autoComplete="off"
-                        className={`${inputClass(!!errors.matricula)} uppercase`}
+                        className={`${inputClass(!!errors.matricula || (!statusMatricula.ok && form.matricula.length > 3))} uppercase`}
                     />
+
+                    {/* Mensaje de estado de formato */}
+                    {form.matricula && (
+                        <p className={`text-[10px] font-medium ${statusMatricula.ok ? 'text-blue-600' : 'text-red-500'}`}>
+                            {statusMatricula.msg}
+                        </p>
+                    )}
 
                     {loadingMatricula && (
                         <p className="text-xs text-gray-400">Buscando…</p>
                     )}
 
+                    {/* Sugerencias */}
                     {sugerencias.length > 0 && (
                         <ul className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-lg border bg-white shadow-md dark:border-gray-700 dark:bg-gray-900">
                             {sugerencias.map((m) => (
                                 <li
                                     key={m}
                                     onClick={() => {
-                                        setForm({ ...form, matricula: m });
+                                        setForm({ ...form, matricula: m.toUpperCase() });
                                         setSugerencias([]);
                                     }}
-                                    className="cursor-pointer px-3 py-2 text-sm hover:bg-primary/10"
+                                    className="cursor-pointer px-3 py-2 text-sm hover:bg-primary/10 dark:hover:bg-primary/20"
                                 >
-                                    {m}
+                                    <span className="font-bold">{m.toUpperCase()}</span>
                                 </li>
                             ))}
                         </ul>

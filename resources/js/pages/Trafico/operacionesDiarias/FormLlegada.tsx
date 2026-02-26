@@ -11,7 +11,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
     soloLectura?: boolean
 }) => {
     const { obtenerTipo } = useMatriculaAutocompleteStore();
-
+    const [cargando, setCargando] = useState(false);
     const [formData, setFormData] = useState({
         id: datosEdicion?.id || null,
         matricula: datosEdicion?.matricula || '',
@@ -23,13 +23,13 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
         tipo_cliente: datosEdicion?.tipo_cliente || '',
         departamento: moduloNombre,
         movimiento: 'Llegada',
-        fecha: datosEdicion?.fecha || new Date().toLocaleDateString('en-CA'),
+        fecha: datosEdicion?.fecha
+            ? new Date(datosEdicion.fecha).toISOString().split('T')[0]
+            : new Date().toISOString().split('T')[0],
         observaciones: datosEdicion?.observaciones || '',
         nombre: datosEdicion?.nombre || '',
         impulso: datosEdicion?.impulso || ''
     });
-    console.log(new Date().toLocaleDateString('en-CA'),);
-    console.log(new Date().toLocaleDateString('en-CA'),);
 
     const handleFieldChange = (name: string, value: any) => {
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -54,8 +54,31 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (cargando) return;
+
         try {
+            const infoMatricula = await obtenerTipo(formData.matricula) as any;
+            if (!infoMatricula || !infoMatricula.tipo) {
+                const result = await Swal.fire({
+                    title: '¿Matrícula no registrada?',
+                    text: `La matrícula "${formData.matricula}" no se encuentra en el sistema. ¿Está seguro que los datos y el equipo (${formData.equipo}) son correctos para crear un nuevo registro permanente?`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#2563eb', // Azul
+                    cancelButtonColor: '#64748b', // Gris
+                    confirmButtonText: 'Sí, es correcto',
+                    cancelButtonText: 'Revisar datos',
+                    reverseButtons: true
+                });
+                if (!result.isConfirmed) {
+                    return;
+                }
+            }
+            setCargando(true);
+
             await guardarOperacionesDiariasApi(formData);
+
             Swal.fire({
                 icon: 'success',
                 title: datosEdicion ? 'Actualizado' : 'Guardado',
@@ -63,10 +86,11 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                 timer: 1500,
                 showConfirmButton: false
             });
+
             if (alCerrar) alCerrar();
+
         } catch (error) {
             let mensaje = 'Ocurrió un error inesperado';
-
             if (error instanceof Error) {
                 mensaje = error.message;
             }
@@ -76,19 +100,48 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                 title: 'Error',
                 text: mensaje,
             });
+        } finally {
+            setCargando(false);
         }
     };
 
     return (
         <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl border-t-8 border-blue-600 shadow-2xl w-full">
-            <div className="flex justify-between items-start mb-6">
+            <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-6">
                 <div>
-                    <h2 className="text-xl font-bold mb-1 uppercase tracking-tight text-slate-800">
-                        {datosEdicion ? 'Actualizar Llegada' : 'Nuevo Registro de Arribo'}
+                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">
+                        {datosEdicion ? 'EDITAR ARRIBO' : 'NUEVO ARRIBO'}
                     </h2>
-                    <p className="text-sm text-slate-400">Complete los datos de arribo</p>
+                    <div className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                        <p className="text-xs text-slate-500 font-semibold tracking-wide uppercase">Operaciones Diarias</p>
+                    </div>
                 </div>
-                <button type="button" onClick={alCerrar} className="text-slate-300 hover:text-slate-600 text-xl font-bold">✕</button>
+
+                <div className="flex items-center gap-6">
+                    <div className="relative flex items-center bg-slate-50 border border-slate-200 rounded-2xl p-1 pr-4 shadow-sm group hover:border-blue-300 transition-all">
+                        <div className="bg-white shadow-sm rounded-xl p-2 text-blue-600 flex flex-col items-center min-w-[45px] border border-slate-100">
+                            <span className="text-[10px] font-black leading-none uppercase">Día</span>
+                            <span className="text-lg font-bold leading-none mt-1">{formData.fecha.split('-')[2]}</span>
+                        </div>
+                        <div className="ml-3">
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none mb-1">Fecha de Operación</label>
+                            <input
+                                type="date"
+                                value={formData.fecha}
+                                onChange={(e) => handleFieldChange("fecha", e.target.value)}
+                                className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer block"
+                            />
+                        </div>
+                    </div>
+
+                    <button onClick={alCerrar} className="group relative">
+                        <div className="absolute -inset-1 bg-slate-100 rounded-full scale-0 group-hover:scale-100 transition-transform"></div>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-300 group-hover:text-red-500 relative transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
             </div>
             {soloLectura && (
                 <div className="mb-4 p-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold rounded-lg flex items-center gap-2">
@@ -292,8 +345,23 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                         Cancelar
                     </button>
                     {!soloLectura && (
-                        <button type="submit" className="flex-1 bg-blue-600 text-white px-4 py-3 rounded-lg font-bold shadow-lg hover:bg-blue-700 active:scale-95 transition-all">
-                            {datosEdicion ? 'Guardar Cambios' : 'Confirmar Registro'}
+                        <button
+                            type="submit"
+                            disabled={cargando}
+                            className={`flex-1 px-4 py-3 rounded-lg font-bold shadow-lg transition-all
+                                ${cargando
+                                    ? 'bg-blue-400 cursor-not-allowed scale-95'
+                                    : 'bg-blue-600 hover:bg-blue-700 active:scale-95 text-white'
+                                }`}
+                        >
+                            {cargando ? (
+                                <div className="flex items-center justify-center gap-2">
+                                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                                    Procesando...
+                                </div>
+                            ) : (
+                                datosEdicion ? 'Guardar Cambios' : 'Confirmar Registro'
+                            )}
                         </button>
                     )}
                 </div>

@@ -133,6 +133,7 @@ class OperacionesDiariasController extends Controller
             'hora'         => $request->hora,
             'lugar'        => $request->procedencia ?? $request->destino,
             'pax'          => $request->pax,
+            'fecha'        => $request->fecha,
             'validaciones' => array_values($validaciones),
             'equipaje'     => $request->equipaje,
             'observaciones'=> $request->observaciones,
