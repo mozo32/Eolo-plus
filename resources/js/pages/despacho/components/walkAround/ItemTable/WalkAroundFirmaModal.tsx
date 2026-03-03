@@ -48,10 +48,9 @@ function toChecklistHelicopteroEstado(input: unknown): ChecklistHelicopteroEstad
 function toChecklistAvionEstado(input: unknown): ChecklistAvionEstado {
     const out: ChecklistAvionEstado = {};
     if (!input || typeof input !== "object") return out;
-
     for (const [k, v] of Object.entries(input as Record<string, any>)) {
-        const rawDanios = Array.isArray(v?.danios)
-            ? v.danios.filter(isTipoDanio)
+        const rawDanios = Array.isArray(v?.damages)
+            ? v.damages.filter(isTipoDanio)
             : normalizeToArray(v);
 
         out[k] = {

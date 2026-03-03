@@ -14,10 +14,12 @@ use App\Models\Aeronave;
 use App\Models\Departamento;
 use App\Models\Personal;
 use App\Models\Bitacora;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Http\JsonResponse;
 
 class WalkAroundController extends Controller
 {
@@ -36,6 +38,7 @@ class WalkAroundController extends Controller
                 'movimiento',
                 'matricula',
                 'tipo',
+                'tipo_aeronave',
                 'hora',
                 'destino',
                 'procedensia',
@@ -309,28 +312,24 @@ class WalkAroundController extends Controller
     public function store(Request $request)
     {
         DB::beginTransaction();
-
         try {
             $tipoExistente = DB::connection('remota')
                 ->table('tb_tipo')
-                ->where('tipo', $request->tipoAeronave)
+                ->where('tipo', $request->metadata['tipo'])
                 ->first();
 
-            if (!$tipoExistente) {
-                $idTipo = DB::connection('remota')->table('tb_tipo')->insertGetId([
-                    'tipo' => $request->tipoAeronave
-                ]);
-            } else {
-                $idTipo = $tipoExistente->id_tipo;
-            }
+            $idTipo = $tipoExistente ? $tipoExistente->id_tipo : DB::connection('remota')->table('tb_tipo')->insertGetId([
+                'tipo' => $request->metadata['tipo']
+            ]);
+
             $dbMatricula = DB::connection('remota')
-                ->table('tb_matricula as m')
-                ->where('m.matricula', $request->matricula)
+                ->table('tb_matricula')
+                ->where('matricula', $request->metadata['matricula'])
                 ->first();
 
             if (!$dbMatricula) {
                 DB::connection('remota')->table('tb_matricula')->insert([
-                    'matricula'      => $request->matricula,
+                    'matricula'      => $request->metadata['matricula'],
                     'id_estatus'     => 1,
                     'id_tipo'        => $idTipo,
                     'id_categoria'   => 0,
@@ -344,33 +343,36 @@ class WalkAroundController extends Controller
             }
 
             $walkAround = WalkAround::create([
-                'fecha'                     => $request->fecha,
-                'movimiento'                => $request->movimiento,
-                'matricula'                 => $request->matricula,
-                'tipo_aeronave_id'          => $request->AeronaveId,
-                'tipo'                      => $request->tipo,
-                'tipo_aeronave'             => $request->tipoAeronave,
-                'hora'                      => $request->hora,
-                'destino'                   => $request->destino,
-                'procedensia'               => $request->procedensia,
-                'observaciones'             => $request->observaciones,
-                'elabora_departamento_id'   => $request->elabora_departamento_id,
-                'elabora_personal_id'       => $request->elabora_personal_id,
-                'elabora'                   => $request->elabora,
-                'responsable'               => $request->responsable,
-                'jefe_area'                 => $request->jefeArea,
-                'fbo'                       => $request->fbo,
-                'numero_estaticas'          => $request->numeroEstatica,
+                'fecha'                    => $request->metadata['fecha'],
+                'movimiento'               => $request->metadata['movimiento'],
+                'matricula'                => $request->metadata['matricula'],
+                'tipo'                     => $request->metadata['aeronave'],
+                'tipo_aeronave'            => $request->metadata['tipo'],
+                'hora'                     => $request->metadata['hora'],
+                'destino'                  => $request->metadata['destino'],
+                'procedensia'              => $request->metadata['procedencia'],
+                'observaciones'            => $request->cierreYFirmas['observaciones'] ?? null,
+                'elabora'                  => auth()->user()->name,
+                'responsable'              => $request->cierreYFirmas['nombreResponsable'],
+                'jefe_area'                => $request->cierreYFirmas['nombreJefe'],
+                'fbo'                      => $request->cierreYFirmas['nombreFbo'],
+                'numero_estaticas'         => $request->inspeccionTecnica['numeroEstaticas'] ?? 0,
+                'elabora_departamento_id'  => auth()->id(),
+                'elabora_personal_id'      => auth()->id(),
+                'tipo_aeronave_id'         => $idTipo,
             ]);
+
+            $esAvion = ($request->metadata['aeronave'] === 'Avión');
+            $checklistPuro = $request->inspeccionTecnica['checklist'] ?? [];
 
             WalkaroundChecklist::create([
                 'walk_around_id'        => $walkAround->id,
-                'checklist_avion'       => $request->checklistAvion ?: null,
-                'checklist_helicoptero' => $request->checklistHelicoptero ?: null,
+                'checklist_avion'       => $esAvion ? $checklistPuro : null,
+                'checklist_helicoptero' => !$esAvion ? $checklistPuro : null,
             ]);
 
-            if (is_array($request->marcaDanos)) {
-                foreach ($request->marcaDanos as $punto) {
+            if (isset($request->inspeccionTecnica['puntos3D']) && is_array($request->inspeccionTecnica['puntos3D'])) {
+                foreach ($request->inspeccionTecnica['puntos3D'] as $punto) {
                     WalkaroundMarcaDanio::create([
                         'walk_around_id' => $walkAround->id,
                         'x'              => $punto['x'],
@@ -382,48 +384,40 @@ class WalkAroundController extends Controller
                 }
             }
 
-            if (is_array($request->fotos)) {
-                foreach ($request->fotos as $index => $base64) {
-                    $imagen = $this->guardarImagenBase64(
-                        $base64,
-                        'walkaround/' . now()->format('Y/m')
-                    );
+            if (isset($request->inspeccionTecnica['fotos']) && is_array($request->inspeccionTecnica['fotos'])) {
+                foreach ($request->inspeccionTecnica['fotos'] as $index => $fotoData) {
+                    $base64String = is_array($fotoData) ? ($fotoData['dataUrl'] ?? null) : $fotoData;
 
-                    $walkAround->imagenes()->attach($imagen->id, [
-                        'tag'    => 'evidencia',
-                        'orden'  => $index,
-                        'status' => 'A',
-                    ]);
+                    if (!empty($base64String)) {
+                        $imagen = $this->guardarImagenBase64(
+                            $base64String,
+                            'walkaround/' . now()->format('Y/m')
+                        );
+
+                        $walkAround->imagenes()->attach($imagen->id, [
+                            'tag'    => 'evidencia',
+                            'orden'  => $index,
+                            'status' => 'A',
+                        ]);
+                    }
                 }
             }
 
-            // ===== FIRMAS =====
-            $this->guardarFirmaBase64($request->firmaJefeAreaBase64 ?? '', 'jefe_area', $walkAround);
-            $this->guardarFirmaBase64($request->firmaFboBase64 ?? '', 'fbo', $walkAround);
-            $this->guardarFirmaBase64($request->firmaResponsableBase64 ?? '', 'responsable', $walkAround);
+            $this->guardarFirmaBase64($request->cierreYFirmas['firmaJefe'] ?? '', 'jefe_area', $walkAround);
+            $this->guardarFirmaBase64($request->cierreYFirmas['firmaFbo'] ?? '', 'fbo', $walkAround);
+            $this->guardarFirmaBase64($request->cierreYFirmas['firmaResponsable'] ?? '', 'responsable', $walkAround);
 
-            // ===== BITÁCORA =====
-            Bitacora::log(
-                'WalkAround',
-                'CREAR',
-                "Se registró WalkAround ID {$walkAround->id} | Matrícula: {$walkAround->matricula} | Tipo: {$walkAround->tipo}",
-                auth()->id(),
-                $request->elabora
-            );
+            Bitacora::log('WalkAround', 'CREAR', "Se registró WalkAround ID {$walkAround->id}", auth()->id(), auth()->user()->name);
 
             DB::commit();
-
-            return response()->json([
-                'message' => 'WalkAround guardado correctamente',
-                'id'      => $walkAround->id,
-            ], 201);
+            return response()->json(['message' => 'WalkAround guardado correctamente', 'id' => $walkAround->id], 201);
 
         } catch (\Throwable $e) {
             DB::rollBack();
-
             return response()->json([
                 'message' => 'Error al guardar WalkAround',
                 'error'   => $e->getMessage(),
+                'line'    => $e->getLine()
             ], 500);
         }
     }
@@ -435,104 +429,101 @@ class WalkAroundController extends Controller
     public function update(Request $request, WalkAround $walkAround)
     {
         DB::beginTransaction();
-
         try {
+            // 1. Actualizar datos principales (Metadata)
             $walkAround->update([
-                'fecha'            => $request->fecha,
-                'movimiento'       => $request->movimiento,
-                'matricula'        => $request->matricula,
-                'tipo_aeronave_id' => $request->AeronaveId,
-                'tipo'             => $request->tipo,
-                'hora'             => $request->hora,
-                'destino'          => $request->destino,
-                'procedensia'      => $request->procedensia,
-                'observaciones'    => $request->observaciones,
-                'elabora'          => $request->elabora,
-                'responsable'      => $request->responsable,
-                'jefe_area'        => $request->jefeArea,
-                'fbo'              => $request->fbo,
-                'numero_estaticas' => $request->numeroEstatica,
+                'fecha'            => $request->metadata['fecha'],
+                'movimiento'       => $request->metadata['movimiento'],
+                'matricula'        => $request->metadata['matricula'],
+                'tipo'             => $request->metadata['aeronave'],
+                'tipo_aeronave'    => $request->metadata['tipo'],
+                'hora'             => $request->metadata['hora'],
+                'destino'          => $request->metadata['destino'],
+                'procedensia'      => $request->metadata['procedencia'],
+                'observaciones'    => $request->cierreYFirmas['observaciones'] ?? null,
+                'responsable'      => $request->cierreYFirmas['nombreResponsable'],
+                'jefe_area'        => $request->cierreYFirmas['nombreJefe'],
+                'fbo'              => $request->cierreYFirmas['nombreFbo'],
+                'numero_estaticas' => $request->inspeccionTecnica['numeroEstaticas'] ?? 0,
             ]);
+
+            // 2. Actualizar Checklist
+            $esAvion = ($request->metadata['aeronave'] === 'Avión');
+            $checklistPuro = $request->inspeccionTecnica['checklist'] ?? [];
 
             WalkaroundChecklist::updateOrCreate(
                 ['walk_around_id' => $walkAround->id],
                 [
-                    'checklist_avion'       => $request->checklistAvion ?: null,
-                    'checklist_helicoptero' => $request->checklistHelicoptero ?: null,
+                    'checklist_avion'       => $esAvion ? $checklistPuro : null,
+                    'checklist_helicoptero' => !$esAvion ? $checklistPuro : null,
                 ]
             );
 
+            // 3. Actualizar Marcas de Daño (Puntos 3D)
             $walkAround->marcasDanio()->delete();
-
-            if (is_array($request->marcaDanos)) {
-                foreach ($request->marcaDanos as $punto) {
+            if (isset($request->inspeccionTecnica['puntos3D']) && is_array($request->inspeccionTecnica['puntos3D'])) {
+                foreach ($request->inspeccionTecnica['puntos3D'] as $punto) {
                     WalkaroundMarcaDanio::create([
                         'walk_around_id' => $walkAround->id,
                         'x'              => $punto['x'],
                         'y'              => $punto['y'],
-                        'z'              => $punto['z'],
+                        'z'              => $punto['z'] ?? 0,
                         'descripcion'    => $punto['descripcion'] ?? null,
                         'severidad'      => $punto['severidad'] ?? null,
                     ]);
                 }
             }
 
-            // Fotos: desactivar existentes
-            if (!empty($request->desactivar_imagen_ids)) {
-                $walkAround->imagenes()
-                    ->newPivotStatement()
-                    ->where('imageable_type', WalkAround::class)
-                    ->where('imageable_id', $walkAround->id)
-                    ->whereIn('imagen_id', $request->desactivar_imagen_ids)
-                    ->update(['status' => 'N']);
-            }
-
-            // Fotos nuevas
-            if (!empty($request->fotos)) {
+            // 4. Fotos: Procesar solo las nuevas (que vienen en base64)
+            if (isset($request->inspeccionTecnica['fotos']) && is_array($request->inspeccionTecnica['fotos'])) {
                 $startOrden = (int) ($walkAround->imagenes()->max('imageables.orden') ?? -1) + 1;
 
-                foreach ($request->fotos as $i => $base64) {
-                    $imagen = $this->guardarImagenBase64(
-                        $base64,
-                        'walkaround/' . now()->format('Y/m')
-                    );
+                foreach ($request->inspeccionTecnica['fotos'] as $index => $fotoData) {
+                    // Si la foto ya es una URL (contiene http), no hacemos nada
+                    if (is_string($fotoData) && str_contains($fotoData, 'http')) {
+                        continue;
+                    }
 
-                    $walkAround->imagenes()->attach($imagen->id, [
-                        'tag'    => 'evidencia',
-                        'orden'  => $startOrden + $i,
-                        'status' => 'A',
-                    ]);
+                    $base64String = is_array($fotoData) ? ($fotoData['base64'] ?? null) : $fotoData;
+
+                    if (!empty($base64String) && str_contains($base64String, 'data:image')) {
+                        $imagen = $this->guardarImagenBase64(
+                            $base64String,
+                            'walkaround/' . now()->format('Y/m')
+                        );
+
+                        $walkAround->imagenes()->attach($imagen->id, [
+                            'tag'    => 'evidencia',
+                            'orden'  => $startOrden + $index,
+                            'status' => 'A',
+                        ]);
+                    }
                 }
             }
 
-            // ===== FIRMAS =====
-            $this->guardarFirmaBase64($request->firmaJefeAreaBase64 ?? '', 'jefe_area', $walkAround);
-            $this->guardarFirmaBase64($request->firmaFboBase64 ?? '', 'fbo', $walkAround);
-            $this->guardarFirmaBase64($request->firmaResponsableBase64 ?? '', 'responsable', $walkAround);
+            // 5. Firmas: Solo guardar si el valor enviado es un Base64 nuevo
+            $this->procesarFirmaUpdate($request->cierreYFirmas['firmaJefe'] ?? '', 'jefe_area', $walkAround);
+            $this->procesarFirmaUpdate($request->cierreYFirmas['firmaFbo'] ?? '', 'fbo', $walkAround);
+            $this->procesarFirmaUpdate($request->cierreYFirmas['firmaResponsable'] ?? '', 'responsable', $walkAround);
 
-            // ===== BITÁCORA =====
-            Bitacora::log(
-                'WalkAround',
-                'ACTUALIZAR',
-                "Se actualizó WalkAround ID {$walkAround->id} | Matrícula: {$walkAround->matricula}",
-                auth()->id(),
-                $request->elabora
-            );
+            // Bitácora
+            Bitacora::log('WalkAround', 'ACTUALIZAR', "Se actualizó WalkAround ID {$walkAround->id}", auth()->id(), auth()->user()->name);
 
             DB::commit();
-
-            return response()->json([
-                'message' => 'WalkAround actualizado correctamente',
-                'id'      => $walkAround->id,
-            ], 200);
+            return response()->json(['message' => 'WalkAround actualizado correctamente', 'id' => $walkAround->id], 200);
 
         } catch (\Throwable $e) {
             DB::rollBack();
-
             return response()->json([
                 'message' => 'Error al actualizar WalkAround',
                 'error'   => $e->getMessage(),
+                'line'    => $e->getLine()
             ], 500);
+        }
+    }
+    private function procesarFirmaUpdate($firmaData, $rol, $walkAround) {
+        if (!empty($firmaData) && str_contains($firmaData, 'data:image')) {
+            $this->guardarFirmaBase64($firmaData, $rol, $walkAround);
         }
     }
     public function updateFirma(Request $request, WalkAround $walkAround)
@@ -710,5 +701,25 @@ class WalkAroundController extends Controller
         $bitacoras = $query->paginate(20);
 
         return response()->json($bitacoras);
+    }
+    public function buscarPorMatricula(string $matricula): JsonResponse
+    {
+        try {
+            $infoMatricula = DB::connection('remota')
+                ->table('tb_matricula as m')
+                ->leftJoin('tb_estatus as e', 'e.id_estatus', '=', 'm.id_estatus')
+                ->leftJoin('tb_tipo as t', 't.id_tipo', '=', 'm.id_tipo')
+                ->leftJoin('tb_categoria as c', 'c.id_categoria', '=', 'm.id_categoria')
+                ->where('m.matricula', $matricula)
+                ->select(
+                    't.tipo',
+                )
+                ->first();
+            return response()->json($infoMatricula);
+
+        } catch (\Throwable $e) {
+            \Log::error('Error al buscar aeronave: ' . $e->getMessage());
+            return response()->json(['error' => 'Error interno del servidor'], 500);
+        }
     }
 }

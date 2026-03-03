@@ -15,11 +15,6 @@ import avionImg from "@/assets/avion (2).png";
 import helipImg from "@/assets/helicoptero.png";
 
 import { fetchWalkaroundDetalle, WalkAroundDetalle } from "@/stores/apiWalkaround";
-
-/* =======================
-   Helpers
-======================= */
-
 function normalizeArray(v: unknown): string[] {
     if (Array.isArray(v)) return v.map(String);
     if (typeof v === "string" && v) return [v];
@@ -68,15 +63,11 @@ async function urlToDataUrl(url: string): Promise<string> {
 
     return await new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result)); // data:image/png;base64,...
+        reader.onload = () => resolve(String(reader.result));
         reader.onerror = reject;
         reader.readAsDataURL(blob);
     });
 }
-
-/* =======================
-   PDF Styles
-======================= */
 
 const GREEN = "#003E51";
 const BORDER = "#111111";
@@ -413,11 +404,6 @@ const styles = StyleSheet.create({
     },
 
 });
-
-/* =======================
-   PDF Component
-======================= */
-
 function PdfMapaReact({
     imageSrc,
     points,
@@ -560,7 +546,6 @@ function WalkAroundPdfDoc({
                     <View style={styles.headerLeft}>
                         <Text style={styles.headerLeftText}>EOLO</Text>
                     </View>
-
                     <View style={styles.headerMid}>
                         <Text style={styles.headerTitle}>
                             Reporte de Inspección de Aeronave
@@ -577,36 +562,29 @@ function WalkAroundPdfDoc({
                         <Text style={styles.headerRightText}>FBO: {detalle.fbo ?? "-"}</Text>
                     </View>
                 </View>
-
-                {/* Fields */}
                 <View style={styles.fieldsWrap}>
                     <View style={styles.fieldsRow}>
                         <View style={[styles.fieldCell, { width: "18%" }]}>
                             <Text style={styles.value}>{modalidad}</Text>
                         </View>
-
                         <View style={[styles.fieldCell, { width: "20%" }]}>
                             <Text style={styles.label}>Matrícula</Text>
                             <Text style={styles.value}>{detalle.matricula ?? "-"}</Text>
                         </View>
-
                         <View style={[styles.fieldCell, { width: "16%" }]}>
                             <Text style={styles.label}>Tipo aeronave</Text>
                             <Text style={styles.value}>{detalle.tipo ?? "-"}</Text>
                         </View>
-
                         <View style={[styles.fieldCell, { width: "22%" }]}>
                             <Text style={styles.label}>Procedencia / Destino</Text>
                             <Text style={styles.value}>
                                 {detalle.procedensia ?? detalle.destino ?? "-"}
                             </Text>
                         </View>
-
                         <View style={[styles.fieldCell, { width: "12%" }]}>
                             <Text style={styles.label}>Hora</Text>
                             <Text style={styles.value}>{detalle.hora ?? "-"}</Text>
                         </View>
-
                         <View style={[styles.fieldCell, styles.fieldCellLast, { width: "12%" }]}>
                             <Text style={styles.label}>Fecha</Text>
                             <Text style={styles.value}>
@@ -615,7 +593,6 @@ function WalkAroundPdfDoc({
                         </View>
                     </View>
                 </View>
-
                 <View style={styles.body}>
                     <View style={styles.rightCol}>
                         <View style={styles.box}>
@@ -642,13 +619,13 @@ function WalkAroundPdfDoc({
                                             <Text style={[styles.td, styles.tdParte, { width: "46%" }]}>{k}</Text>
                                             <Text style={[styles.td, { width: "6%" }]}>{v.der ? "X" : ""}</Text>
                                             <Text style={[styles.td, { width: "6%" }]}>{v.izq ? "X" : ""}</Text>
-                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.danios, "sin_danio")}</Text>
-                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.danios, "golpe")}</Text>
-                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.danios, "rayon")}</Text>
-                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.danios, "fisurado")}</Text>
-                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.danios, "quebrado")}</Text>
-                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.danios, "pintura_cuarteada")}</Text>
-                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.danios, "otro")}</Text>
+                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.damages, "sin_danio")}</Text>
+                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.damages, "golpe")}</Text>
+                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.damages, "rayon")}</Text>
+                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.damages, "fisurado")}</Text>
+                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.damages, "quebrado")}</Text>
+                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.damages, "pintura_cuarteada")}</Text>
+                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.damages, "otro")}</Text>
                                         </View>
                                     );
                                 })}
@@ -668,7 +645,6 @@ function WalkAroundPdfDoc({
                     <Text style={styles.boxTitle}>Detalle de Daños</Text>
 
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                        {/* Usamos el encadenamiento opcional y validamos que sea Array */}
                         {Array.isArray(fotos3D) && fotos3D.map((imgUri: string, index: number) => (
                             <View key={index} style={{ width: '30%', marginBottom: 10 }}>
                                 <Image
@@ -686,7 +662,6 @@ function WalkAroundPdfDoc({
                         )}
                     </View>
                 </View>
-                {/* Observaciones */}
                 <View style={[styles.box, { marginTop: 8 }]}>
                     <Text style={styles.boxTitle}>Observaciones adicionales</Text>
                     <View style={styles.obs}>
@@ -716,7 +691,6 @@ function WalkAroundPdfDoc({
             <Page size="A4" style={styles.page}>
                 <Watermark src={watermarkUrl} />
                 <Text style={styles.boxTitle}>Evidencia fotográfica</Text>
-
                 <View style={styles.evidenciasGrid}>
                     {pages[pages.length - 1]?.map((src, idx) => (
                         <View key={idx} style={styles.evidenciaCard}>
@@ -731,7 +705,6 @@ function WalkAroundPdfDoc({
                 {footerEnMismaPagina && (
                     <View style={{ marginTop: 10 }}>
                         <View style={styles.firmasGrid}>
-                            {/* Responsable */}
                             <View style={styles.firmaCard}>
                                 <Text style={styles.firmaLabel}>Responsable</Text>
                                 <Text style={styles.firmaNombre}>{detalle.responsable ?? "-"}</Text>
@@ -743,8 +716,6 @@ function WalkAroundPdfDoc({
                                     )}
                                 </View>
                             </View>
-
-                            {/* Jefe de área */}
                             <View style={styles.firmaCard}>
                                 <Text style={styles.firmaLabel}>Jefe de área</Text>
                                 <Text style={styles.firmaNombre}>{detalle.jefe_area ?? "-"}</Text>
@@ -756,8 +727,6 @@ function WalkAroundPdfDoc({
                                     )}
                                 </View>
                             </View>
-
-                            {/* FBO */}
                             <View style={styles.firmaCard}>
                                 <Text style={styles.firmaLabel}>FBO</Text>
                                 <Text style={styles.firmaNombre}>{detalle.fbo ?? "-"}</Text>
@@ -769,8 +738,6 @@ function WalkAroundPdfDoc({
                                     )}
                                 </View>
                             </View>
-
-                            {/* Elabora */}
                             <View style={styles.firmaCard}>
                                 <Text style={styles.firmaLabel}>Elabora</Text>
                                 <Text style={styles.firmaNombre}>{detalle.elabora ?? "-"}</Text>
@@ -787,7 +754,6 @@ function WalkAroundPdfDoc({
                     <Watermark src={watermarkUrl} />
                     <Text style={styles.footerTitle}>Firmas</Text>
                     <View style={styles.firmasGrid}>
-                        {/* Responsable */}
                         <View style={styles.firmaCard}>
                             <Text style={styles.firmaLabel}>Responsable</Text>
                             <Text style={styles.firmaNombre}>{detalle.responsable ?? "-"}</Text>
@@ -799,8 +765,6 @@ function WalkAroundPdfDoc({
                                 )}
                             </View>
                         </View>
-
-                        {/* Jefe de área */}
                         <View style={styles.firmaCard}>
                             <Text style={styles.firmaLabel}>Jefe de área</Text>
                             <Text style={styles.firmaNombre}>{detalle.jefe_area ?? "-"}</Text>
@@ -812,8 +776,6 @@ function WalkAroundPdfDoc({
                                 )}
                             </View>
                         </View>
-
-                        {/* FBO */}
                         <View style={styles.firmaCard}>
                             <Text style={styles.firmaLabel}>FBO</Text>
                             <Text style={styles.firmaNombre}>{detalle.fbo ?? "-"}</Text>
@@ -825,8 +787,6 @@ function WalkAroundPdfDoc({
                                 )}
                             </View>
                         </View>
-
-                        {/* Elabora */}
                         <View style={styles.firmaCard}>
                             <Text style={styles.firmaLabel}>Elabora</Text>
                             <Text style={styles.firmaNombre}>{detalle.elabora ?? "-"}</Text>
@@ -842,17 +802,11 @@ function WalkAroundPdfDoc({
 
 }
 
-/* ====================
-   Exporter Component
-   ==================== */
-
 type Props = { id: number | null; onDone: () => void };
 
 export default function WalkAroundPdfExporterReactPdf({ id, onDone }: Props) {
     const [detalle, setDetalle] = useState<WalkAroundDetalle | null>(null);
     const [loading, setLoading] = useState(false);
-
-    // 1. Cargar datos del detalle
     useEffect(() => {
         if (!id) return;
         (async () => {
@@ -866,7 +820,6 @@ export default function WalkAroundPdfExporterReactPdf({ id, onDone }: Props) {
         })();
     }, [id]);
 
-    // 2. Procesar Multimedia y Generar PDF
     useEffect(() => {
         if (!detalle) return;
 
@@ -882,8 +835,6 @@ export default function WalkAroundPdfExporterReactPdf({ id, onDone }: Props) {
                 },
             });
             try {
-                // --- A. CAPTURA DEL MODELO 3D ---
-                // Ajusta la ruta a tu archivo .obj
                 const MODEL_BY_TIPO: Record<string, string> = {
                     avion: "/models/Avion.obj",
                     helicoptero: "/models/18706 Fighter Helicopter_v1.obj",
@@ -893,8 +844,6 @@ export default function WalkAroundPdfExporterReactPdf({ id, onDone }: Props) {
                 const marcas3D = Array.isArray(detalle.marcas_danio) ? detalle.marcas_danio : [];
                 const fotos3D = await capturePointsScreenshots(modelUrl, marcas3D);
                 const screenshot3d = await captureModelScreenshot(modelUrl, marcas3D);
-
-                // --- B. PROCESAMIENTO DE FIRMAS (Copiado de tu código original) ---
                 const fResp = getFirmaByRol(detalle, "responsable");
                 const fJefe = getFirmaByRol(detalle, "jefe_area");
                 const fFbo = getFirmaByRol(detalle, "fbo");
@@ -904,8 +853,6 @@ export default function WalkAroundPdfExporterReactPdf({ id, onDone }: Props) {
                     jefe_area: fJefe?.url ? await urlToDataUrl(fJefe.url) : null,
                     fbo: fFbo?.url ? await urlToDataUrl(fFbo.url) : null,
                 };
-
-                // --- C. PROCESAMIENTO DE EVIDENCIAS (Copiado de tu código original) ---
                 const evidenciasRaw = Array.isArray((detalle as any).imagenes)
                     ? (detalle as any).imagenes
                     : Array.isArray((detalle as any).evidencias)
@@ -919,8 +866,6 @@ export default function WalkAroundPdfExporterReactPdf({ id, onDone }: Props) {
                 const evidenciasBase64 = await Promise.all(
                     evidenciasUrls.slice(0, 12).map((u) => urlToDataUrl(u))
                 );
-
-                // --- D. GENERACIÓN DEL PDF ---
                 const blob = await pdf(
                     <WalkAroundPdfDoc
                         detalle={detalle}
@@ -930,8 +875,6 @@ export default function WalkAroundPdfExporterReactPdf({ id, onDone }: Props) {
                         fotos3D={fotos3D}
                     />
                 ).toBlob();
-
-                // --- E. DESCARGA ---
                 const filename = `WalkAround_${detalle.id}_${(detalle.matricula || "").replace(/\s+/g, "_")}.pdf`;
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");

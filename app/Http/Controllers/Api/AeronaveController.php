@@ -38,7 +38,7 @@ class AeronaveController extends Controller
                 'idTipoAeronave' => $aeronave->aeronave_id ?? ($ultimoWalk->tipo_aeronave_id ?? null),
                 'movimiento'     => $ultimoWalk->movimiento ?? null,
                 'tipo_aeronave'  => $aeronave->tipo_aeronave ?? ($ultimoWalk->tipo ?? null),
-                'tipo_aeronave'  => $infoMatricula->tipo ?? null,
+                'tipo'  => $infoMatricula->tipo ?? null,
             ]);
 
         } catch (\Throwable $e) {

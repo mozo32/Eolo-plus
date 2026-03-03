@@ -161,3 +161,19 @@ export async function updateFirmaWalkaroundApi(id: number, form: any) {
     if (!res.ok) throw new Error(data?.message || "No se pudo actualizar");
     return data;
 }
+
+export async function obtenerInfoMatriculaApi(matricula: string) {
+    const xsrf = getXsrfToken();
+    const res = await fetch(`/api/walkarounds/buscar/${encodeURIComponent(matricula)}`, {
+        method: "GET",
+        headers: {
+            Accept: 'application/json',
+            'X-XSRF-TOKEN': xsrf,
+        },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error("Error al buscar información de matrícula");
+    return data;
+}

@@ -1,0 +1,164 @@
+import React from 'react';
+import MatriculaAutocomplete, { AeronaveApiData } from '@/pages/despacho/components/walkAround/MatriculaAutocomplete';
+
+interface InfoData {
+    matricula: string;
+    movimiento: 'Entrada' | 'Salida' | '';
+    aeronave: 'Avión' | 'Helicóptero' | '';
+    tipo: string;
+    hora: string;
+    destino: string;
+    procedencia: string;
+    fecha: string;
+}
+
+interface Props {
+    data: InfoData;
+    onChange: (newData: Partial<InfoData>) => void;
+}
+
+const GeneralInfo = ({ data, onChange }: Props) => {
+
+    const handleAeronaveData = (aeronave: AeronaveApiData) => {
+        let sugerirMovimiento = data.movimiento;
+
+        if (aeronave.movimiento?.toLowerCase() === 'entrada') {
+            sugerirMovimiento = 'Salida';
+        } else if (aeronave.movimiento?.toLowerCase() === 'salida') {
+            sugerirMovimiento = 'Entrada';
+        }
+
+        onChange({
+            tipo: (aeronave.tipo || aeronave.tipo)?.toUpperCase() || '',
+            aeronave: !aeronave.tipo_aeronave
+                ? ''
+                : (aeronave.tipo_aeronave.toLowerCase().includes('heli') ? 'Helicóptero' : 'Avión'),
+            movimiento: sugerirMovimiento as any,
+            destino: sugerirMovimiento === 'Salida' ? (aeronave.destino || '') : '',
+            procedencia: sugerirMovimiento === 'Entrada' ? (aeronave.procedensia || '') : ''
+        });
+    };
+
+    const groupLabelStyle = "text-[#1e4e5a] font-bold text-sm mb-1 block";
+    const subLabelStyle = "text-slate-500 text-[11px] font-semibold mb-1.5 block uppercase tracking-wider";
+    const inputStyle = "w-full border border-slate-200 rounded-lg p-2.5 text-slate-700 font-medium focus:border-cyan-600 focus:ring-1 focus:ring-cyan-600 outline-none transition-all placeholder:text-slate-300 shadow-sm text-sm";
+    const disabledStyle = "bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed";
+
+    return (
+        <div className="w-full bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-6 mb-6">
+            <div className="border-b border-slate-50 pb-3">
+                <h3 className={groupLabelStyle}>Información general</h3>
+                <p className="text-slate-400 text-[11px] font-medium uppercase tracking-tight">Datos del movimiento</p>
+            </div>
+
+            {/* Fila de Matrícula y Movimiento */}
+            <div className="bg-slate-50/50 p-5 rounded-xl border border-slate-100 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                <div className="md:col-span-7 relative">
+                    <label className={subLabelStyle}>Matrícula</label>
+                    <MatriculaAutocomplete
+                        matricula={data.matricula}
+                        onMatriculaChange={(val) => onChange({ matricula: val })}
+                        onAeronaveData={handleAeronaveData}
+                        onNuevaMatricula={() => console.log("Matrícula nueva")}
+                    />
+                </div>
+
+                <div className="md:col-span-5">
+                    <label className={subLabelStyle}>Tipo de Movimiento</label>
+                    <div className="flex gap-8 mt-2 h-11 items-center">
+                        {['Entrada', 'Salida'].map((op) => (
+                            <label key={op} className="flex items-center gap-3 cursor-pointer group">
+                                <input
+                                    type="radio"
+                                    name="movimiento"
+                                    checked={data.movimiento === op}
+                                    onChange={() => onChange({ movimiento: op as any, destino: '', procedencia: '' })}
+                                    className="w-5 h-5 text-cyan-700 border-slate-300 focus:ring-cyan-600 cursor-pointer"
+                                />
+                                <span className={`text-sm font-bold ${data.movimiento === op ? 'text-cyan-800' : 'text-slate-500'}`}>
+                                    {op}
+                                </span>
+                            </label>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Fila de Datos Aeronave */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div>
+                    <label className={subLabelStyle}>Aeronave</label>
+                    <select
+                        className={inputStyle}
+                        value={data.aeronave}
+                        onChange={(e) => onChange({ aeronave: e.target.value as any })}
+                    >
+                        <option value="">Seleccione...</option>
+                        <option value="Avión">Avión</option>
+                        <option value="Helicóptero">Helicóptero</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label className={subLabelStyle}>Tipo / Modelo</label>
+                    <input
+                        type="text"
+                        value={data.tipo}
+                        onChange={(e) => onChange({ tipo: e.target.value.toUpperCase() })}
+                        placeholder="Ej. C172"
+                        className={inputStyle}
+                    />
+                </div>
+
+                <div>
+                    <label className={subLabelStyle}>Hora Operación</label>
+                    <input
+                        type="time"
+                        value={data.hora}
+                        onChange={(e) => onChange({ hora: e.target.value })}
+                        className={inputStyle}
+                    />
+                </div>
+            </div>
+
+            {/* Fila de Destino/Procedencia/Fecha */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div>
+                    <label className={subLabelStyle}>Destino</label>
+                    <input
+                        type="text"
+                        value={data.destino}
+                        disabled={data.movimiento !== 'Salida'}
+                        onChange={(e) => onChange({ destino: e.target.value.toUpperCase() })}
+                        placeholder="Lugar de destino"
+                        className={`${inputStyle} ${data.movimiento !== 'Salida' ? disabledStyle : ''}`}
+                    />
+                </div>
+
+                <div>
+                    <label className={subLabelStyle}>Procedencia</label>
+                    <input
+                        type="text"
+                        value={data.procedencia}
+                        disabled={data.movimiento !== 'Entrada'}
+                        onChange={(e) => onChange({ procedencia: e.target.value.toUpperCase() })}
+                        placeholder="Lugar de procedencia"
+                        className={`${inputStyle} ${data.movimiento !== 'Entrada' ? disabledStyle : ''}`}
+                    />
+                </div>
+
+                <div>
+                    <label className={subLabelStyle}>Fecha</label>
+                    <input
+                        type="date"
+                        value={data.fecha}
+                        onChange={(e) => onChange({ fecha: e.target.value })}
+                        className={inputStyle}
+                    />
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default GeneralInfo;

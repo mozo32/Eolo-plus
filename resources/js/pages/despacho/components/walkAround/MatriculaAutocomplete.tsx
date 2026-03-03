@@ -9,6 +9,7 @@ export interface AeronaveApiData {
     idTipoAeronave?: number | null;
     movimiento?: string | null;
     tipo_aeronave?: string | null;
+    tipo?: string;
 }
 
 interface MatriculaAutocompleteProps {

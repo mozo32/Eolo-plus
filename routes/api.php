@@ -50,6 +50,7 @@ Route::prefix('walkarounds')->group(function () {
     Route::put('/firma/{walkAround}', [WalkAroundController::class, 'updateFirma']);
     Route::patch('/{walkAround}', [WalkAroundController::class, 'update']); // opcional
     Route::delete('/{walkAround}', [WalkAroundController::class, 'destroy']); // deleteWalkaround
+    Route::get('/buscar/{matricula}', [WalkAroundController::class, 'buscarPorMatricula']);
 });
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('administracion')->group(function () {
