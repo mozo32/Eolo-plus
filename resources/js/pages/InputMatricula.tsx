@@ -27,14 +27,10 @@ export default function InputMatricula({
         clear,
     } = useMatriculaAutocompleteStore();
 
-    // --- EFECTO DE LIMPIEZA ---
-    // Este useEffect se ejecuta cuando el componente se monta y se desmonta
     useEffect(() => {
-        // Al montar, nos aseguramos de que el store esté limpio
         clear();
 
         return () => {
-            // Al desmontar (salir del componente), limpiamos todo
             clear();
             setMatricula("");
         };
@@ -44,7 +40,6 @@ export default function InputMatricula({
         let val = input.toUpperCase().replace(/\s/g, "");
         if (val.length < prev.length) return val;
 
-        // Prefijos comunes OACI
         const prefijos2 = ["XA", "XB", "XC", "EC", "CC", "LV", "LQ", "HK", "HJ", "TG", "TI", "HC", "YV", "ZP", "OB"];
 
         if (val.length === 2 && prefijos2.includes(val)) {

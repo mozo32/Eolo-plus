@@ -43,6 +43,22 @@ const GeneralInfo = ({ data, onChange }: Props) => {
     const subLabelStyle = "text-slate-500 text-[11px] font-semibold mb-1.5 block uppercase tracking-wider";
     const inputStyle = "w-full border border-slate-200 rounded-lg p-2.5 text-slate-700 font-medium focus:border-cyan-600 focus:ring-1 focus:ring-cyan-600 outline-none transition-all placeholder:text-slate-300 shadow-sm text-sm";
     const disabledStyle = "bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed";
+    const handleHoraChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        let val = e.target.value.replace(/\D/g, "");
+        if (val.length > 4) val = val.slice(0, 4);
+
+        let formatted = val;
+        if (val.length >= 3) {
+            formatted = `${val.slice(0, 2)}:${val.slice(2)}`;
+        }
+        const hours = parseInt(val.slice(0, 2));
+        const minutes = parseInt(val.slice(2));
+
+        if (hours > 23) return;
+        if (minutes > 59) return;
+
+        onChange({ hora: formatted });
+    };
 
     return (
         <div className="w-full bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-6 mb-6">
@@ -51,7 +67,6 @@ const GeneralInfo = ({ data, onChange }: Props) => {
                 <p className="text-slate-400 text-[11px] font-medium uppercase tracking-tight">Datos del movimiento</p>
             </div>
 
-            {/* Fila de Matrícula y Movimiento */}
             <div className="bg-slate-50/50 p-5 rounded-xl border border-slate-100 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
                 <div className="md:col-span-7 relative">
                     <label className={subLabelStyle}>Matrícula</label>
@@ -111,17 +126,23 @@ const GeneralInfo = ({ data, onChange }: Props) => {
                 </div>
 
                 <div>
-                    <label className={subLabelStyle}>Hora Operación</label>
-                    <input
-                        type="time"
-                        value={data.hora}
-                        onChange={(e) => onChange({ hora: e.target.value })}
-                        className={inputStyle}
-                    />
+                    <label className={subLabelStyle}>Hora Operación (24h)</label>
+                    <div className="relative">
+                        <input
+                            type="text"
+                            value={data.hora}
+                            onChange={handleHoraChange}
+                            placeholder="HH:mm"
+                            maxLength={5}
+                            className={inputStyle}
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-xs">
+                            hrs
+                        </span>
+                    </div>
                 </div>
             </div>
 
-            {/* Fila de Destino/Procedencia/Fecha */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 <div>
                     <label className={subLabelStyle}>Destino</label>
