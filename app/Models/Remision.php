@@ -12,7 +12,7 @@ class Remision extends Model
         'folio','fecha', 'operador', 'cliente', 'requisicion', 'forma_pago',
         'aeronave_tipo', 'matricula', 'destino', 'hora_llegada',
         'hora_inicial', 'hora_final', 'lectura_inicial',
-        'lectura_final', 'total_litros'
+        'lectura_final', 'total_litros', 'id_turno','status'
     ];
     public function firmas()
     {

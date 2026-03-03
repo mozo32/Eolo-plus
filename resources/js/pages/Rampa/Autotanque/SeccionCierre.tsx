@@ -99,15 +99,16 @@ export const SeccionCierre = ({
                 {/* Fila 3: Totalizador */}
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase">
-                        Lectura Totalizador Final
+                        Lectura Totalizador Final (Auto)
                     </label>
                     <input
                         type="number"
                         value={totalizadorCierre || ''}
-                        onChange={(e) => onUpdate('totalizadorCierre', Number(e.target.value))}
-                        className="w-full border-b-2 border-gray-200 focus:border-blue-500 outline-none py-1 font-mono text-lg"
-                        placeholder="000000"
+                        readOnly
+                        className="w-full border-b-2 border-gray-100 bg-gray-50 text-blue-700 outline-none py-1 font-mono text-lg cursor-not-allowed"
+                        placeholder="Calculado..."
                     />
+                    <p className="text-[10px] text-gray-400 mt-1">* Suma de Inicio + Ventas</p>
                 </div>
             </div>
             {/* Fila 2: Toma Física de Cierre */}

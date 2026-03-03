@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useForm, usePage } from '@inertiajs/react';
 import Swal from 'sweetalert2';
+import PressureGauge from './PressureGauge';
 
 interface EoloFormData {
     fecha: string;
@@ -16,6 +17,7 @@ interface EoloFormData {
     lecturaFinal: string;
     horaInicial: string;
     lecturaInicial: string;
+    presionDif: number;
 }
 
 type Role = { slug: string; nombre: string; };
@@ -133,6 +135,7 @@ const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
         lecturaFinal: '',
         horaInicial: '',
         lecturaInicial: '',
+        presionDif: 0,
     });
 
     const totalLitros = (Number(data.lecturaFinal) || 0) - (Number(data.lecturaInicial) || 0);
@@ -227,17 +230,16 @@ const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
                         <p className="text-lg font-bold text-slate-800 underline decoration-blue-500 decoration-2 underline-offset-4">PIPA 1 · EP01</p>
                     </div>
                 </header>
-
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                    <div className="md:col-span-4 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
-                        <h2 className="text-xs font-black text-blue-600 uppercase mb-4 tracking-tighter">Logística</h2>
-                        <div className="space-y-4">
+                <div className="mb-6 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-wrap items-center justify-between gap-6">
+                    <div className="flex items-center gap-4">
+                        <h2 className="text-xs font-black text-blue-600 uppercase tracking-tighter border-r pr-4 border-slate-200">Logística</h2>
+                        <div className="flex gap-4">
                             <div>
                                 <label className="block text-[10px] font-bold text-slate-400 uppercase ml-1 mb-1">Operador Responsable</label>
                                 <input
                                     value={data.operador}
                                     onChange={e => setData('operador', e.target.value)}
-                                    className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-blue-500/20 transition-all outline-none"
+                                    className="bg-slate-50 border-none rounded-xl px-4 py-2 text-sm font-semibold focus:ring-2 focus:ring-blue-500/20 outline-none"
                                 />
                             </div>
                             <div>
@@ -246,13 +248,24 @@ const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
                                     type="date"
                                     value={data.fecha}
                                     onChange={e => setData('fecha', e.target.value)}
-                                    className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-blue-500/20 transition-all outline-none"
+                                    className="bg-slate-50 border-none rounded-xl px-4 py-2 text-sm font-semibold focus:ring-2 focus:ring-blue-500/20 outline-none"
                                 />
                             </div>
-                            <div className="pt-4 border-t border-slate-50 text-[11px] text-slate-500 space-y-1">
-                                <p><strong>Producto:</strong> Turbosina</p>
-                                <p><strong>Placas:</strong> LC-44-020</p>
-                            </div>
+                        </div>
+                    </div>
+                    <div className="flex gap-8 text-[11px] text-slate-500">
+                        <p><strong>Producto:</strong> Turbosina</p>
+                        <p><strong>Placas:</strong> LC-44-020</p>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                    <div className="md:col-span-4 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+                        <div className="md:col-span-4 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col justify-center">
+                            <h2 className="text-xs font-black text-blue-600 uppercase mb-4 tracking-tighter">Instrumentación</h2>
+                            <PressureGauge
+                                value={data.presionDif}
+                                onChange={(val) => setData('presionDif', val)}
+                            />
                         </div>
                     </div>
 
@@ -300,58 +313,57 @@ const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
                                 />
                             </div>
                         </div>
-                    </div>
-
-                    <div className="md:col-span-12 bg-white rounded-[3rem] p-1 overflow-hidden shadow-xl shadow-slate-200/60 border border-slate-100">
-                        <div className="grid grid-cols-1 lg:grid-cols-12">
-                            <div className="lg:col-span-4 p-8 bg-slate-50/50">
-                                <div className="flex items-center gap-2 mb-6">
-                                    <div className="w-1.5 h-4 bg-blue-500 rounded-full"></div>
-                                    <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest">Cronología</h2>
-                                </div>
-                                <div className="space-y-4">
-                                    <div className="relative pl-6 border-l-2 border-slate-200 space-y-8">
-                                        <div className="relative">
-                                            <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-white border-4 border-slate-300"></div>
-                                            <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1 ml-1">Llegada a Plataforma</label>
+                        <div className="lg:col-span-4 p-8 bg-slate-50/50">
+                            <div className="flex items-center gap-2 mb-6">
+                                <div className="w-1.5 h-4 bg-blue-500 rounded-full"></div>
+                                <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest">Cronología</h2>
+                            </div>
+                            <div className="space-y-4">
+                                <div className="relative pl-6 border-l-2 border-slate-200 space-y-8">
+                                    <div className="relative">
+                                        <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-white border-4 border-slate-300"></div>
+                                        <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1 ml-1">Llegada a Plataforma</label>
+                                        <input
+                                            type="text"
+                                            placeholder="HH:MM"
+                                            maxLength={5}
+                                            value={data.horaLlegada}
+                                            onChange={e => handleTimeChange('horaLlegada', e.target.value)}
+                                            className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xl font-mono font-bold w-full focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-slate-700 transition-all shadow-sm"
+                                        />
+                                    </div>
+                                    <div className="relative grid grid-cols-2 gap-3">
+                                        <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-blue-500 border-4 border-white shadow-md"></div>
+                                        <div>
+                                            <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1 ml-1">Inicio</label>
                                             <input
                                                 type="text"
                                                 placeholder="HH:MM"
                                                 maxLength={5}
-                                                value={data.horaLlegada}
-                                                onChange={e => handleTimeChange('horaLlegada', e.target.value)}
-                                                className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xl font-mono font-bold w-full focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-slate-700 transition-all shadow-sm"
+                                                value={data.horaInicial}
+                                                onChange={e => handleTimeChange('horaInicial', e.target.value)}
+                                                className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-base font-mono font-bold w-full focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-slate-700 transition-all shadow-sm"
                                             />
                                         </div>
-                                        <div className="relative grid grid-cols-2 gap-3">
-                                            <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-blue-500 border-4 border-white shadow-md"></div>
-                                            <div>
-                                                <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1 ml-1">Inicio</label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="HH:MM"
-                                                    maxLength={5}
-                                                    value={data.horaInicial}
-                                                    onChange={e => handleTimeChange('horaInicial', e.target.value)}
-                                                    className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-base font-mono font-bold w-full focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-slate-700 transition-all shadow-sm"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1 ml-1">Fin</label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="HH:MM"
-                                                    maxLength={5}
-                                                    value={data.horaFinal}
-                                                    onChange={e => handleTimeChange('horaFinal', e.target.value)}
-                                                    className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-base font-mono font-bold w-full focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-slate-700 transition-all shadow-sm"
-                                                />
-                                            </div>
+                                        <div>
+                                            <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1 ml-1">Fin</label>
+                                            <input
+                                                type="text"
+                                                placeholder="HH:MM"
+                                                maxLength={5}
+                                                value={data.horaFinal}
+                                                onChange={e => handleTimeChange('horaFinal', e.target.value)}
+                                                className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-base font-mono font-bold w-full focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-slate-700 transition-all shadow-sm"
+                                            />
                                         </div>
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
 
+                    <div className="md:col-span-12 bg-white rounded-[3rem] p-1 overflow-hidden shadow-xl shadow-slate-200/60 border border-slate-100">
+                        <div className="grid grid-cols-1 lg:grid-cols-12">
                             <div className="lg:col-span-5 p-8 flex flex-col justify-center border-y lg:border-y-0 lg:border-x border-slate-100">
                                 <div className="flex items-center gap-2 mb-6 justify-center lg:justify-start">
                                     <div className="w-1.5 h-4 bg-blue-600 rounded-full"></div>

@@ -16,7 +16,7 @@ export default function Remision() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Remision" />
-            <IndexRemisiones />
+            <EoloForm />
         </AppLayout>
     );
 }

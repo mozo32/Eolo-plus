@@ -5,6 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\TurnoAutotanque;
+
+use App\Models\Remision;
+use App\Models\SumaAutotanque;
+
 use Illuminate\Support\Facades\DB;
 use Exception;
 use Illuminate\Support\Facades\Auth;
@@ -15,21 +19,23 @@ class TurnoAutotanqueController extends Controller
     {
         try {
             $validated = $request->validate([
-                'id'                => 'nullable|integer',
-                'nombre'            => 'required|string',
-                'fecha'             => 'required|date',
-                'cmIni'             => 'required|numeric',
-                'litrosIni'         => 'required|numeric',
-                'totalizadorIni'    => 'required|numeric',
+                'id'                        => 'nullable|integer',
+                'nombre'                    => 'required|string',
+                'fecha'                     => 'required|date',
+                'cmIni'                     => 'required|numeric',
+                'litrosIni'                 => 'required|numeric',
+                'totalizadorIni'            => 'required|numeric',
                 'resumen.totalVendidos'     => 'required|numeric',
                 'resumen.balanceAritmetico' => 'required|numeric',
                 'resumen.balanceFisico'     => 'required|numeric',
                 'resumen.diferenciaFinal'   => 'required|numeric',
+                'remisiones'                => 'present|array',
+                'entradasASA'               => 'present|array',
             ]);
 
             $turno = DB::transaction(function () use ($validated, $request) {
-                return TurnoAutotanque::updateOrCreate(
-                    ['id'      => $request->id],
+                $turno = TurnoAutotanque::updateOrCreate(
+                    ['id' => $request->id],
                     [
                         'user_id'           => Auth::id(),
                         'nombre'            => $validated['nombre'],
@@ -48,14 +54,32 @@ class TurnoAutotanqueController extends Controller
                         'diferenciaFinal'   => $validated['resumen']['diferenciaFinal'],
                     ]
                 );
+
+                if (!empty($request->remisiones)) {
+                    $folios = collect($request->remisiones)->pluck('folio');
+                    Remision::whereIn('folio', $folios)
+                        ->update(['id_turno' => $turno->id]);
+                }
+
+                SumaAutotanque::where('id_turno', $turno->id)->delete();
+
+                foreach ($request->entradasASA as $entrada) {
+                    SumaAutotanque::create([
+                        'id_turno' => $turno->id,
+                        'litros'   => $entrada['litros'],
+                        'folio'    => $entrada['folio'],
+                    ]);
+                }
+
+                return $turno;
             });
 
             return response()->json([
-                'message' => $request->id ? 'Turno actualizado' : 'Turno creado',
+                'message' => $request->id ? 'Turno actualizado correctamente' : 'Turno creado correctamente',
                 'data' => $turno
             ], 201);
 
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Error al procesar el turno',
                 'error' => $e->getMessage()
@@ -83,6 +107,36 @@ class TurnoAutotanqueController extends Controller
 
         } catch (Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+    public function getLastTotalizador()
+    {
+        $ultimoTurno = TurnoAutotanque::latest('id')->first();
+
+        return response()->json([
+            'totalizador' => $ultimoTurno ? $ultimoTurno->totalizadorCierre : null
+        ]);
+    }
+    public function cancelarRemision(Request $request, $folio) // Recibimos el string del folio
+    {
+        try {
+            $remision = \App\Models\Remision::where('id', $folio)->first();
+
+            if (!$remision) {
+                return response()->json(['error' => 'Remisión no encontrada: ' . $folio], 404);
+            }
+            $remision->update(['status' => 'N']);
+
+            return response()->json([
+                'message' => 'Remisión cancelada correctamente',
+                'folio'   => $folio
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'No se pudo cancelar la remisión',
+                'details' => $e->getMessage()
+            ], 500);
         }
     }
 }

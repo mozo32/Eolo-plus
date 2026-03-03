@@ -151,4 +151,6 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('Remision')->group(function (
 Route::middleware(['api', 'auth:sanctum'])->prefix('TurnoAutoTanque')->group(function () {
     Route::post('/', [TurnoAutotanqueController::class, 'store']);
     Route::get('/check-active', [TurnoAutotanqueController::class, 'checkActiveTurno']);
+    Route::get('/ultimo-totalizador', [TurnoAutotanqueController::class, 'getLastTotalizador']);
+    Route::put('/remisiones/{remision}/cancelar', [TurnoAutotanqueController::class, 'cancelarRemision']);
 });
