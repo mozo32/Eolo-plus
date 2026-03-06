@@ -24,7 +24,6 @@ const RampaExtrasSection: React.FC<ExtrasProps> = ({ carrito, aeronaves, onChang
 
     return (
         <div className="space-y-8">
-            {/* SECCIÓN INVENTARIO DE AERONAVES */}
             <div className="bg-blue-50/50 border-2 border-blue-100 rounded-[2.5rem] p-8">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                     <div className="flex items-center gap-4">
@@ -32,12 +31,12 @@ const RampaExtrasSection: React.FC<ExtrasProps> = ({ carrito, aeronaves, onChang
                             <Plane size={24} />
                         </div>
                         <div>
-                            <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Inventario de Aeronaves</h3>
-                            <p className="text-blue-500 text-[10px] font-bold tracking-widest uppercase">Distribución actual en plataforma</p>
+                            <h3 className="text-xl font-black text-slate-800 tracking-tight">Inventario de Aeronaves</h3>
+                            <p className="text-blue-500 text-[10px] font-bold tracking-widest">Distribución actual en plataforma</p>
                         </div>
                     </div>
                     <div className="bg-blue-600 self-start md:self-center px-6 py-2 rounded-2xl text-white shadow-lg shadow-blue-200">
-                        <span className="text-[10px] font-black uppercase opacity-80 block leading-none mb-1">Total Flota</span>
+                        <span className="text-[10px] font-black opacity-80 block leading-none mb-1">Total Flota</span>
                         <span className="text-xl font-black leading-none">
                             {totalAeronaves}
                         </span>
@@ -64,13 +63,9 @@ const RampaExtrasSection: React.FC<ExtrasProps> = ({ carrito, aeronaves, onChang
                     ))}
                 </div>
             </div>
-
-            {/* SECCIÓN CARRITOS DE GOLF */}
             {Object.keys(carrito).map((id) => (
                 <div key={id} className="bg-white border-2 border-slate-100 rounded-[2.5rem] p-2 shadow-sm mb-6">
                     <div className="flex flex-col lg:flex-row gap-2">
-
-                        {/* Lateral Izquierdo: Info y Estado */}
                         <div className="bg-slate-50 rounded-[2rem] p-8 lg:w-80 flex flex-col justify-between border border-slate-100">
                             <div>
                                 <div className="flex justify-between items-start mb-6">
@@ -79,10 +74,8 @@ const RampaExtrasSection: React.FC<ExtrasProps> = ({ carrito, aeronaves, onChang
                                     }`}>
                                         <Zap size={24} fill="currentColor" />
                                     </div>
-
-                                    {/* Selector de Estado Operativo */}
                                     <div className="flex flex-col items-end gap-1">
-                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none">Estatus</span>
+                                        <span className="text-[8px] font-black text-slate-400 tracking-widest leading-none">Estatus</span>
                                         <button
                                             type="button"
                                             onClick={() => {
@@ -100,20 +93,20 @@ const RampaExtrasSection: React.FC<ExtrasProps> = ({ carrito, aeronaves, onChang
                                             ) : (
                                                 <Play size={14} fill="currentColor" />
                                             )}
-                                            <span className="text-[10px] font-black uppercase tracking-tight">
+                                            <span className="text-[10px] font-black tracking-tight">
                                                 {carrito[id].estado || 'Operativo'}
                                             </span>
                                         </button>
                                     </div>
                                 </div>
 
-                                <h4 className="text-4xl font-black text-slate-800 tracking-tighter italic">GOLF-{id}</h4>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase mt-1 tracking-[0.2em]">Inspección diaria de rampa</p>
+                                <h4 className="text-4xl font-black text-slate-800 tracking-tighter italic">Golf-{id}</h4>
+                                <p className="text-[10px] font-bold text-slate-400 mt-1 tracking-[0.2em]">Inspección diaria de rampa</p>
                             </div>
 
                             <div className="mt-8 pt-6 border-t border-slate-200">
                                 <div className="flex justify-between items-end mb-4">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nivel de Batería</span>
+                                    <span className="text-[10px] font-black text-slate-400 tracking-widest">Nivel de Batería</span>
                                     <span className={`text-2xl font-black transition-colors ${Number(carrito[id].carga) < 20 ? 'text-red-500 animate-pulse' : 'text-amber-500'}`}>
                                         {carrito[id].carga}%
                                     </span>
@@ -141,7 +134,6 @@ const RampaExtrasSection: React.FC<ExtrasProps> = ({ carrito, aeronaves, onChang
                             </div>
                         </div>
 
-                        {/* Contenido Derecho: Validaciones y Notas */}
                         <div className={`flex-1 p-6 space-y-8 transition-opacity duration-300 ${carrito[id].estado === 'Mantenimiento' ? 'opacity-50 pointer-events-none select-none' : 'opacity-100'}`}>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                 {['llantas', 'luces', 'frenos', 'limpieza'].map((item) => {
@@ -165,8 +157,8 @@ const RampaExtrasSection: React.FC<ExtrasProps> = ({ carrito, aeronaves, onChang
                                                 }`}
                                         >
                                             <div className="flex flex-col items-start">
-                                                <span className="text-[9px] font-black uppercase opacity-60">{item}</span>
-                                                <span className="font-bold uppercase tracking-tight text-xs">
+                                                <span className="text-[9px] font-black  opacity-60">{item}</span>
+                                                <span className="font-bold tracking-tight text-xs">
                                                     {carrito[id][item] || '---'}
                                                 </span>
                                             </div>
@@ -183,7 +175,7 @@ const RampaExtrasSection: React.FC<ExtrasProps> = ({ carrito, aeronaves, onChang
                             <div className="bg-slate-50 rounded-[1.5rem] p-4 border border-slate-100">
                                 <div className="flex items-center gap-2 mb-3 text-slate-400">
                                     <MessageSquare size={16} />
-                                    <span className="text-[10px] font-black uppercase">Notas y Reporte de Fallas</span>
+                                    <span className="text-[10px] font-black">Notas y Reporte de Fallas</span>
                                 </div>
                                 <textarea
                                     value={carrito[id].obs}

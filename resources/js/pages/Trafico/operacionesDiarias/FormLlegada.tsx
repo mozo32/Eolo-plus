@@ -65,8 +65,8 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                     text: `La matrícula "${formData.matricula}" no se encuentra en el sistema. ¿Está seguro que los datos y el equipo (${formData.equipo}) son correctos para crear un nuevo registro permanente?`,
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonColor: '#2563eb', // Azul
-                    cancelButtonColor: '#64748b', // Gris
+                    confirmButtonColor: '#2563eb',
+                    cancelButtonColor: '#64748b',
                     confirmButtonText: 'Sí, es correcto',
                     cancelButtonText: 'Revisar datos',
                     reverseButtons: true

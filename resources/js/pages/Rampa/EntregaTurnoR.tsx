@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Head, usePage } from '@inertiajs/react';
 import RampaForm from './entregaTurnoR/RampaForm';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { Loader2, Plus, ClipboardList } from 'lucide-react';
 import TablaJefeArea from './entregaTurnoR/TablaJefeArea';
 import axios from 'axios';
+
 type Role = {
     slug: string;
     nombre: string;
@@ -14,63 +15,55 @@ export type AuthUser = {
     id: number;
     name: string;
     email: string;
-
     isAdmin: boolean;
     roles: Role[];
 };
+
 export default function EntregaTurnoR() {
-    const [entregaPendiente, setEntregaPendiente] = useState<any>(null);
-    const [reporteSeleccionado, setReporteSeleccionado] = useState<any>(null); // Nuevo estado
+    const [reporteSeleccionado, setReporteSeleccionado] = useState<any>(null);
+    const [mostrarNuevoForm, setMostrarNuevoForm] = useState(false);
     const [loading, setLoading] = useState(true);
+
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
     const user = auth?.user;
 
     const esJefeArea = user?.roles.some(rol => rol.slug === 'jefe_area');
+    const esAdmin = user?.isAdmin || user?.roles.some(rol => rol.slug === 'admin');
 
-    useEffect(() => {
-        const checkPendingRepo = async () => {
-            try {
-                // Esta consulta es la que ya tenías para operativos
-                const response = await axios.get('/api/EntregaTurnoR/entrega-turno-rampa');
-                if (response.data) {
-                    setEntregaPendiente(response.data);
-                }
-            } catch (error) {
-                console.error("Error al consultar entregas pendientes", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        checkPendingRepo();
-    }, []);
 
-    // Función que recibirá la tabla para avisar al padre qué reporte cargar
     const seleccionarReporteParaFirmar = (reporte: any) => {
         setReporteSeleccionado(reporte);
     };
 
-    if (loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin" /></div>;
-
     return (
         <AppLayout breadcrumbs={[{ title: 'Entrega Turno' }]}>
             <div className="p-4 space-y-6">
-
-                {esJefeArea ? (
-                    reporteSeleccionado ? (
-                        <div className="space-y-4">
-                            <button
-                                onClick={() => setReporteSeleccionado(null)}
-                                className="text-sm font-bold text-slate-500 hover:text-blue-600 flex items-center gap-2"
-                            >
-                                ← Volver a la lista de pendientes
-                            </button>
-                            <RampaForm initialData={reporteSeleccionado} />
-                        </div>
-                    ) : (
-                        <TablaJefeArea onSeleccionar={seleccionarReporteParaFirmar} />
-                    )
+                {(reporteSeleccionado || mostrarNuevoForm) ? (
+                    <div className="space-y-4">
+                        <button
+                            onClick={() => {
+                                setReporteSeleccionado(null);
+                                setMostrarNuevoForm(false);
+                            }}
+                            className="text-sm font-bold text-slate-500 hover:text-blue-600 flex items-center gap-2 transition-colors"
+                        >
+                            ← Volver a la lista de pendientes
+                        </button>
+                        <RampaForm initialData={reporteSeleccionado} />
+                    </div>
                 ) : (
-                    <RampaForm initialData={entregaPendiente} />
+                    <div className="space-y-4">
+                        <div className="flex justify-end">
+                            <button
+                                onClick={() => setMostrarNuevoForm(true)}
+                                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-blue-200 transition-all active:scale-95"
+                            >
+                                <Plus size={20} />
+                                NUEVO REGISTRO
+                            </button>
+                        </div>
+                        <TablaJefeArea onSeleccionar={seleccionarReporteParaFirmar} />
+                    </div>
                 )}
             </div>
         </AppLayout>

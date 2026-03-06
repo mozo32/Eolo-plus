@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
-import { ChevronRight, ChevronLeft, Send, CheckCircle2 } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Send, CheckCircle2, ClipboardList, Truck, Plane, Wrench  } from 'lucide-react';
 import VehiculosSection from './secciones/VehiculosSection';
 import EquiposApoyoSection from './secciones/EquiposApoyoSection';
 import GpuInspectionSection from './secciones/GpuInspectionSection';
@@ -77,44 +77,48 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
     });
     useEffect(() => {
         const tieneDatos = initialData && Object.keys(initialData).length > 0;
+
         if (!tieneDatos) {
             setStep(1);
             return;
         }
-        if (initialData) {
-            if (initialData.encabezado || initialData.comunicaciones) {
-                setFormData({
-                    encabezado: initialData.encabezado || formData.encabezado,
-                    comunicaciones: initialData.comunicaciones || formData.comunicaciones
-                });
-            }
-            if (initialData.vehiculos) setVehiculos(initialData.vehiculos);
-            if (initialData.barras_remolque) setBarrasRemolque(initialData.barras_remolque);
-            if (initialData.gpus) setGpus(initialData.gpus);
-            if (initialData.carrito_golf) setCarritoGolf(initialData.carrito_golf);
-            if (initialData.aeronaves) setAeronaves(initialData.aeronaves);
-            if (initialData.firmas && Array.isArray(initialData.firmas)) {
-                const nuevasFirmas: FirmasState = { ...firmas };
+        if (initialData.encabezado || initialData.comunicaciones) {
+            setFormData(prev => ({
+                ...prev,
+                encabezado: initialData.encabezado || prev.encabezado,
+                comunicaciones: initialData.comunicaciones || prev.comunicaciones
+            }));
+        }
 
-                initialData.firmas.forEach((f: any) => {
-                    const rol = f.pivot.rol;
-                    const mapping: Record<string, keyof FirmasState> = {
-                        'quien_entrega': 'entrega',
-                        'jefe_rampa': 'jefe',
-                        'quien_recibe': 'recibe'
+        if (initialData.vehiculos) setVehiculos(initialData.vehiculos);
+        if (initialData.barras_remolque) setBarrasRemolque(initialData.barras_remolque);
+        if (initialData.gpus) setGpus(initialData.gpus);
+        if (initialData.carrito_golf) setCarritoGolf(initialData.carrito_golf);
+        if (initialData.aeronaves) setAeronaves(initialData.aeronaves);
+        if (initialData.firmas && Array.isArray(initialData.firmas)) {
+            const nuevasFirmas: FirmasState = { ...firmas };
+
+            initialData.firmas.forEach((f: any) => {
+                const rol = f.pivot.rol;
+                const mapping: Record<string, { estadoKey: keyof FirmasState, dataKey: string }> = {
+                    'quien_entrega': { estadoKey: 'entrega', dataKey: 'nombre_entrega' },
+                    'jefe_rampa':    { estadoKey: 'jefe',    dataKey: 'nombre_jefe_area' },
+                    'quien_recibe':  { estadoKey: 'recibe',  dataKey: 'nombre_recibe' }
+                };
+
+                const config = mapping[rol];
+
+                if (config) {
+                    const nombreReal = (initialData as any)[config.dataKey] || f.tag || "";
+
+                    nuevasFirmas[config.estadoKey] = {
+                        nombre: nombreReal,
+                        firma: f.path ? `/storage/${f.path}` : ""
                     };
+                }
+            });
 
-                    const estadoKey = mapping[rol];
-                    if (estadoKey) {
-                        nuevasFirmas[estadoKey] = {
-                            nombre: f.pivot.tag || "",
-                            firma: `/storage/${f.path}`
-                        };
-                    }
-                });
-
-                setFirmas(nuevasFirmas);
-            }
+            setFirmas(nuevasFirmas);
         }
         if (initialData.id) {
             setStep(1);
@@ -238,50 +242,117 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
                 </div>
 
                 <form onSubmit={handleSubmit} className="bg-white rounded-[2.5rem] shadow-xl border border-slate-100">
-                    <div className="p-6 md:p-10">
+                    <div>
                         {step === 1 && (
                             <div className="space-y-10 animate-in fade-in duration-500">
-                                <section className="space-y-6">
-                                    <h2 className="text-2xl font-black italic uppercase text-slate-800">Datos Generales</h2>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">Fecha</label>
-                                            <input type="date" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700 border border-transparent focus:border-blue-500 transition-all" value={formData.encabezado.fecha} onChange={e => handleUpdate(setFormData, 'encabezado', 'fecha', e.target.value)} />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">Jefe de Turno</label>
-                                            <input type="text" placeholder="Nombre completo" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700 border border-transparent focus:border-blue-500 transition-all" value={formData.encabezado.jefeTurno} onChange={e => handleUpdate(setFormData, 'encabezado', 'jefeTurno', e.target.value)} />
-                                        </div>
+                                <header className="bg-blue-900 text-white p-6 rounded-t-3xl flex justify-between items-center shadow-lg">
+                                    <div>
+                                        <h1 className="text-2xl font-bold tracking-widest">EOLO</h1>
+                                        <p className="text-sm opacity-80 uppercase">Entrega de Turno - Rampa</p>
                                     </div>
-                                </section>
+                                    <ClipboardList size={40} className="opacity-90" />
+                                </header>
 
-                                <section className="space-y-6">
-                                    <h2 className="text-2xl font-black italic uppercase text-slate-800 border-t pt-8">Comunicaciones</h2>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <input type="number" placeholder="Cant. Radios Interinos " className="p-4 bg-slate-50 rounded-2xl font-bold outline-none border border-transparent focus:border-blue-500" value={formData.comunicaciones.radios} onChange={e => handleUpdate(setFormData, 'comunicaciones', 'radios', e.target.value)} />
-                                        <input type="number" placeholder="Cant. Radios Frecuencia" className="p-4 bg-slate-50 rounded-2xl font-bold outline-none border border-transparent focus:border-blue-500" value={formData.comunicaciones.radioFrecuencia} onChange={e => handleUpdate(setFormData, 'comunicaciones', 'radioFrecuencia', e.target.value)} />
-                                    </div>
-                                    <button type="button" onClick={() => handleUpdate(setFormData, 'comunicaciones', 'radiosFuncionando', !formData.comunicaciones.radiosFuncionando)}
-                                        className={`w-full p-4 rounded-2xl font-black border-2 transition-all ${formData.comunicaciones.radiosFuncionando ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
-                                        ESTADO DE RADIOS: {formData.comunicaciones.radiosFuncionando ? "OPERATIVO" : "CON FALLAS"}
-                                    </button>
-                                </section>
+                                <div className="px-2 space-y-8">
+                                    <h2 className="text-blue-800 font-bold border-b-2 border-blue-100 mb-4 pb-1 ">
+                                        Datos Generales
+                                    </h2>
+                                    <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="space-y-2">
+                                            <label className="text-[11px] font-bold text-slate-400 ml-2 tracking-wider">Fecha</label>
+                                            <input
+                                                type="date"
+                                                className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700 border border-slate-100 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50/50 transition-all"
+                                                value={formData.encabezado.fecha}
+                                                onChange={e => handleUpdate(setFormData, 'encabezado', 'fecha', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[11px] font-bold text-slate-400 ml-2 tracking-wider">Jefe de Turno</label>
+                                            <input
+                                                type="text"
+                                                placeholder="Nombre completo"
+                                                className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700 border border-slate-100 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50/50 transition-all"
+                                                value={formData.encabezado.jefeTurno}
+                                                onChange={e => handleUpdate(setFormData, 'encabezado', 'jefeTurno', e.target.value)}
+                                            />
+                                        </div>
+                                    </section>
+
+                                    <section className="space-y-6 pt-4">
+                                        <h2 className="text-blue-800 font-bold border-b-2 border-blue-100 mb-4 pb-1">
+                                            Comunicaciones
+                                        </h2>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="space-y-2">
+                                                <label className="text-[11px] font-bold text-slate-400 ml-2 tracking-wider">Cant. Radios Interinos</label>
+                                                <input
+                                                    type="number"
+                                                    placeholder="0"
+                                                    className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 outline-none border border-slate-100 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50/50 transition-all"
+                                                    value={formData.comunicaciones.radios}
+                                                    onChange={e => handleUpdate(setFormData, 'comunicaciones', 'radios', e.target.value)}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[11px] font-bold text-slate-400 ml-2 tracking-wider">Cant. Radios Frecuencia</label>
+                                                <input
+                                                    type="number"
+                                                    placeholder="0"
+                                                    className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 outline-none border border-slate-100 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50/50 transition-all"
+                                                    value={formData.comunicaciones.radioFrecuencia}
+                                                    onChange={e => handleUpdate(setFormData, 'comunicaciones', 'radioFrecuencia', e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleUpdate(setFormData, 'comunicaciones', 'radiosFuncionando', !formData.comunicaciones.radiosFuncionando)}
+                                            className={`w-full p-5 rounded-2xl font-black border-2 transition-all duration-300 transform active:scale-[0.98] shadow-sm ${formData.comunicaciones.radiosFuncionando
+                                                    ? 'bg-green-50 border-green-200 text-green-700 shadow-green-100'
+                                                    : 'bg-red-50 border-red-200 text-red-700 shadow-red-100'
+                                                }`}
+                                        >
+                                            ESTADO DE RADIOS: {formData.comunicaciones.radiosFuncionando ? "OPERATIVO" : "CON FALLAS"}
+                                        </button>
+                                    </section>
+                                </div>
                             </div>
                         )}
 
-                        {step === 2 && <VehiculosSection vehiculos={vehiculos} onChange={(id, f, v) => handleUpdate(setVehiculos, id, f, v)} />}
+                        {step === 2 &&
+                            <VehiculosSection vehiculos={vehiculos} onChange={(id, f, v) => handleUpdate(setVehiculos, id, f, v)} />
+                        }
 
                         {step === 3 && (
-                            <div className="space-y-8 animate-in slide-in-from-right duration-500">
-                                <EquiposApoyoSection data={barrasRemolque} onChange={(f, v) => handleUpdate(setBarrasRemolque, null, f, v)} />
-                                <GpuInspectionSection data={gpus} onChange={(id, f, v) => handleUpdate(setGpus, id, f, v)} />
+                            <div >
+                                <header className="bg-blue-900 text-white p-6 rounded-t-lg flex justify-between items-center">
+                                    <div>
+                                        <h1 className="text-2xl font-bold tracking-widest">CONTROL DE HERRAMIENTAS DE APOYO Y GPUS</h1>
+                                        <p className="text-sm opacity-80">ESTADO TÉCNICO Y OPERATIVO DE HERRAMIENTAS DE APOYO Y GPUS</p>
+                                    </div>
+                                    <Wrench size={40} />
+                                </header>
+                                <div className="p-6 space-y-8">
+                                    <EquiposApoyoSection data={barrasRemolque} onChange={(f, v) => handleUpdate(setBarrasRemolque, null, f, v)} />
+                                    <GpuInspectionSection data={gpus} onChange={(id, f, v) => handleUpdate(setGpus, id, f, v)} />
+                                </div>
                             </div>
                         )}
 
                         {step === 4 && (
                             <div className="space-y-8 animate-in slide-in-from-right duration-500">
-                                <RampaExtrasSection carrito={carritoGolf} aeronaves={aeronaves} onChangeCarrito={(id, f, v) => handleUpdate(setCarritoGolf, id, f, v)} onChangeAeronaves={(f, v) => handleUpdate(setAeronaves, null, f, v)} />
-                                <RampaSignaturesSection data={firmas} onUpdate={(role: string, field: string, value: any) => handleUpdate(setFirmas, role, field, value)} />
+                                <header className="bg-blue-900 text-white p-6 rounded-t-lg flex justify-between items-center">
+                                    <div>
+                                        <h1 className="text-2xl font-bold tracking-widest">CONTROL DE AERONAVES Y CARRITO DE GOLF</h1>
+                                        <p className="text-sm opacity-80">ESTADO TÉCNICO Y OPERATIVO DE AERONAVES Y CARRITO DE GOLF</p>
+                                    </div>
+                                    <Plane size={40} />
+                                </header>
+                                <div className="p-6 space-y-8">
+                                    <RampaExtrasSection carrito={carritoGolf} aeronaves={aeronaves} onChangeCarrito={(id, f, v) => handleUpdate(setCarritoGolf, id, f, v)} onChangeAeronaves={(f, v) => handleUpdate(setAeronaves, null, f, v)} />
+                                    <RampaSignaturesSection data={firmas} onUpdate={(role: string, field: string, value: any) => handleUpdate(setFirmas, role, field, value)} />
+                                </div>
                             </div>
                         )}
                     </div>

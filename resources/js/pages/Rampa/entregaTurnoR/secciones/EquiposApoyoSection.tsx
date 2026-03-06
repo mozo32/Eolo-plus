@@ -10,7 +10,7 @@ const EquiposApoyoSection: React.FC<EquiposProps> = ({ data, onChange }) => {
 
     const StateToggle = ({ field, label, options }: { field: string, label: string, options: string[] }) => (
         <div className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</span>
+            <span className="text-[10px] font-bold text-slate-400 tracking-wider">{label}</span>
             <div className="flex p-1 bg-slate-100 rounded-xl w-fit">
                 {options.map((opt) => (
                     <button
@@ -37,7 +37,7 @@ const EquiposApoyoSection: React.FC<EquiposProps> = ({ data, onChange }) => {
                         <Anchor size={20} />
                     </div>
                     <div className="flex flex-col items-end">
-                        <span className="text-[10px] font-bold text-blue-600 uppercase tracking-tighter bg-blue-50 px-2 py-0.5 rounded-md mb-1">
+                        <span className="text-[10px] font-bold text-blue-600 tracking-tighter bg-blue-50 px-2 py-0.5 rounded-md mb-1">
                             Cantidad Total
                         </span>
                         <div className="flex items-center gap-2">
@@ -65,7 +65,7 @@ const EquiposApoyoSection: React.FC<EquiposProps> = ({ data, onChange }) => {
 
             <div className="col-span-6 lg:col-span-3 bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100 flex flex-col items-center text-center gap-3">
                 <Settings className="text-indigo-600" size={24} />
-                <h3 className="font-bold text-indigo-900 text-xs uppercase tracking-widest">Cabezales</h3>
+                <h3 className="font-bold text-indigo-900 text-xs tracking-widest">Cabezales</h3>
                 <input
                     type="number"
                     className="w-full bg-white/50 border-none rounded-xl py-2 text-center font-black text-indigo-600 outline-none"
@@ -77,7 +77,7 @@ const EquiposApoyoSection: React.FC<EquiposProps> = ({ data, onChange }) => {
 
             <div className="col-span-6 lg:col-span-3 bg-orange-50 p-6 rounded-[2rem] border border-orange-100 flex flex-col items-center text-center gap-3">
                 <Layers className="text-orange-600" size={24} />
-                <h3 className="font-bold text-orange-900 text-xs uppercase tracking-widest">Escaleras</h3>
+                <h3 className="font-bold text-orange-900 text-xs tracking-widest">Escaleras</h3>
                 <input
                     type="number"
                     className="w-full bg-white/50 border-none rounded-xl py-2 text-center font-black text-orange-600 outline-none"
@@ -96,12 +96,12 @@ const EquiposApoyoSection: React.FC<EquiposProps> = ({ data, onChange }) => {
                             <Layout className="text-emerald-600" size={32} />
                         </div>
                         <div>
-                            <h3 className="text-slate-800 font-black text-2xl uppercase tracking-tight leading-none">
+                            <h3 className="text-slate-800 font-black text-2xl tracking-tight leading-none">
                                 Carro Equipajero
                             </h3>
                             <div className="flex items-center gap-2 mt-3 bg-slate-50 w-fit px-3 py-1 rounded-full border border-slate-100">
                                 <Gauge size={14} className="text-emerald-500" />
-                                <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">
+                                <span className="text-slate-500 text-[10px] font-bold  tracking-widest">
                                     Checklist de Seguridad
                                 </span>
                             </div>
@@ -109,7 +109,7 @@ const EquiposApoyoSection: React.FC<EquiposProps> = ({ data, onChange }) => {
                     </div>
                     <div className="flex flex-col sm:flex-row gap-8 lg:gap-12">
                         <div className="space-y-4">
-                            <span className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2 ml-1">
+                            <span className="text-slate-400 text-[10px] font-black tracking-[0.2em] flex items-center gap-2 ml-1">
                                 <CheckCircle2 size={12} className="text-emerald-500" /> Higiene
                             </span>
                             <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
@@ -129,7 +129,7 @@ const EquiposApoyoSection: React.FC<EquiposProps> = ({ data, onChange }) => {
                             </div>
                         </div>
                         <div className="space-y-4">
-                            <span className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2 ml-1">
+                            <span className="text-slate-400 text-[10px] font-black tracking-[0.2em] flex items-center gap-2 ml-1">
                                 <CheckCircle2 size={12} className="text-emerald-500" /> Neumáticos
                             </span>
                             <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-100">

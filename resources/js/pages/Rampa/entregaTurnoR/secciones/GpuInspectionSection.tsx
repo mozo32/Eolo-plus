@@ -11,16 +11,10 @@ const GpuInspectionSection: React.FC<GpuProps> = ({ data, onChange }) => {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between ml-2">
-                <h2 className="text-xl font-black italic uppercase text-slate-800 flex items-center gap-2">
-                    <div className="bg-blue-600 p-1.5 rounded-lg text-white">
-                        <BatteryCharging size={20} />
-                    </div>
+            <div className="items-center justify-between ml-2">
+                <h2 className="text-blue-800 font-bold border-b-2 border-blue-100 mb-4 pb-1 ">
                     Inspección de GPUs
                 </h2>
-                <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full uppercase tracking-widest">
-                    {gpuKeys.length} Unidades en inventario
-                </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -50,12 +44,12 @@ const GpuInspectionSection: React.FC<GpuProps> = ({ data, onChange }) => {
                                     </div>
                                     <div>
                                         <h3 className="font-black text-slate-800 text-xl uppercase tracking-tighter leading-none">{key}</h3>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Ground Power Unit</p>
+                                        <p className="text-[10px] font-bold text-slate-400  tracking-[0.2em] mt-1">Ground Power Unit</p>
                                     </div>
                                 </div>
 
                                 <div className="flex flex-col items-end gap-1.5">
-                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">¿Limpia?</span>
+                                    <span className="text-[9px] font-black text-slate-400  tracking-widest">¿Limpia?</span>
                                     <div className="flex p-1 bg-slate-100 rounded-xl">
                                         {['Si', 'No'].map(opt => (
                                             <button
@@ -74,13 +68,10 @@ const GpuInspectionSection: React.FC<GpuProps> = ({ data, onChange }) => {
                                     </div>
                                 </div>
                             </div>
-
-                            {/* Cuerpo */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-3">
-                                    {/* Campo Dinámico 1: Horómetro o Número de Plantas */}
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">
+                                        <label className="text-[10px] font-bold text-slate-400 ml-2">
                                             {isPlantBased ? 'Nº Plantas' : 'Horómetro'}
                                         </label>
                                         <div className="flex items-center gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-100 focus-within:bg-white focus-within:border-blue-400 transition-all">
@@ -94,11 +85,9 @@ const GpuInspectionSection: React.FC<GpuProps> = ({ data, onChange }) => {
                                             />
                                         </div>
                                     </div>
-
-                                    {/* Campo Dinámico 2: Solo para GPU115 (Cableado) */}
                                     {isGpu115 && (
                                         <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">Cableado</label>
+                                            <label className="text-[10px] font-bold text-slate-400 ml-2">Cableado</label>
                                             <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
                                                 {['Bien', 'Mal'].map(opt => (
                                                     <button
@@ -118,12 +107,10 @@ const GpuInspectionSection: React.FC<GpuProps> = ({ data, onChange }) => {
                                         </div>
                                     )}
                                 </div>
-
-                                {/* Estado Físico (Enchufe y Llantas) */}
                                 <div className="bg-slate-50 rounded-[2rem] p-4 flex flex-col justify-around border border-slate-100">
                                     <div className="flex flex-col gap-2">
                                         <div className="flex justify-between items-center px-1">
-                                            <span className="text-[9px] font-bold text-slate-500 uppercase">Enchufe</span>
+                                            <span className="text-[9px] font-bold text-slate-500">Enchufe</span>
                                             <span className={`w-2 h-2 rounded-full ${gpu.enchufe === 'Bien' ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
                                         </div>
                                         <div className="flex bg-white p-1 rounded-xl shadow-sm">
@@ -146,7 +133,7 @@ const GpuInspectionSection: React.FC<GpuProps> = ({ data, onChange }) => {
 
                                     <div className="flex flex-col gap-2 mt-2">
                                         <div className="flex justify-between items-center px-1">
-                                            <span className="text-[9px] font-bold text-slate-500 uppercase">Llantas</span>
+                                            <span className="text-[9px] font-bold text-slate-500">Llantas</span>
                                             <span className={`w-2 h-2 rounded-full ${gpu.llantas === 'Bien' ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
                                         </div>
                                         <div className="flex bg-white p-1 rounded-xl shadow-sm">
@@ -169,7 +156,6 @@ const GpuInspectionSection: React.FC<GpuProps> = ({ data, onChange }) => {
                                 </div>
                             </div>
 
-                            {/* Observaciones */}
                             <div className="mt-4 relative group">
                                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors">
                                     <MessageSquare size={16} />

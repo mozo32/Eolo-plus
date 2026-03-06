@@ -1,5 +1,5 @@
 import React from 'react';
-import { Truck, Gauge, ClipboardList, CheckCircle2, Settings2, Droplet, Disc, Lightbulb } from 'lucide-react';
+import { Truck, Gauge, ClipboardList, CheckCircle2, Settings2, Droplet, Disc, Lightbulb, CircleDot } from 'lucide-react';
 
 interface VehiculoData {
     limpieza: string;
@@ -21,8 +21,15 @@ const VehiculosSection: React.FC<Props> = ({ vehiculos, onChange }) => {
     const optionsLimpieza = ["Limpio", "Sucio"];
 
     return (
-        <div className="space-y-8 p-2">
-            {/* Definición de la animación inline para evitar errores de compilación */}
+
+        <div className="space-y-8">
+            <header className="bg-blue-900 text-white p-6 rounded-t-lg flex justify-between items-center">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-widest">CONTROL DE FLOTA</h1>
+                    <p className="text-sm opacity-80">ESTADO TÉCNICO Y OPERATIVO DE UNIDADES</p>
+                </div>
+                <Truck size={40} />
+            </header>
             <style>
                 {`
                     @keyframes spin-slow {
@@ -35,33 +42,24 @@ const VehiculosSection: React.FC<Props> = ({ vehiculos, onChange }) => {
                 `}
             </style>
 
-            <div className="flex flex-col gap-1 border-l-4 border-orange-500 pl-4">
-                <h2 className="text-xl md:text-2xl font-black text-gray-800 uppercase tracking-tighter flex items-center gap-3">
-                    <Truck className="text-orange-500" size={28} />
-                    Control de Flota
-                </h2>
-                <p className="text-gray-500 text-xs md:text-sm font-medium">Estado técnico y operativo de unidades</p>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6 space-y-8">
                 {Object.entries(vehiculos).map(([id, data]) => {
                     const isMantenimiento = data.estado === 'Mantenimiento';
 
                     return (
                         <div
                             key={id}
-                            className={`group relative overflow-hidden rounded-3xl border-2 transition-all duration-500 ${
-                                isMantenimiento
+                            className={`group relative overflow-hidden rounded-3xl border-2 transition-all duration-500 ${isMantenimiento
                                 ? 'border-red-100 bg-red-50/30'
                                 : 'border-gray-100 bg-white hover:border-blue-200 shadow-sm'
-                            }`}
+                                }`}
                         >
                             <div className={`h-1.5 w-full ${isMantenimiento ? 'bg-red-500' : 'bg-blue-600'}`} />
 
                             <div className="p-4 md:p-6">
                                 <div className="flex justify-between items-center gap-2 mb-6">
                                     <div className="flex-1 min-w-0">
-                                        <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ${isMantenimiento ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                                        <span className={`text-[9px] font-bold tracking-widest px-2 py-0.5 rounded-md ${isMantenimiento ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
                                             Unidad
                                         </span>
                                         <h3 className={`text-xl md:text-2xl font-black mt-0.5 truncate ${isMantenimiento ? 'text-gray-400' : 'text-gray-800'}`}>
@@ -89,7 +87,7 @@ const VehiculosSection: React.FC<Props> = ({ vehiculos, onChange }) => {
 
                                 <div className={`grid grid-cols-2 gap-y-4 gap-x-3 transition-opacity duration-300 ${isMantenimiento ? 'opacity-30 grayscale pointer-events-none' : ''}`}>
                                     <div className="space-y-1">
-                                        <label className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase ml-1">
+                                        <label className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400  ml-1">
                                             <Droplet size={12} /> Limpieza
                                         </label>
                                         <select
@@ -103,24 +101,37 @@ const VehiculosSection: React.FC<Props> = ({ vehiculos, onChange }) => {
                                     </div>
 
                                     <div className="space-y-1">
-                                        <label className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase ml-1">
+                                        <label className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 ml-1">
                                             <Disc size={12} /> Llantas
                                         </label>
                                         <select
                                             value={data.llantas}
                                             onChange={(e) => onChange(id, 'llantas', e.target.value)}
-                                            className={`w-full p-2 border-none rounded-xl text-sm font-bold outline-none ${
-                                                data.llantas === 'Mal' ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-700'
-                                            }`}
+                                            className={`w-full p-2 border-none rounded-xl text-sm font-bold outline-none ${data.llantas === 'Mal' ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-700'
+                                                }`}
                                         >
                                             <option value="">--</option>
                                             {optionsBienMal.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                         </select>
                                     </div>
-
+                                    {'frenos' in data && (
+                                        <div className="space-y-1">
+                                            <label className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 ml-1">
+                                                <CircleDot size={12} /> Frenos
+                                            </label>
+                                            <select
+                                                value={data.frenos || ''}
+                                                onChange={(e) => onChange(id, 'frenos', e.target.value)}
+                                                className={`w-full p-2 border-none rounded-xl text-sm font-bold outline-none ${data.frenos === 'Mal' ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-700'}`}
+                                            >
+                                                <option value="">--</option>
+                                                {optionsBienMal.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                            </select>
+                                        </div>
+                                    )}
                                     {'nivel' in data && (
                                         <div className="space-y-1">
-                                            <label className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase ml-1">
+                                            <label className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 ml-1">
                                                 <Gauge size={12} /> Nivel
                                             </label>
                                             <input
@@ -135,15 +146,14 @@ const VehiculosSection: React.FC<Props> = ({ vehiculos, onChange }) => {
 
                                     {'luces' in data && (
                                         <div className="space-y-1">
-                                            <label className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase ml-1">
+                                            <label className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 ml-1">
                                                 <Lightbulb size={12} /> Luces
                                             </label>
                                             <select
                                                 value={data.luces}
                                                 onChange={(e) => onChange(id, 'luces', e.target.value)}
-                                                className={`w-full p-2 border-none rounded-xl text-sm font-bold outline-none ${
-                                                    data.luces === 'Mal' ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-700'
-                                                }`}
+                                                className={`w-full p-2 border-none rounded-xl text-sm font-bold outline-none ${data.luces === 'Mal' ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-700'
+                                                    }`}
                                             >
                                                 <option value="">--</option>
                                                 {optionsBienMal.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -152,7 +162,7 @@ const VehiculosSection: React.FC<Props> = ({ vehiculos, onChange }) => {
                                     )}
 
                                     <div className="col-span-2 space-y-1 pt-1">
-                                        <label className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase ml-1">
+                                        <label className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 ml-1">
                                             <ClipboardList size={12} /> Observaciones
                                         </label>
                                         <textarea
@@ -167,7 +177,7 @@ const VehiculosSection: React.FC<Props> = ({ vehiculos, onChange }) => {
 
                                 {isMantenimiento && (
                                     <div className="absolute inset-0 flex items-center justify-center bg-red-50/10 pointer-events-none">
-                                        <div className="bg-red-600 text-white px-4 py-1.5 rounded-full shadow-lg font-black text-[10px] md:text-xs uppercase tracking-widest flex items-center gap-2 transform -rotate-3">
+                                        <div className="bg-red-600 text-white px-4 py-1.5 rounded-full shadow-lg font-black text-[10px] md:text-xs  tracking-widest flex items-center gap-2 transform -rotate-3">
                                             <Settings2 size={14} className="animate-spin-slow" />
                                             En Taller
                                         </div>

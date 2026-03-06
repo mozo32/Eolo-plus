@@ -153,14 +153,14 @@ const SignatureBox: React.FC<SignatureBoxProps> = ({
                 {icon}
             </div>
             <div>
-                <h4 className="text-sm font-black text-slate-800 uppercase tracking-tighter">{role}</h4>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Firma Autógrafa</p>
+                <h4 className="text-sm font-black text-slate-800 tracking-tighter">{role}</h4>
+                <p className="text-[9px] font-bold text-slate-400 tracking-widest">Firma Autógrafa</p>
             </div>
         </div>
 
         <div className="space-y-4">
             <div>
-                <label className="text-[9px] font-black text-slate-400 uppercase ml-2 mb-1 block">Nombre Completo</label>
+                <label className="text-[9px] font-black text-slate-400 ml-2 mb-1 block">Nombre Completo</label>
                 <input
                     type="text"
                     value={name}
@@ -170,7 +170,7 @@ const SignatureBox: React.FC<SignatureBoxProps> = ({
                 />
             </div>
             <div>
-                <label className="text-[9px] font-black text-slate-400 uppercase ml-2 mb-1 block">Firma</label>
+                <label className="text-[9px] font-black text-slate-400 ml-2 mb-1 block">Firma</label>
                 {initialSignature && (initialSignature.startsWith('/storage') || initialSignature.startsWith('http')) ? (
                     <div className="relative group border-2 border-dashed border-emerald-200 rounded-2xl bg-emerald-50 overflow-hidden h-32 flex items-center justify-center">
                         <img
@@ -194,12 +194,12 @@ const SignatureBox: React.FC<SignatureBoxProps> = ({
 );
 
 const RampaSignaturesSection: React.FC<RampaSignaturesProps> = ({ data, onUpdate }) => {
+
     return (
         <div className="mt-12 space-y-8">
-            <div className="flex items-center gap-3 ml-4">
-                <div className="bg-slate-800 text-white p-2 rounded-lg italic font-black text-xs">SIGN</div>
-                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter italic">Cierre de Operación</h3>
-            </div>
+            <h2 className="text-blue-800 font-bold border-b-2 border-blue-100 mb-4 pb-1 ">
+                Cierre de Operación
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <SignatureBox
                     role="Entrega"

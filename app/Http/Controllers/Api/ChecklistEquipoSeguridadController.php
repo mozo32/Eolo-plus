@@ -81,13 +81,12 @@ class ChecklistEquipoSeguridadController extends Controller
     }
     public function index(Request $request)
     {
-
         $query = ChecklistEquipoSeguridad::query();
 
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
-                $q->where('nombre_empleado', 'like', "%{$search}%");
+                $q->where('nombre', 'like', "%{$search}%");
             });
         }
 

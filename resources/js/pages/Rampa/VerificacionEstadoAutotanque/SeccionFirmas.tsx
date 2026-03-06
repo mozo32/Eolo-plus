@@ -1,5 +1,6 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
 import { Trash2, ClipboardCheck, PenTool, XCircle, Circle, Save } from 'lucide-react';
+import { usePage } from '@inertiajs/react';
 import camioPipa from '../../../../../resources/js/assets/Captura de pantalla 2026-02-10 121721.png';
 
 interface Marca {
@@ -7,7 +8,19 @@ interface Marca {
     y: number;
     tipo: 'X' | 'O';
 }
-
+type Role = { slug: string; nombre: string; };
+export type AuthUser = {
+    id: number;
+    name: string;
+    email: string;
+    isAdmin: boolean;
+    roles: Role[];
+    departamentos: {
+        id: number;
+        nombre: string;
+        subdepartamentos: { id: number; nombre: string; route: string; }[];
+    }[];
+};
 interface Props {
     estaCompleto: boolean;
     onGuardar: (datosFirmas: any) => void;
@@ -48,8 +61,10 @@ const CardFirma = ({ titulo, id, nombre, setNombres, canvasRef }: any) => {
 };
 
 export const SeccionFirmas = ({ estaCompleto, onGuardar, marcas, setMarcas }: Props) => {
+    const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
+    const user = auth?.user;
     const [modo, setModo] = useState<'X' | 'O'>('X');
-    const [nombres, setNombres] = useState({ entrega: '', receptor: '', operaciones: '' });
+    const [nombres, setNombres] = useState({ entrega: user?.name, receptor: '', operaciones: '' });
     const canvasRefs = {
         entrega: useRef<HTMLCanvasElement>(null),
         receptor: useRef<HTMLCanvasElement>(null),

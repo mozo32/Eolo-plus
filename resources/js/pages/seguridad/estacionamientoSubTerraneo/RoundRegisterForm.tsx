@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, CheckCircle2, Car, Hash, User } from 'lucide-react';
+import { X, Plus, Trash2, CheckCircle2, Car, Hash, User, Key } from 'lucide-react';
 import { guardarEstaSubTerraneo } from '@/stores/apiEstacionamientoSubterraneo';
 import Swal from 'sweetalert2';
 
@@ -14,13 +14,28 @@ const RoundRegisterForm: React.FC<VehicleEntryFormProps> = ({ isOpen, onClose })
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [oficial] = useState('Oficial de Turno');
 
-    // Estado para manejar múltiples vehículos en una sola vista
     const [vehiculos, setVehiculos] = useState([
-        { id: Date.now(), placas: '', vehiculo: '', color: '', responsable: '', matricula: '' }
+        {
+            id: Date.now(),
+            placas: '',
+            vehiculo: '',
+            color: '',
+            responsable: '',
+            matricula: '',
+            llaves: 'NO'
+        }
     ]);
 
     const addRow = () => {
-        setVehiculos([...vehiculos, { id: Date.now(), placas: '', vehiculo: '', color: '', responsable: '', matricula: '' }]);
+        setVehiculos([...vehiculos, {
+            id: Date.now(),
+            placas: '',
+            vehiculo: '',
+            color: '',
+            responsable: '',
+            matricula: '',
+            llaves: 'NO'
+        }]);
     };
 
     const removeRow = (id: number) => {
@@ -38,10 +53,9 @@ const RoundRegisterForm: React.FC<VehicleEntryFormProps> = ({ isOpen, onClose })
         setIsSubmitting(true);
 
         try {
-            // Enviamos un solo objeto con el array de vehículos dentro
             await guardarEstaSubTerraneo({
                 oficial: oficial,
-                vehiculos: vehiculos // Este es el array que tiene todas las filas
+                vehiculos: vehiculos
             });
 
             Swal.fire({
@@ -66,9 +80,8 @@ const RoundRegisterForm: React.FC<VehicleEntryFormProps> = ({ isOpen, onClose })
 
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
-            <div className="bg-white w-full max-w-6xl max-h-[90vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col">
+            <div className="bg-white w-full max-w-7xl max-h-[95vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col">
 
-                {/* Header */}
                 <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
                     <div>
                         <h2 className="text-3xl font-black tracking-tighter">REGISTRO DE RONDA</h2>
@@ -78,19 +91,19 @@ const RoundRegisterForm: React.FC<VehicleEntryFormProps> = ({ isOpen, onClose })
                         <X size={28} />
                     </button>
                 </div>
-
-                {/* Tabla de Captura Rápida */}
                 <div className="flex-1 overflow-y-auto p-8">
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="hidden lg:grid grid-cols-12 gap-4 px-4 mb-2">
                             <div className="col-span-2 text-[10px] font-black text-slate-400 uppercase">Placas</div>
-                            <div className="col-span-3 text-[10px] font-black text-slate-400 uppercase">Vehículo (Marca/Modelo)</div>
-                            <div className="col-span-2 text-[10px] font-black text-slate-400 uppercase">Color</div>
-                            <div className="col-span-3 text-[10px] font-black text-slate-400 uppercase">Responsable</div>
-                            <div className="col-span-2"></div>
+                            <div className="col-span-2 text-[10px] font-black text-slate-400 uppercase">Vehículo</div>
+                            <div className="col-span-1 text-[10px] font-black text-slate-400 uppercase">Color</div>
+                            <div className="col-span-2 text-[10px] font-black text-slate-400 uppercase">Responsable</div>
+                            <div className="col-span-2 text-[10px] font-black text-slate-400 uppercase">Matrícula</div>
+                            <div className="col-span-2 text-[10px] font-black text-slate-400 uppercase">Llaves</div>
+                            <div className="col-span-1"></div>
                         </div>
 
-                        {vehiculos.map((v, index) => (
+                        {vehiculos.map((v) => (
                             <div key={v.id} className="group grid grid-cols-1 lg:grid-cols-12 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 hover:border-blue-200 transition-all">
 
                                 {/* Placas */}
@@ -106,7 +119,7 @@ const RoundRegisterForm: React.FC<VehicleEntryFormProps> = ({ isOpen, onClose })
                                 </div>
 
                                 {/* Vehiculo */}
-                                <div className="col-span-3 relative">
+                                <div className="col-span-2 relative">
                                     <Car className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                                     <input
                                         placeholder="Marca/Modelo"
@@ -117,7 +130,7 @@ const RoundRegisterForm: React.FC<VehicleEntryFormProps> = ({ isOpen, onClose })
                                 </div>
 
                                 {/* Color */}
-                                <div className="col-span-2">
+                                <div className="col-span-1">
                                     <input
                                         placeholder="Color"
                                         className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500 outline-none"
@@ -127,7 +140,7 @@ const RoundRegisterForm: React.FC<VehicleEntryFormProps> = ({ isOpen, onClose })
                                 </div>
 
                                 {/* Responsable */}
-                                <div className="col-span-3 relative">
+                                <div className="col-span-2 relative">
                                     <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                                     <input
                                         placeholder="Conductor"
@@ -137,12 +150,36 @@ const RoundRegisterForm: React.FC<VehicleEntryFormProps> = ({ isOpen, onClose })
                                     />
                                 </div>
 
+                                {/* Matricula */}
+                                <div className="col-span-2 relative">
+                                    <Car className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                    <input
+                                        placeholder="ID / Matrícula"
+                                        className="w-full pl-10 pr-3 py-3 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                                        value={v.matricula}
+                                        onChange={(e) => handleChange(v.id, 'matricula', e.target.value)}
+                                    />
+                                </div>
+
+                                {/* Llaves (Selector) */}
+                                <div className="col-span-2 relative">
+                                    <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                    <select
+                                        className="w-full pl-10 pr-3 py-3 bg-white border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+                                        value={v.llaves}
+                                        onChange={(e) => handleChange(v.id, 'llaves', e.target.value)}
+                                    >
+                                        <option value="NO">SIN LLAVES</option>
+                                        <option value="SI">CON LLAVES</option>
+                                    </select>
+                                </div>
+
                                 {/* Acciones */}
-                                <div className="col-span-2 flex gap-2">
+                                <div className="col-span-1 flex gap-2">
                                     <button
                                         type="button"
                                         onClick={() => removeRow(v.id)}
-                                        className="flex-1 flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all"
+                                        className="w-full flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all p-3"
                                     >
                                         <Trash2 size={18} />
                                     </button>

@@ -49,12 +49,11 @@ export const CheckEstadoAutotanque = () => {
 
     const finalizarInspeccion = (datosFirmas: any) => {
         const dataLog = {
-            metadata: {
-                fecha: new Date().toLocaleString(),
-                operador: user?.name,
-            },
+            fecha: new Date().toLocaleString(),
+            operador: user?.name,
             checklist: respuestas,
-            vehiculo: datosVehiculo,
+            km:datosVehiculo.km,
+            combustible:datosVehiculo.combustible,
             danos: marcasDanos,
             firmas: datosFirmas
         };

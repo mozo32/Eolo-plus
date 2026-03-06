@@ -129,78 +129,49 @@ class EntregaTurnoRController extends Controller
         };
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        $entrega = EntregaTurnoR::with([
+        $query = EntregaTurnoR::with([
             'firmas' => function ($q) {
                 $q->withPivot(['rol', 'tag', 'orden', 'status']);
             },
         ])
-        ->where('user_id', Auth::id())
-        ->latest()
-        ->first();
-
-        if (!$entrega) {
-            return response()->json(null);
+        ->where('user_id', Auth::id());
+        if ($request->has('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('id', 'like', "%{$search}%")
+                ->orWhere('encabezado->jefeTurno', 'like', "%{$search}%");
+            });
         }
-
-        $firmasRequeridas = $entrega->firmas->filter(function ($firma) {
-            return $firma->pivot->status === 'A' &&
-                in_array($firma->pivot->rol, ['quien_entrega', 'quien_recibe']);
-        })->count();
-
-        if ($firmasRequeridas < 2) {
-            return response()->json($entrega);
+        if ($request->filled('date')) {
+            $query->whereDate('encabezado->fecha', $request->date);
         }
+        $entregas = $query->latest()->paginate(10);
+        $entregas->getCollection()->transform(function ($entrega) {
+            $firmasCompletasCount = $entrega->firmas->filter(function ($firma) {
+                return $firma->pivot->status === 'A' &&
+                    in_array($firma->pivot->rol, ['quien_entrega', 'quien_recibe']);
+            })->count();
 
-        return response()->json(null);
+            $entrega->esta_firmado = ($firmasCompletasCount >= 2);
+            $entrega->conteo_firmas = $firmasCompletasCount;
+            return $entrega;
+        });
+
+        return response()->json($entregas);
     }
 
     public function show(EntregaTurnoR $entregaTurnoR)
     {
-        $entregaTurnoR->load([
-            'firmas' => fn ($q) => $q->withPivot(['rol', 'tag', 'orden', 'status']),
-        ]);
 
-        $firmas = $entregaTurnoR->firmas->map(function (Firma $firma) {
-            $disk = $firma->disk ?? 'public';
-            $path = $firma->path;
+        // Cargamos las relaciones sobre el objeto existente
+        $entregaTurnoR->load(['firmas' => function ($q) {
+            $q->withPivot(['rol', 'tag', 'orden', 'status']);
+        }]);
 
-            if (!$path || !Storage::disk($disk)->exists($path)) {
-                return [
-                    'id'     => $firma->id,
-                    'url'    => null,
-                    'rol'    => $firma->pivot->rol ?? null,
-                    'tag'    => $firma->pivot->tag ?? null,
-                    'orden'  => $firma->pivot->orden ?? 0,
-                    'status' => $firma->pivot->status ?? 'A',
-                    'error'  => 'firma_no_encontrada',
-                ];
-            }
-
-            return [
-                'id'     => $firma->id,
-                'url'    => Storage::disk($disk)->url($path),
-                'rol'    => $firma->pivot->rol ?? null,
-                'tag'    => $firma->pivot->tag ?? null,
-                'orden'  => $firma->pivot->orden ?? 0,
-                'status' => $firma->pivot->status ?? 'A',
-            ];
-        })->values();
-
-        return response()->json([
-            'id'                => $entregaTurnoR->id,
-            'encabezado'        => $entregaTurnoR->encabezado,
-            'comunicaciones'    => $entregaTurnoR->comunicaciones,
-            'vehiculos'         => $entregaTurnoR->vehiculos,
-            'barras_remolque'   => $entregaTurnoR->barras_remolque,
-            'gpus'              => $entregaTurnoR->gpus,
-            'carrito_golf'      => $entregaTurnoR->carrito_golf,
-            'aeronaves'         => $entregaTurnoR->aeronaves,
-            'firmas'            => $firmas,
-            'created_at'        => $entregaTurnoR->created_at,
-            'updated_at'        => $entregaTurnoR->updated_at,
-        ]);
+        // Retornamos el objeto (React espera un objeto o un array de un solo elemento)
+        return response()->json($entregaTurnoR);
     }
     public function update(Request $request, EntregaTurnoR $entregaTurnoR)
     {

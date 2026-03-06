@@ -17,7 +17,29 @@ const TABLA_CALIBRACION: Record<number, number> = {
     31: 1731, 32: 1809, 33: 1887, 34: 1996, 35: 2085, 36: 2174, 37: 2263, 38: 2352, 39: 2441, 40: 2491,
     41: 2587, 42: 2684, 43: 2780, 44: 2876, 45: 2999, 46: 3096, 47: 3193, 48: 3290, 49: 3388, 50: 3497
 };
+const obtenerLitrosInterpolados = (cm: number): number => {
+    const puntos = Object.keys(TABLA_CALIBRACION).map(Number).sort((a, b) => a - b);
+    if (TABLA_CALIBRACION[cm] !== undefined) return TABLA_CALIBRACION[cm];
 
+    if (cm <= puntos[0]) return TABLA_CALIBRACION[puntos[0]];
+    if (cm >= puntos[puntos.length - 1]) return TABLA_CALIBRACION[puntos[puntos.length - 1]];
+
+    let x0 = puntos[0];
+    let x1 = puntos[puntos.length - 1];
+
+    for (let i = 0; i < puntos.length; i++) {
+        if (puntos[i] > cm) {
+            x1 = puntos[i];
+            x0 = puntos[i - 1];
+            break;
+        }
+    }
+
+    const y0 = TABLA_CALIBRACION[x0];
+    const y1 = TABLA_CALIBRACION[x1];
+    const litros = y0 + (cm - x0) * ((y1 - y0) / (x1 - x0));
+    return Math.round(litros);
+}
 interface DatosTurno {
     nombre: string;
     fecha: string;
@@ -105,10 +127,14 @@ const EntregarTurnoAutotanque = () => {
     const handleUpdate = (key: string, val: any) => {
         setDatos(prev => {
             const nuevosDatos = { ...prev, [key]: val };
+
             if (key === 'cmIni' || key === 'cmCierre') {
-                const litros = TABLA_CALIBRACION[val];
-                if (litros !== undefined) {
-                    nuevosDatos[key === 'cmIni' ? 'litrosIni' : 'litrosCierre'] = litros;
+                const cmValue = parseFloat(val);
+                if (!isNaN(cmValue)) {
+                    const litrosCalculados = obtenerLitrosInterpolados(cmValue);
+                    nuevosDatos[key === 'cmIni' ? 'litrosIni' : 'litrosCierre'] = litrosCalculados;
+                } else {
+                    nuevosDatos[key === 'cmIni' ? 'litrosIni' : 'litrosCierre'] = null;
                 }
             }
             return nuevosDatos;
