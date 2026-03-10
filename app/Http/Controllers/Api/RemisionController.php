@@ -34,7 +34,7 @@ class RemisionController extends Controller
                     'fecha'           => $request->fecha,
                     'operador'        => $request->operador,
                     'cliente'         => $request->cliente,
-                    'requisicion'     => $request->requisicion,
+                    'presionDif'     => $request->presionDif,
                     'forma_pago'      => $request->formaPago,
                     'aeronave_tipo'   => $request->aeronaveTipo,
                     'matricula'       => $request->matricula,

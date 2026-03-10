@@ -9,7 +9,7 @@ class Remision extends Model
     protected $table = 'remisiones';
 
     protected $fillable = [
-        'folio','fecha', 'operador', 'cliente', 'requisicion', 'forma_pago',
+        'folio','fecha', 'operador', 'cliente', 'forma_pago','presionDif',
         'aeronave_tipo', 'matricula', 'destino', 'hora_llegada',
         'hora_inicial', 'hora_final', 'lectura_inicial',
         'lectura_final', 'total_litros', 'id_turno','status'

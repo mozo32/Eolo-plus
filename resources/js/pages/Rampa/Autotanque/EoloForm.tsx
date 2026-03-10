@@ -2,12 +2,12 @@ import React, { useRef, useState } from 'react';
 import { useForm, usePage } from '@inertiajs/react';
 import Swal from 'sweetalert2';
 import PressureGauge from './PressureGauge';
+import MatriculaAutocomplete from '@/pages/despacho/components/walkAround/MatriculaAutocomplete';
 
 interface EoloFormData {
     fecha: string;
     operador: string;
     cliente: string;
-    requisicion: string;
     formaPago: string;
     aeronaveTipo: string;
     matricula: string;
@@ -125,7 +125,6 @@ const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
         fecha: today,
         operador: user?.name || '',
         cliente: '',
-        requisicion: '',
         formaPago: '',
         aeronaveTipo: '',
         matricula: '',
@@ -155,6 +154,14 @@ const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
 
     const handleUppercaseChange = (name: keyof EoloFormData, value: string) => {
         setData(name, value.toUpperCase());
+    };
+
+    const handleAeronaveData = (aeronave: any) => {
+        setData(prev => ({
+            ...prev,
+            aeronaveTipo: (aeronave.tipo || '').toUpperCase(),
+            cliente: (aeronave.cliente || prev.cliente).toUpperCase()
+        }));
     };
 
     const handleSubmit = async () => {
@@ -230,6 +237,7 @@ const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
                         <p className="text-lg font-bold text-slate-800 underline decoration-blue-500 decoration-2 underline-offset-4">PIPA 1 · EP01</p>
                     </div>
                 </header>
+
                 <div className="mb-6 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-wrap items-center justify-between gap-6">
                     <div className="flex items-center gap-4">
                         <h2 className="text-xs font-black text-blue-600 uppercase tracking-tighter border-r pr-4 border-slate-200">Logística</h2>
@@ -258,15 +266,14 @@ const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
                         <p><strong>Placas:</strong> LC-44-020</p>
                     </div>
                 </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                    <div className="md:col-span-4 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
-                        <div className="md:col-span-4 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col justify-center">
-                            <h2 className="text-xs font-black text-blue-600 uppercase mb-4 tracking-tighter">Instrumentación</h2>
-                            <PressureGauge
-                                value={data.presionDif}
-                                onChange={(val) => setData('presionDif', val)}
-                            />
-                        </div>
+                    <div className="md:col-span-4 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col justify-center">
+                        <h2 className="text-xs font-black text-blue-600 uppercase mb-4 tracking-tighter">Instrumentación</h2>
+                        <PressureGauge
+                            value={data.presionDif}
+                            onChange={(val) => setData('presionDif', val)}
+                        />
                     </div>
 
                     <div className="md:col-span-8 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
@@ -281,12 +288,6 @@ const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
                                 />
                             </div>
                             <input
-                                placeholder="Requisición"
-                                value={data.requisicion}
-                                onChange={e => handleUppercaseChange('requisicion', e.target.value)}
-                                className="w-full border-slate-100 border-2 rounded-2xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-all uppercase"
-                            />
-                            <input
                                 placeholder="Forma de Pago"
                                 value={data.formaPago}
                                 onChange={e => handleUppercaseChange('formaPago', e.target.value)}
@@ -298,12 +299,14 @@ const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
                                 onChange={e => handleUppercaseChange('aeronaveTipo', e.target.value)}
                                 className="w-full border-slate-100 border-2 rounded-2xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-all uppercase"
                             />
-                            <input
-                                placeholder="Matrícula"
-                                value={data.matricula}
-                                onChange={e => handleUppercaseChange('matricula', e.target.value)}
-                                className="w-full border-slate-100 border-2 rounded-2xl px-4 py-3 text-sm font-mono focus:border-blue-500 outline-none transition-all uppercase"
+
+                            <MatriculaAutocomplete
+                                matricula={data.matricula}
+                                onMatriculaChange={(val) => setData('matricula', val.toUpperCase())}
+                                onAeronaveData={handleAeronaveData}
+                                onNuevaMatricula={() => {}}
                             />
+
                             <div className="md:col-span-2">
                                 <input
                                     placeholder="Destino"
@@ -313,7 +316,8 @@ const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
                                 />
                             </div>
                         </div>
-                        <div className="lg:col-span-4 p-8 bg-slate-50/50">
+
+                        <div className="mt-8 p-6 bg-slate-50/50 rounded-2xl">
                             <div className="flex items-center gap-2 mb-6">
                                 <div className="w-1.5 h-4 bg-blue-500 rounded-full"></div>
                                 <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest">Cronología</h2>
@@ -364,7 +368,7 @@ const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
 
                     <div className="md:col-span-12 bg-white rounded-[3rem] p-1 overflow-hidden shadow-xl shadow-slate-200/60 border border-slate-100">
                         <div className="grid grid-cols-1 lg:grid-cols-12">
-                            <div className="lg:col-span-5 p-8 flex flex-col justify-center border-y lg:border-y-0 lg:border-x border-slate-100">
+                            <div className="lg:col-span-5 p-8 flex flex-col justify-center border-y lg:border-y-0 lg:border-r border-slate-100">
                                 <div className="flex items-center gap-2 mb-6 justify-center lg:justify-start">
                                     <div className="w-1.5 h-4 bg-blue-600 rounded-full"></div>
                                     <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest">Lecturas (Lts)</h2>
@@ -400,7 +404,7 @@ const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
                                 </div>
                             </div>
 
-                            <div className="lg:col-span-3 p-8 flex flex-col justify-center bg-blue-50/30">
+                            <div className="lg:col-span-7 p-8 flex flex-col justify-center bg-blue-50/30">
                                 <div className="text-center">
                                     <span className="inline-block px-4 py-1.5 bg-white border border-blue-100 rounded-full text-[10px] font-black uppercase text-blue-600 mb-4 tracking-[0.2em] shadow-sm">
                                         Total Neto

@@ -1,14 +1,16 @@
 import { validarServicioComisariato } from "./validacion";
 import { useState, useEffect } from "react";
-import TimePicker24 from "@/pages/TimePicker24";
 import { guardarServicioComisariatoApi, actualizarServicioComisariatoApi } from "@/stores/apiServicioComisariato";
 import Swal from "sweetalert2";
+import { Package } from "lucide-react";
+
 type Props = {
     isEdit: boolean;
     data?: any;
     open: boolean;
     onSuccess?: () => void;
 };
+
 const getInitialForm = (data?: any) => ({
     catering: data?.catering ?? "",
     formaPago: data?.forma_pago ?? "",
@@ -23,21 +25,16 @@ const getInitialForm = (data?: any) => ({
     subtotal: data?.subtotal ?? "",
     total: data?.total ?? "",
 });
-export default function ServicioComisariatoForm({
-    isEdit,
-    data,
-    open,
-    onSuccess,
-}: Props) {
 
+export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Props) {
     const [form, setForm] = useState(() => getInitialForm(data));
+
     useEffect(() => {
         setForm(getInitialForm(isEdit ? data : undefined));
     }, [data, isEdit]);
+
     const updateField = (key: string, value: any, forceUpper: boolean = false) => {
-        const finalValue = (forceUpper && typeof value === 'string')
-            ? value.toUpperCase()
-            : value;
+        const finalValue = (forceUpper && typeof value === 'string') ? value.toUpperCase() : value;
         setForm((prev) => ({ ...prev, [key]: finalValue }));
     };
 
@@ -49,206 +46,120 @@ export default function ServicioComisariatoForm({
             Swal.fire({
                 icon: "warning",
                 title: "Formulario incompleto",
-                html: `
-                    <ul style="text-align:left">
-                        ${errores.map(e => `<li>• ${e}</li>`).join("")}
-                    </ul>
-                `,
+                html: `<ul style="text-align:left">${errores.map(e => `<li>• ${e}</li>`).join("")}</ul>`,
             });
             return;
         }
+
         try {
             Swal.fire({ title: "Procesando...", didOpen: () => Swal.showLoading() });
-
             if (isEdit && data?.id) {
                 await actualizarServicioComisariatoApi(data.id, form);
-
             } else {
                 await guardarServicioComisariatoApi(form);
             }
-
             Swal.fire({
                 icon: "success",
-                title: isEdit ? "Servicio de Comisariato actualizado" : "Servicio de Comisariato Guardado",
+                title: isEdit ? "Servicio actualizado" : "Servicio Guardado"
             });
             onSuccess?.();
-
         } catch (error: any) {
-            Swal.fire({
-                icon: "error",
-                title: "Error",
-                text: error?.message || "Error al guardar",
-            });
+            Swal.fire({ icon: "error", title: "Error", text: error?.message || "Error al guardar" });
         }
     };
 
-    const input =
-        "w-full rounded-lg border-2 border-slate-300 bg-slate-50 px-4 py-3 " +
-        "text-sm font-semibold text-slate-700 shadow-sm " +
-        "placeholder:text-slate-400 " +
-        "focus:border-[#00677F] focus:bg-white focus:ring-2 focus:ring-[#00677F]/20 focus:outline-none";
-
-    const textarea =
-        "w-full min-h-[200px] rounded-lg border-2 border-slate-300 bg-slate-50 px-4 py-3 " +
-        "text-sm font-medium text-slate-700 shadow-sm " +
-        "placeholder:text-slate-400 " +
-        "focus:border-[#00677F] focus:bg-white focus:ring-2 focus:ring-[#00677F]/20 focus:outline-none";
+    const inputStyle = "w-full rounded-lg border-2 border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm placeholder:text-slate-400 focus:border-[#00677F] focus:bg-white focus:ring-2 focus:ring-[#00677F]/20 focus:outline-none";
+    const labelStyle = "mb-1 block text-xs font-extrabold uppercase text-slate-600";
+    const sectionTitle = "mb-4 text-xs font-extrabold uppercase tracking-widest text-[#00677F]";
 
     return (
-        <form
-            onSubmit={handleSubmit}
-            className="mx-auto max-w-6xl space-y-8 rounded-2xl border border-slate-300 bg-white p-8 shadow-lg"
-        >
-            <div className="flex items-center justify-between rounded-lg bg-[#00677F] px-6 py-4 text-white">
-                <h2 className="text-lg font-extrabold uppercase tracking-wide">
-                    Servicio de Comisariato
-                </h2>
-                <span className="text-xs opacity-80">Área Operativa</span>
-            </div>
+        <div className="mx-auto max-w-5xl bg-slate-50 shadow-xl rounded-xl overflow-hidden border border-slate-200">
+            <header className="bg-[#1e3a8a] p-8 text-white flex justify-between items-center">
+                <div>
+                    <h1 className="text-2xl font-black uppercase tracking-tighter">
+                        {isEdit ? "Edición de Comisariato" : "Nuevo Registro de Comisariato"}
+                    </h1>
+                    <p className="text-xs opacity-70 font-bold uppercase tracking-[0.2em]">Logística Operativa</p>
+                </div>
+                <Package size={36} className="opacity-30" />
+            </header>
+            <form onSubmit={handleSubmit}>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                    <div className="border bg-slate-50 p-5 space-y-4">
+                        <h4 className={sectionTitle}>Datos del servicio</h4>
 
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <div className="rounded-xl border bg-slate-50 p-5">
-                    <h4 className="mb-4 text-xs font-extrabold uppercase tracking-widest text-[#00677F]">
-                        Datos del servicio
-                    </h4>
-
-                    <div className="space-y-4">
-                        {/* CATERING */}
                         <div>
-                            <label className="mb-1 block text-xs font-extrabold uppercase text-slate-600">
-                                Catering
-                            </label>
-                            <input
-                                className={input}
-                                value={form.catering}
-                                onChange={(e) =>
-                                    updateField("catering", e.target.value)
-                                }
-                            />
+                            <label className={labelStyle}>Catering</label>
+                            <input className={inputStyle} value={form.catering} onChange={(e) => updateField("catering", e.target.value)} placeholder="Proveedor" />
                         </div>
 
-                        {/* FORMA DE PAGO */}
                         <div>
-                            <label className="mb-1 block text-xs font-extrabold uppercase text-slate-600">
-                                Forma de pago
-                            </label>
-                            <input
-                                className={input}
-                                value={form.formaPago}
-                                onChange={(e) =>
-                                    updateField("formaPago", e.target.value)
-                                }
-                            />
+                            <label className={labelStyle}>Matrícula</label>
+                            <input className={`${inputStyle} text-blue-800`} value={form.matricula} onChange={(e) => updateField("matricula", e.target.value, true)} placeholder="XA-XXX" />
                         </div>
 
-                        {/* MATRÍCULA */}
                         <div>
-                            <label className="mb-1 block text-xs font-extrabold uppercase text-slate-600">
-                                Matrícula
-                            </label>
-                            <input
-                                className={input}
-                                value={form.matricula}
-                                onChange={(e) => updateField("matricula", e.target.value, true)}
-                            />
+                            <label className={labelStyle}>Forma de Pago</label>
+                            <input className={inputStyle} value={form.formaPago} onChange={(e) => updateField("formaPago", e.target.value)} />
+                        </div>
+                    </div>
+                    <div className="border bg-slate-50 p-5 space-y-4">
+                        <h4 className={sectionTitle}>Programación de Entrega</h4>
+
+                        <div>
+                            <label className={labelStyle}>Fecha de entrega</label>
+                            <input type="date" className={inputStyle} value={form.fechaEntrega} onChange={(e) => updateField("fechaEntrega", e.target.value)} />
                         </div>
 
-                        {/* FECHA ENTREGA */}
                         <div>
-                            <label className="mb-1 block text-xs font-extrabold uppercase text-slate-600">
-                                Fecha de entrega
-                            </label>
+                            <label className={labelStyle}>Hora de entrega (24H)</label>
                             <input
-                                type="date"
-                                className={input}
-                                value={form.fechaEntrega}
-                                onChange={(e) =>
-                                    updateField("fechaEntrega", e.target.value)
-                                }
+                                type="time"
+                                className={`${inputStyle} text-center text-lg`}
+                                value={form.horaEntrega}
+                                onChange={(e) => updateField("horaEntrega", e.target.value)}
+                                required
                             />
+                            <p className="mt-1 text-[10px] font-bold text-slate-400 italic">Formato Militar 24 Horas</p>
                         </div>
                     </div>
                 </div>
-
-                <div className="rounded-xl border bg-slate-50 p-5">
-                    <h4 className="mb-4 text-xs font-extrabold uppercase tracking-widest text-[#00677F]">
-                        Hora de entrega
-                    </h4>
-
-                    <div className="space-y-4">
-
-
-                        <TimePicker24
-                            value={form.horaEntrega}
-                            onChange={(value) => updateField("horaEntrega", value)}
-                        />
+                <div className=" border bg-white p-6">
+                    <h4 className={sectionTitle}>Detalle del servicio</h4>
+                    <textarea
+                        className="w-full min-h-[120px] rounded-lg border-2 border-slate-300 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm focus:border-[#00677F] focus:bg-white focus:outline-none"
+                        placeholder="Describa el servicio solicitado..."
+                        value={form.detalle}
+                        onChange={(e) => updateField("detalle", e.target.value)}
+                    />
+                </div>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-4 rounded-xl border bg-slate-50 p-5">
+                    <div>
+                        <label className={labelStyle}>Solicitado por</label>
+                        <input className={inputStyle} placeholder="Nombre" value={form.solicitadoPor} onChange={(e) => updateField("solicitadoPor", e.target.value)} />
+                    </div>
+                    <div>
+                        <label className={labelStyle}>Atendió</label>
+                        <input className={inputStyle} placeholder="Nombre" value={form.atendio} onChange={(e) => updateField("atendio", e.target.value)} />
+                    </div>
+                    <div>
+                        <label className={labelStyle}>Subtotal</label>
+                        <input type="number" className={inputStyle} placeholder="0.00" value={form.subtotal} onChange={(e) => updateField("subtotal", e.target.value)} />
+                    </div>
+                    <div>
+                        <label className={labelStyle}>Total Final</label>
+                        <input type="number" className={`${inputStyle} font-extrabold text-[#00677F]`} placeholder="0.00" value={form.total} onChange={(e) => updateField("total", e.target.value)} />
                     </div>
                 </div>
-            </div>
-
-            <div className="rounded-xl border bg-white p-6">
-                <h4 className="mb-3 text-xs font-extrabold uppercase tracking-widest text-[#00677F]">
-                    Detalle del servicio
-                </h4>
-
-                <textarea
-                    className={textarea}
-                    placeholder="Describa el servicio solicitado..."
-                    value={form.detalle}
-                    onChange={(e) =>
-                        updateField("detalle", e.target.value)
-                    }
-                />
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-4 rounded-xl border bg-slate-50 p-5">
-                <input
-                    className={input}
-                    placeholder="Solicitado por"
-                    value={form.solicitadoPor}
-                    onChange={(e) =>
-                        updateField("solicitadoPor", e.target.value)
-                    }
-                />
-
-                <input
-                    className={input}
-                    placeholder="Atendió"
-                    value={form.atendio}
-                    onChange={(e) =>
-                        updateField("atendio", e.target.value)
-                    }
-                />
-
-                <input
-                    type="number"
-                    className={input}
-                    placeholder="Subtotal"
-                    value={form.subtotal}
-                    onChange={(e) =>
-                        updateField("subtotal", e.target.value)
-                    }
-                />
-
-                <input
-                    type="number"
-                    className={`${input} font-extrabold`}
-                    placeholder="Total"
-                    value={form.total}
-                    onChange={(e) =>
-                        updateField("total", e.target.value)
-                    }
-                />
-            </div>
-
-            <div className="flex justify-end">
-                <button
-                    type="submit"
-                    className="rounded-lg bg-[#00677F] px-12 py-3 text-sm font-extrabold uppercase tracking-wide text-white hover:bg-[#00586D]"
-                >
-                    {isEdit ? "Actualizar Servicio" : " Guardar Servicio"}
-                </button>
-            </div>
-        </form>
+                <div className="flex justify-end">
+                    <button
+                        type="submit"
+                        className="rounded-lg bg-[#00677F] px-12 py-4 text-sm font-extrabold uppercase tracking-widest text-white transition-colors hover:bg-[#00586D] shadow-md active:scale-95"
+                    >
+                        {isEdit ? "Actualizar Registro" : "Guardar Registro"}
+                    </button>
+                </div>
+            </form>
+        </div>
     );
 }

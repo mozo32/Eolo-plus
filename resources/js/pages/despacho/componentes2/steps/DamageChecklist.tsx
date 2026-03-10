@@ -115,9 +115,10 @@ const VehicleInspection = ({ aeronaveType, inspeccion, setInspeccion }: Props) =
                         <div className="flex gap-2 p-4 bg-white border-b border-slate-100 overflow-x-auto sticky top-0 z-20 no-scrollbar">
                             {SECTIONS_PLANE.map(section => (
                                 <button
+                                    type='button'
                                     key={section.key}
                                     onClick={() => setActiveSection(section.key)}
-                                    className={`px-6 py-3 rounded-2xl font-black text-[11px] uppercase transition-all whitespace-nowrap shadow-sm border ${activeSection === section.key
+                                    className={`px-6 py-3 rounded-2xl font-black text-[11px] transition-all whitespace-nowrap shadow-sm border ${activeSection === section.key
                                             ? 'bg-slate-900 text-white border-slate-900 scale-105'
                                             : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300 hover:text-slate-600'
                                         }`}
@@ -131,19 +132,19 @@ const VehicleInspection = ({ aeronaveType, inspeccion, setInspeccion }: Props) =
                     <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-6">
                             <div>
-                                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">
+                                <h3 className="text-xl font-black text-slate-800 tracking-tight">
                                     Inspección: {aeronaveType === 'avion' ? `Sección ${activeSection}` : 'Helicóptero'}
                                 </h3>
                                 <div className="flex items-center gap-2 mt-1">
-                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-bold rounded-md uppercase">
-                                        {currentItems.length} componentes
+                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-bold rounded-md">
+                                        {currentItems.length} Componentes
                                     </span>
                                 </div>
                             </div>
 
                             <div className="flex items-end gap-3 w-full md:w-auto">
                                 <div className="flex flex-col gap-1.5 flex-1 md:flex-none">
-                                    <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest ml-1 flex items-center gap-1">
+                                    <label className="text-[10px] font-black text-indigo-600 tracking-widest ml-1 flex items-center gap-1">
                                         N° Estáticas <span className="text-rose-500 text-sm">*</span>
                                     </label>
                                     <input
@@ -158,8 +159,9 @@ const VehicleInspection = ({ aeronaveType, inspeccion, setInspeccion }: Props) =
                                     />
                                 </div>
                                 <button
+                                    type='button'
                                     onClick={handleMarkAllClean}
-                                    className="flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-black uppercase transition-all active:scale-95 shadow-lg shadow-emerald-100 h-[44px]"
+                                    className="flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-black transition-all active:scale-95 shadow-lg shadow-emerald-100 h-[44px]"
                                 >
                                     <ShieldCheck size={16} /> Sección OK
                                 </button>
@@ -183,20 +185,22 @@ const VehicleInspection = ({ aeronaveType, inspeccion, setInspeccion }: Props) =
                                                 <div className={`w-3 h-3 rounded-full shadow-sm ${hasDamages ? 'bg-amber-500 animate-pulse' :
                                                         isClean ? 'bg-emerald-500' : 'bg-slate-200'
                                                     }`} />
-                                                <span className="font-black text-slate-700 text-sm uppercase tracking-tight">
+                                                <span className="font-black text-slate-700 text-sm tracking-tight">
                                                     {item}
                                                 </span>
                                             </div>
 
                                             <div className="flex bg-slate-100 p-1 rounded-xl w-fit shadow-inner">
                                                 <button
+                                                    type='button'
                                                     onClick={() => handleToggle(item, 'izq')}
-                                                    className={`px-5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${partData.izq ? 'bg-white shadow-md text-indigo-600' : 'text-slate-400'
+                                                    className={`px-5 py-1.5 rounded-lg text-[10px] font-black transition-all ${partData.izq ? 'bg-white shadow-md text-indigo-600' : 'text-slate-400'
                                                         }`}
                                                 > IZQ </button>
                                                 <button
+                                                    type='button'
                                                     onClick={() => handleToggle(item, 'der')}
-                                                    className={`px-5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${partData.der ? 'bg-white shadow-md text-indigo-600' : 'text-slate-400'
+                                                    className={`px-5 py-1.5 rounded-lg text-[10px] font-black transition-all ${partData.der ? 'bg-white shadow-md text-indigo-600' : 'text-slate-400'
                                                         }`}
                                                 > DER </button>
                                             </div>
@@ -205,9 +209,10 @@ const VehicleInspection = ({ aeronaveType, inspeccion, setInspeccion }: Props) =
                                         <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
                                             {DAMAGE_TYPES.map(d => (
                                                 <button
+                                                    type='button'
                                                     key={d.key}
                                                     onClick={() => handleToggle(item, d.key)}
-                                                    className={`py-3 rounded-xl text-[9px] font-black uppercase border-2 transition-all ${partData.damages.includes(d.key)
+                                                    className={`py-3 rounded-xl text-[9px] font-black border-2 transition-all ${partData.damages.includes(d.key)
                                                             ? (d.key === 'sin_danio' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-amber-500 border-amber-500 text-white')
                                                             : 'bg-white border-slate-50 text-slate-400 hover:border-slate-200 hover:text-slate-600'
                                                         }`}

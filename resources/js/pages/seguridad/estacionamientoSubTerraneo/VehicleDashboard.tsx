@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Activity, Calendar, ChevronRight, FileText, Bell, Filter, Plus, X } from 'lucide-react';
+import { Activity, FileText, Bell, Filter, Plus, X, ChevronRight } from 'lucide-react';
 import { listarEstaSubTerraneo } from '@/stores/apiEstacionamientoSubterraneo';
 import VehicleDetail from './VehicleDetail';
 import RoundRegisterForm from './RoundRegisterForm';
@@ -10,13 +10,16 @@ interface MesRegistro {
 }
 
 const VehicleDashboard = () => {
+    // --- ESTADOS DE NAVEGACIÓN ---
+    const [showForm, setShowForm] = useState(false);
+
+    // --- ESTADOS DE DATOS ---
     const [meses, setMeses] = useState<MesRegistro[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterMonth, setFilterMonth] = useState('');
     const [filterYear, setFilterYear] = useState('');
     const [selectedVehicle, setSelectedVehicle] = useState('');
     const [isDetailOpen, setIsDetailOpen] = useState(false);
-    const [isModalOpen, setIsModalOpen] = useState(false);
 
     const cargarMeses = async () => {
         try {
@@ -41,6 +44,7 @@ const VehicleDashboard = () => {
         const matchYear = filterYear === '' || year === filterYear;
         return matchMonth && matchYear;
     });
+
     const añosUnicos = Array.from(new Set(meses.map(m => m.valor.split('-')[0]))).sort().reverse();
 
     const handleOpenDetail = (mes: any) => {
@@ -53,8 +57,21 @@ const VehicleDashboard = () => {
         setFilterYear('');
     };
 
+    // --- RENDERIZADO CONDICIONAL ---
+    // Si showForm es true, mostramos el formulario en lugar del dashboard
+    if (showForm) {
+        return (
+            <RoundRegisterForm
+                onClose={() => {
+                    setShowForm(false);
+                    cargarMeses();
+                }}
+            />
+        );
+    }
+
     return (
-        <div className="min-h-screen bg-[#f1f5f9] text-slate-600 p-6 md:p-12 font-sans">
+        <div className="min-h-screen bg-[#f1f5f9] text-slate-600 p-6 md:p-12 font-sans animate-in fade-in duration-500">
             <div className="max-w-5xl mx-auto">
                 <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-6">
                     <div>
@@ -71,7 +88,7 @@ const VehicleDashboard = () => {
                             <Bell size={20} />
                         </button>
                         <button
-                            onClick={() => setIsModalOpen(true)}
+                            onClick={() => setShowForm(true)}
                             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-2xl font-bold shadow-lg shadow-blue-200 transition-all active:scale-95"
                         >
                             <Plus size={20} />
@@ -79,6 +96,7 @@ const VehicleDashboard = () => {
                         </button>
                     </div>
                 </header>
+
                 <div className="flex flex-col md:flex-row gap-4 mb-10">
                     <div className="flex-1 grid grid-cols-2 gap-4">
                         <select
@@ -123,6 +141,7 @@ const VehicleDashboard = () => {
                         </button>
                     )}
                 </div>
+
                 <div className="space-y-4">
                     {loading ? (
                         <div className="py-20 text-center">
@@ -170,14 +189,6 @@ const VehicleDashboard = () => {
                     selectedVehicle={selectedVehicle}
                 />
             </div>
-
-            <RoundRegisterForm
-                isOpen={isModalOpen}
-                onClose={() => {
-                    setIsModalOpen(false);
-                    cargarMeses();
-                }}
-            />
         </div>
     );
 };

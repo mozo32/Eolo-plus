@@ -17,6 +17,7 @@ class EstacionamientoSubterraneo extends Model
         'color',
         'placas',
         'matricula',
+        'llaves',
         'responsable',
         'fecha_ingreso',
         'fecha_salida',

@@ -1,223 +1,272 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, CheckCircle2, Car, Hash, User, Key } from 'lucide-react';
+import { Plus, Trash2, Car, Hash, User, ArrowLeft, ListChecks, Send, Calendar } from 'lucide-react';
 import { guardarEstaSubTerraneo } from '@/stores/apiEstacionamientoSubterraneo';
 import Swal from 'sweetalert2';
+import InputMatricula from '@/pages/InputMatricula';
 
 interface VehicleEntryFormProps {
-    isOpen?: boolean;
     onClose?: () => void;
 }
 
-const RoundRegisterForm: React.FC<VehicleEntryFormProps> = ({ isOpen, onClose }) => {
-    if (!isOpen) return null;
+interface Vehiculo {
+    id: number;
+    placas: string;
+    vehiculo: string;
+    color: string;
+    responsable: string;
+    matricula: string;
+    llaves: string;
+}
 
+const RoundRegisterForm: React.FC<VehicleEntryFormProps> = ({ onClose }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [oficial] = useState('Oficial de Turno');
 
-    const [vehiculos, setVehiculos] = useState([
-        {
-            id: Date.now(),
-            placas: '',
-            vehiculo: '',
-            color: '',
-            responsable: '',
-            matricula: '',
-            llaves: 'NO'
+    const [fechaIngreso, setFechaIngreso] = useState(() => {
+        const d = new Date();
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    });
+
+    const [currentVehicle, setCurrentVehicle] = useState<Vehiculo>({
+        id: Date.now(),
+        placas: '',
+        vehiculo: '',
+        color: '',
+        responsable: '',
+        matricula: '',
+        llaves: 'NO'
+    });
+
+    const [listaVehiculos, setListaVehiculos] = useState<Vehiculo[]>([]);
+
+    const handleInputChange = (field: keyof Vehiculo, value: string) => {
+        setCurrentVehicle({ ...currentVehicle, [field]: value.toUpperCase() });
+    };
+
+    const addToList = () => {
+        const { placas, vehiculo, color, responsable } = currentVehicle;
+        if (!placas || !vehiculo || !color || !responsable) {
+            Swal.fire({ icon: "error", title: "Atención", text: "Campos obligatorios incompletos.", confirmButtonColor: '#1e3a8a' });
+            return;
         }
-    ]);
 
-    const addRow = () => {
-        setVehiculos([...vehiculos, {
-            id: Date.now(),
-            placas: '',
-            vehiculo: '',
-            color: '',
-            responsable: '',
-            matricula: '',
-            llaves: 'NO'
-        }]);
-    };
-
-    const removeRow = (id: number) => {
-        if (vehiculos.length > 1) {
-            setVehiculos(vehiculos.filter(v => v.id !== id));
+        const existePlacas = listaVehiculos.some(v => v.placas.trim().toUpperCase() === placas.trim().toUpperCase());
+        if (existePlacas) {
+            Swal.fire({ icon: "warning", title: "Placa Duplicada", text: `La placa ${placas} ya está en la lista.`, confirmButtonColor: '#1e3a8a' });
+            return;
         }
+
+        setListaVehiculos([currentVehicle, ...listaVehiculos]);
+        setCurrentVehicle({ id: Date.now(), placas: '', vehiculo: '', color: '', responsable: '', matricula: '', llaves: 'NO' });
     };
 
-    const handleChange = (id: number, field: string, value: string) => {
-        setVehiculos(vehiculos.map(v => v.id === id ? { ...v, [field]: value.toUpperCase() } : v));
+    const removeFromList = (id: number) => {
+        setListaVehiculos(listaVehiculos.filter(v => v.id !== id));
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = async () => {
+        if (listaVehiculos.length === 0) {
+            Swal.fire("Lista vacía", "Agregue al menos un vehículo", "info");
+            return;
+        }
+
         setIsSubmitting(true);
-
         try {
             await guardarEstaSubTerraneo({
                 oficial: oficial,
-                vehiculos: vehiculos
+                fecha_ingreso: fechaIngreso,
+                vehiculos: listaVehiculos
             });
 
-            Swal.fire({
-                icon: "success",
-                title: "Ronda Guardada",
-                text: `Se registraron ${vehiculos.length} vehículos`,
-                timer: 2000,
-                showConfirmButton: false
-            });
-
+            Swal.fire({ icon: "success", title: "Ronda Guardada", text: `Registros guardados con éxito`, timer: 2000, showConfirmButton: false });
             if (onClose) onClose();
         } catch (error: any) {
-            Swal.fire({
-                icon: "error",
-                title: "Error",
-                text: "No se pudo guardar la ronda",
-            });
+            Swal.fire("Error", "No se pudo guardar la información", "error");
         } finally {
             setIsSubmitting(false);
         }
     };
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
-            <div className="bg-white w-full max-w-7xl max-h-[95vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col">
+        <div className="min-h-screen bg-[#f8fafc] p-4 md:p-8 animate-in fade-in duration-500">
+            <div className="max-w-6xl mx-auto">
+                <button onClick={onClose} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-blue-600 font-bold transition-colors">
+                    <ArrowLeft size={20} /> Volver al panel principal
+                </button>
 
-                <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
-                    <div>
-                        <h2 className="text-3xl font-black tracking-tighter">REGISTRO DE RONDA</h2>
-                        <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">Carga masiva de avistamientos</p>
-                    </div>
-                    <button onClick={onClose} className="hover:bg-white/10 p-3 rounded-2xl transition-colors">
-                        <X size={28} />
-                    </button>
-                </div>
-                <div className="flex-1 overflow-y-auto p-8">
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="hidden lg:grid grid-cols-12 gap-4 px-4 mb-2">
-                            <div className="col-span-2 text-[10px] font-black text-slate-400 uppercase">Placas</div>
-                            <div className="col-span-2 text-[10px] font-black text-slate-400 uppercase">Vehículo</div>
-                            <div className="col-span-1 text-[10px] font-black text-slate-400 uppercase">Color</div>
-                            <div className="col-span-2 text-[10px] font-black text-slate-400 uppercase">Responsable</div>
-                            <div className="col-span-2 text-[10px] font-black text-slate-400 uppercase">Matrícula</div>
-                            <div className="col-span-2 text-[10px] font-black text-slate-400 uppercase">Llaves</div>
-                            <div className="col-span-1"></div>
-                        </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-1">
+                        <div className="bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden sticky top-8">
+                            <header className="bg-blue-900 text-white p-6 flex justify-between items-center">
+                                <p className="text-sm opacity-80 font-bold">Datos de la unidad</p>
+                                <Car size={28} />
+                            </header>
 
-                        {vehiculos.map((v) => (
-                            <div key={v.id} className="group grid grid-cols-1 lg:grid-cols-12 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 hover:border-blue-200 transition-all">
+                            <div className="p-6 space-y-4">
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 ml-1">Placas *</label>
+                                    <div className="relative">
+                                        <Hash className="absolute left-3 top-3 text-slate-400" size={18} />
+                                        <input
+                                            value={currentVehicle.placas}
+                                            onChange={(e) => handleInputChange('placas', e.target.value)}
+                                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-mono font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                            placeholder="PLACA"
+                                        />
+                                    </div>
+                                </div>
 
-                                {/* Placas */}
-                                <div className="col-span-2 relative">
-                                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 ml-1">Vehículo / Modelo *</label>
                                     <input
-                                        required
-                                        placeholder="PLACA"
-                                        className="w-full pl-10 pr-3 py-3 bg-white border border-slate-200 rounded-xl font-mono font-bold focus:ring-2 focus:ring-blue-500 outline-none"
-                                        value={v.placas}
-                                        onChange={(e) => handleChange(v.id, 'placas', e.target.value)}
+                                        value={currentVehicle.vehiculo}
+                                        onChange={(e) => handleInputChange('vehiculo', e.target.value)}
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                        placeholder="Ej. Nissan Sentra"
                                     />
                                 </div>
 
-                                {/* Vehiculo */}
-                                <div className="col-span-2 relative">
-                                    <Car className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                    <input
-                                        placeholder="Marca/Modelo"
-                                        className="w-full pl-10 pr-3 py-3 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500 outline-none"
-                                        value={v.vehiculo}
-                                        onChange={(e) => handleChange(v.id, 'vehiculo', e.target.value)}
-                                    />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-[10px] font-black text-slate-400 ml-1">Color *</label>
+                                        <input
+                                            value={currentVehicle.color}
+                                            onChange={(e) => handleInputChange('color', e.target.value)}
+                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-slate-400 ml-1">Llaves</label>
+                                        <select
+                                            value={currentVehicle.llaves}
+                                            onChange={(e) => handleInputChange('llaves', e.target.value)}
+                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                        >
+                                            <option value="NO">NO</option>
+                                            <option value="SI">SI</option>
+                                        </select>
+                                    </div>
                                 </div>
 
-                                {/* Color */}
-                                <div className="col-span-1">
-                                    <input
-                                        placeholder="Color"
-                                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500 outline-none"
-                                        value={v.color}
-                                        onChange={(e) => handleChange(v.id, 'color', e.target.value)}
-                                    />
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 ml-1">Responsable *</label>
+                                    <div className="relative">
+                                        <User className="absolute left-3 top-3 text-slate-400" size={18} />
+                                        <input
+                                            value={currentVehicle.responsable}
+                                            onChange={(e) => handleInputChange('responsable', e.target.value)}
+                                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                            placeholder="Nombre"
+                                        />
+                                    </div>
                                 </div>
 
-                                {/* Responsable */}
-                                <div className="col-span-2 relative">
-                                    <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                    <input
-                                        placeholder="Conductor"
-                                        className="w-full pl-10 pr-3 py-3 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500 outline-none"
-                                        value={v.responsable}
-                                        onChange={(e) => handleChange(v.id, 'responsable', e.target.value)}
-                                    />
-                                </div>
+                                <InputMatricula
+                                    label="Matrícula"
+                                    value={currentVehicle.matricula}
+                                    onSelect={(m) => handleInputChange("matricula", m.toUpperCase())}
+                                />
 
-                                {/* Matricula */}
-                                <div className="col-span-2 relative">
-                                    <Car className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                    <input
-                                        placeholder="ID / Matrícula"
-                                        className="w-full pl-10 pr-3 py-3 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500 outline-none"
-                                        value={v.matricula}
-                                        onChange={(e) => handleChange(v.id, 'matricula', e.target.value)}
-                                    />
-                                </div>
-
-                                {/* Llaves (Selector) */}
-                                <div className="col-span-2 relative">
-                                    <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                    <select
-                                        className="w-full pl-10 pr-3 py-3 bg-white border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
-                                        value={v.llaves}
-                                        onChange={(e) => handleChange(v.id, 'llaves', e.target.value)}
-                                    >
-                                        <option value="NO">SIN LLAVES</option>
-                                        <option value="SI">CON LLAVES</option>
-                                    </select>
-                                </div>
-
-                                {/* Acciones */}
-                                <div className="col-span-1 flex gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => removeRow(v.id)}
-                                        className="w-full flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all p-3"
-                                    >
-                                        <Trash2 size={18} />
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={addToList}
+                                    className="w-full py-4 bg-slate-900 hover:bg-blue-600 text-white rounded-2xl font-black tracking-widest text-xs transition-all flex items-center justify-center gap-2"
+                                >
+                                    <Plus size={20} /> Agregar a la Lista
+                                </button>
                             </div>
-                        ))}
-
-                        <button
-                            type="button"
-                            onClick={addRow}
-                            className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 font-bold hover:bg-slate-50 hover:border-blue-300 hover:text-blue-500 transition-all flex items-center justify-center gap-2"
-                        >
-                            <Plus size={20} /> AGREGAR OTRO VEHÍCULO
-                        </button>
-                    </form>
-                </div>
-
-                {/* Footer Acciones */}
-                <div className="p-8 bg-slate-50 border-t border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div className="text-slate-500 font-medium">
-                        Total a registrar: <span className="text-blue-600 font-black text-xl">{vehiculos.length}</span> vehículos
+                        </div>
                     </div>
-                    <div className="flex gap-4 w-full md:w-auto">
-                        <button
-                            onClick={onClose}
-                            className="flex-1 md:flex-none px-8 py-4 font-bold text-slate-500 hover:bg-slate-200 rounded-2xl transition-all"
-                        >
-                            CANCELAR
-                        </button>
-                        <button
-                            onClick={handleSubmit}
-                            disabled={isSubmitting}
-                            className={`flex-[2] md:flex-none px-12 py-4 rounded-2xl font-black text-white shadow-xl flex items-center justify-center gap-3 transition-all ${
-                                isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-blue-200'
-                            }`}
-                        >
-                            {isSubmitting ? 'GUARDANDO...' : 'FINALIZAR RONDA'} <CheckCircle2 size={22} />
-                        </button>
+                    <div className="lg:col-span-2 space-y-6">
+                        <div className="bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden flex flex-col min-h-[600px]">
+                            <header className="bg-blue-900 text-white p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                <div>
+                                    <h1 className="text-2xl font-bold tracking-tight">Vehículos en Lista</h1>
+                                    <p className="text-sm opacity-80">{listaVehiculos.length} registros listos</p>
+                                </div>
+                                <div className="bg-blue-800/50 p-2 px-4 rounded-2xl border border-blue-700 flex items-center gap-3">
+                                    <Calendar size={18} className="text-blue-200" />
+                                    <div className="flex flex-col">
+                                        <span className="text-[9px] font-black text-blue-200">Fecha de Ronda</span>
+                                        <input
+                                            type="date"
+                                            value={fechaIngreso}
+                                            onChange={(e) => setFechaIngreso(e.target.value)}
+                                            className="bg-transparent border-none text-white font-bold outline-none text-sm cursor-pointer"
+                                        />
+                                    </div>
+                                </div>
+                            </header>
+
+                            <div className="flex-1 overflow-x-auto p-4">
+                                {listaVehiculos.length > 0 ? (
+                                    <table className="w-full text-left border-separate border-spacing-y-3">
+                                        <thead>
+                                            <tr className="text-[10px] font-black text-slate-400 tracking-widest">
+                                                <th className="px-4 pb-2">Placa</th>
+                                                <th className="px-4 pb-2">Detalles</th>
+                                                <th className="px-4 pb-2">Matrícula</th>
+                                                <th className="px-4 pb-2 text-center">Llaves</th>
+                                                <th className="px-4 pb-2 text-right">Acción</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {listaVehiculos.map((v) => (
+                                                <tr key={v.id} className="bg-slate-50 hover:bg-blue-50 transition-colors group">
+                                                    <td className="px-4 py-4 rounded-l-2xl">
+                                                        <span className="font-mono font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-lg border border-blue-100">
+                                                            {v.placas}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <div className="font-bold text-slate-700">{v.vehiculo}</div>
+                                                        <div className="text-[10px] text-slate-400 font-bold">{v.color} - {v.responsable}</div>
+                                                    </td>
+                                                    <td className="px-4 py-4 font-medium text-slate-600">
+                                                        {v.matricula || '---'}
+                                                    </td>
+                                                    <td className="px-4 py-4 text-center">
+                                                        <span className={`text-[10px] font-black px-3 py-1 rounded-full ${v.llaves === 'SI' ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-500'}`}>
+                                                            {v.llaves}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-4 rounded-r-2xl text-right">
+                                                        <button
+                                                            onClick={() => removeFromList(v.id)}
+                                                            className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                                                        >
+                                                            <Trash2 size={18} />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-300 py-32">
+                                        <Car size={64} strokeWidth={1} className="mb-4 opacity-20" />
+                                        <p className="font-bold tracking-widest text-sm">Lista vacía</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="p-8 bg-slate-50 border-t border-slate-100">
+                                <button
+                                    onClick={handleSubmit}
+                                    disabled={isSubmitting || listaVehiculos.length === 0}
+                                    className={`w-full py-5 rounded-[1.5rem] font-black text-white shadow-xl flex items-center justify-center gap-3 transition-all tracking-[0.2em] text-sm ${
+                                        isSubmitting || listaVehiculos.length === 0
+                                        ? 'bg-slate-300 cursor-not-allowed'
+                                        : 'bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-blue-200'
+                                    }`}
+                                >
+                                    {isSubmitting ? 'Guardando...' : 'Guardar Todos los Registros'}
+                                    <Send size={20} />
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -11,7 +11,7 @@ interface Props {
 }
 
 export default function InputMatricula({
-    label = "Matrícula",
+    label = "",
     placeholder = "Escribe la matrícula…",
     disabled = false,
     required = false,

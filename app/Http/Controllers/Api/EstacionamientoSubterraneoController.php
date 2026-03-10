@@ -51,19 +51,20 @@ class EstacionamientoSubterraneoController extends Controller
         $oficial = $request->oficial;
         $userId = Auth::id();
         $registrados = 0;
+        $fecha = $request->fecha_ingreso;
 
         foreach ($request->vehiculos as $item) {
             $ultimo = EstacionamientoSubterraneo::where('placas', $item['placas'])
                 ->latest()
                 ->first();
-
             EstacionamientoSubterraneo::create([
                 'placas'      => strtoupper($item['placas']),
                 'vehiculo'    => $item['vehiculo'] ?? ($ultimo->vehiculo ?? 'N/A'),
                 'color'       => $item['color'] ?? ($ultimo->color ?? 'N/A'),
                 'responsable' => $item['responsable'] ?? ($ultimo->responsable ?? 'N/A'),
                 'matricula'   => $item['matricula'] ?? ($ultimo->matricula ?? 'N/A'),
-                'fecha_ingreso' => now(),
+                'llaves'      => $item['llaves'] ?? ($ultimo->llaves ?? 'N/A'),
+                'fecha_ingreso' => $fecha,
                 'oficial'     => $oficial,
                 'user_id'     => $userId,
             ]);

@@ -84,7 +84,7 @@ const SignaturePad = ({
         const ctx = canvas?.getContext('2d');
         if (canvas && ctx) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            setHasInteraction(true); // Al borrar, nos aseguramos de no mostrar la img vieja
+            setHasInteraction(true);
             onClear();
         }
     };
@@ -92,16 +92,13 @@ const SignaturePad = ({
     return (
         <div className="flex flex-col gap-4 bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm transition-all hover:border-slate-200">
             <div className="flex justify-between items-center">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{title}</span>
+                <span className="text-[10px] font-black text-slate-400 tracking-widest">{title}</span>
                 <button onClick={handleClear} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors">
                     <Trash2 size={16} />
                 </button>
             </div>
 
             <div className="bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 h-32 relative touch-none overflow-hidden">
-                {/* PARCHE: Si hay una firma en el servidor y el usuario no ha tocado el canvas,
-                   mostramos una etiqueta <img> normal. Esta NO da error de CORS.
-                */}
                 {signatureValue && !hasInteraction && (
                     <img
                         src={signatureValue}
@@ -154,7 +151,7 @@ const ExteriorObservaciones = ({ data, onChange }: Props) => {
                     <div className="p-2 bg-amber-500 rounded-xl text-white">
                         <CheckCircle2 size={24} />
                     </div>
-                    <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Observaciones Finales</h3>
+                    <h3 className="text-xl font-black text-slate-800 tracking-tight">Observaciones Finales</h3>
                 </div>
 
                 <textarea
@@ -167,7 +164,7 @@ const ExteriorObservaciones = ({ data, onChange }: Props) => {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <SignaturePad
-                    title="Responsable de Inspección"
+                    title="Responsable/Piloto"
                     nameValue={data.nombreResponsable}
                     signatureValue={data.firmaResponsable}
                     onNameChange={(val) => onChange({ nombreResponsable: val })}

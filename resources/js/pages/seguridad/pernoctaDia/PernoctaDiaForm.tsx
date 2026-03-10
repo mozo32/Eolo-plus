@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { validatePernoctaDia } from "./validation";
 import { usePage } from "@inertiajs/react";
-
+import { Plane, User, MapPin, ClipboardList, Calendar, PlusCircle, CheckCircle2 } from "lucide-react";
 export type PernoctaDiaItem = {
     fecha: string;
     hora: string;
@@ -10,35 +10,11 @@ export type PernoctaDiaItem = {
     observaciones: string;
     nombre: string;
 };
-
-interface Props {
-    onAdd: (item: PernoctaDiaItem) => void;
-}
-type Role = {
-    slug: string;
-    nombre: string;
-};
-export type AuthUser = {
-    id: number;
-    name: string;
-    email: string;
-    isAdmin: boolean;
-    roles: Role[];
-    departamentos: {
-        id: number;
-        nombre: string;
-        subdepartamentos: {
-            id: number;
-            nombre: string;
-            route: string;
-        }[];
-    }[];
-};
-const PernoctaDiaForm: React.FC<Props> = ({ onAdd }) => {
+const PernoctaDiaForm: React.FC<{ onAdd: (item: any) => void }> = ({ onAdd }) => {
     const today = new Date().toLocaleDateString("en-CA");
-    const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
+    const { auth } = usePage<{ auth: { user: any } }>().props;
 
-    const [form, setForm] = useState<PernoctaDiaItem>({
+    const [form, setForm] = useState({
         fecha: today,
         hora: "",
         matricula: "",
@@ -50,280 +26,98 @@ const PernoctaDiaForm: React.FC<Props> = ({ onAdd }) => {
     const [sugerencias, setSugerencias] = useState<string[]>([]);
     const [loadingMatricula, setLoadingMatricula] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
-    const aplicarFormatoMatricula = (input: string, prev: string): string => {
-        let val = input.toUpperCase().replace(/\s/g, "");
-        if (val.length < prev.length) return val; // Permitir borrar
 
-        const prefijos2 = ["XA", "XB", "XC", "EC", "CC", "LV", "LQ", "HK", "HJ", "TG", "TI", "HC", "YV", "ZP", "OB"];
-
-        if (val.length === 2 && prefijos2.includes(val)) {
-            return `${val}-`;
-        }
-        if (val.length > 2 && !val.includes("-")) {
-            const possiblePrefix = val.substring(0, 2);
-            if (prefijos2.includes(possiblePrefix)) {
-                return `${possiblePrefix}-${val.substring(2)}`;
-            }
-        }
-        return val;
-    };
-
-    // --- LÓGICA DE VALIDACIÓN VISUAL ---
     const statusMatricula = useMemo(() => {
-        const val = form.matricula;
-        if (!val) return { ok: true, msg: "" };
-        const regexGeneral = /^[A-Z0-9]{1,3}-[A-Z0-9]{1,5}$/;
-        const regexUSA = /^N[1-9][0-9A-Z]{0,4}$/;
-
-        if (regexGeneral.test(val) || regexUSA.test(val)) return { ok: true, msg: "Formato correcto" };
-        if (val.startsWith("N")) return { ok: true, msg: "Formato USA detectado" };
-        if (val.length <= 3) return { ok: true, msg: "Ingresa el prefijo..." };
-        return { ok: false, msg: "Formato inválido (Ej: XA-ABC o N12345)" };
+        if (!form.matricula) return { ok: true, msg: "" };
+        const regex = /^[A-Z0-9]{1,3}-[A-Z0-9]{1,5}$|^N[1-9][0-9A-Z]{0,4}$/;
+        return regex.test(form.matricula) ? { ok: true, msg: "Formato Correcto" } : { ok: false, msg: "Formato Inválido" };
     }, [form.matricula]);
 
-    const handleChange = (
-        e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-    ) => {
+    const handleChange = (e: any) => {
         const { name, value } = e.target;
-
-        // Aplicar formato especial si es matrícula
-        const finalValue = name === "matricula"
-            ? aplicarFormatoMatricula(value, form.matricula)
-            : value;
-
-        setForm({ ...form, [name]: finalValue });
-
-        if (errors[name]) {
-            setErrors({ ...errors, [name]: "" });
-        }
-
+        let finalValue = value;
         if (name === "matricula") {
-            buscarMatriculas(finalValue);
+            finalValue = value.toUpperCase().replace(/\s/g, "");
+            if (finalValue.length === 2 && !finalValue.includes("-")) finalValue += "-";
         }
+        setForm({ ...form, [name]: finalValue });
+        if (name === "matricula" && finalValue.length > 1) buscarMatriculas(finalValue);
     };
-    const buscarMatriculas = async (value: string) => {
-        if (!value) {
-            setSugerencias([]);
-            return;
-        }
 
+    const buscarMatriculas = async (q: string) => {
         setLoadingMatricula(true);
-
         try {
-            const res = await fetch(`/api/PernoctaDia/matriculas/buscar?q=${value}`);
-            const data = await res.json();
-            setSugerencias(data);
-        } catch {
-            setSugerencias([]);
-        } finally {
-            setLoadingMatricula(false);
-        }
+            const res = await fetch(`/api/PernoctaDia/matriculas/buscar?q=${q}`);
+            setSugerencias(await res.json());
+        } catch { setSugerencias([]); } finally { setLoadingMatricula(false); }
     };
 
-    const handleSubmit = () => {
-        const validationErrors = validatePernoctaDia(form);
-        if (Object.keys(validationErrors).length) {
-            setErrors(validationErrors);
-            return;
-        }
-
-        onAdd({
-            ...form,
-            hora: new Date().toLocaleTimeString("es-MX", {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-                hour12: false,
-            }),
-        });
-
-        setForm({
-            fecha: form.fecha,
-            hora: "",
-            matricula: "",
-            ubicacion: "",
-            observaciones: "",
-            nombre: auth?.user?.name ?? "",
-        });
-        setErrors({});
-    };
-
-    const inputClass = (hasError?: boolean) =>
-        [
-            "w-full rounded-lg border px-3 py-2 text-sm transition outline-none",
-            "focus:ring-2 focus:ring-primary/40",
-            hasError
-                ? "border-red-500 focus:ring-red-300"
-                : "border-gray-300 dark:border-gray-700",
-            "bg-white dark:bg-gray-900",
-        ].join(" ");
-
-    const radioCard = (active: boolean) =>
-        [
-            "flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-3 text-sm transition",
-            active
-                ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                : "border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800",
-        ].join(" ");
+    const inputStyle = (err: any) => `w-full px-4 py-3 rounded-xl border-2 transition-all text-sm font-bold ${err ? 'border-rose-400 bg-rose-50' : 'border-slate-100 focus:border-blue-600 focus:ring-4 focus:ring-blue-50'} dark:bg-slate-900`;
 
     return (
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-slate-900">
-            {/* Header */}
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden dark:bg-slate-900 dark:border-slate-800">
+            <header className="bg-blue-900 text-white p-8 flex justify-between items-center shadow-lg">
                 <div>
-                    <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                        Registrar pernocta de día
-                    </h3>
-                    <p className="text-xs text-gray-500">
-                        Captura la información requerida
-                    </p>
+                    <h1 className="text-2xl font-black uppercase tracking-widest">Pernocta de Día</h1>
+                    <p className="text-sm opacity-80 uppercase font-medium">Control de Pernoctas Diarias de Aeronaves</p>
+                </div>
+                <Plane size={40} className="opacity-40" />
+            </header>
+            <div className="p-8 space-y-8">
+                <div className="flex flex-wrap gap-6 justify-between items-center pb-6 border-b border-slate-50">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600"><User size={18} /></div>
+                        <div>
+                            <p className="text-[9px] font-black text-slate-400 tracking-widest">Responsable</p>
+                            <p className="text-sm font-bold text-slate-700 italic">{form.nombre}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="text-right">
+                            <p className="text-[9px] font-black text-slate-400 tracking-widest">Fecha de Captura</p>
+                            <input type="date" name="fecha" value={form.fecha} onChange={handleChange} className="text-sm font-black text-blue-600 bg-transparent outline-none" />
+                        </div>
+                        <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600"><Calendar size={18} /></div>
+                    </div>
                 </div>
 
-                <div className="flex flex-col items-end gap-1">
-                    <label className="text-[10px] font-bold uppercase text-gray-400">Fecha de Registro</label>
-                    <input
-                        type="date"
-                        name="fecha"
-                        value={form.fecha}
-                        onChange={handleChange}
-                        className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 outline-none ring-primary/30 focus:ring-2 dark:bg-gray-800 dark:text-gray-200"
-                    />
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <div className="relative space-y-1">
-                    <label className={`text-xs font-medium transition-colors ${
-                        !statusMatricula.ok && form.matricula.length > 3 ? 'text-red-600' : 'text-gray-600 dark:text-gray-300'
-                    }`}>
-                        Matrícula *
-                    </label>
-
-                    <input
-                        name="matricula"
-                        value={form.matricula}
-                        onChange={handleChange}
-                        placeholder="Ej. XA-ABC"
-                        autoComplete="off"
-                        className={`${inputClass(!!errors.matricula || (!statusMatricula.ok && form.matricula.length > 3))} uppercase`}
-                    />
-
-                    {/* Mensaje de estado de formato */}
-                    {form.matricula && (
-                        <p className={`text-[10px] font-medium ${statusMatricula.ok ? 'text-blue-600' : 'text-red-500'}`}>
-                            {statusMatricula.msg}
-                        </p>
-                    )}
-
-                    {loadingMatricula && (
-                        <p className="text-xs text-gray-400">Buscando…</p>
-                    )}
-
-                    {/* Sugerencias */}
-                    {sugerencias.length > 0 && (
-                        <ul className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-lg border bg-white shadow-md dark:border-gray-700 dark:bg-gray-900">
-                            {sugerencias.map((m) => (
-                                <li
-                                    key={m}
-                                    onClick={() => {
-                                        setForm({ ...form, matricula: m.toUpperCase() });
-                                        setSugerencias([]);
-                                    }}
-                                    className="cursor-pointer px-3 py-2 text-sm hover:bg-primary/10 dark:hover:bg-primary/20"
-                                >
-                                    <span className="font-bold">{m.toUpperCase()}</span>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-
-                    {errors.matricula && (
-                        <p className="text-xs text-red-600">{errors.matricula}</p>
-                    )}
-                </div>
-
-                {/* Nombre */}
-                <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
-                        Nombre *
-                    </label>
-                    <input
-                        name="nombre"
-                        value={form.nombre}
-                        onChange={handleChange}
-                        placeholder="Responsable"
-                        disabled
-                        className="w-full rounded-lg border px-3 py-2 text-sm
-                                    bg-gray-100 text-gray-700 cursor-not-allowed
-                                    dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
-                    />
-                    {errors.nombre && (
-                        <p className="text-xs text-red-600">{errors.nombre}</p>
-                    )}
-                </div>
-
-                {/* Ubicación */}
-                <div className="space-y-2 md:col-span-2">
-                    <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
-                        Ubicación *
-                    </label>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <label className={radioCard(form.ubicacion === "H1")}>
-                            <input
-                                type="radio"
-                                name="ubicacion"
-                                value="H1"
-                                checked={form.ubicacion === "H1"}
-                                onChange={handleChange}
-                                className="h-4 w-4 text-primary"
-                            />
-                            <span>Hangar 1</span>
-                        </label>
-
-                        <label className={radioCard(form.ubicacion === "H2")}>
-                            <input
-                                type="radio"
-                                name="ubicacion"
-                                value="H2"
-                                checked={form.ubicacion === "H2"}
-                                onChange={handleChange}
-                                className="h-4 w-4 text-primary"
-                            />
-                            <span>Hangar 2</span>
-                        </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="relative space-y-2">
+                        <label className="text-[10px] font-black text-slate-500 tracking-[0.2em] ml-1">Matrícula</label>
+                        <input name="matricula" value={form.matricula} onChange={handleChange} placeholder="XA-ABC" className={inputStyle(errors.matricula)} />
+                        {form.matricula && <span className={`text-[9px] font-black ml-1 ${statusMatricula.ok ? 'text-emerald-500' : 'text-rose-500'}`}>{statusMatricula.msg}</span>}
+                        {sugerencias.length > 0 && (
+                            <ul className="absolute z-30 mt-2 w-full bg-white border border-slate-100 rounded-2xl shadow-2xl overflow-hidden">
+                                {sugerencias.map(s => (
+                                    <li key={s} onClick={() => { setForm({ ...form, matricula: s }); setSugerencias([]); }} className="px-4 py-3 text-sm font-bold hover:bg-blue-50 cursor-pointer border-b last:border-0">{s}</li>
+                                ))}
+                            </ul>
+                        )}
                     </div>
 
-                    {errors.ubicacion && (
-                        <p className="text-xs text-red-600">{errors.ubicacion}</p>
-                    )}
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-500 tracking-[0.2em] ml-1">Ubicación</label>
+                        <div className="grid grid-cols-2 gap-4">
+                            {["H1", "H2"].map(h => (
+                                <label key={h} className={`flex items-center justify-center p-3 rounded-xl border-2 cursor-pointer transition-all font-black text-xs ${form.ubicacion === h ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-50 bg-slate-50 text-slate-400 hover:border-slate-200'}`}>
+                                    <input type="radio" name="ubicacion" value={h} checked={form.ubicacion === h} onChange={handleChange} className="hidden" />
+                                    {h === "H1" ? "HANGAR 1" : "HANGAR 2"}
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="md:col-span-2 space-y-2">
+                        <label className="text-[10px] font-black text-slate-500 tracking-[0.2em] ml-1">Observaciones</label>
+                        <textarea name="observaciones" value={form.observaciones} onChange={handleChange} rows={2} className={`${inputStyle(false)} resize-none`} placeholder="Notas de pernocta..." />
+                    </div>
                 </div>
 
-                {/* Observaciones */}
-                <div className="space-y-1 md:col-span-2">
-                    <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
-                        Observaciones
-                    </label>
-                    <textarea
-                        name="observaciones"
-                        value={form.observaciones}
-                        onChange={handleChange}
-                        placeholder="Notas adicionales (opcional)"
-                        rows={3}
-                        className={inputClass()}
-                    />
+                <div className="pt-4 flex justify-end">
+                    <button type="button" onClick={() => { onAdd(form); setForm({ ...form, matricula: "", observaciones: "" }); }} className="flex items-center gap-2 bg-slate-900 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-black transition-all active:scale-95">
+                        <PlusCircle size={18} /> Agregar a Lista
+                    </button>
                 </div>
-            </div>
-
-            {/* Acciones */}
-            <div className="mt-8 flex justify-end">
-                <button
-                    type="button"
-                    onClick={handleSubmit}
-                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
-                >
-                    Agregar
-                </button>
             </div>
         </div>
     );

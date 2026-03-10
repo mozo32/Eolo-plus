@@ -145,7 +145,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
             </div>
             {soloLectura && (
                 <div className="mb-4 p-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold rounded-lg flex items-center gap-2">
-                    <span>🔒 REGISTRO VALIDADO POR {moduloNombre?.toUpperCase()} - SOLO LECTURA</span>
+                    <span>REGISTRO VALIDADO POR {moduloNombre?.toUpperCase()} - SOLO LECTURA</span>
                 </div>
             )}
             <div className="space-y-4">
