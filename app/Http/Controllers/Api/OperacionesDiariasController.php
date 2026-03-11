@@ -30,75 +30,76 @@ class OperacionesDiariasController extends Controller
             'nombre'       => ['nullable', 'string', 'max:100'],
             'impulso'      => ['nullable', 'string', 'max:100'],
         ]);
+        return DB::transaction(function () use ($validated, $request) {
+            $ver = OperacionDiaria::where('matricula', $validated['matricula'])
+                                    ->where('tipo', $validated['movimiento'])
+                                    ->first();
 
-        $ver = OperacionDiaria::where('matricula', $validated['matricula'])
-                                ->where('tipo', $validated['movimiento'])
-                                ->first();
+            // if ($ver) {
+            //     return response()->json([
+            //         'message' => 'ya hay un registro de esta matricula',
+            //         'data' => null,
+            //     ], 422);
+            // }
+            $tipoExistente = DB::connection('remota')
+                    ->table('tb_tipo')
+                    ->where('tipo', $validated['equipo'])
+                    ->first();
 
-        // if ($ver) {
-        //     return response()->json([
-        //         'message' => 'ya hay un registro de esta matricula',
-        //         'data' => null,
-        //     ], 422);
-        // }
-        $tipoExistente = DB::connection('remota')
-                ->table('tb_tipo')
-                ->where('tipo', $validated['equipo'])
-                ->first();
+            if (!$tipoExistente) {
+                $idTipo = DB::connection('remota')->table('tb_tipo')->insertGetId([
+                    'tipo' => $validated['equipo']
+                ]);
+            } else {
+                $idTipo = $tipoExistente->id_tipo;
+            }
+            $infoMatricula = DB::connection('remota')
+                    ->table('tb_matricula as m')
+                    ->where('m.matricula', $validated['matricula'])
+                    ->first();
 
-        if (!$tipoExistente) {
-            $idTipo = DB::connection('remota')->table('tb_tipo')->insertGetId([
-                'tipo' => $validated['equipo']
+            if (!$infoMatricula) {
+                DB::connection('remota')->table('tb_matricula')->insert([
+                    'matricula'      => $validated['matricula'],
+                    'id_estatus'     => 1,
+                    'id_tipo'        => $idTipo,
+                    'id_categoria'   => 0,
+                    'id_motor'       => 0,
+                    'id_aterrizaje'  => 0,
+                    'id_transito2h'  => 0,
+                    'id_transito12h' => 0,
+                    'id_pernocta'    => 0,
+                    'd_vuelos'       => 0,
+                ]);
+            }
+            $operacion = OperacionDiaria::create([
+                'user_id'      => Auth::id(),
+                'fecha'        => $validated['fecha'],
+                'tipo'         => strtolower($validated['movimiento']),
+                'matricula'    => $validated['matricula'],
+                'equipo'       => $validated['equipo'],
+                'hora'         => $validated['hora'],
+                'lugar'        => $request->procedencia ?? $request->destino,
+                'pax'          => $validated['pax'],
+                'departamento' => $validated['departamento'],
+                'equipaje'     => $validated['equipaje'],
+                'observaciones'=> $validated['observaciones'],
+                'validaciones' => [$validated['departamento']],
+                'impulso'      => $validated['impulso'],
+                'nombre'       => $validated['nombre'],
+                'tipo_cliente' => $validated['tipo_cliente'],
             ]);
-        } else {
-            $idTipo = $tipoExistente->id_tipo;
-        }
-        $infoMatricula = DB::connection('remota')
-                ->table('tb_matricula as m')
-                ->where('m.matricula', $validated['matricula'])
-                ->first();
-
-        if (!$infoMatricula) {
-            DB::connection('remota')->table('tb_matricula')->insert([
-                'matricula'      => $validated['matricula'],
-                'id_estatus'     => 1,
-                'id_tipo'        => $idTipo,
-                'id_categoria'   => 0,
-                'id_motor'       => 0,
-                'id_aterrizaje'  => 0,
-                'id_transito2h'  => 0,
-                'id_transito12h' => 0,
-                'id_pernocta'    => 0,
-                'd_vuelos'       => 0,
-            ]);
-        }
-        $operacion = OperacionDiaria::create([
-            'user_id'      => Auth::id(),
-            'fecha'        => $validated['fecha'],
-            'tipo'         => strtolower($validated['movimiento']),
-            'matricula'    => $validated['matricula'],
-            'equipo'       => $validated['equipo'],
-            'hora'         => $validated['hora'],
-            'lugar'        => $request->procedencia ?? $request->destino,
-            'pax'          => $validated['pax'],
-            'departamento' => $validated['departamento'],
-            'equipaje'     => $validated['equipaje'],
-            'observaciones'=> $validated['observaciones'],
-            'validaciones' => [$validated['departamento']],
-            'impulso'      => $validated['impulso'],
-            'nombre'       => $validated['nombre'],
-            'tipo_cliente' => $validated['tipo_cliente'],
-        ]);
-
-        return response()->json([
-            'message'   => 'Operación guardada correctamente',
-            'operacion' => $operacion,
-        ], 201);
+            return response()->json([
+                'message'   => 'Operación guardada correctamente',
+                'operacion' => $operacion,
+            ], 201);
+        });
     }
 
     public function index(Request $request)
     {
         $query = OperacionDiaria::with('user');
+
         if ($request->has('buscar') && $request->buscar != '') {
             $query->where('matricula', 'LIKE', '%' . $request->buscar . '%');
         }
@@ -106,11 +107,12 @@ class OperacionesDiariasController extends Controller
             $query->where('tipo', $request->tipo);
         }
         if ($request->has('fecha') && $request->fecha != '') {
-            $query->whereDate('created_at', $request->fecha);
+            $query->whereDate('fecha', $request->fecha);
         }
+
         $registros = $query->orderBy('fecha', 'desc')
-                   ->orderBy('hora', 'desc')
-                   ->paginate(100);
+                        ->orderBy('hora', 'desc')
+                        ->paginate(100);
 
         return response()->json($registros);
     }
@@ -177,8 +179,8 @@ class OperacionesDiariasController extends Controller
                 ->table('tb_matricula')
                 ->where('matricula', 'like', '%' . strtoupper($q) . '%')
                 ->limit(10)
-                ->pluck('matricula')
-                ->toArray();
+                ->select('matricula')
+                ->get();
 
             if (empty($matriculas)) {
                 return response()->json([]);
@@ -200,5 +202,40 @@ class OperacionesDiariasController extends Controller
 
             return response()->json([]);
         }
+    }
+    public function verificarExistente(Request $request)
+    {
+        $request->validate([
+            'matricula' => 'required|string',
+            'fecha' => 'required|date',
+            'tipo' => 'required|string',
+            'modulo' => 'required|string'
+        ]);
+
+        // Buscamos la operación
+        $operacion = OperacionDiaria::where('matricula', $request->matricula)
+            ->where('fecha', $request->fecha)
+            ->where('tipo', $request->tipo)
+            ->first();
+
+        if ($operacion) {
+            // Verificamos si EL MÓDULO ACTUAL ya está en el JSON
+            $yaValidadoPorMi = collect($operacion->validaciones ?? [])->contains($request->modulo);
+
+            // Si YA lo validé, devolvemos existe => false para que el front no muestre el Swal
+            // y permita seguir con un registro nuevo.
+            if ($yaValidadoPorMi) {
+                return response()->json(['existe' => false]);
+            }
+
+            // Si existe pero YO no lo he validado, entonces sí disparamos la alerta
+            return response()->json([
+                'existe' => true,
+                'operacion' => $operacion,
+                'message' => "Registro encontrado. Falta validación de {$request->modulo}."
+            ]);
+        }
+
+        return response()->json(['existe' => false]);
     }
 }

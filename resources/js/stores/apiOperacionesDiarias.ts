@@ -111,3 +111,11 @@ export async function obtenerInfoMatriculaApi(matricula: string) {
     if (!res.ok) throw new Error("Error al buscar información de matrícula");
     return data;
 }
+export async function verificarOperacionExistenteApi(matricula: string, fecha: string, tipo: string, modulo: string) {
+    const res = await fetch(`/api/OperacionesDiarias/verificar?matricula=${matricula}&fecha=${fecha}&tipo=${tipo}&modulo=${modulo}`, {
+        method: "GET",
+        headers: { 'Accept': 'application/json' },
+        credentials: "same-origin",
+    });
+    return await res.json();
+}

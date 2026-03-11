@@ -127,6 +127,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('OperacionesDiarias')->group(
     Route::post('/',[OperacionesDiariasController::class, 'store']);
     Route::get('/autocomplete', [OperacionesDiariasController::class, 'autocomplete']);
     Route::get('/buscar/{matricula}', [OperacionesDiariasController::class, 'buscarPorMatricula']);
+    Route::get('/verificar', [OperacionesDiariasController::class, 'verificarExistente']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('MovimientosCSAE')->group(function () {
     Route::post('/',[MovimientoCSAEController::class, 'store']);

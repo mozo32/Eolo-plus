@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Swal from "sweetalert2";
-import { guardarOperacionesDiariasApi } from "@/stores/apiOperacionesDiarias";
+import { guardarOperacionesDiariasApi, verificarOperacionExistenteApi } from "@/stores/apiOperacionesDiarias";
 import InputMatricula from "@/pages/InputMatricula";
 import { useMatriculaAutocompleteStore } from "./useMatriculaAutocompleteStore";
 
@@ -12,7 +12,8 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
 }) => {
     const { obtenerTipo } = useMatriculaAutocompleteStore();
     const [cargando, setCargando] = useState(false);
-    const [formData, setFormData] = useState({
+
+    const getInitialState = (fecha?: string) => ({
         id: datosEdicion?.id || null,
         matricula: datosEdicion?.matricula || '',
         equipo: datosEdicion?.equipo || '',
@@ -23,13 +24,15 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
         tipo_cliente: datosEdicion?.tipo_cliente || '',
         departamento: moduloNombre,
         movimiento: 'Llegada',
-        fecha: datosEdicion?.fecha
+        fecha: fecha || (datosEdicion?.fecha
             ? new Date(datosEdicion.fecha).toISOString().split('T')[0]
-            : new Date().toISOString().split('T')[0],
+            : new Date().toLocaleDateString('sv-SE')),
         observaciones: datosEdicion?.observaciones || '',
         nombre: datosEdicion?.nombre || '',
         impulso: datosEdicion?.impulso || ''
     });
+
+    const [formData, setFormData] = useState(getInitialState());
 
     const handleFieldChange = (name: string, value: any) => {
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -37,24 +40,66 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
 
     const handleMatriculaSelect = async (matricula: string) => {
         const upperMat = matricula.toUpperCase();
-
         handleFieldChange("matricula", upperMat);
 
         if (upperMat.length > 2) {
             try {
+                const check = await verificarOperacionExistenteApi(
+                    upperMat,
+                    formData.fecha,
+                    'Llegada',
+                    moduloNombre || ''
+                );
+
+                if (check.existe) {
+                    const op = check.operacion;
+                    setFormData({
+                        id: op.id,
+                        matricula: op.matricula,
+                        equipo: op.equipo,
+                        hora: op.hora.substring(0, 5),
+                        procedencia: op.lugar || '',
+                        pax: op.pax,
+                        equipaje: op.equipaje,
+                        tipo_cliente: op.tipo_cliente || '',
+                        departamento: moduloNombre,
+                        movimiento: 'Llegada',
+                        fecha: op?.fecha
+                            ? new Date(op.fecha).toISOString().split('T')[0]
+                            : new Date().toLocaleDateString('sv-SE'),
+                        observaciones: op.observaciones || '',
+                        nombre: op.nombre || '',
+                        impulso: op.impulso || ''
+                    });
+
+                    const Toast = Swal.mixin({
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        timer: 4000,
+                        timerProgressBar: true,
+                    });
+
+                    Toast.fire({
+                        icon: 'info',
+                        title: `Ya se registro la matrícula ${upperMat}, valide la informacion`
+                    });
+
+                    return;
+                }
                 const response = await obtenerTipo(upperMat) as any;
                 if (response && response.tipo) {
                     handleFieldChange("equipo", response.tipo);
                 }
+
             } catch (error) {
-                console.error("Error al obtener equipo:", error);
+                console.error("Error en la verificación:", error);
             }
         }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
         if (cargando) return;
 
         try {
@@ -71,12 +116,9 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                     cancelButtonText: 'Revisar datos',
                     reverseButtons: true
                 });
-                if (!result.isConfirmed) {
-                    return;
-                }
+                if (!result.isConfirmed) return;
             }
             setCargando(true);
-
             await guardarOperacionesDiariasApi(formData);
 
             Swal.fire({
@@ -88,22 +130,33 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
             });
 
             if (alCerrar) alCerrar();
-
         } catch (error) {
             let mensaje = 'Ocurrió un error inesperado';
-            if (error instanceof Error) {
-                mensaje = error.message;
-            }
-
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: mensaje,
-            });
+            if (error instanceof Error) mensaje = error.message;
+            Swal.fire({ icon: 'error', title: 'Error', text: mensaje });
         } finally {
             setCargando(false);
         }
     };
+
+    useEffect(() => {
+        if (!datosEdicion) {
+            setFormData(prev => ({
+                ...getInitialState(prev.fecha),
+                id: null,
+                matricula: '',
+                equipo: '',
+                hora: '',
+                procedencia: '',
+                pax: null,
+                equipaje: null,
+                tipo_cliente: '',
+                observaciones: '',
+                nombre: '',
+                impulso: ''
+            }));
+        }
+    }, [formData.fecha]);
 
     return (
         <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl border-t-8 border-blue-600 shadow-2xl w-full">
@@ -135,7 +188,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                         </div>
                     </div>
 
-                    <button onClick={alCerrar} className="group relative">
+                    <button type="button" onClick={alCerrar} className="group relative">
                         <div className="absolute -inset-1 bg-slate-100 rounded-full scale-0 group-hover:scale-100 transition-transform"></div>
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-300 group-hover:text-red-500 relative transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -143,11 +196,13 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                     </button>
                 </div>
             </div>
+
             {soloLectura && (
                 <div className="mb-4 p-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold rounded-lg flex items-center gap-2">
                     <span>REGISTRO VALIDADO POR {moduloNombre?.toUpperCase()} - SOLO LECTURA</span>
                 </div>
             )}
+
             <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                     <InputMatricula
@@ -169,6 +224,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                         />
                     </div>
                 </div>
+
                 <div className="grid grid-cols-2 gap-4">
                     <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Hora Arribo (24h)</label>
@@ -205,13 +261,14 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                         />
                     </div>
                 </div>
+
                 <div className="grid grid-cols-2 gap-4">
                     <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Pax</label>
                         <input
                             type="number"
                             disabled={soloLectura}
-                            value={formData.pax}
+                            value={formData.pax ?? ''}
                             required
                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                             onChange={(e) => handleFieldChange("pax", parseInt(e.target.value) || 0)}
@@ -223,7 +280,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                             <input
                                 type="text"
                                 disabled={soloLectura}
-                                value={formData.equipaje}
+                                value={formData.equipaje || ''}
                                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                                 onChange={(e) => handleFieldChange("equipaje", e.target.value.toUpperCase())}
                                 required
@@ -231,6 +288,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                         </div>
                     )}
                 </div>
+
                 {moduloNombre === 'Trafico' && (
                     <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tipo Cliente</label>
@@ -248,6 +306,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                         </select>
                     </div>
                 )}
+
                 {moduloNombre === 'Seguridad' && (
                     <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 space-y-4">
                         <div>
@@ -284,7 +343,6 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                             <label className="block text-[10px] font-bold text-blue-600 uppercase mb-2 tracking-wider">
                                 Responsable del Movimiento
                             </label>
-
                             <div className="group relative flex items-center bg-slate-50 border border-blue-200 rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all shadow-sm">
                                 <div className="relative border-r border-blue-100 bg-white">
                                     <select
@@ -319,11 +377,6 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                                         handleFieldChange("nombre", `${prefijo}${e.target.value.toUpperCase()}`);
                                     }}
                                 />
-                            </div>
-                            <div className="flex justify-end mt-2">
-                                <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-600 text-[9px] font-bold border border-blue-200 uppercase">
-                                    {formData.nombre || 'Sin nombre'}
-                                </span>
                             </div>
                         </div>
                     </div>

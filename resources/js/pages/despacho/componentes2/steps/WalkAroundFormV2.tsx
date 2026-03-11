@@ -53,7 +53,9 @@ const WalkAroundFormV2 = ({ id, onCancel }: Props) => {
                             hora: detalle.hora || '',
                             destino: detalle.destino || '',
                             procedencia: detalle.procedensia || '',
-                            fecha: detalle.fecha ? detalle.fecha.split('T')[0] : INITIAL_INFO.fecha
+                            fecha: detalle.fecha
+                                    ? new Date(detalle.fecha).toLocaleDateString('en-CA') // Retorna YYYY-MM-DD en hora local
+                                    : INITIAL_INFO.fecha
                         });
                         const checklistData = detalle.tipo === 'avion' ? detalle.checklists?.checklist_avion : detalle.checklists?.checklist_helicoptero;
                         setInspeccion({

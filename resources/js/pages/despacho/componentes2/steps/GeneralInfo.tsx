@@ -11,6 +11,7 @@ interface InfoData {
     destino: string;
     procedencia: string;
     fecha: string;
+    bloqueado: boolean;
 }
 
 interface Props {
@@ -22,11 +23,13 @@ const GeneralInfo = ({ data, onChange }: Props) => {
 
     const handleAeronaveData = (aeronave: AeronaveApiData) => {
         let sugerirMovimiento = data.movimiento;
-
+        let debeBloquear = false;
         if (aeronave.movimiento?.toLowerCase() === 'entrada') {
             sugerirMovimiento = 'Salida';
+            debeBloquear = true;
         } else if (aeronave.movimiento?.toLowerCase() === 'salida') {
             sugerirMovimiento = 'Entrada';
+            debeBloquear = true;
         }
 
         onChange({
@@ -36,7 +39,8 @@ const GeneralInfo = ({ data, onChange }: Props) => {
                 : (aeronave.tipo_aeronave.toLowerCase().includes('heli') ? 'Helicóptero' : 'Avión'),
             movimiento: sugerirMovimiento as any,
             destino: sugerirMovimiento === 'Salida' ? (aeronave.destino || '') : '',
-            procedencia: sugerirMovimiento === 'Entrada' ? (aeronave.procedensia || '') : ''
+            procedencia: sugerirMovimiento === 'Entrada' ? (aeronave.procedensia || '') : '',
+            bloqueado: debeBloquear
         });
     };
 
@@ -82,6 +86,7 @@ const GeneralInfo = ({ data, onChange }: Props) => {
                                     <input
                                         type="radio"
                                         name="movimiento"
+                                        disabled={data.bloqueado}
                                         checked={data.movimiento === op}
                                         onChange={() => onChange({ movimiento: op as any, destino: '', procedencia: '' })}
                                         className="w-5 h-5 text-cyan-700 border-slate-300 focus:ring-cyan-600 cursor-pointer"
@@ -99,6 +104,7 @@ const GeneralInfo = ({ data, onChange }: Props) => {
                         <label className={subLabelStyle}>Aeronave</label>
                         <select
                             className={inputStyle}
+                            disabled={data.bloqueado}
                             value={data.aeronave}
                             onChange={(e) => onChange({ aeronave: e.target.value as any })}
                         >
@@ -114,6 +120,7 @@ const GeneralInfo = ({ data, onChange }: Props) => {
                             value={data.tipo}
                             onChange={(e) => onChange({ tipo: e.target.value.toUpperCase() })}
                             placeholder="Ej. C172"
+                            disabled={data.bloqueado}
                             className={inputStyle}
                         />
                     </div>
