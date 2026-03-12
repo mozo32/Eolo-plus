@@ -8,7 +8,7 @@ import { guardarPernoctaDiaApi } from "@/stores/apiPernoctaDia";
 import Swal from "sweetalert2";
 import { Save, CheckCircle } from "lucide-react";
 
-const breadcrumbs: BreadcrumbItem[] = [{ title: "Pernocta de Día" }];
+const breadcrumbs: BreadcrumbItem[] = [{ title: "Pernocta del Día" }];
 
 export default function PernoctaDia() {
     const [items, setItems] = useState<PernoctaDiaItem[]>([]);
@@ -55,7 +55,7 @@ export default function PernoctaDia() {
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Pernocta de Día" />
+            <Head title="Pernocta del Día" />
             <div className="max-w-5xl mx-auto p-6 space-y-8 animate-in fade-in duration-700">
 
                 <PernoctaDiaForm onAdd={handleAdd} />
