@@ -86,7 +86,7 @@ const GeneralInfo = ({ data, onChange }: Props) => {
                                     <input
                                         type="radio"
                                         name="movimiento"
-                                        disabled={data.bloqueado}
+                                        // disabled={data.bloqueado}
                                         checked={data.movimiento === op}
                                         onChange={() => onChange({ movimiento: op as any, destino: '', procedencia: '' })}
                                         className="w-5 h-5 text-cyan-700 border-slate-300 focus:ring-cyan-600 cursor-pointer"
@@ -104,7 +104,7 @@ const GeneralInfo = ({ data, onChange }: Props) => {
                         <label className={subLabelStyle}>Aeronave</label>
                         <select
                             className={inputStyle}
-                            disabled={data.bloqueado}
+                            // disabled={data.bloqueado}
                             value={data.aeronave}
                             onChange={(e) => onChange({ aeronave: e.target.value as any })}
                         >
@@ -120,7 +120,7 @@ const GeneralInfo = ({ data, onChange }: Props) => {
                             value={data.tipo}
                             onChange={(e) => onChange({ tipo: e.target.value.toUpperCase() })}
                             placeholder="Ej. C172"
-                            disabled={data.bloqueado}
+                            // disabled={data.bloqueado}
                             className={inputStyle}
                         />
                     </div>
