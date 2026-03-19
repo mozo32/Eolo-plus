@@ -139,4 +139,22 @@ class TurnoAutotanqueController extends Controller
             ], 500);
         }
     }
+    public function index(Request $request)
+    {
+        $search = $request->query('search');
+        $fecha  = $request->query('date');
+        $perPage = $request->query('per_page', 10);
+
+        $remisiones = TurnoAutotanque::query()
+            ->when($search, function ($query, $search) {
+                $query->where('nombre', 'like', "%{$search}%")
+                    ->orWhere('nombreCierre', 'like', "%{$search}%");
+            })
+            ->when($fecha, function ($query, $fecha) {
+                $query->whereDate('fecha', $fecha);
+            })
+            ->orderBy('id', 'desc')
+            ->paginate($perPage);
+        return response()->json($remisiones);
+    }
 }

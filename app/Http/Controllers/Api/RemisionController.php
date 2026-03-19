@@ -68,7 +68,7 @@ class RemisionController extends Controller
     {
         $fecha = $request->query('fecha', now()->toDateString());
         $remisiones = Remision::whereDate('fecha', $fecha)
-            ->orderBy('fecha', 'asc')
+            ->orderBy('id', 'desc')
             ->get();
 
         return response()->json($remisiones);

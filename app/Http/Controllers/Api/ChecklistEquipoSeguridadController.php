@@ -13,12 +13,9 @@ class ChecklistEquipoSeguridadController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'user_id' => 'required|exists:users,id',
             'nombre' => 'required|string',
         ],
         [
-            'user_id.required' => 'Debes seleccionar un usuario o el usuario no esta registrado.',
-            'user_id.exists'   => 'El usuario seleccionado no es válido.',
             'nombre.required' => 'El nombre es obligatorio.',
         ]);
 

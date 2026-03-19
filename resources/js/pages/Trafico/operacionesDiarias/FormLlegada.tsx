@@ -159,7 +159,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
     }, [formData.fecha]);
 
     return (
-        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl border-t-8 border-blue-600 shadow-sm w-full mb-6">
+        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl border-t-8 border-blue-600 shadow-2xl w-full">
             <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-6">
                 <div>
                     <h2 className="text-2xl font-black text-slate-800 tracking-tight">
@@ -187,6 +187,13 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                             />
                         </div>
                     </div>
+
+                    <button type="button" onClick={alCerrar} className="group relative">
+                        <div className="absolute -inset-1 bg-slate-100 rounded-full scale-0 group-hover:scale-100 transition-transform"></div>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-300 group-hover:text-red-500 relative transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                 </div>
             </div>
 

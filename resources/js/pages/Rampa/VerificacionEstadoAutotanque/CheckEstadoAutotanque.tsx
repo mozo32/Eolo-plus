@@ -1,10 +1,11 @@
+import Swal from 'sweetalert2';
 import React, { useState } from 'react';
 import { usePage } from '@inertiajs/react';
 import { ClipboardCheck, Truck, PenTool, CheckCircle2, ArrowRight, Save, Layout } from 'lucide-react';
 import { SeccionChecklist } from './SeccionChecklist';
 import { SeccionVehiculo } from './SeccionVehiculo';
 import { SeccionFirmas } from './SeccionFirmas';
-
+import { guardarInspeccion } from '@/stores/apiInspeccionAutoTanque';
 const SECCIONES_CHECK = [
     {
         titulo: "Vehículo General",
@@ -47,19 +48,43 @@ export const CheckEstadoAutotanque = () => {
     const vehiculoCompleto = datosVehiculo.km.length > 0;
     const todoListo = checklistCompleto && vehiculoCompleto;
 
-    const finalizarInspeccion = (datosFirmas: any) => {
+    const finalizarInspeccion = async(datosFirmas: any) => {
         const dataLog = {
-            fecha: new Date().toLocaleString(),
+            fecha: new Date().toLocaleDateString('en-CA'),
             operador: user?.name,
             checklist: respuestas,
-            km:datosVehiculo.km,
-            combustible:datosVehiculo.combustible,
+            km: datosVehiculo.km,
+            combustible: datosVehiculo.combustible,
             danos: marcasDanos,
             firmas: datosFirmas
         };
 
-        console.log("REPORTE COMPLETO:", dataLog);
-        alert("Inspección guardada con éxito.");
+        try {
+            Swal.fire({
+                title: "Guardando...",
+                didOpen: () => Swal.showLoading(),
+                allowOutsideClick: false
+            });
+
+            await guardarInspeccion(dataLog);
+            setRespuestas({});
+            setDatosVehiculo({ km: '', combustible: '50' });
+            setMarcasDanos([]);
+            setTabActiva('checklist');
+
+            Swal.fire({
+                icon: "success",
+                title: "Completado con éxito",
+                text: "La inspección ha sido enviada correctamente."
+            });
+
+        } catch (error: any) {
+            Swal.fire({
+                icon: "error",
+                title: "Error",
+                text: error?.message || "Error al procesar"
+            });
+        }
     };
 
     const manejarSiguiente = () => {

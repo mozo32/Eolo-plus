@@ -103,3 +103,23 @@ export async function updateRemision(id: number | string, form: any) {
 
     return data;
 }
+export async function fetchAutotanque(
+    params: {
+        page?: number;
+        date?: string;
+        search?: string;
+        per_page?: number;
+    }
+) {
+    const qs = new URLSearchParams(params as any).toString();
+
+    const res = await fetch(`/api/TurnoAutoTanque?${qs}`, {
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || 'Error al cargar');
+
+    return data;
+}

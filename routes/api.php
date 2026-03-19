@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\VehiculoEoloController;
 use App\Http\Controllers\Api\RegistroVisitantesController;
 use App\Http\Controllers\Api\RemisionController;
 use App\Http\Controllers\Api\TurnoAutotanqueController;
+use App\Http\Controllers\Api\InspeccioAutotanqueController;
 
 Route::post('/despacho', [DespachoController::class, 'store']);
 Route::get('/aeronaves/autocomplete', [AeronaveController::class, 'autocomplete']);
@@ -157,4 +158,9 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('TurnoAutoTanque')->group(fun
     Route::get('/check-active', [TurnoAutotanqueController::class, 'checkActiveTurno']);
     Route::get('/ultimo-totalizador', [TurnoAutotanqueController::class, 'getLastTotalizador']);
     Route::put('/remisiones/{remision}/cancelar', [TurnoAutotanqueController::class, 'cancelarRemision']);
+    Route::get('/', [TurnoAutotanqueController::class, 'index']);
+});
+Route::middleware(['api', 'auth:sanctum'])->prefix('InspeccionAutoTanque')->group(function () {
+    Route::post('/', [InspeccioAutotanqueController::class, 'store']);
+
 });

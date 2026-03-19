@@ -24,9 +24,9 @@ class InspeccioAutotanqueController extends Controller
             'checklist_respuestas' => $request->checklist,
             'danos_grafico' => $request->danos,
         ]);
-        $this->guardarFirmaBase64($request->firmas['entrega']['imagen'] ?? '', 'quien_entrega', $entrega);
-        $this->guardarFirmaBase64($request->firmas['operaciones']['imagen'] ?? '', 'fbo', $entrega);
-        $this->guardarFirmaBase64($request->firmas['receptor']['imagen'] ?? '', 'quien_recibe', $entrega);
+        $this->guardarFirmaBase64($request->firmas['entrega']['imagen'] ?? '', 'quien_entrega', $inspeccion);
+        $this->guardarFirmaBase64($request->firmas['operaciones']['imagen'] ?? '', 'fbo', $inspeccion);
+        $this->guardarFirmaBase64($request->firmas['receptor']['imagen'] ?? '', 'quien_recibe', $inspeccion);
     }
 
     private function guardarFirmaBase64(string $value, string $rol, inspeccionAutotanque $entrega): void
@@ -92,4 +92,5 @@ class InspeccioAutotanqueController extends Controller
             default         => ucfirst(str_replace('_', ' ', $rol)),
         };
     }
+
 }
