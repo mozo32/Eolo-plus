@@ -29,7 +29,6 @@ export default function InputMatricula({
 
     useEffect(() => {
         clear();
-
         return () => {
             clear();
             setMatricula("");
@@ -79,6 +78,13 @@ export default function InputMatricula({
         }
     };
 
+    // --- NUEVA FUNCIÓN PARA CERRAR LA LISTA ---
+    const handleBlur = () => {
+        setTimeout(() => {
+            clear();
+        }, 200);
+    };
+
     return (
         <div className="relative w-full">
             {label && (
@@ -94,9 +100,11 @@ export default function InputMatricula({
                     type="text"
                     value={value}
                     onChange={handleInputChange}
+                    onBlur={handleBlur} // <--- AGREGADO
                     disabled={disabled}
                     required={required}
                     placeholder={placeholder}
+                    autoComplete="off" // <--- AGREGADO (para no chocar con el navegador)
                     className={`w-full rounded-lg border px-4 py-2 text-sm outline-none transition-all uppercase
                         ${!status.ok && value.length > 3
                             ? 'border-red-500 focus:ring-2 focus:ring-red-100'

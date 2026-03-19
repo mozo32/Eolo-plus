@@ -104,7 +104,11 @@ const SignaturePad = ({ label, onClear, canvasRef }: {
     );
 };
 
-const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
+const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
+    data?: any,
+    isEdit?: boolean,
+    onSuccess?: () => void
+}) => {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
@@ -223,7 +227,51 @@ const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
             setIsSubmitting(false);
         }
     };
+    React.useEffect(() => {
+        if (externalData) {
+            setData({
+                fecha: externalData.fecha || today,
+                operador: externalData.operador || '',
+                cliente: externalData.cliente || '',
+                formaPago: externalData.forma_pago || '',
+                aeronaveTipo: externalData.aeronave_tipo || '',
+                matricula: externalData.matricula || '',
+                destino: externalData.destino || '',
+                horaLlegada: externalData.hora_llegada || '',
+                horaFinal: externalData.hora_final || '',
+                lecturaFinal: externalData.lectura_final || '',
+                horaInicial: externalData.hora_inicial || '',
+                presionDif: Number(externalData.presionDif) || 0,
+                lecturaInicial: externalData.lectura_inicial || '',
+            });
+            const firmaClienteObj = externalData.firmas?.find((f: any) => f.pivot?.rol === 'cliente');
+            const firmaOperadorObj = externalData.firmas?.find((f: any) => f.pivot?.rol === 'operador');
 
+            const firmasAPintar = [
+                { ref: canvasClienteRef, path: firmaClienteObj?.path },
+                { ref: canvasOperadorRef, path: firmaOperadorObj?.path }
+            ];
+
+            firmasAPintar.forEach(item => {
+                if (item.path && item.ref.current) {
+                    const img = new Image();
+                    img.crossOrigin = "anonymous";
+
+                    img.onload = () => {
+                        const canvas = item.ref.current;
+                        const ctx = canvas?.getContext('2d');
+                        if (ctx && canvas) {
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        }
+                    };
+                    img.src = `/storage/${item.path}`;
+                }
+            });
+        } else {
+            reset();
+        }
+    }, [externalData]);
     return (
         <div className="min-h-screen bg-[#f8fafc] p-6 font-sans">
             <div className="mx-auto max-w-5xl">
@@ -304,7 +352,7 @@ const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
                                 matricula={data.matricula}
                                 onMatriculaChange={(val) => setData('matricula', val.toUpperCase())}
                                 onAeronaveData={handleAeronaveData}
-                                onNuevaMatricula={() => {}}
+                                onNuevaMatricula={() => { }}
                             />
 
                             <div className="md:col-span-2">
@@ -431,24 +479,16 @@ const EoloForm = ({ onSuccess }: { onSuccess?: () => void }) => {
 
                             <button
                                 onClick={handleSubmit}
-                                disabled={isSubmitting}
-                                className={`mt-10 w-full ${isSubmitting ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'} text-white font-black uppercase tracking-widest py-6 rounded-2xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98] flex items-center justify-center gap-4 group`}
+                                disabled={isSubmitting || isEdit} // Deshabilitar si solo es visualización
+                                className={`mt-10 w-full ${isEdit ? 'bg-slate-800' : isSubmitting ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'
+                                    } ...`}
                             >
-                                {isSubmitting ? (
-                                    <span className="flex items-center gap-2">
-                                        <svg className="animate-spin h-6 w-6 text-white" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        Procesando Registro...
-                                    </span>
+                                {isEdit ? (
+                                    <span className="text-lg text-white">Documento en Modo Lectura</span>
+                                ) : isSubmitting ? (
+                                    "Procesando..."
                                 ) : (
-                                    <>
-                                        <span className="text-lg">Finalizar y Registrar Suministro</span>
-                                        <svg className="w-6 h-6 transition-transform group-hover:translate-x-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                        </svg>
-                                    </>
+                                    "Finalizar y Registrar Suministro"
                                 )}
                             </button>
                         </div>

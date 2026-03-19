@@ -68,7 +68,7 @@ class RemisionController extends Controller
     {
         $fecha = $request->query('fecha', now()->toDateString());
         $remisiones = Remision::whereDate('fecha', $fecha)
-            ->orderBy('fecha', 'desc')
+            ->orderBy('fecha', 'asc')
             ->get();
 
         return response()->json($remisiones);
@@ -132,5 +132,69 @@ class RemisionController extends Controller
             'operador'    => 'Firma del operdor',
             default         => ucfirst(str_replace('_', ' ', $rol)),
         };
+    }
+    public function show($id)
+    {
+        $remision = Remision::with('firmas')->find($id);
+
+        if (!$remision) {
+            return response()->json(['message' => 'Remisión no encontrada'], 404);
+        }
+
+        return response()->json($remision);
+    }
+
+    public function update(Request $request, $id)
+    {
+        try {
+            $remision = Remision::findOrFail($id);
+
+            $validated = $request->validate([
+                'fecha'          => 'required|date',
+                'operador'       => 'required|string',
+                'cliente'        => 'required|string',
+                'formaPago'      => 'required|string',
+                'matricula'      => 'required|string',
+                'horaLlegada'    => 'required|string|max:5',
+                'lecturaInicial' => 'required|numeric',
+                'lecturaFinal'   => 'required|numeric',
+            ]);
+
+            return DB::transaction(function () use ($request, $remision) {
+                $remision->update([
+                    'fecha'           => $request->fecha,
+                    'operador'        => $request->operador,
+                    'cliente'         => $request->cliente,
+                    'presionDif'      => $request->presionDif,
+                    'forma_pago'      => $request->formaPago,
+                    'aeronave_tipo'   => $request->aeronaveTipo,
+                    'matricula'       => $request->matricula,
+                    'destino'         => $request->destino,
+                    'hora_llegada'    => $request->horaLlegada,
+                    'hora_inicial'    => $request->horaInicial,
+                    'hora_final'      => $request->horaFinal,
+                    'lectura_inicial' => $request->lecturaInicial,
+                    'lectura_final'   => $request->lecturaFinal,
+                    'total_litros'    => (float)$request->lecturaFinal - (float)$request->lecturaInicial,
+                ]);
+                if ($request->filled('firmaCliente')) {
+                    $this->guardarFirmaBase64($request->firmaCliente, 'cliente', $remision);
+                }
+                if ($request->filled('firmaOperador')) {
+                    $this->guardarFirmaBase64($request->firmaOperador, 'operador', $remision);
+                }
+
+                return response()->json([
+                    'message' => 'Remisión actualizada con éxito',
+                    'data'    => $remision
+                ]);
+            });
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error al actualizar el registro',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
     }
 }

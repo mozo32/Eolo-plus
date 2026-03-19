@@ -35,23 +35,16 @@ export default function MatriculaAutocomplete({
 
     const userTypingRef = useRef(false);
 
-    // --- LÓGICA DE FORMATO ---
     const aplicarFormato = (input: string, prev: string): string => {
-        // Limpiamos espacios y convertimos a mayúsculas
         let val = input.toUpperCase().replace(/\s/g, "");
-
-        // Si el usuario está borrando (longitud menor a la anterior), no aplicamos formato
-        // para permitir que borre el guion.
         if (val.length < (prev || "").length) return val;
 
         const prefijos2 = ["XA", "XB", "XC", "EC", "CC", "LV", "LQ", "HK", "HJ", "TG", "TI", "HC", "YV", "ZP", "OB"];
 
-        // Caso 1: Exactamente 2 letras de prefijo -> agregar guion
         if (val.length === 2 && prefijos2.includes(val)) {
             return `${val}-`;
         }
 
-        // Caso 2: Escribió más de 2 letras pero olvidó el guion (ej: pegado de texto)
         if (val.length > 2 && !val.includes("-")) {
             const possiblePrefix = val.substring(0, 2);
             if (prefijos2.includes(possiblePrefix)) {
@@ -62,19 +55,23 @@ export default function MatriculaAutocomplete({
         return val;
     };
 
-    // --- HANDLERS ---
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         userTypingRef.current = true;
-
-        // Aplicamos el formato usando el valor actual del input vs el valor que ya teníamos
         const formattedValue = aplicarFormato(e.target.value, matricula);
-
-        // Notificamos al componente padre
         onMatriculaChange(formattedValue);
 
-        // Disparar búsqueda de sugerencias si hay contenido
         if (formattedValue.length > 1) {
             void fetchSuggestions(formattedValue);
+            const esFormatoCompleto = (formattedValue.includes('-') && formattedValue.length >= 6) ||
+                                     (formattedValue.startsWith('N') && formattedValue.length >= 4);
+
+            if (esFormatoCompleto) {
+                void fetchAeronave(formattedValue).then(data => {
+                    if (data && onAeronaveData) {
+                        onAeronaveData(data);
+                    }
+                });
+            }
         } else {
             clearSuggestions();
         }
@@ -93,6 +90,12 @@ export default function MatriculaAutocomplete({
         }
     };
 
+    const handleBlur = () => {
+        setTimeout(() => {
+            clearSuggestions();
+        }, 200);
+    };
+
     return (
         <div className="relative w-full">
             <div className="relative">
@@ -101,6 +104,7 @@ export default function MatriculaAutocomplete({
                     type="text"
                     value={matricula}
                     onChange={handleInputChange}
+                    onBlur={handleBlur}
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-slate-700 font-medium focus:border-cyan-600 focus:ring-1 focus:ring-cyan-600 outline-none transition-all placeholder:text-slate-300 shadow-sm text-sm uppercase"
                     placeholder="XA-ABC"
                     autoComplete="off"
@@ -113,7 +117,6 @@ export default function MatriculaAutocomplete({
                 )}
             </div>
 
-            {/* Lista de Sugerencias */}
             {suggestions.length > 0 && (
                 <ul className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto">
                     {suggestions.map((s) => (

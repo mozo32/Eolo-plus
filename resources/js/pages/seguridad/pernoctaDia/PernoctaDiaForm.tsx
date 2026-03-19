@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from "react";
-import { validatePernoctaDia } from "./validation";
 import { usePage } from "@inertiajs/react";
-import { Plane, User, MapPin, ClipboardList, Calendar, PlusCircle, CheckCircle2 } from "lucide-react";
+import { Plane, User, MapPin, ClipboardList, Calendar, PlusCircle } from "lucide-react";
 
 export type PernoctaDiaItem = {
     fecha: string;
@@ -32,17 +31,11 @@ const PernoctaDiaForm: React.FC<{ onAdd: (item: any) => void }> = ({ onAdd }) =>
     const aplicarFormatoMatricula = (input: string, prev: string): string => {
         let val = input.toUpperCase().replace(/\s/g, "");
         if (val.length < prev.length) return val;
-
         const prefijos2 = ["XA", "XB", "XC", "EC", "CC", "LV", "LQ", "HK", "HJ", "TG", "TI", "HC", "YV", "ZP", "OB"];
-
-        if (val.length === 2 && prefijos2.includes(val)) {
-            return `${val}-`;
-        }
+        if (val.length === 2 && prefijos2.includes(val)) return `${val}-`;
         if (val.length > 2 && !val.includes("-")) {
             const possiblePrefix = val.substring(0, 2);
-            if (prefijos2.includes(possiblePrefix)) {
-                return `${possiblePrefix}-${val.substring(2)}`;
-            }
+            if (prefijos2.includes(possiblePrefix)) return `${possiblePrefix}-${val.substring(2)}`;
         }
         return val;
     };
@@ -51,32 +44,11 @@ const PernoctaDiaForm: React.FC<{ onAdd: (item: any) => void }> = ({ onAdd }) =>
         if (!form.matricula) return { ok: true, msg: "" };
         const regexGeneral = /^[A-Z0-9]{1,3}-[A-Z0-9]{1,5}$/;
         const regexUSA = /^N[1-9][0-9A-Z]{0,4}$/;
-
-        if (regexGeneral.test(form.matricula) || regexUSA.test(form.matricula)) {
-            return { ok: true, msg: "Formato Correcto" };
-        }
+        if (regexGeneral.test(form.matricula) || regexUSA.test(form.matricula)) return { ok: true, msg: "Formato Correcto" };
         if (form.matricula.startsWith("N")) return { ok: true, msg: "Formato USA detectado" };
         if (form.matricula.length <= 3) return { ok: true, msg: "Ingresa el prefijo..." };
-
         return { ok: false, msg: "Formato Inválido (Ej: XA-ABC o N12345)" };
     }, [form.matricula]);
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-        const { name, value } = e.target;
-
-        if (name === "matricula") {
-            const finalValue = aplicarFormatoMatricula(value, form.matricula);
-            setForm({ ...form, [name]: finalValue });
-
-            if (finalValue.length > 1) {
-                buscarMatriculas(finalValue);
-            } else {
-                setSugerencias([]);
-            }
-        } else {
-            setForm({ ...form, [name]: value });
-        }
-    };
 
     const buscarMatriculas = async (q: string) => {
         setLoadingMatricula(true);
@@ -89,6 +61,22 @@ const PernoctaDiaForm: React.FC<{ onAdd: (item: any) => void }> = ({ onAdd }) =>
         } finally {
             setLoadingMatricula(false);
         }
+    };
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const { name, value } = e.target;
+        if (name === "matricula") {
+            const finalValue = aplicarFormatoMatricula(value, form.matricula);
+            setForm({ ...form, [name]: finalValue });
+            if (finalValue.length > 1) buscarMatriculas(finalValue);
+            else setSugerencias([]);
+        } else {
+            setForm({ ...form, [name]: value });
+        }
+    };
+
+    const handleBlur = () => {
+        setTimeout(() => setSugerencias([]), 200);
     };
 
     const inputStyle = (err: any) => `w-full px-4 py-3 rounded-xl border-2 transition-all text-sm font-bold ${err ? 'border-rose-400 bg-rose-50' : 'border-slate-100 focus:border-blue-600 focus:ring-4 focus:ring-blue-50'} dark:bg-slate-900`;
@@ -104,7 +92,6 @@ const PernoctaDiaForm: React.FC<{ onAdd: (item: any) => void }> = ({ onAdd }) =>
             </header>
 
             <div className="p-8 space-y-8">
-                {/* Header de Info */}
                 <div className="flex flex-wrap gap-6 justify-between items-center pb-6 border-b border-slate-50">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600"><User size={18} /></div>
@@ -123,7 +110,6 @@ const PernoctaDiaForm: React.FC<{ onAdd: (item: any) => void }> = ({ onAdd }) =>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {/* Input Matrícula con Regla de Formato */}
                     <div className="relative space-y-2">
                         <label className="text-[10px] font-black text-slate-500 tracking-[0.2em] ml-1">Matrícula</label>
                         <div className="relative">
@@ -131,6 +117,7 @@ const PernoctaDiaForm: React.FC<{ onAdd: (item: any) => void }> = ({ onAdd }) =>
                                 name="matricula"
                                 value={form.matricula}
                                 onChange={handleChange}
+                                onBlur={handleBlur}
                                 placeholder="XA-ABC"
                                 className={`${inputStyle(errors.matricula || (!statusMatricula.ok && form.matricula.length > 3))} uppercase`}
                             />
@@ -165,8 +152,6 @@ const PernoctaDiaForm: React.FC<{ onAdd: (item: any) => void }> = ({ onAdd }) =>
                             </ul>
                         )}
                     </div>
-
-                    {/* Ubicación */}
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-500 tracking-[0.2em] ml-1">Ubicación</label>
                         <div className="grid grid-cols-2 gap-4">
@@ -178,8 +163,6 @@ const PernoctaDiaForm: React.FC<{ onAdd: (item: any) => void }> = ({ onAdd }) =>
                             ))}
                         </div>
                     </div>
-
-                    {/* Observaciones */}
                     <div className="md:col-span-2 space-y-2">
                         <label className="text-[10px] font-black text-slate-500 tracking-[0.2em] ml-1">Observaciones</label>
                         <textarea name="observaciones" value={form.observaciones} onChange={handleChange} rows={2} className={`${inputStyle(false)} resize-none`} placeholder="Notas de pernocta..." />

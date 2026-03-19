@@ -31,7 +31,6 @@ const VehicleDetail: React.FC<VehicleDetailProps> = ({ isOpen, onClose, selected
         if (isOpen) cargarDetalle();
     }, [isOpen, selectedVehicle]);
 
-    // Calcular días reales del mes (ej. febrero 2026 = 28 días)
     const getDaysInMonth = (yearMonth: string) => {
         const [year, month] = yearMonth.split('-').map(Number);
         return new Date(year, month, 0).getDate();

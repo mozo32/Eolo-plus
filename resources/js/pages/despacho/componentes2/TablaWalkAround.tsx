@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { fetchWalkarounds } from '@/stores/apiWalkaround';
 import WalkAroundFirmaModal from '../components/walkAround/ItemTable/WalkAroundFirmaModal';
+import WalkAroundFilterModal from './WalkAroundFilterModal';
 
 import {
     Search, Loader2, Plane, ChevronLeft,
@@ -27,6 +28,9 @@ const TablaWalkAround = () => {
         total: 0,
         per_page: 10
     });
+    const handleApplyFilters = () => {
+        loadData(1);
+    };
     const handlePdfDone = useCallback(() => {
         setPdfId(null);
     }, []);
@@ -85,10 +89,7 @@ const TablaWalkAround = () => {
             <div className="max-w-[1400px] mx-auto">
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                     <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className="h-2 w-2 bg-indigo-600 rounded-full animate-pulse"></span>
-                            {/* <span className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]">Operaciones en tiempo real</span> */}
-                        </div>
+
                         <h1 className="text-4xl font-black text-slate-900 tracking-tight">Walkaround </h1>
                     </div>
 
@@ -298,6 +299,13 @@ const TablaWalkAround = () => {
                     setFirmOpen(false);
                     setFirmId(null);
                 }}
+            />
+            <WalkAroundFilterModal
+                open={showFilterModal}
+                onClose={() => setShowFilterModal(false)}
+                filters={filters}
+                setFilters={setFilters}
+                onApply={handleApplyFilters}
             />
         </div>
     );

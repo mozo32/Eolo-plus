@@ -149,6 +149,8 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('RegistroVisitantes')->group(
 Route::middleware(['api', 'auth:sanctum'])->prefix('Remision')->group(function () {
     Route::post('/remisiones', [RemisionController::class, 'store']);
     Route::get('/', [RemisionController::class, 'index']);
+    Route::get('/{id}', [RemisionController::class, 'show']);
+    Route::put('/{id}', [RemisionController::class, 'update']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('TurnoAutoTanque')->group(function () {
     Route::post('/', [TurnoAutotanqueController::class, 'store']);

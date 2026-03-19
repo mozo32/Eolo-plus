@@ -85,9 +85,10 @@ class ChecklistEquipoSeguridadController extends Controller
 
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('nombre', 'like', "%{$search}%");
-            });
+            $query->where('nombre', 'like', "%{$search}%");
+        }
+        if ($request->filled('date')) {
+            $query->whereDate('created_at', $request->date);
         }
 
         $perPage = $request->get('per_page', 10);
