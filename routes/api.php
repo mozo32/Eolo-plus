@@ -87,6 +87,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('ChecklistEquipoSeguridad')->
     Route::get('/',[ChecklistEquipoSeguridadController::class, 'index']);
     Route::get('/{ChecklistEquipoSeguridad}', [ChecklistEquipoSeguridadController::class, 'show']);
     Route::put('/{ChecklistEquipoSeguridad}', [ChecklistEquipoSeguridadController::class, 'update']);
+    Route::get('/eliminar/{id}', [ChecklistEquipoSeguridadController::class, 'eliminar']);
 });
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('EntregaTurnoR')->group(function () {
@@ -103,7 +104,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('CheckListTurno')->group(func
     Route::get('/',[ChecklistTurnoController::class, 'index']);
     Route::get('/{checklistTurno}', [ChecklistTurnoController::class, 'show']);
     Route::put('/{checklistTurno}',[ChecklistTurnoController::class, 'update']);
-
+    Route::get('eliminar/{id}',[ChecklistTurnoController::class, 'eliminar']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('ControlMedicamento')->group(function () {
     Route::get('/ultimosMovimientos',[ControlMedicamentoController::class, 'ultimosMovimientos']);
@@ -159,6 +160,8 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('TurnoAutoTanque')->group(fun
     Route::get('/ultimo-totalizador', [TurnoAutotanqueController::class, 'getLastTotalizador']);
     Route::put('/remisiones/{remision}/cancelar', [TurnoAutotanqueController::class, 'cancelarRemision']);
     Route::get('/', [TurnoAutotanqueController::class, 'index']);
+    Route::get('/{id}', [TurnoAutotanqueController::class, 'show']);
+    Route::get('/eliminarTurno/{id}', [TurnoAutotanqueController::class, 'eliminar']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('InspeccionAutoTanque')->group(function () {
     Route::post('/', [InspeccioAutotanqueController::class, 'store']);

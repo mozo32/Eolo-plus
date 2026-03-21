@@ -67,7 +67,7 @@ class TurnoAutotanqueController extends Controller
                     SumaAutotanque::create([
                         'id_turno' => $turno->id,
                         'litros'   => $entrada['litros'],
-                        'folio'    => $entrada['folio'],
+                        'folio'    => $entrada['remision'],
                     ]);
                 }
 
@@ -91,18 +91,28 @@ class TurnoAutotanqueController extends Controller
         try {
             $turnoActivo = TurnoAutotanque::where(function($query) {
                     $query->whereNull('totalizadorCierre')
-                        ->orWhere('totalizadorCierre', 0);
+                        ->orWhere('nombreCierre','')
+                        ->orWhere('fechaCierre','')
+                        ->orWhere('cmCierre',0)
+                        ->orWhere('litrosCierre',0)
+                        ->orWhere('totalizadorCierre',0);
                 })
                 ->latest()
                 ->first();
 
+            $remision = Remision::where('id_turno', $turnoActivo->id)->get();
+            $sumaAutotanque = SumaAutotanque::where('id_turno', $turnoActivo->id)->get();
             if (!$turnoActivo) {
                 return response()->json(['active' => false]);
             }
 
             return response()->json([
                 'active' => true,
-                'turno' => $turnoActivo
+                'data' => [
+                    'turno' => $turnoActivo,
+                    'remision' => $remision,
+                    'sumaAutotanque' => $sumaAutotanque,
+                ],
             ]);
 
         } catch (Exception $e) {
@@ -117,7 +127,7 @@ class TurnoAutotanqueController extends Controller
             'totalizador' => $ultimoTurno ? $ultimoTurno->totalizadorCierre : null
         ]);
     }
-    public function cancelarRemision(Request $request, $folio) // Recibimos el string del folio
+    public function cancelarRemision(Request $request, $folio)
     {
         try {
             $remision = \App\Models\Remision::where('id', $folio)->first();
@@ -154,7 +164,57 @@ class TurnoAutotanqueController extends Controller
                 $query->whereDate('fecha', $fecha);
             })
             ->orderBy('id', 'desc')
+            ->where('status', 'A')
             ->paginate($perPage);
         return response()->json($remisiones);
+    }
+    public function show($id)
+    {
+        $turno = TurnoAutotanque::where('id', $id)
+            ->latest()
+            ->first();
+
+        $remision = Remision::where('id_turno', $id)->get();
+        $sumaAutotanque = SumaAutotanque::where('id_turno', $id)->get();
+
+        return response()->json([
+            'message' => 'Se encontró el registro',
+            'data' => [
+                'turno' => $turno,
+                'remision' => $remision,
+                'sumaAutotanque' => $sumaAutotanque,
+            ],
+        ]);
+    }
+    public function eliminar($id)
+    {
+        try {
+            $autotanque = TurnoAutotanque::find($id);
+
+            if (!$autotanque) {
+                return response()->json([
+                    'message' => 'El registro no existe.'
+                ], 404);
+            }
+            DB::transaction(function () use ($autotanque, $id) {
+                $autotanque->update([
+                    'status' => 'N'
+                ]);
+                Remision::where('id_turno', $id)->update([
+                    'status' => 'N'
+                ]);
+            });
+
+            return response()->json([
+                'message' => 'Registro y remisiones cancelados correctamente',
+                'data' => $autotanque
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Error al intentar eliminar el registro',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

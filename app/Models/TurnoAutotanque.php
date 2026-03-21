@@ -10,6 +10,6 @@ class TurnoAutotanque extends Model
     protected $fillable = [
         'user_id','nombre', 'fecha', 'cmIni', 'litrosIni', 'totalizadorIni',
         'nombreCierre', 'fechaCierre', 'cmCierre', 'litrosCierre', 'totalizadorCierre',
-        'totalVendidos', 'balanceAritmetico', 'balanceFisico', 'diferenciaFinal'
+        'totalVendidos', 'balanceAritmetico', 'balanceFisico', 'diferenciaFinal','status'
     ];
 }

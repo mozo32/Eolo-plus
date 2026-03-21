@@ -30,6 +30,7 @@ class ChecklistEquipoSeguridadController extends Controller
                 'nombre' => $request->nombre,
                 'checklist' => $request->checklist,
                 'observaciones' => $request->observaciones,
+                'status' => 'A',
             ]);
 
             return response()->json([
@@ -44,6 +45,7 @@ class ChecklistEquipoSeguridadController extends Controller
             'nombre' => $request->nombre,
             'checklist' => $request->checklist,
             'observaciones' => $request->observaciones,
+            'status' => 'A',
         ]);
 
         return response()->json([
@@ -56,9 +58,7 @@ class ChecklistEquipoSeguridadController extends Controller
     {
         $now = Carbon::now();
 
-        $checklist = ChecklistEquipoSeguridad::where('user_id', $userId)
-            ->whereYear('created_at', $now->year)
-            ->whereMonth('created_at', $now->month)
+        $checklist = ChecklistEquipoSeguridad::where('id', $userId)
             ->latest()
             ->first();
 
@@ -79,7 +79,7 @@ class ChecklistEquipoSeguridadController extends Controller
     public function index(Request $request)
     {
         $query = ChecklistEquipoSeguridad::query();
-
+        $query->where('status', 'A');
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where('nombre', 'like', "%{$search}%");
@@ -101,13 +101,12 @@ class ChecklistEquipoSeguridadController extends Controller
 
         try {
             $validated = $request->validate([
-                'user_id' => 'required|exists:users,id',
                 'nombre' => 'required|string',
                 'checklist' => 'required|array',
             ]);
 
             $ChecklistEquipoSeguridad->update([
-                'user_id' => $validated['user_id'],
+                'user_id' => $validated['user_id']?? null,
                 'nombre' => $validated['nombre'],
                 'checklist' => $validated['checklist'] ?? null,
                 'observaciones' => $request->observaciones,
@@ -126,6 +125,30 @@ class ChecklistEquipoSeguridadController extends Controller
             return response()->json([
                 'message' => 'Error al actualizar checklist',
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+    public function eliminar($id)
+    {
+        try {
+            $registro = ChecklistEquipoSeguridad::find($id);
+
+            if (!$registro) {
+                return response()->json([
+                    'message' => 'El registro no existe.'
+                ], 404);
+            }
+            $registro->update([
+                'status' => 'N'
+            ]);
+            return response()->json([
+                'message' => 'Checklist eliminado correctamente (lógicamente)',
+                'data' => $registro
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Error al intentar eliminar el registro',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

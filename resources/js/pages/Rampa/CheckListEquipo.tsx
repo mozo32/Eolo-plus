@@ -1,13 +1,14 @@
-import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
+import Swal from 'sweetalert2';
 import AppLayout from '@/layouts/app-layout';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import CheckListEquipoForm from './checkListEquipo/CheckListEquipoForm';
 import UniversalTable from '../UniversalTable';
-import { useState, useEffect } from 'react';
-import { fetchCheckListEquipo, fetchCheckUser } from '@/stores/apiCheckListEquipoSeguridad';
+import { useState, useEffect, useCallback } from 'react';
+import { fetchCheckListEquipo, fetchCheckUser, eliminar } from '@/stores/apiCheckListEquipoSeguridad';
 import { ChevronLeft, Plus, Edit2, Search, Calendar, X } from "lucide-react";
+import PdfExporter from './checkListEquipo/components/PdfExporter';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'CheckList Equipo' }];
 
@@ -21,6 +22,7 @@ export default function CheckListEquipo() {
     const [openForm, setOpenForm] = useState(false);
     const [isEdit, setIsEdit] = useState(false);
     const [detalle, setDetalle] = useState<any>(null);
+    const [pdfId, setPdfId] = useState<number | null>(null);
 
     const formatFecha = (fecha: string) => {
         const [y, m, d] = fecha.split("T")[0].split("-");
@@ -67,6 +69,40 @@ export default function CheckListEquipo() {
         setDetalle(null);
     };
 
+    const handleEliminar = async (id: number) => {
+        const result = await Swal.fire({
+            title: '¿Estás seguro?',
+            text: "El registro se marcará como inactivo.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#4f46e5',
+            cancelButtonColor: '#f87171',
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true
+        });
+
+        if (result.isConfirmed) {
+            try {
+                const res = await eliminar(id);
+                if (res.ok) {
+                    Swal.fire({
+                        title: '¡Eliminado!',
+                        text: 'El registro ha sido borrado con éxito.',
+                        icon: 'success',
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
+                    cargarDatos();
+                } else {
+                    throw new Error(res.message || "Error al eliminar");
+                }
+            } catch (error: any) {
+                Swal.fire('Error', error.message || 'No se pudo eliminar el registro', 'error');
+            }
+        }
+    };
+
     const columns = [
         {
             header: "ID",
@@ -96,12 +132,53 @@ export default function CheckListEquipo() {
             header: "Acciones",
             align: 'right' as const,
             render: (row: any) => (
-                <button
-                    className="p-2.5 text-slate-400 hover:text-white hover:bg-indigo-600 rounded-xl transition-all shadow-sm"
-                    onClick={() => show(row.user_id)}
-                >
-                    <Edit2 size={18} />
-                </button>
+                <div className="flex items-center justify-end gap-2">
+                    <button
+                        className="p-2.5 text-slate-400 hover:text-white hover:bg-indigo-600 rounded-xl transition-all shadow-sm"
+                        onClick={() => show(row.id)}
+                    >
+                        <Edit2 size={18} />
+                    </button>
+                    <button
+                        type="button"
+                        className="p-2.5 text-slate-400 hover:text-white hover:bg-amber-600 rounded-xl transition-all shadow-sm"
+                        title="Exportar PDF"
+                        onClick={() => setPdfId(row.id)}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                            fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <path d="M7 10l5 5 5-5" />
+                            <path d="M12 15V3" />
+                        </svg>
+                    </button>
+                    <button
+                        type="button"
+                        className="p-2.5 text-slate-400 hover:text-white hover:bg-red-600 rounded-xl transition-all shadow-sm"
+                        title="Eliminar"
+                        onClick={() => handleEliminar(row.id)}
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        >
+                            <path d="M3 3l18 18" />
+                            <path d="M4 7h3m4 0h9" />
+                            <path d="M10 11l0 6" />
+                            <path d="M14 14l0 3" />
+                            <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l.077 -.923" />
+                            <path d="M18.384 14.373l.616 -7.373" />
+                            <path d="M9 5v-1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
+                        </svg>
+                    </button>
+                </div>
             ),
         },
     ];
@@ -111,7 +188,11 @@ export default function CheckListEquipo() {
             cargarDatos();
         }, 300);
         return () => clearTimeout(timeoutId);
-    }, [page, search, filterDate]); // Escuchamos cambios en filterDate
+    }, [page, search, filterDate]);
+
+    const handlePdfDone = useCallback(() => {
+        setPdfId(null);
+    }, []);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -125,7 +206,6 @@ export default function CheckListEquipo() {
                             </div>
 
                             <div className="flex flex-wrap items-center gap-3">
-                                {/* Filtro de Fecha */}
                                 <div className="relative flex items-center">
                                     <Calendar className="absolute left-3 text-slate-400" size={18} />
                                     <input
@@ -147,7 +227,6 @@ export default function CheckListEquipo() {
                                     )}
                                 </div>
 
-                                {/* Buscador de Nombre */}
                                 <div className="relative group">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
                                     <input
@@ -217,6 +296,10 @@ export default function CheckListEquipo() {
                     </div>
                 )}
             </div>
+            <PdfExporter
+                id={pdfId}
+                onDone={handlePdfDone}
+            />
         </AppLayout>
     );
 }

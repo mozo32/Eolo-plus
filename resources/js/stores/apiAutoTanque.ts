@@ -123,3 +123,35 @@ export async function fetchAutotanque(
 
     return data;
 }
+export async function showAutotanque(id: number) {
+    const res = await fetch(`/api/TurnoAutoTanque/${id}`, {
+        headers: {
+            Accept: "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+        },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    return {
+        ok: res.ok,
+        ...data,
+    };
+}
+export async function eliminarTurno(id: number) {
+    const res = await fetch(`/api/TurnoAutoTanque/eliminarTurno/${id}`, {
+        headers: {
+            Accept: "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+        },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    return {
+        ok: res.ok,
+        ...data,
+    };
+}

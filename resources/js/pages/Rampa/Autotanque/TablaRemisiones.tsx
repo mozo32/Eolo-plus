@@ -32,7 +32,6 @@ export const TablaRemisiones = ({
         ...remisiones.map((r, idx) => ({ ...r, tipo: 'VENTA', originalIdx: idx })),
         ...entradasASA.map((e, idx) => ({ folio: e.remision, litros: e.litros, tipo: 'SUMA', originalIdx: idx }))
     ];
-    console.log(remisiones);
 
     return (
         <section className="bg-slate-50 p-4 rounded-lg">

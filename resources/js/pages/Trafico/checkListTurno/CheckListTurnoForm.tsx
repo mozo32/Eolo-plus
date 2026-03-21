@@ -66,7 +66,12 @@ export default function CheckListTurnoForm({ isEdit, data, onSuccess }: { isEdit
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (step < totalSteps) {
+            if (validarPaso(form, step)) setStep(s => s + 1);
+            return;
+        }
         if (!validarPaso(form, step)) return;
+
         try {
             Swal.fire({ title: "Guardando...", didOpen: () => Swal.showLoading() });
             if (isEdit && data?.id) await actualizarCheckListTurnoApi(data.id, form);
@@ -170,15 +175,31 @@ export default function CheckListTurnoForm({ isEdit, data, onSuccess }: { isEdit
                     )}
 
                     <footer className="flex justify-between border-t border-slate-100 pt-6">
-                        <button type="button" onClick={() => setStep(s => Math.max(1, s - 1))} className={`rounded-md px-8 py-2.5 text-xs font-black uppercase tracking-widest transition-all ${step === 1 ? "invisible" : "border-2 border-slate-200 text-slate-400 hover:bg-slate-50"}`}>
+                        <button
+                            type="button"
+                            onClick={() => setStep(s => Math.max(1, s - 1))}
+                            className={`rounded-md px-8 py-2.5 text-xs font-black uppercase tracking-widest transition-all ${step === 1 ? "invisible" : "border-2 border-slate-200 text-slate-400 hover:bg-slate-50"}`}
+                        >
                             Anterior
                         </button>
+
                         {step < totalSteps ? (
-                            <button type="button" onClick={() => { if (validarPaso(form, step)) setStep(s => s + 1); }} className="rounded-md bg-[#00677F] px-10 py-2.5 text-xs font-black uppercase tracking-widest text-white shadow-lg hover:bg-[#004B5C]">
+                            <button
+                                key="btn-next" // Usar keys ayuda a React a no confundir los botones
+                                type="button"
+                                onClick={() => {
+                                    if (validarPaso(form, step)) setStep(s => s + 1);
+                                }}
+                                className="rounded-md bg-[#00677F] px-10 py-2.5 text-xs font-black uppercase tracking-widest text-white shadow-lg hover:bg-[#004B5C]"
+                            >
                                 Siguiente Paso
                             </button>
                         ) : (
-                            <button type="submit" className={`rounded-md px-10 py-2.5 text-xs font-black uppercase tracking-widest text-white shadow-lg transition-all ${isEdit ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"}`}>
+                            <button
+                                key="btn-submit"
+                                type="submit"
+                                className={`rounded-md px-10 py-2.5 text-xs font-black uppercase tracking-widest text-white shadow-lg transition-all ${isEdit ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"}`}
+                            >
                                 {isEdit ? "Actualizar Registro" : "Finalizar Entrega"}
                             </button>
                         )}

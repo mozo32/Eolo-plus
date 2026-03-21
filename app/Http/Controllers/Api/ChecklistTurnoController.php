@@ -148,7 +148,7 @@ class ChecklistTurnoController extends Controller
     {
 
         $query = ChecklistTurno::query();
-
+        $query->where('status', 'A');
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
@@ -261,5 +261,28 @@ class ChecklistTurnoController extends Controller
             ], 500);
         }
     }
+    public function eliminar($id)
+    {
+        try {
+            $registro = ChecklistTurno::find($id);
 
+            if (!$registro) {
+                return response()->json([
+                    'message' => 'El registro no existe.'
+                ], 404);
+            }
+            $registro->update([
+                'status' => 'N'
+            ]);
+            return response()->json([
+                'message' => 'Checklist eliminado correctamente (lógicamente)',
+                'data' => $registro
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Error al intentar eliminar el registro',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

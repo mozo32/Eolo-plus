@@ -13,6 +13,7 @@ class ChecklistEquipoSeguridad extends Model
         'nombre',
         'checklist',
         'observaciones',
+        'status',
     ];
 
     protected $casts = [
