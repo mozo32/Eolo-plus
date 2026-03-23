@@ -74,3 +74,20 @@ export async function guardarMovimientoCSASalida(id: number, form: any) {
 
     return data;
 }
+export async function eliminar(id: number) {
+    const res = await fetch(`/api/MovimientosCSAE/eliminar/${id}`, {
+        headers: {
+            Accept: "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+        },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    return {
+        ok: res.ok,
+        status: res.status,
+        ...data,
+    };
+}

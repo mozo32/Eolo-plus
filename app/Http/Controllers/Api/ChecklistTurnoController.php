@@ -19,51 +19,38 @@ class ChecklistTurnoController extends Controller
             $validated = $request->validate([
                 'nombreEmpleado' => 'required|string|max:255',
                 'fecha' => 'required|date',
-
-                'recibeTurnoCon' => 'required|array',
+                'recibeTurnoCon' => 'nullable|array',
                 'observaciones_recibe' => 'nullable|string',
-
-                'revisionSalas' => 'required|array',
+                'revisionSalas' => 'nullable|array',
                 'HotTrasComiCoor' => 'nullable|array',
-
-                'revision_base_operaciones' => 'required|boolean',
-                'envia_informe_diario' => 'required|boolean',
-                'envia_resumen_semanal' => 'required|boolean',
-
-                'entregaTurnoCon' => 'required|array',
+                'revision_base_operaciones' => 'nullable|boolean',
+                'envia_informe_diario' => 'nullable|boolean',
+                'envia_resumen_semanal' => 'nullable|boolean',
+                'entregaTurnoCon' => 'nullable|array',
                 'observaciones_entrega' => 'nullable|string',
-
-                'cantidad_pasajeros' => 'required|integer|min:0',
-                'cantidad_operaciones' => 'required|integer|min:0',
-
+                'cantidad_pasajeros' => 'nullable|integer|min:0',
+                'cantidad_operaciones' => 'nullable|integer|min:0',
             ]);
 
             $checklist = ChecklistTurno::create([
                 'nombre_empleado' => $validated['nombreEmpleado'],
                 'fecha' => $validated['fecha'],
-
-                'recibe_turno_con' => $validated['recibeTurnoCon'],
+                'recibe_turno_con' => $validated['recibeTurnoCon'] ?? [],
                 'observaciones_recibe' => $validated['observaciones_recibe'] ?? null,
-
-                'revision_salas' => $validated['revisionSalas'],
+                'revision_salas' => $validated['revisionSalas'] ?? [],
                 'hot_tras_comi_coor' => $validated['HotTrasComiCoor'] ?? [],
-
-                'revision_base_operaciones' => $validated['revision_base_operaciones'],
-                'envia_informe_diario' => $validated['envia_informe_diario'],
-                'envia_resumen_semanal' => $validated['envia_resumen_semanal'],
-
-                'entrega_turno_con' => $validated['entregaTurnoCon'],
+                'revision_base_operaciones' => $validated['revision_base_operaciones'] ?? false,
+                'envia_informe_diario' => $validated['envia_informe_diario'] ?? false,
+                'envia_resumen_semanal' => $validated['envia_resumen_semanal'] ?? false,
+                'entrega_turno_con' => $validated['entregaTurnoCon'] ?? [],
                 'observaciones_entrega' => $validated['observaciones_entrega'] ?? null,
-
-                'cantidad_pasajeros' => $validated['cantidad_pasajeros'],
-                'cantidad_operaciones' => $validated['cantidad_operaciones'],
+                'cantidad_pasajeros' => $validated['cantidad_pasajeros'] ?? 0,
+                'cantidad_operaciones' => $validated['cantidad_operaciones'] ?? 0,
             ]);
+            if ($request->filled('firma')) {
+                $this->guardarFirmaBase64($request->firma, 'firma_validacion', $checklist);
+            }
 
-            $this->guardarFirmaBase64(
-                $request->firma ?? '',
-                'firma_validacion',
-                $checklist
-            );
             DB::commit();
 
             return response()->json([
@@ -73,17 +60,12 @@ class ChecklistTurnoController extends Controller
 
         } catch (\Throwable $e) {
             DB::rollBack();
-
             return response()->json([
                 'message' => 'Error al guardar checklist',
                 'error' => $e->getMessage(),
             ], 500);
         }
     }
-
-    /**
-     * === MÉTODOS REUTILIZADOS ===
-     */
 
     private function guardarFirmaBase64(string $value, string $rol, ChecklistTurno $checklist): void
     {
@@ -146,22 +128,38 @@ class ChecklistTurnoController extends Controller
     }
     public function index(Request $request)
     {
-
-        $query = ChecklistTurno::query();
+        $query = ChecklistTurno::with(['firmas' => function($q) {
+            $q->wherePivot('status', 'A');
+        }]);
         $query->where('status', 'A');
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('nombre_empleado', 'like', "%{$search}%");
-            });
+            $query->where('nombre_empleado', 'like', "%{$search}%");
+        }
+        if ($request->filled('estado')) {
+            $estado = $request->estado;
+
+            if ($estado === 'finalizado') {
+                $query->whereNotNull('cantidad_pasajeros')
+                    ->whereNotNull('cantidad_operaciones')
+                    ->whereHas('firmas', function($q) {
+                        $q->wherePivot('status', 'A');
+                    });
+            } elseif ($estado === 'sin finalizar') {
+                $query->where(function($q) {
+                    $q->whereNull('cantidad_pasajeros')
+                    ->orWhereNull('cantidad_operaciones')
+                    ->orWhereDoesntHave('firmas', function($sq) {
+                        $sq->wherePivot('status', 'A');
+                    });
+                });
+            }
         }
 
         $perPage = $request->get('per_page', 10);
 
-        return response()->json(
-            $query->orderBy('created_at', 'desc')
-                ->paginate($perPage)
-        );
+        $resultados = $query->orderBy('created_at', 'desc')->paginate($perPage);
+        return response()->json($resultados);
     }
 
     public function show(ChecklistTurno $checklistTurno)

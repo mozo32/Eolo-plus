@@ -93,7 +93,7 @@ export default function Login({
                                 data-test="login-button"
                             >
                                 {processing && <Spinner />}
-                                Iniciar seción
+                                Iniciar sesión
                             </Button>
                         </div>
 

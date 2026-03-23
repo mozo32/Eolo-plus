@@ -88,7 +88,7 @@ export default function CheckListTurnoForm({ isEdit, data, onSuccess }: { isEdit
             <div className="max-w-4xl mx-auto">
                 <div className="mb-8 px-4">
                     <div className="flex justify-between mb-2">
-                        {['Inicio', 'Vehículos', 'Apoyo', 'Apoyo 2', 'Final'].map((label, i) => (
+                        {['Inicio', 'Salas', 'Coordinaciones', 'Entrega', 'Final'].map((label, i) => (
                             <div key={i} className="flex flex-col items-center">
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${step > i + 1 ? 'bg-green-500 text-white' : step === i + 1 ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-white border text-slate-400'}`}>
                                     {step > i + 1 ? <CheckCircle2 size={16} /> : i + 1}

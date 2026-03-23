@@ -58,7 +58,7 @@ const InventoryTable: React.FC<Props> = ({ medicamentos }) => {
                                                 ? 'bg-orange-100 text-orange-600'
                                                 : 'bg-emerald-100 text-emerald-600'
                                         }`}>
-                                            {m.cantidad === 0 ? 'Agotado' : m.cantidad <= 5 ? 'Crítico' : 'Disponible'}
+                                            {m.cantidad === 0 ? 'Agotado' : m.cantidad <= 5 ? 'Reabastecer' : 'Disponible'}
                                         </span>
                                     </td>
                                 </tr>

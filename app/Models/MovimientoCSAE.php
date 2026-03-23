@@ -28,6 +28,7 @@ class MovimientoCSAE extends Model
         // SALIDA
         'fecha_hora_salida',
         'observaciones_salida',
+        'status',
     ];
 
     /**

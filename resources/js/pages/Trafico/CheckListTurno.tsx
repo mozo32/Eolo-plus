@@ -5,7 +5,7 @@ import CheckListTurnoForm from './checkListTurno/CheckListTurnoForm';
 import UniversalTable from '../UniversalTable';
 import { useEffect, useState, useCallback } from 'react';
 import { fetchCheckListTurno, fetchShowCheckListTurno, eliminar } from '@/stores/apiCheckListTurno';
-import { Plus, ChevronLeft, Edit2 } from 'lucide-react';
+import { Plus, ChevronLeft, Edit2, CheckCircle2, AlertCircle } from 'lucide-react';
 import PdfExporterTurno from './checkListTurno/sections/PdfExporterTurno';
 import Swal from 'sweetalert2';
 
@@ -21,15 +21,12 @@ export default function CheckListTurno() {
     const [isEdit, setIsEdit] = useState(false);
     const [detalle, setDetalle] = useState<any>(null);
     const [pdfId, setPdfId] = useState<number | null>(null);
+
     const formatFecha = (fecha: string) => {
         if (!fecha) return 'N/A';
         const [y, m, d] = fecha.split("T")[0].split("-");
         return new Date(Number(y), Number(m) - 1, Number(d))
-            .toLocaleDateString("es-MX", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric",
-            });
+            .toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
     };
 
     const cargarDatos = async () => {
@@ -44,7 +41,9 @@ export default function CheckListTurno() {
             setLoading(false);
         }
     };
+
     const handlePdfDone = useCallback(() => setPdfId(null), []);
+
     const show = async (id: number) => {
         try {
             const dat = await fetchShowCheckListTurno(id);
@@ -79,22 +78,15 @@ export default function CheckListTurno() {
             try {
                 const res = await eliminar(id);
                 if (res.ok) {
-                    Swal.fire({
-                        title: '¡Eliminado!',
-                        text: 'El registro ha sido borrado con éxito.',
-                        icon: 'success',
-                        timer: 1500,
-                        showConfirmButton: false
-                    });
+                    Swal.fire({ title: '¡Eliminado!', icon: 'success', timer: 1500, showConfirmButton: false });
                     cargarDatos();
-                } else {
-                    throw new Error(res.message || "Error al eliminar");
                 }
             } catch (error: any) {
-                Swal.fire('Error', error.message || 'No se pudo eliminar el registro', 'error');
+                Swal.fire('Error', 'No se pudo eliminar', 'error');
             }
         }
     };
+
     const columns = [
         {
             header: "ID",
@@ -120,11 +112,32 @@ export default function CheckListTurno() {
             ),
         },
         {
+            header: "Estado",
+            render: (row: any) => {
+                const esFinalizado = row.estado_entrega === 'finalizado';
+                return (
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-tight border ${
+                        esFinalizado ? "bg-green-50 text-green-600 border-green-200" : "bg-orange-50 text-orange-600 border-orange-200"
+                    }`}>
+                        {esFinalizado ? <CheckCircle2 size={12} /> : <AlertCircle size={12} className="animate-pulse" />}
+                        {row.estado_entrega}
+                    </span>
+                );
+            }
+        },
+        {
             header: "Acciones",
             align: 'right' as const,
             render: (row: any) => (
                 <div className="flex items-center justify-end gap-2">
-                    <button className="p-2.5 text-slate-400 hover:text-white hover:bg-indigo-600 rounded-xl transition-all shadow-sm" onClick={() => show(row.id)}>
+                    <button
+                        className={`p-2.5 rounded-xl transition-all shadow-sm ${
+                            row.estado_entrega === 'finalizado'
+                            ? "text-slate-400 hover:text-white hover:bg-indigo-600"
+                            : "text-orange-500 bg-orange-50 hover:bg-orange-600 hover:text-white border border-orange-200"
+                        }`}
+                        onClick={() => show(row.id)}
+                    >
                         <Edit2 size={18} />
                     </button>
                     <button className="p-2.5 text-slate-400 hover:text-white hover:bg-amber-600 rounded-xl transition-all shadow-sm" onClick={() => setPdfId(row.id)} >
@@ -138,9 +151,7 @@ export default function CheckListTurno() {
         },
     ];
 
-    useEffect(() => {
-        cargarDatos();
-    }, [page, search]);
+    useEffect(() => { cargarDatos(); }, [page, search]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -151,18 +162,15 @@ export default function CheckListTurno() {
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                             <div>
                                 <h2 className="text-3xl font-black tracking-tight text-slate-900 uppercase">CheckList de Turno</h2>
-                                <p className="text-sm text-slate-500 font-medium uppercase">Historial y administración de entregas de turno.</p>
+                                <p className="text-sm text-slate-500 font-medium uppercase">Historial y entregas.</p>
                             </div>
                             <button
                                 onClick={() => { setIsEdit(false); setOpenForm(true); }}
-                                className="flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white transition-all shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-95"
+                                className="flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white transition-all shadow-lg hover:bg-indigo-700"
                             >
-                                <Plus size={18} strokeWidth={3} />
-                                NUEVO REGISTRO
+                                <Plus size={18} strokeWidth={3} /> NUEVO REGISTRO
                             </button>
                         </div>
-
-                        {/* Implementación de UniversalTable */}
                         <UniversalTable
                             columns={columns}
                             data={data}
@@ -173,18 +181,18 @@ export default function CheckListTurno() {
                                 total: meta?.total || 0
                             }}
                             onPageChange={(p) => setPage(p)}
-                            emptyMessage="No hay registros de checklist disponibles"
+                            emptyMessage="No hay registros disponibles"
                         />
                     </div>
                 ) : (
                     <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
                         <div className="flex items-center gap-4">
-                            <button onClick={handleBack} className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white p-3 text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-all shadow-sm">
+                            <button onClick={handleBack} className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white p-3 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
                                 <ChevronLeft size={20} strokeWidth={3} />
                             </button>
                             <div>
                                 <h2 className="text-2xl font-black text-slate-900">{isEdit ? 'Editar Entrega' : 'Nueva Entrega'}</h2>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Volver al panel principal</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Panel principal</p>
                             </div>
                         </div>
                         <CheckListTurnoForm
@@ -196,10 +204,7 @@ export default function CheckListTurno() {
                     </div>
                 )}
             </div>
-            <PdfExporterTurno
-                id={pdfId}
-                onDone={handlePdfDone}
-            />
+            <PdfExporterTurno id={pdfId} onDone={handlePdfDone} />
         </AppLayout>
     );
 }

@@ -24,6 +24,7 @@ class ServicioComisariato extends Model
         'atendio',
         'subtotal',
         'total',
+        'status',
     ];
 
     /**

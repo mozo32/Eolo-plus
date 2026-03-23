@@ -300,7 +300,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                             disabled={soloLectura}
                         >
                             <option value="">Seleccione una opción...</option>
-                            <option value="TRAFICO">TRAFICO</option>
+                            <option value="TRÁNSITO">TRÁNSITO</option>
                             <option value="GUARDA">GUARDA</option>
                             <option value="AEROTAXI">AEROTAXI</option>
                         </select>

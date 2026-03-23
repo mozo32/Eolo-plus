@@ -122,6 +122,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('ServicioComisariato')->group
     Route::get('/',[ServicioComisariatoController::class, 'index']);
     Route::get('/{servicioComisariato}', [ServicioComisariatoController::class, 'show']);
     Route::put('/{servicioComisariato}',[ServicioComisariatoController::class, 'update']);
+    Route::get('eliminar/{id}', [ServicioComisariatoController::class, 'eliminar']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('OperacionesDiarias')->group(function () {
     Route::get('/', [OperacionesDiariasController::class, 'index']);
@@ -136,6 +137,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('MovimientosCSAE')->group(fun
     Route::get('/',[MovimientoCSAEController::class, 'index']);
     Route::get('/{movimientoCSAE}', [MovimientoCSAEController::class, 'show']);
     Route::put('/{movimientoCSAE}',[MovimientoCSAEController::class, 'salida']);
+    Route::get('eliminar/{id}', [MovimientoCSAEController::class, 'eliminar']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('VehiculoEolo')->group(function () {
     Route::get('/', [VehiculoEoloController::class, 'index']);

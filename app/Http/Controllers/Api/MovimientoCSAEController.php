@@ -101,12 +101,12 @@ class MovimientoCSAEController extends Controller
     {
 
         $query = MovimientoCSAE::query();
-
+        $query->where('status', 'A');
         if ($request->filled('search')) {
             $search = $request->search;
+
             $query->where(function ($q) use ($search) {
                 $q->where('matricula', 'like', "%{$search}%");
-                $q->where('tipo_aeronave', 'like', "%{$search}%");
             });
         }
 
@@ -248,5 +248,33 @@ class MovimientoCSAEController extends Controller
             'firma_salida'  => 'Firma de salida',
             default         => ucfirst(str_replace('_', ' ', $rol)),
         };
+    }
+    public function eliminar($id)
+    {
+        try {
+            $CSAE = MovimientoCSAE::find($id);
+
+            if (!$CSAE) {
+                return response()->json([
+                    'message' => 'El registro no existe.'
+                ], 404);
+            }
+            DB::transaction(function () use ($CSAE, $id) {
+                $CSAE->update([
+                    'status' => 'N'
+                ]);
+            });
+
+            return response()->json([
+                'message' => 'Registro cancelados correctamente',
+                'data' => $CSAE
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Error al intentar eliminar el registro',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

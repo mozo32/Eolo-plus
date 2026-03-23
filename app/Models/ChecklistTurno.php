@@ -25,7 +25,7 @@ class ChecklistTurno extends Model
         'status',
         'firma',
     ];
-
+    protected $appends = ['estado_entrega'];
     protected $casts = [
         'recibe_turno_con' => 'array',
         'revision_salas' => 'array',
@@ -41,5 +41,16 @@ class ChecklistTurno extends Model
         return $this->morphToMany(Firma::class, 'firmable')
             ->withPivot(['rol', 'tag', 'orden', 'status'])
             ->withTimestamps();
+    }
+    public function getEstadoEntregaAttribute(): string
+    {
+        $tieneCantidades = !is_null($this->cantidad_pasajeros) && !is_null($this->cantidad_operaciones);
+        $tieneFirma = $this->firmas()->wherePivot('status', 'A')->exists();
+
+        if ($tieneCantidades && $tieneFirma) {
+            return 'finalizado';
+        }
+
+        return 'sin finalizar';
     }
 }

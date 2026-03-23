@@ -219,7 +219,7 @@ const ActionForms: React.FC<Props> = ({ view, medicamentos, onSuccess }) => {
                             <label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">¿Quién recibe?</label>
                             <input
                                 type="text"
-                                placeholder="Nombre completo del paciente"
+                                placeholder="Nombre"
                                 className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 rounded-2xl py-4 px-4 outline-none font-bold"
                                 value={entregaData.recibe}
                                 onChange={(e) => setEntregaData({ ...entregaData, recibe: e.target.value })}
@@ -239,7 +239,7 @@ const ActionForms: React.FC<Props> = ({ view, medicamentos, onSuccess }) => {
                                 />
                             </div>
                             <div>
-                                <label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Enfermero(a)</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Quien Entrega</label>
                                 <input type="text" readOnly value={auth?.user?.name ?? ""} className="w-full bg-slate-100 border-2 border-transparent rounded-2xl py-4 px-4 font-bold text-slate-500" />
                             </div>
                         </div>

@@ -16,7 +16,7 @@ const MedicamentosControl = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Nombre del Paciente</label>
+                        <label className="block text-sm font-medium text-gray-700">Nombre</label>
                         <input type="text" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 border" placeholder="Juan Pérez" />
                     </div>
 

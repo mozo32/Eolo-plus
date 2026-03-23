@@ -77,12 +77,11 @@ class ServicioComisariatoController extends Controller
     {
 
         $query = ServicioComisariato::query();
-
+        $query->where('status', 'A');
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('matricula', 'like', "%{$search}%");
-                $q->where('catering', 'like', "%{$search}%");
             });
         }
 
@@ -145,6 +144,34 @@ class ServicioComisariatoController extends Controller
             return response()->json([
                 'message' => 'Error al actualizar',
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+    public function eliminar($id)
+    {
+        try {
+            $comisariato = ServicioComisariato::find($id);
+
+            if (!$comisariato) {
+                return response()->json([
+                    'message' => 'El registro no existe.'
+                ], 404);
+            }
+            DB::transaction(function () use ($comisariato, $id) {
+                $comisariato->update([
+                    'status' => 'N'
+                ]);
+            });
+
+            return response()->json([
+                'message' => 'Registro cancelados correctamente',
+                'data' => $comisariato
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Error al intentar eliminar el registro',
+                'error' => $e->getMessage()
             ], 500);
         }
     }
