@@ -14,6 +14,6 @@ class TurnoAutotanque extends Model
     ];
     public function inspeccion(): HasOne
     {
-        return $this->hasOne(InspeccionAutotanque::class, 'turno_autotanque_id');
+        return $this->hasOne(inspeccionAutotanque::class, 'turno_autotanque_id');
     }
 }
