@@ -105,3 +105,12 @@ export async function eliminar(id: number) {
         ...data,
     };
 }
+
+export async function fetchCheckListPendiente() {
+    const res = await fetch(`/api/CheckListTurno/pendiente`, {
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+    });
+    if (!res.ok) return null;
+    return await res.json();
+}

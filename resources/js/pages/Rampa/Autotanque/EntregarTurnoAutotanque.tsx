@@ -150,44 +150,64 @@ const EntregarTurnoAutotanque = ({ initialData, onSuccess }: { initialData?: any
     const diferencia = aritmetico - (datos.litrosCierre ?? 0);
 
     const handleSubmit = async () => {
-    setCargando(true);
-    try {
-        const response = await guardarEntregarTurno({
-            id: idTurno,
-            ...datos,
-            remisiones,
-            entradasASA,
-            resumen: {
-                totalVendidos,
-                totalSuman,
-                balanceAritmetico: aritmetico,
-                balanceFisico: datos.litrosCierre ?? 0,
-                diferenciaFinal: diferencia
-            }
-        });
-        const turnoIdFinal = idTurno || response?.data?.id;
-        const result = await Swal.fire({
-            title: '¡Turno Guardado!',
-            text: 'Los datos se registraron correctamente. ¿Deseas realizar la inspección de la unidad ahora?',
-            icon: 'success',
-            showCancelButton: true,
-            confirmButtonColor: '#2563eb',
-            cancelButtonColor: '#64748b',
-            confirmButtonText: 'Sí, ir a inspección',
-            cancelButtonText: 'No, después',
-        });
-        if (result.isConfirmed) {
-            window.location.href = `/verificacionEstadoAutotanque?id=${turnoIdFinal}`;
-        } else {
-            if (onSuccess) onSuccess();
-        }
+        const estaCierreCompleto =
+            datos.nombreCierre.trim() !== '' &&
+            datos.fechaCierre !== '' &&
+            datos.cmCierre !== null &&
+            datos.totalizadorCierre !== null;
 
-    } catch (error: any) {
-        Swal.fire('Error', 'No se pudo guardar el turno', 'error');
-    } finally {
-        setCargando(false);
-    }
-};
+        setCargando(true);
+        try {
+            const response = await guardarEntregarTurno({
+                id: idTurno,
+                ...datos,
+                remisiones,
+                entradasASA,
+                resumen: {
+                    totalVendidos,
+                    totalSuman,
+                    balanceAritmetico: aritmetico,
+                    balanceFisico: datos.litrosCierre ?? 0,
+                    diferenciaFinal: diferencia
+                }
+            });
+
+            const turnoIdFinal = idTurno || response?.data?.id;
+
+            if (estaCierreCompleto) {
+                const result = await Swal.fire({
+                    title: '¡Turno Guardado!',
+                    text: 'Los datos se registraron correctamente. ¿Deseas realizar la inspección de la unidad ahora?',
+                    icon: 'success',
+                    showCancelButton: true,
+                    confirmButtonColor: '#2563eb',
+                    cancelButtonColor: '#64748b',
+                    confirmButtonText: 'Sí, ir a inspección',
+                    cancelButtonText: 'No, después',
+                });
+
+                if (result.isConfirmed) {
+                    window.location.href = `/verificacionEstadoAutotanque?id=${turnoIdFinal}`;
+                } else if (onSuccess) {
+                    onSuccess();
+                }
+            } else {
+                await Swal.fire({
+                    title: 'Progreso Guardado',
+                    text: 'Los datos de inicio de turno se han guardado correctamente.',
+                    icon: 'success',
+                    confirmButtonColor: '#2563eb',
+                });
+
+                if (onSuccess) onSuccess();
+            }
+
+        } catch (error: any) {
+            Swal.fire('Error', 'No se pudo guardar el turno', 'error');
+        } finally {
+            setCargando(false);
+        }
+    };
 
     useEffect(() => {
         const calculado = (datos.totalizadorIni ?? 0) + totalVendidos;

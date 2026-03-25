@@ -204,17 +204,17 @@ class ChecklistTurnoController extends Controller
             $validated = $request->validate([
                 'nombreEmpleado' => 'required|string|max:255',
                 'fecha' => 'required|date',
-                'recibeTurnoCon' => 'required|array',
+                'recibeTurnoCon' => 'nullable|array',
                 'observaciones_recibe' => 'nullable|string',
-                'revisionSalas' => 'required|array',
+                'revisionSalas' => 'nullable|array',
                 'HotTrasComiCoor' => 'nullable|array',
-                'revision_base_operaciones' => 'required|boolean',
-                'envia_informe_diario' => 'required|boolean',
-                'envia_resumen_semanal' => 'required|boolean',
-                'entregaTurnoCon' => 'required|array',
+                'revision_base_operaciones' => 'nullable|boolean',
+                'envia_informe_diario' => 'nullable|boolean',
+                'envia_resumen_semanal' => 'nullable|boolean',
+                'entregaTurnoCon' => 'nullable|array',
                 'observaciones_entrega' => 'nullable|string',
-                'cantidad_pasajeros' => 'required|integer|min:0',
-                'cantidad_operaciones' => 'required|integer|min:0',
+                'cantidad_pasajeros' => 'nullable|integer|min:0',
+                'cantidad_operaciones' => 'nullable|integer|min:0',
             ]);
 
             $checklistTurno->update([
@@ -282,5 +282,25 @@ class ChecklistTurnoController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    public function checkPendiente()
+    {
+        $pendiente = ChecklistTurno::where('status', 'A')
+            ->where(function($q) {
+                $q->whereNull('cantidad_pasajeros')
+                    ->orWhereNull('cantidad_operaciones')
+                    ->orWhereDoesntHave('firmas', function($sq) {
+                        $sq->where('firmables.status', 'A');
+                    });
+            })
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if (!$pendiente) {
+            return response()->json(null, 200);
+        }
+
+        return response()->json($pendiente);
     }
 }

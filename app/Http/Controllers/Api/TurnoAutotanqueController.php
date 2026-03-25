@@ -156,21 +156,33 @@ class TurnoAutotanqueController extends Controller
         $perPage = $request->query('per_page', 10);
 
         $turnos = TurnoAutotanque::query()
+            // Cargamos la relación para verificar la inspección
             ->with('inspeccion:id,turno_autotanque_id')
             ->when($search, function ($query, $search) {
-                $query->where('nombre', 'like', "%{$search}%")
+                $query->where(function($q) use ($search) {
+                    $q->where('nombre', 'like', "%{$search}%")
                     ->orWhere('nombreCierre', 'like', "%{$search}%");
+                });
             })
             ->when($fecha, function ($query, $fecha) {
                 $query->whereDate('fecha', $fecha);
             })
-            ->orderBy('id', 'desc')
             ->where('status', 'A')
+            ->orderBy('id', 'desc')
             ->paginate($perPage);
 
         $turnos->getCollection()->transform(function ($turno) {
+            // 1. Verificación de Inspección (la que ya tenías)
             $turno->tiene_inspeccion = $turno->inspeccion !== null;
             unset($turno->inspeccion);
+
+            // 2. Verificación de Finalizado
+            // Comprobamos que todos los campos requeridos para el cierre tengan contenido
+            $turno->finalizado = !empty($turno->nombreCierre) &&
+                                !empty($turno->fechaCierre) &&
+                                $turno->cmCierre !== null &&
+                                $turno->litrosCierre !== null &&
+                                $turno->totalizadorCierre !== null;
 
             return $turno;
         });

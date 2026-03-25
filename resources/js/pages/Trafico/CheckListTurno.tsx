@@ -4,7 +4,7 @@ import AppLayout from '@/layouts/app-layout';
 import CheckListTurnoForm from './checkListTurno/CheckListTurnoForm';
 import UniversalTable from '../UniversalTable';
 import { useEffect, useState, useCallback } from 'react';
-import { fetchCheckListTurno, fetchShowCheckListTurno, eliminar } from '@/stores/apiCheckListTurno';
+import { fetchCheckListTurno, fetchShowCheckListTurno, eliminar, fetchCheckListPendiente} from '@/stores/apiCheckListTurno';
 import { Plus, ChevronLeft, Edit2, CheckCircle2, AlertCircle } from 'lucide-react';
 import PdfExporterTurno from './checkListTurno/sections/PdfExporterTurno';
 import Swal from 'sweetalert2';
@@ -21,6 +21,7 @@ export default function CheckListTurno() {
     const [isEdit, setIsEdit] = useState(false);
     const [detalle, setDetalle] = useState<any>(null);
     const [pdfId, setPdfId] = useState<number | null>(null);
+    const [idPendiente, setIdPendiente] = useState<number | null>(null);
 
     const formatFecha = (fecha: string) => {
         if (!fecha) return 'N/A';
@@ -35,13 +36,28 @@ export default function CheckListTurno() {
             const res = await fetchCheckListTurno({ page, search, per_page: 10 });
             setData(res.data || []);
             setMeta(res);
+
+            const pendiente = await fetchCheckListPendiente();
+            if (pendiente && pendiente.id) {
+                setIdPendiente(pendiente.id);
+            } else {
+                setIdPendiente(null);
+            }
         } catch (error) {
             console.error(error);
         } finally {
             setLoading(false);
         }
     };
-
+    const handlePrincipalAction = () => {
+        if (idPendiente) {
+            show(idPendiente);
+        } else {
+            setIsEdit(false);
+            setDetalle(null);
+            setOpenForm(true);
+        }
+    };
     const handlePdfDone = useCallback(() => setPdfId(null), []);
 
     const show = async (id: number) => {
@@ -165,10 +181,23 @@ export default function CheckListTurno() {
                                 <p className="text-sm text-slate-500 font-medium uppercase">Historial y entregas.</p>
                             </div>
                             <button
-                                onClick={() => { setIsEdit(false); setOpenForm(true); }}
-                                className="flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white transition-all shadow-lg hover:bg-indigo-700"
+                                onClick={handlePrincipalAction}
+                                className={`flex items-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold text-white transition-all shadow-lg ${
+                                    idPendiente
+                                    ? "bg-orange-500 hover:bg-orange-600 ring-4 ring-orange-100"
+                                    : "bg-indigo-600 hover:bg-indigo-700"
+                                }`}
                             >
-                                <Plus size={18} strokeWidth={3} /> NUEVO REGISTRO
+                                {idPendiente ? (
+                                    <>
+                                        <AlertCircle size={18} strokeWidth={3} className="animate-pulse" />
+                                        FINALIZAR TURNO PENDIENTE
+                                    </>
+                                ) : (
+                                    <>
+                                        <Plus size={18} strokeWidth={3} /> NUEVO REGISTRO
+                                    </>
+                                )}
                             </button>
                         </div>
                         <UniversalTable

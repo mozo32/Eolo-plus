@@ -98,13 +98,13 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('EntregaTurnoR')->group(funct
     Route::put('/{entregaTurnoR}', [EntregaTurnoRController::class, 'update']);
 
 });
-
 Route::middleware(['api', 'auth:sanctum'])->prefix('CheckListTurno')->group(function () {
-    Route::post('/',[ChecklistTurnoController::class, 'store']);
+    Route::get('pendiente',[ChecklistTurnoController::class, 'checkPendiente']);
     Route::get('/',[ChecklistTurnoController::class, 'index']);
+    Route::post('/', [ChecklistTurnoController::class, 'store']);
+    Route::get('eliminar/{id}', [ChecklistTurnoController::class, 'eliminar']);
     Route::get('/{checklistTurno}', [ChecklistTurnoController::class, 'show']);
-    Route::put('/{checklistTurno}',[ChecklistTurnoController::class, 'update']);
-    Route::get('eliminar/{id}',[ChecklistTurnoController::class, 'eliminar']);
+    Route::put('/{checklistTurno}', [ChecklistTurnoController::class, 'update']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('ControlMedicamento')->group(function () {
     Route::get('/ultimosMovimientos',[ControlMedicamentoController::class, 'ultimosMovimientos']);

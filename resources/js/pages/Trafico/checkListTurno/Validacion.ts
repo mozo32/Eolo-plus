@@ -15,10 +15,6 @@ const requiredFieldsByStep: Record<number, { path: string; label: string }[]> = 
         { path: "nombreEmpleado", label: "Nombre del empleado" },
         { path: "fecha", label: "Fecha" },
     ],
-    5: [
-        { path: "cantidad_operaciones", label: "Cantidad de operaciones" },
-        { path: "cantidad_pasajeros", label: "Cantidad de pasajeros" },
-    ],
 };
 
 /**

@@ -4,7 +4,7 @@ import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
 import EntregarTurnoAutotanque from './Autotanque/EntregarTurnoAutotanque';
 import UniversalTable from '../UniversalTable';
-import { Calendar, Plus, X, ChevronLeft, Edit2, AlertCircle,ClipboardList } from 'lucide-react';
+import { Calendar, Plus, X, ChevronLeft, Edit2, AlertCircle, ClipboardList } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { fetchAutotanque, eliminarTurno, showAutotanque, fetchTurnoActivo } from '@/stores/apiAutoTanque';
 import PdfExporterAutotanque from './Autotanque/PdfExporterAutotanque';
@@ -112,12 +112,12 @@ export default function ReporteEntregaTurno() {
             render: (row: any) => (
                 <div className="flex items-center gap-2">
                     <span className="font-bold text-slate-900">#{row.id}</span>
-                    {/* Si no tiene inspección, mostramos un aviso sutil */}
-                    {!row.tiene_inspeccion && (
+                    {/* Alerta si el turno está incompleto o falta inspección */}
+                    {(!row.tiene_inspeccion || !row.finalizado) && (
                         <div className="group relative">
                             <AlertCircle size={14} className="text-amber-500" />
-                            <span className="absolute bottom-full mb-2 hidden group-hover:block w-32 bg-slate-800 text-white text-[10px] p-1 rounded shadow-lg">
-                                Falta Inspección
+                            <span className="absolute bottom-full mb-2 hidden group-hover:block w-40 bg-slate-800 text-white text-[10px] p-2 rounded shadow-lg z-50">
+                                Pendiente: {!row.finalizado && '• Datos de Cierre '} {!row.tiene_inspeccion && '• Inspección'}
                             </span>
                         </div>
                     )}
@@ -125,40 +125,66 @@ export default function ReporteEntregaTurno() {
             )
         },
         { header: "Nombre de quien entrega", render: (row: any) => <span className="text-sm font-semibold text-slate-700">{row.nombre || 'N/A'}</span> },
+
+        // --- ESTADO DE CIERRE (NUEVA) ---
         {
-            header: "Inspección",
+            header: "Estado Turno",
             render: (row: any) => (
-                row.tiene_inspeccion ? (
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-100 uppercase">
-                        Completada
+                row.finalizado ? (
+                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 w-fit uppercase">
+                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                        Finalizado
                     </span>
                 ) : (
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-100 animate-pulse uppercase">
-                        Pendiente
+                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1 w-fit uppercase">
+                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        Abierto / Pendiente
                     </span>
                 )
             )
         },
-        { header: "Fecha de inicio", render: (row: any) => <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">{row.fecha}</span> },
-        { header: "Diferencia Final", render: (row: any) => <span className="text-sm font-mono font-bold text-slate-600">{row.diferenciaFinal} Lts</span> },
-        { header: "Nombre de quien Recibe", render: (row: any) => <span className="text-sm font-semibold text-slate-700">{row.nombreCierre || 'N/A'}</span> },
-        { header: "Fecha de cierre", render: (row: any) => <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">{row.fechaCierre || 'Pendiente'}</span> },
+
+        // --- ESTADO DE INSPECCIÓN ---
+        {
+            header: "Inspección",
+            render: (row: any) => (
+                row.tiene_inspeccion ? (
+                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 w-fit uppercase">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        Completada
+                    </span>
+                ) : (
+                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1 w-fit uppercase">
+                        <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-bounce" />
+                        Falta llenar
+                    </span>
+                )
+            )
+        },
+
+        { header: "Fecha", render: (row: any) => <span className="text-xs font-medium text-slate-500">{row.fecha}</span> },
+        { header: "Diferencia", render: (row: any) => <span className={`text-sm font-mono font-bold ${row.diferenciaFinal < 0 ? 'text-red-600' : 'text-slate-600'}`}>{row.diferenciaFinal} Lts</span> },
+
         {
             header: "Acciones",
             align: 'right' as const,
             render: (row: any) => (
                 <div className="flex items-center justify-end gap-2">
-
-                    {row.tiene_inspeccion == false && (
+                    {/* Botón de inspección inteligente: Solo si no tiene inspección */}
+                    {!row.tiene_inspeccion && (
                         <button
-                            className="p-2.5 text-slate-400 hover:text-white hover:bg-indigo-600 rounded-xl transition-all shadow-sm"
+                            className="p-2.5 text-rose-600 bg-rose-50 hover:bg-rose-600 hover:text-white rounded-xl transition-all shadow-sm border border-rose-100"
                             onClick={() => router.get(verificacionEstadoAutotanque(), { id: row.id })}
-                            title="Ver inspección"
+                            title="Realizar Inspección Pendiente"
                         >
                             <ClipboardList size={18} />
                         </button>
                     )}
-                    <button className="p-2.5 text-slate-400 hover:text-white hover:bg-indigo-600 rounded-xl transition-all shadow-sm" onClick={() => show(row.id)}>
+                    <button
+                        className={`p-2.5 rounded-xl transition-all shadow-sm ${!row.finalizado ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'text-slate-400 hover:bg-slate-100'}`}
+                        onClick={() => show(row.id)}
+                        title={!row.finalizado ? "Completar Cierre" : "Editar"}
+                    >
                         <Edit2 size={18} />
                     </button>
                     <button className="p-2.5 text-slate-400 hover:text-white hover:bg-amber-600 rounded-xl transition-all shadow-sm" onClick={() => setPdfId(row.id)}>
