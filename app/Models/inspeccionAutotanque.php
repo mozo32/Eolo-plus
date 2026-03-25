@@ -9,17 +9,23 @@ class inspeccionAutotanque extends Model
     protected $table = 'inspecciones_autotanque';
 
     protected $fillable = [
+        'turno_autotanque_id',
         'fecha_inspeccion',
         'operador',
         'kilometraje',
         'porcentaje_combustible',
         'checklist_respuestas',
         'danos_grafico',
+        'status',
     ];
     protected $casts = [
         'checklist_respuestas' => 'array',
         'danos_grafico' => 'array',
     ];
+    public function turno(): BelongsTo
+    {
+        return $this->belongsTo(TurnoAutotanque::class, 'turno_autotanque_id');
+    }
     public function usuario(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');

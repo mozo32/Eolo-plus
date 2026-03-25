@@ -30,6 +30,7 @@ class OperacionDiaria extends Model
         'impulso',
         'nombre',
         'tipo_cliente',
+        'tipo_operacion',
         'validaciones',
     ];
 

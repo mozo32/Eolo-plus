@@ -6,6 +6,8 @@ import { SeccionChecklist } from './SeccionChecklist';
 import { SeccionVehiculo } from './SeccionVehiculo';
 import { SeccionFirmas } from './SeccionFirmas';
 import { guardarInspeccion } from '@/stores/apiInspeccionAutoTanque';
+import { router } from '@inertiajs/react';
+import { reporteEntregaTurno } from '@/routes';
 const SECCIONES_CHECK = [
     {
         titulo: "Vehículo General",
@@ -36,6 +38,9 @@ export type AuthUser = {
 };
 
 export const CheckEstadoAutotanque = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const turnoId = urlParams.get('id');
+
     const [tabActiva, setTabActiva] = useState('checklist');
     const [respuestas, setRespuestas] = useState<Record<string, string>>({});
     const [datosVehiculo, setDatosVehiculo] = useState({ km: '', combustible: '50' });
@@ -50,6 +55,7 @@ export const CheckEstadoAutotanque = () => {
 
     const finalizarInspeccion = async(datosFirmas: any) => {
         const dataLog = {
+            turno_id: turnoId,
             fecha: new Date().toLocaleDateString('en-CA'),
             operador: user?.name,
             checklist: respuestas,
@@ -76,6 +82,9 @@ export const CheckEstadoAutotanque = () => {
                 icon: "success",
                 title: "Completado con éxito",
                 text: "La inspección ha sido enviada correctamente."
+            }).then(() => {
+                // Opcional: Redirigir de vuelta al reporte después de guardar
+                router.get(reporteEntregaTurno());
             });
 
         } catch (error: any) {

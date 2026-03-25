@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-
+use Illuminate\Database\Eloquent\Relations\HasOne;
 class TurnoAutotanque extends Model
 {
     protected $table = 'turnos_autotanque';
@@ -12,4 +12,8 @@ class TurnoAutotanque extends Model
         'nombreCierre', 'fechaCierre', 'cmCierre', 'litrosCierre', 'totalizadorCierre',
         'totalVendidos', 'balanceAritmetico', 'balanceFisico', 'diferenciaFinal','status'
     ];
+    public function inspeccion(): HasOne
+    {
+        return $this->hasOne(InspeccionAutotanque::class, 'turno_autotanque_id');
+    }
 }

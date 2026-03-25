@@ -4,10 +4,12 @@ import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
 import EntregarTurnoAutotanque from './Autotanque/EntregarTurnoAutotanque';
 import UniversalTable from '../UniversalTable';
-import { Calendar, Plus, X, ChevronLeft, Edit2, AlertCircle } from 'lucide-react';
+import { Calendar, Plus, X, ChevronLeft, Edit2, AlertCircle,ClipboardList } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { fetchAutotanque, eliminarTurno, showAutotanque, fetchTurnoActivo } from '@/stores/apiAutoTanque';
 import PdfExporterAutotanque from './Autotanque/PdfExporterAutotanque';
+import { router } from '@inertiajs/react';
+import { verificacionEstadoAutotanque } from '@/routes';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Reporte de Entrega de Turno' }];
 
@@ -105,8 +107,38 @@ export default function ReporteEntregaTurno() {
     };
 
     const columns = [
-        { header: "ID", render: (row: any) => <span className="font-bold text-slate-900">#{row.id}</span> },
+        {
+            header: "ID",
+            render: (row: any) => (
+                <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900">#{row.id}</span>
+                    {/* Si no tiene inspección, mostramos un aviso sutil */}
+                    {!row.tiene_inspeccion && (
+                        <div className="group relative">
+                            <AlertCircle size={14} className="text-amber-500" />
+                            <span className="absolute bottom-full mb-2 hidden group-hover:block w-32 bg-slate-800 text-white text-[10px] p-1 rounded shadow-lg">
+                                Falta Inspección
+                            </span>
+                        </div>
+                    )}
+                </div>
+            )
+        },
         { header: "Nombre de quien entrega", render: (row: any) => <span className="text-sm font-semibold text-slate-700">{row.nombre || 'N/A'}</span> },
+        {
+            header: "Inspección",
+            render: (row: any) => (
+                row.tiene_inspeccion ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-100 uppercase">
+                        Completada
+                    </span>
+                ) : (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-100 animate-pulse uppercase">
+                        Pendiente
+                    </span>
+                )
+            )
+        },
         { header: "Fecha de inicio", render: (row: any) => <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">{row.fecha}</span> },
         { header: "Diferencia Final", render: (row: any) => <span className="text-sm font-mono font-bold text-slate-600">{row.diferenciaFinal} Lts</span> },
         { header: "Nombre de quien Recibe", render: (row: any) => <span className="text-sm font-semibold text-slate-700">{row.nombreCierre || 'N/A'}</span> },
@@ -116,6 +148,16 @@ export default function ReporteEntregaTurno() {
             align: 'right' as const,
             render: (row: any) => (
                 <div className="flex items-center justify-end gap-2">
+
+                    {row.tiene_inspeccion == false && (
+                        <button
+                            className="p-2.5 text-slate-400 hover:text-white hover:bg-indigo-600 rounded-xl transition-all shadow-sm"
+                            onClick={() => router.get(verificacionEstadoAutotanque(), { id: row.id })}
+                            title="Ver inspección"
+                        >
+                            <ClipboardList size={18} />
+                        </button>
+                    )}
                     <button className="p-2.5 text-slate-400 hover:text-white hover:bg-indigo-600 rounded-xl transition-all shadow-sm" onClick={() => show(row.id)}>
                         <Edit2 size={18} />
                     </button>
@@ -179,9 +221,8 @@ export default function ReporteEntregaTurno() {
                                 </div>
                                 <button
                                     onClick={handleAccionReporte}
-                                    className={`flex items-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold text-white transition-all shadow-lg active:scale-95 ${
-                                        turnoPendiente ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-100' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'
-                                    }`}
+                                    className={`flex items-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold text-white transition-all shadow-lg active:scale-95 ${turnoPendiente ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-100' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'
+                                        }`}
                                 >
                                     {turnoPendiente ? (
                                         <>

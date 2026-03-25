@@ -27,6 +27,7 @@ class OperacionesDiariasController extends Controller
             'observaciones'=> ['nullable','string'],
             'destino'      => ['nullable', 'string', 'max:100'],
             'tipo_cliente' => ['nullable', 'string', 'max:100'],
+            'tipo_operacion' => ['nullable', 'string', 'max:100'],
             'nombre'       => ['nullable', 'string', 'max:100'],
             'impulso'      => ['nullable', 'string', 'max:100'],
         ]);
@@ -88,6 +89,7 @@ class OperacionesDiariasController extends Controller
                 'impulso'      => $validated['impulso'],
                 'nombre'       => $validated['nombre'],
                 'tipo_cliente' => $validated['tipo_cliente'],
+                'tipo_operacion' => $validated['tipo_operacion'],
             ]);
             return response()->json([
                 'message'   => 'Operación guardada correctamente',
@@ -140,6 +142,7 @@ class OperacionesDiariasController extends Controller
             'equipaje'     => $request->equipaje,
             'observaciones'=> $request->observaciones,
             'tipo_cliente' => $request->tipo_cliente,
+            'tipo_operacion' => $request->tipo_operacion,
             'nombre'       => $request->nombre,
             'impulso'      => $request->impulso,
         ]);
@@ -212,23 +215,16 @@ class OperacionesDiariasController extends Controller
             'modulo' => 'required|string'
         ]);
 
-        // Buscamos la operación
         $operacion = OperacionDiaria::where('matricula', $request->matricula)
             ->where('fecha', $request->fecha)
             ->where('tipo', $request->tipo)
             ->first();
 
         if ($operacion) {
-            // Verificamos si EL MÓDULO ACTUAL ya está en el JSON
             $yaValidadoPorMi = collect($operacion->validaciones ?? [])->contains($request->modulo);
-
-            // Si YA lo validé, devolvemos existe => false para que el front no muestre el Swal
-            // y permita seguir con un registro nuevo.
             if ($yaValidadoPorMi) {
                 return response()->json(['existe' => false]);
             }
-
-            // Si existe pero YO no lo he validado, entonces sí disparamos la alerta
             return response()->json([
                 'existe' => true,
                 'operacion' => $operacion,

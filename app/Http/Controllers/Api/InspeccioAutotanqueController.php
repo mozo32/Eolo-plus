@@ -17,6 +17,7 @@ class InspeccioAutotanqueController extends Controller
     public function store(Request $request)
     {
         $inspeccion = inspeccionAutotanque::create([
+            'turno_autotanque_id' => $request->turno_id,
             'fecha_inspeccion' => Carbon::parse($request->fecha),
             'operador' => $request->operador,
             'kilometraje' => $request->km,

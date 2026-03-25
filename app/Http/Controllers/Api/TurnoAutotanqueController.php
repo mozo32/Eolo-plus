@@ -155,7 +155,8 @@ class TurnoAutotanqueController extends Controller
         $fecha  = $request->query('date');
         $perPage = $request->query('per_page', 10);
 
-        $remisiones = TurnoAutotanque::query()
+        $turnos = TurnoAutotanque::query()
+            ->with('inspeccion:id,turno_autotanque_id')
             ->when($search, function ($query, $search) {
                 $query->where('nombre', 'like', "%{$search}%")
                     ->orWhere('nombreCierre', 'like', "%{$search}%");
@@ -166,13 +167,25 @@ class TurnoAutotanqueController extends Controller
             ->orderBy('id', 'desc')
             ->where('status', 'A')
             ->paginate($perPage);
-        return response()->json($remisiones);
+
+        $turnos->getCollection()->transform(function ($turno) {
+            $turno->tiene_inspeccion = $turno->inspeccion !== null;
+            unset($turno->inspeccion);
+
+            return $turno;
+        });
+
+        return response()->json($turnos);
     }
     public function show($id)
     {
-        $turno = TurnoAutotanque::where('id', $id)
-            ->latest()
+        $turno = TurnoAutotanque::with('inspeccion')
+            ->where('id', $id)
             ->first();
+
+        if (!$turno) {
+            return response()->json(['message' => 'Registro no encontrado'], 404);
+        }
 
         $remision = Remision::where('id_turno', $id)->get();
         $sumaAutotanque = SumaAutotanque::where('id_turno', $id)->get();
@@ -180,22 +193,24 @@ class TurnoAutotanqueController extends Controller
         return response()->json([
             'message' => 'Se encontró el registro',
             'data' => [
-                'turno' => $turno,
-                'remision' => $remision,
+                'turno'          => $turno,
+                'remision'       => $remision,
                 'sumaAutotanque' => $sumaAutotanque,
+                'inspeccion'     => $turno->inspeccion,
             ],
         ]);
     }
     public function eliminar($id)
     {
         try {
-            $autotanque = TurnoAutotanque::find($id);
+            $autotanque = TurnoAutotanque::with('inspeccion')->find($id);
 
             if (!$autotanque) {
                 return response()->json([
                     'message' => 'El registro no existe.'
                 ], 404);
             }
+
             DB::transaction(function () use ($autotanque, $id) {
                 $autotanque->update([
                     'status' => 'N'
@@ -203,10 +218,15 @@ class TurnoAutotanqueController extends Controller
                 Remision::where('id_turno', $id)->update([
                     'status' => 'N'
                 ]);
+                if ($autotanque->inspeccion) {
+                    $autotanque->inspeccion->update([
+                        'status' => 'N'
+                    ]);
+                }
             });
 
             return response()->json([
-                'message' => 'Registro y remisiones cancelados correctamente',
+                'message' => 'Registro, remisiones e inspección cancelados correctamente',
                 'data' => $autotanque
             ]);
 

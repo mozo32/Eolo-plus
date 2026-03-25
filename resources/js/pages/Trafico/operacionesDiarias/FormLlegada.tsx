@@ -22,6 +22,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
         pax: datosEdicion?.pax || null,
         equipaje: datosEdicion?.equipaje || null,
         tipo_cliente: datosEdicion?.tipo_cliente || '',
+        tipo_operacion: datosEdicion?.tipo_operacion || '',
         departamento: moduloNombre,
         movimiento: 'Llegada',
         fecha: fecha || (datosEdicion?.fecha
@@ -62,6 +63,7 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                         pax: op.pax,
                         equipaje: op.equipaje,
                         tipo_cliente: op.tipo_cliente || '',
+                        tipo_operacion: op.tipo_operacion || '',
                         departamento: moduloNombre,
                         movimiento: 'Llegada',
                         fecha: op?.fecha
@@ -290,21 +292,49 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                 </div>
 
                 {moduloNombre === 'Trafico' && (
-                    <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tipo Cliente</label>
-                        <select
-                            value={formData.tipo_cliente}
-                            className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
-                            onChange={(e) => handleFieldChange("tipo_cliente", e.target.value)}
-                            required
-                            disabled={soloLectura}
-                        >
-                            <option value="">Seleccione una opción...</option>
-                            <option value="TRÁNSITO">TRÁNSITO</option>
-                            <option value="GUARDA">GUARDA</option>
-                            <option value="AEROTAXI">AEROTAXI</option>
-                        </select>
-                    </div>
+                    <>
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tipo Cliente</label>
+                            <select
+                                value={formData.tipo_cliente}
+                                className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+                                onChange={(e) => handleFieldChange("tipo_cliente", e.target.value)}
+                                required
+                                disabled={soloLectura}
+                            >
+                                <option value="">Seleccione una opción...</option>
+                                <option value="TRÁNSITO">TRÁNSITO</option>
+                                <option value="GUARDA">GUARDA</option>
+                                <option value="AEROTAXI">AEROTAXI</option>
+                                <option value="MANTENIMIENTO">MANTENIMIENTO</option>
+                                <option value="HANDLING">HANDLING</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">
+                                Tipo operación
+                            </label>
+                            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl border border-slate-200">
+                                {['NACIONAL', 'INTERNACIONAL'].map((opcion) => (
+                                    <button
+                                        key={opcion}
+                                        type="button"
+                                        disabled={soloLectura}
+                                        onClick={() => handleFieldChange("tipo_operacion", opcion)}
+                                        className={`py-2.5 px-4 rounded-lg text-xs font-bold transition-all duration-200
+                                                        ${formData.tipo_operacion === opcion
+                                                            ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200'
+                                                            : 'text-slate-500 hover:bg-slate-200/50'
+                                                        }
+                                                    ${soloLectura ? 'cursor-not-allowed opacity-70' : ''}
+                                                `}
+                                    >
+                                        {opcion}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </>
                 )}
 
                 {moduloNombre === 'Seguridad' && (

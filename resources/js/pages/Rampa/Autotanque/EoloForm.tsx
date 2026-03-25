@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useForm, usePage } from '@inertiajs/react';
 import Swal from 'sweetalert2';
 import PressureGauge from './PressureGauge';
@@ -45,7 +45,6 @@ const SignaturePad = ({ label, onClear, canvasRef }: {
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-
         const { x, y } = getCoordinates(e);
         ctx.lineWidth = 2.5;
         ctx.lineCap = 'round';
@@ -116,15 +115,6 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
     const canvasClienteRef = useRef<HTMLCanvasElement>(null);
     const canvasOperadorRef = useRef<HTMLCanvasElement>(null);
 
-    const getXsrfToken = () => {
-        return decodeURIComponent(
-            document.cookie
-                .split('; ')
-                .find(row => row.startsWith('XSRF-TOKEN='))
-                ?.split('=')[1] || ''
-        );
-    };
-
     const { data, setData, reset } = useForm<EoloFormData>({
         fecha: today,
         operador: user?.name || '',
@@ -141,7 +131,25 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
         presionDif: 0,
     });
 
-    const totalLitros = (Number(data.lecturaFinal) || 0) - (Number(data.lecturaInicial) || 0);
+    const totalLitros = (Number(data.lecturaInicial) || 0) - (Number(data.lecturaFinal) || 0);
+    const isLecturaInvalid = Number(data.lecturaFinal) > Number(data.lecturaInicial) && data.lecturaInicial !== '';
+
+    const handleSwapLecturas = () => {
+        setData(prev => ({
+            ...prev,
+            lecturaInicial: prev.lecturaFinal,
+            lecturaFinal: prev.lecturaInicial
+        }));
+    };
+
+    const getXsrfToken = () => {
+        return decodeURIComponent(
+            document.cookie
+                .split('; ')
+                .find(row => row.startsWith('XSRF-TOKEN='))
+                ?.split('=')[1] || ''
+        );
+    };
 
     const handleTimeChange = (name: keyof EoloFormData, value: string) => {
         const rawValue = value.replace(/\D/g, '');
@@ -169,8 +177,8 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
     };
 
     const handleSubmit = async () => {
-        if (!data.cliente || !data.lecturaFinal) {
-            Swal.fire('Error', 'Por favor completa los campos obligatorios', 'error');
+        if (!data.cliente || !data.lecturaFinal || isLecturaInvalid) {
+            Swal.fire('Error', 'Verifica los campos obligatorios y lecturas', 'error');
             return;
         }
 
@@ -227,7 +235,8 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
             setIsSubmitting(false);
         }
     };
-    React.useEffect(() => {
+
+    useEffect(() => {
         if (externalData) {
             setData({
                 fecha: externalData.fecha || today,
@@ -244,6 +253,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                 presionDif: Number(externalData.presionDif) || 0,
                 lecturaInicial: externalData.lectura_inicial || '',
             });
+
             const firmaClienteObj = externalData.firmas?.find((f: any) => f.pivot?.rol === 'cliente');
             const firmaOperadorObj = externalData.firmas?.find((f: any) => f.pivot?.rol === 'operador');
 
@@ -256,7 +266,6 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                 if (item.path && item.ref.current) {
                     const img = new Image();
                     img.crossOrigin = "anonymous";
-
                     img.onload = () => {
                         const canvas = item.ref.current;
                         const ctx = canvas?.getContext('2d');
@@ -272,6 +281,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
             reset();
         }
     }, [externalData]);
+
     return (
         <div className="min-h-screen bg-[#f8fafc] p-6 font-sans">
             <div className="mx-auto max-w-5xl">
@@ -432,22 +442,39 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                                             className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-3xl font-mono text-slate-700 text-center focus:bg-white focus:border-blue-200 outline-none transition-all shadow-inner"
                                         />
                                     </div>
-                                    <div className="flex justify-center -my-2 relative z-10">
-                                        <div className="bg-white p-1 rounded-full border border-slate-100 shadow-sm">
-                                            <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+
+                                    <div className="flex justify-center -my-4 relative z-20">
+                                        <button
+                                            type="button"
+                                            onClick={handleSwapLecturas}
+                                            className="bg-white p-2 rounded-full border border-slate-200 shadow-md hover:shadow-lg hover:scale-110 active:scale-95 transition-all group/swap"
+                                        >
+                                            <svg className="w-6 h-6 text-blue-500 group-hover/swap:rotate-180 transition-transform duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M7 16V4m0 0L3 8m4-4l4 4m9 4v12m0 0l4-4m-4 4l-4-4" />
                                             </svg>
-                                        </div>
+                                        </button>
                                     </div>
+
                                     <div className="group">
-                                        <label className="block text-[10px] text-blue-600 uppercase font-bold mb-1 ml-2 tracking-widest text-center lg:text-left">Final</label>
+                                        <label className={`block text-[10px] uppercase font-bold mb-1 ml-2 tracking-widest text-center lg:text-left ${isLecturaInvalid ? 'text-red-500' : 'text-blue-600'}`}>
+                                            Final {isLecturaInvalid}
+                                        </label>
                                         <input
                                             type="number"
                                             placeholder="000000"
                                             value={data.lecturaFinal}
                                             onChange={e => setData('lecturaFinal', e.target.value)}
-                                            className="w-full bg-blue-50 border-2 border-blue-100 rounded-2xl px-6 py-4 text-3xl font-mono text-blue-700 text-center focus:bg-white focus:border-blue-400 outline-none transition-all shadow-blue-50"
+                                            className={`w-full border-2 rounded-2xl px-6 py-4 text-3xl font-mono text-center outline-none transition-all ${
+                                                isLecturaInvalid
+                                                    ? 'bg-red-50 border-red-200 text-red-700 focus:border-red-400 shadow-red-50'
+                                                    : 'bg-blue-50 border-blue-100 text-blue-700 focus:bg-white focus:border-blue-400 shadow-blue-50'
+                                            }`}
                                         />
+                                        {isLecturaInvalid && (
+                                            <p className="text-[10px] text-red-500 font-black uppercase mt-2 text-center animate-pulse">
+                                                Lectura final inválida
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -459,7 +486,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                                     </span>
                                     <div className="flex flex-col items-center">
                                         <span className="text-7xl lg:text-8xl font-black tracking-tighter text-slate-900 tabular-nums">
-                                            {totalLitros >= 0 ? totalLitros.toLocaleString() : 0}
+                                            {totalLitros >= 0 ? totalLitros.toLocaleString('en-US') : 0}
                                         </span>
                                         <span className="text-xs font-black text-blue-500 uppercase tracking-[0.4em] mt-2">Litros</span>
                                     </div>
@@ -479,12 +506,15 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
 
                             <button
                                 onClick={handleSubmit}
-                                disabled={isSubmitting || isEdit} // Deshabilitar si solo es visualización
-                                className={`mt-10 w-full ${isEdit ? 'bg-slate-800' : isSubmitting ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'
-                                    } ...`}
+                                disabled={isSubmitting || isEdit || isLecturaInvalid}
+                                className={`mt-10 w-full p-4 rounded-2xl font-bold text-white transition-all ${
+                                    isEdit || isLecturaInvalid ? 'bg-slate-800' : isSubmitting ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'
+                                }`}
                             >
                                 {isEdit ? (
-                                    <span className="text-lg text-white">Documento en Modo Lectura</span>
+                                    <span className="text-lg">Documento en Modo Lectura</span>
+                                ) : isLecturaInvalid ? (
+                                    "Error en Lecturas"
                                 ) : isSubmitting ? (
                                     "Procesando..."
                                 ) : (

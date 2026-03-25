@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { showAutotanque } from "@/stores/apiAutoTanque";
 import Swal from "sweetalert2";
+import camioPipa from '../../../../../resources/js/assets/Captura de pantalla 2026-02-10 121721.png';
 import {
     Document,
     Page,
@@ -8,7 +9,7 @@ import {
     View,
     StyleSheet,
     pdf,
-    Image, // Importamos Image para la marca de agua
+    Image,
 } from "@react-pdf/renderer";
 
 const GREEN = "#003E51";
@@ -39,7 +40,7 @@ const styles = StyleSheet.create({
     },
     headerLeftText: {
         fontSize: 16,
-        fontWeight: 900 as any,
+        fontWeight: "bold" as any,
         letterSpacing: 4,
     },
     headerMid: {
@@ -50,7 +51,7 @@ const styles = StyleSheet.create({
     },
     headerTitle: {
         fontSize: 11,
-        fontWeight: 900 as any,
+        fontWeight: "bold" as any,
         textTransform: "uppercase",
         marginBottom: 2,
     },
@@ -78,24 +79,59 @@ const styles = StyleSheet.create({
     fieldCellLast: { borderRightWidth: 0 },
     label: {
         fontSize: 7,
-        fontWeight: 900 as any,
+        fontWeight: "bold" as any,
         textTransform: "uppercase",
         color: "#111",
         marginBottom: 1,
     },
     value: {
         fontSize: 9,
-        fontWeight: 800 as any,
+        fontWeight: "bold" as any,
         textTransform: "uppercase",
     },
     boxTitle: {
         fontSize: 9,
-        fontWeight: 900 as any,
+        fontWeight: "bold" as any,
         textTransform: "uppercase",
         color: GREEN,
         marginBottom: 4,
         marginTop: 8,
     },
+    // Estilos de Inspección
+    inspeccionBox: {
+        borderWidth: 2,
+        borderColor: BORDER,
+        padding: 8,
+        marginBottom: 8,
+    },
+    checklistGrid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        marginTop: 5,
+        borderTopWidth: 1,
+        borderColor: "#eee",
+        paddingTop: 5,
+    },
+    checkItem: {
+        width: "33%",
+        fontSize: 7,
+        marginBottom: 3,
+    },
+    damageContainer: {
+        position: 'relative',
+        width: 320,
+        height: 140,
+        marginTop: 10,
+        alignSelf: 'center',
+    },
+
+    damageMarker: {
+        position: 'absolute',
+        color: 'red',
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+    // Estilos de Tabla
     tableWrap: {
         borderWidth: 2,
         borderColor: BORDER,
@@ -109,14 +145,11 @@ const styles = StyleSheet.create({
     th: {
         paddingVertical: 4,
         fontSize: 7.5,
-        fontWeight: 900 as any,
+        fontWeight: "bold" as any,
         textTransform: "uppercase",
         borderRightWidth: 1,
         borderColor: BORDER,
         textAlign: "center",
-    },
-    thLast: {
-        borderRightWidth: 0,
     },
     tr: {
         flexDirection: "row",
@@ -129,9 +162,6 @@ const styles = StyleSheet.create({
         borderRightWidth: 1,
         borderColor: BORDER,
         textAlign: "center",
-    },
-    tdLast: {
-        borderRightWidth: 0,
     },
     balanceBox: {
         marginTop: 10,
@@ -154,12 +184,12 @@ function Watermark({ src }: { src: string }) {
             src={src}
             style={{
                 position: "absolute",
-                top: 100, // Ajusta la posición vertical
-                left: 50, // Ajusta la posición horizontal
-                width: 500, // Ajusta el ancho de la marca de agua
-                height: 500, // Ajusta el alto de la marca de agua
-                opacity: 0.15, // Ajusta la opacidad para que sea tenue
-                zIndex: -1, // Asegura que esté detrás de todo el contenido
+                top: 150,
+                left: 50,
+                width: 500,
+                height: 500,
+                opacity: 0.1,
+                zIndex: -1,
             }}
         />
     );
@@ -167,6 +197,7 @@ function Watermark({ src }: { src: string }) {
 
 function AutotanquePdfDoc({ detalle }: { detalle: any }) {
     const turno = detalle?.data?.turno || {};
+    const inspeccion = detalle?.data?.inspeccion || turno?.inspeccion;
     const remisiones = Array.isArray(detalle?.data?.remision) ? detalle.data.remision : [];
     const watermarkUrl = `${window.location.origin}/1c463caa-e3a1-4093-a00b-1c0da40795f6.jpg`;
 
@@ -177,110 +208,93 @@ function AutotanquePdfDoc({ detalle }: { detalle: any }) {
 
                 {/* Header */}
                 <View style={styles.headerWrap}>
-                    <View style={styles.headerLeft}>
-                        <Text style={styles.headerLeftText}>EOLO</Text>
-                    </View>
+                    <View style={styles.headerLeft}><Text style={styles.headerLeftText}>EOLO</Text></View>
                     <View style={styles.headerMid}>
                         <Text style={styles.headerTitle}>Reporte de Turno Autotanque</Text>
-                        <Text style={styles.headerSub}>
-                            Folio Turno: #{turno.id || "N/A"} · Fecha: {turno.fecha || "N/A"}
-                        </Text>
+                        <Text style={styles.headerSub}>Folio Turno: #{turno.id || "N/A"} · Fecha: {turno.fecha || "N/A"}</Text>
                     </View>
                 </View>
 
-                {/* Información de Apertura y Cierre */}
+                {/* Apertura y Cierre */}
                 <View style={styles.fieldsWrap}>
                     <View style={styles.fieldsRow}>
-                        <View style={styles.fieldCell}>
-                            <Text style={styles.label}>Responsable Apertura</Text>
-                            <Text style={styles.value}>{turno.nombre || "-"}</Text>
-                        </View>
-                        <View style={styles.fieldCell}>
-                            <Text style={styles.label}>Fecha/Hora Apertura</Text>
-                            <Text style={styles.value}>{turno.fecha || "-"}</Text>
-                        </View>
-                        <View style={[styles.fieldCell, styles.fieldCellLast]}>
-                            <Text style={styles.label}>Litros Iniciales</Text>
-                            <Text style={styles.value}>{turno.litrosIni || 0} L</Text>
-                        </View>
+                        <View style={styles.fieldCell}><Text style={styles.label}>Responsable Apertura</Text><Text style={styles.value}>{turno.nombre || "-"}</Text></View>
+                        <View style={styles.fieldCell}><Text style={styles.label}>Litros Iniciales</Text><Text style={styles.value}>{turno.litrosIni || 0} L</Text></View>
                     </View>
                     <View style={[styles.fieldsRow, { borderBottomWidth: 0 }]}>
-                        <View style={styles.fieldCell}>
-                            <Text style={styles.label}>Responsable Cierre</Text>
-                            <Text style={styles.value}>{turno.nombreCierre || "-"}</Text>
-                        </View>
-                        <View style={styles.fieldCell}>
-                            <Text style={styles.label}>Fecha/Hora Cierre</Text>
-                            <Text style={styles.value}>{turno.fechaCierre || "-"}</Text>
-                        </View>
-                        <View style={[styles.fieldCell, styles.fieldCellLast]}>
-                            <Text style={styles.label}>Litros Finales</Text>
-                            <Text style={styles.value}>{turno.litrosCierre} L</Text>
-                        </View>
+                        <View style={styles.fieldCell}><Text style={styles.label}>Responsable Cierre</Text><Text style={styles.value}>{turno.nombreCierre || "-"}</Text></View>
+                        <View style={styles.fieldCell}><Text style={styles.label}>Litros Finales</Text><Text style={styles.value}>{turno.litrosCierre} L</Text></View>
                     </View>
                 </View>
 
-                {/* Tabla de Remisiones */}
+                {/* Sección Inspección */}
+                {inspeccion && (
+                    <>
+                        <Text style={styles.boxTitle}>Inspección de Unidad (Checklist)</Text>
+                        <View style={styles.inspeccionBox}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                                <Text style={styles.label}>Operador: {inspeccion.operador}</Text>
+                                <Text style={styles.label}>KM: {inspeccion.kilometraje}</Text>
+                                <Text style={styles.label}>Combustible: {inspeccion.porcentaje_combustible}%</Text>
+                            </View>
+
+                            <View style={styles.checklistGrid}>
+                                {Object.entries(inspeccion.checklist_respuestas || {}).map(([key, val], i) => (
+                                    <View key={i} style={styles.checkItem}>
+                                        <Text>• {key}: <Text style={{ color: val === 'Ok' ? '#065f46' : '#991b1b' }}>{val as string}</Text></Text>
+                                    </View>
+                                ))}
+                            </View>
+
+                            <View style={styles.damageContainer}>
+                                <Image src={camioPipa} style={{ width: '100%', height: '100%' }} />
+                                {(inspeccion.danos_grafico || []).map((d: any, idx: number) => (
+                                    <Text key={idx} style={[styles.damageMarker, { left: `${d.x}%`, top: `${d.y}%` }]}>X</Text>
+                                ))}
+                            </View>
+                        </View>
+                    </>
+                )}
+
+                {/* Tabla Remisiones */}
                 <Text style={styles.boxTitle}>Remisiones de Combustible</Text>
                 <View style={styles.tableWrap}>
                     <View style={styles.tableHeader}>
                         <Text style={[styles.th, { width: "15%" }]}>Folio</Text>
-                        <Text style={[styles.th, { width: "25%" }]}>Cliente</Text>
-                        <Text style={[styles.th, { width: "15%" }]}>Matrícula</Text>
-                        <Text style={[styles.th, { width: "15%" }]}>Aeronave</Text>
-                        <Text style={[styles.th, { width: "15%" }]}>Producto</Text>
-                        <Text style={[styles.th, styles.thLast, { width: "15%" }]}>Total Lts</Text>
+                        <Text style={[styles.th, { width: "40%" }]}>Cliente</Text>
+                        <Text style={[styles.th, { width: "25%" }]}>Matrícula</Text>
+                        <Text style={[styles.th, { width: "20%", borderRightWidth: 0 }]}>Total Lts</Text>
                     </View>
-
-                    {remisiones.map((r: any, idx: number) => (
+                    {remisiones.length > 0 ? remisiones.map((r: any, idx: number) => (
                         <View key={idx} style={styles.tr}>
                             <Text style={[styles.td, { width: "15%" }]}>{r.folio}</Text>
-                            <Text style={[styles.td, { width: "25%", textAlign: "left", paddingLeft: 4 }]}>{r.cliente}</Text>
-                            <Text style={[styles.td, { width: "15%" }]}>{r.matricula}</Text>
-                            <Text style={[styles.td, { width: "15%" }]}>{r.aeronave_tipo}</Text>
-                            <Text style={[styles.td, { width: "15%" }]}>{r.producto}</Text>
-                            <Text style={[styles.td, styles.tdLast, { width: "15%", fontWeight: 900 as any }]}>{r.total_litros}</Text>
+                            <Text style={[styles.td, { width: "40%", textAlign: "left", paddingLeft: 4 }]}>{r.cliente}</Text>
+                            <Text style={[styles.td, { width: "25%" }]}>{r.matricula}</Text>
+                            <Text style={[styles.td, { width: "20%", borderRightWidth: 0, fontWeight: "bold" as any }]}>{r.total_litros}</Text>
                         </View>
-                    ))}
+                    )) : (
+                        <View style={styles.tr}><Text style={[styles.td, { width: "100%", borderRightWidth: 0 }]}>No hay remisiones registradas</Text></View>
+                    )}
                 </View>
 
-                {/* Balances Finales */}
+                {/* Balances */}
                 <View style={styles.balanceBox}>
-                    <View style={styles.balanceCard}>
-                        <Text style={styles.label}>Total Vendido</Text>
-                        <Text style={[styles.value, { color: GREEN }]}>{turno.totalVendidos || 0} L</Text>
-                    </View>
-                    <View style={styles.balanceCard}>
-                        <Text style={styles.label}>Diferencia Final</Text>
-                        <Text style={[styles.value, { color: "#dc2626" }]}>{turno.diferenciaFinal || 0} L</Text>
-                    </View>
+                    <View style={styles.balanceCard}><Text style={styles.label}>Total Vendido</Text><Text style={[styles.value, { color: GREEN }]}>{turno.totalVendidos || 0} L</Text></View>
+                    <View style={styles.balanceCard}><Text style={styles.label}>Diferencia Final</Text><Text style={[styles.value, { color: "#dc2626" }]}>{turno.diferenciaFinal || 0} L</Text></View>
                 </View>
             </Page>
         </Document>
     );
 }
 
-type Props = { id: number | null; onDone: () => void };
-
-export default function PdfExporterAutotanque({ id, onDone }: Props) {
+export default function PdfExporterAutotanque({ id, onDone }: { id: number | null; onDone: () => void }) {
     useEffect(() => {
         if (!id) return;
-
         const generatePdf = async () => {
-            Swal.fire({
-                title: "Generando Reporte",
-                text: "Espere un momento...",
-                allowOutsideClick: false,
-                didOpen: () => Swal.showLoading(),
-            });
-
+            Swal.fire({ title: "Generando Reporte", text: "Espere un momento...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             try {
                 const response = await showAutotanque(id);
-
-                if (!response || !response.ok || !response.data) {
-                    throw new Error("Datos incompletos");
-                }
-
+                if (!response?.data) throw new Error("Sin datos");
                 const blob = await pdf(<AutotanquePdfDoc detalle={response} />).toBlob();
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
@@ -288,23 +302,12 @@ export default function PdfExporterAutotanque({ id, onDone }: Props) {
                 a.download = `Reporte_Autotanque_${id}.pdf`;
                 a.click();
                 URL.revokeObjectURL(url);
-
-                Swal.fire({
-                    icon: "success",
-                    title: "PDF Generado",
-                    timer: 1500,
-                    showConfirmButton: false,
-                });
-            } catch (e: any) {
-                console.error(e);
+                Swal.fire({ icon: "success", title: "PDF Generado", timer: 1500, showConfirmButton: false });
+            } catch (e) {
                 Swal.fire("Error", "No se pudo obtener la información", "error");
-            } finally {
-                onDone();
-            }
+            } finally { onDone(); }
         };
-
         generatePdf();
     }, [id]);
-
     return null;
 }
