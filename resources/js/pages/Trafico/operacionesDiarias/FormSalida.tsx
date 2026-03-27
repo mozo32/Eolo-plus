@@ -2,7 +2,11 @@ import { useState, useEffect } from "react";
 import { useMatriculaAutocompleteStore } from "./useMatriculaAutocompleteStore";
 import Swal from "sweetalert2";
 import InputMatricula from "@/pages/InputMatricula";
-import { guardarOperacionesDiariasApi, verificarOperacionExistenteApi } from "@/stores/apiOperacionesDiarias";
+import {
+    guardarOperacionesDiariasApi,
+    verificarOperacionExistenteApi,
+    obtenerNombresHistoricosApi
+} from "@/stores/apiOperacionesDiarias";
 
 export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion, soloLectura = false }: {
     alCerrar?: () => void;
@@ -12,6 +16,8 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion, soloLectura =
 }) => {
     const { obtenerTipo } = useMatriculaAutocompleteStore();
     const [cargando, setCargando] = useState(false);
+    const [sugerenciasNombres, setSugerenciasNombres] = useState<string[]>([]);
+    const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
 
     const getInitialState = (fecha?: string) => ({
         id: datosEdicion?.id || null,
@@ -35,6 +41,21 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion, soloLectura =
 
     const [formData, setFormData] = useState(getInitialState());
 
+    const buscarNombres = async (busqueda: string) => {
+        const terminoLimpio = busqueda.replace(/^CAPITAN\.\s/, "").trim();
+        if (terminoLimpio.length < 2) {
+            setSugerenciasNombres([]);
+            return;
+        }
+        try {
+            const nombres = await obtenerNombresHistoricosApi(terminoLimpio);
+            setSugerenciasNombres(nombres);
+            setMostrarSugerencias(true);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     const handleFieldChange = (name: string, value: any) => {
         setFormData(prev => ({ ...prev, [name]: value }));
     };
@@ -42,7 +63,7 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion, soloLectura =
     const handleMatriculaSelect = async (matricula: string) => {
         const upperMat = matricula.toUpperCase();
         handleFieldChange("matricula", upperMat);
-
+        buscarNombres(upperMat);
         if (upperMat.length > 2) {
             try {
                 const check = await verificarOperacionExistenteApi(
@@ -73,20 +94,17 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion, soloLectura =
                         nombre: op.nombre || '',
                         impulso: op.impulso || ''
                     });
-
-                    const Toast = Swal.mixin({
+                    if (op.nombre) buscarNombres(op.nombre);
+                    Swal.mixin({
                         toast: true,
                         position: 'top-end',
                         showConfirmButton: false,
                         timer: 4000,
                         timerProgressBar: true,
-                    });
-
-                    Toast.fire({
+                    }).fire({
                         icon: 'success',
                         title: `Ya se registro la matrícula ${upperMat}, valide la informacion`
                     });
-
                     return;
                 }
                 const response = await obtenerTipo(upperMat) as any;
@@ -94,7 +112,7 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion, soloLectura =
                     handleFieldChange("equipo", response.tipo);
                 }
             } catch (error) {
-                console.error("Error en verificación de salida:", error);
+                console.error(error);
             }
         }
     };
@@ -102,11 +120,9 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion, soloLectura =
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (cargando) return;
-
         try {
             setCargando(true);
             await guardarOperacionesDiariasApi(formData);
-
             Swal.fire({
                 icon: 'success',
                 title: formData.id ? 'Actualizado' : 'Guardado',
@@ -114,7 +130,6 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion, soloLectura =
                 timer: 1500,
                 showConfirmButton: false
             });
-
             if (alCerrar) alCerrar();
         } catch (error) {
             let mensaje = 'No se pudo registrar la salida';
@@ -173,7 +188,6 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion, soloLectura =
                             />
                         </div>
                     </div>
-
                     <button type="button" onClick={alCerrar} className="group relative">
                         <div className="absolute -inset-1 bg-slate-100 rounded-full scale-0 group-hover:scale-100 transition-transform"></div>
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-300 group-hover:text-red-500 relative transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -289,9 +303,7 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion, soloLectura =
                             </select>
                         </div>
                         <div>
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">
-                                Tipo operación
-                            </label>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Tipo operación</label>
                             <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl border border-slate-200">
                                 {['NACIONAL', 'INTERNACIONAL'].map((opcion) => (
                                     <button
@@ -300,12 +312,10 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion, soloLectura =
                                         disabled={soloLectura}
                                         onClick={() => handleFieldChange("tipo_operacion", opcion)}
                                         className={`py-2.5 px-4 rounded-lg text-xs font-bold transition-all duration-200
-                                                        ${formData.tipo_operacion === opcion
+                                            ${formData.tipo_operacion === opcion
                                                 ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200'
                                                 : 'text-slate-500 hover:bg-slate-200/50'
-                                            }
-                                                    ${soloLectura ? 'cursor-not-allowed opacity-70' : ''}
-                                                `}
+                                            } ${soloLectura ? 'cursor-not-allowed opacity-70' : ''}`}
                                     >
                                         {opcion}
                                     </button>
@@ -347,43 +357,86 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion, soloLectura =
                             </div>
                         </div>
 
-                        <div>
-                            <label className="block text-[10px] font-bold text-blue-600 uppercase mb-2 tracking-wider">Responsable del Movimiento</label>
-                            <div className="group relative flex items-center bg-slate-50 border border-blue-200 rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all shadow-sm">
+                        <div className="relative">
+                            <label className="block text-[10px] font-bold text-blue-600 uppercase mb-2 tracking-wider">
+                                Responsable del Movimiento
+                            </label>
+                            <div className="group relative flex items-center bg-slate-50 border border-blue-200 rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 transition-all shadow-sm">
+
+                                <button
+                                    type="button"
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        setMostrarSugerencias(!mostrarSugerencias);
+                                    }}
+                                    className="p-3 border-r border-blue-100 bg-white hover:bg-blue-50 text-blue-500 transition-colors"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transition-transform ${mostrarSugerencias ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+
                                 <div className="relative border-r border-blue-100 bg-white">
                                     <select
                                         value={formData.nombre.startsWith("CAPITAN. ") ? "CAPITAN. " : ""}
+                                        disabled={soloLectura}
                                         onChange={(e) => {
                                             const nuevoPrefijo = e.target.value;
                                             const nombreLimpio = formData.nombre.replace(/^CAPITAN\.\s/, "");
                                             handleFieldChange("nombre", `${nuevoPrefijo}${nombreLimpio}`);
                                         }}
-                                        disabled={soloLectura}
                                         className="appearance-none pl-4 pr-8 py-3 bg-transparent font-bold text-xs text-blue-600 cursor-pointer outline-none uppercase"
                                     >
                                         <option value="">Personal</option>
                                         <option value="CAPITAN. ">Capitán</option>
                                     </select>
-                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-blue-400">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                        </svg>
-                                    </div>
                                 </div>
+
                                 <input
                                     type="text"
                                     value={formData.nombre.replace(/^CAPITAN\.\s/, "")}
-                                    disabled={soloLectura}
-                                    placeholder="Nombre del responsable..."
+                                    placeholder="Escriba nombre y apellido..."
                                     className="flex-1 p-3 bg-transparent outline-none uppercase font-semibold text-slate-700"
                                     required
+                                    disabled={soloLectura}
+                                    onFocus={() => {
+                                        const valorLimpio = formData.nombre.replace(/^CAPITAN\.\s/, "");
+                                        if (valorLimpio.length >= 2) setMostrarSugerencias(true);
+                                    }}
+                                    onBlur={() => setTimeout(() => setMostrarSugerencias(false), 200)}
                                     onChange={(e) => {
+                                        const nuevoValor = e.target.value.toUpperCase();
                                         const tienePrefijo = formData.nombre.startsWith("CAPITAN. ");
                                         const prefijo = tienePrefijo ? "CAPITAN. " : "";
-                                        handleFieldChange("nombre", `${prefijo}${e.target.value.toUpperCase()}`);
+
+                                        handleFieldChange("nombre", `${prefijo}${nuevoValor}`);
                                     }}
                                 />
                             </div>
+
+                            {mostrarSugerencias && sugerenciasNombres.length > 0 && (
+                                <ul className="absolute z-50 w-full bg-white border border-slate-200 mt-1 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
+                                    {sugerenciasNombres.map((nombreSug, index) => (
+                                        <li
+                                            key={index}
+                                            onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                const valorSug = nombreSug.toUpperCase();
+                                                handleFieldChange("nombre", valorSug);
+                                                setMostrarSugerencias(false);
+                                            }}
+                                            className="px-4 py-3 hover:bg-blue-600 hover:text-white cursor-pointer text-sm font-semibold text-slate-700 border-b border-slate-50 last:border-none transition-colors"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                </svg>
+                                                {nombreSug}
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
                         </div>
                     </div>
                 )}

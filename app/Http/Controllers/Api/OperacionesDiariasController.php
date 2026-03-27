@@ -239,8 +239,8 @@ class OperacionesDiariasController extends Controller
         $nombres = OperacionDiaria::where('matricula', $matricula)
             ->whereNotNull('nombre')
             ->where('nombre', '!=', '')
-            ->distinct()
-            ->pluck('nombre');
+            ->select(DB::raw('DISTINCT UPPER(TRIM(nombre)) as nombre_limpio'))
+            ->pluck('nombre_limpio');
 
         return response()->json($nombres);
     }

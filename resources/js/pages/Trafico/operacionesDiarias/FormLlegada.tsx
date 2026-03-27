@@ -455,7 +455,6 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                                             onMouseDown={(e) => {
                                                 e.preventDefault();
                                                 const valorSug = nombreSug.toUpperCase();
-                                                // El valor final se guarda tal cual viene de la sugerencia
                                                 handleFieldChange("nombre", valorSug);
                                                 setMostrarSugerencias(false);
                                             }}
