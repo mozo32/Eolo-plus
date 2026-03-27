@@ -48,13 +48,16 @@ class VehiculoEoloController extends Controller
         try {
             return DB::transaction(function () use ($request) {
                 $movimiento = movimientoVehiculo::create([
-                    'vehiculo_id' => $request->vehiculo_id,
-                    'tipo'        => $request->movimiento,
-                    'chofer'      => $request->chofer,
-                    'kilometraje' => $request->kilometraje,
-                    'gasolina'    => $request->gasolina,
-                    'destino'     => $request->destino,
-                    'autoriza'    => $request->autoriza,
+                    'vehiculo_id'   => $request->vehiculo_id,
+                    'tipo'          => $request->movimiento,
+                    'chofer'        => $request->chofer,
+                    'kilometraje'   => $request->kilometraje,
+                    'gasolina'      => $request->gasolina,
+                    'destino'       => $request->destino,
+                    'autoriza'      => $request->autoriza,
+                    'matricula'     => $request->matricula,
+                    'motivo'        => $request->motivo,
+                    'observaciones' => $request->notas,
                 ]);
 
                 $vehiculo = Vehiculo::find($request->vehiculo_id);
@@ -77,9 +80,21 @@ class VehiculoEoloController extends Controller
         }
     }
 
-    public function obtenerHistorial($id)
+    public function obtenerHistorial(Request $request, $id)
     {
         $movimientos = movimientoVehiculo::where('vehiculo_id', $id)
+            ->when($request->chofer, function ($query, $chofer) {
+                $query->where('chofer', 'like', '%' . $chofer . '%');
+            })
+            ->when($request->tipo, function ($query, $tipo) {
+                $query->where('tipo', $tipo);
+            })
+            ->when($request->fecha_inicio, function ($query, $fecha) {
+                $query->whereDate('created_at', '>=', $fecha);
+            })
+            ->when($request->fecha_fin, function ($query, $fecha) {
+                $query->whereDate('created_at', '<=', $fecha);
+            })
             ->orderBy('created_at', 'desc')
             ->get();
 

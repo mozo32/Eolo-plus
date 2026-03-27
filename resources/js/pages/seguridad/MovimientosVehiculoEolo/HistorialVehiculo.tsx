@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { History, MapPin, User, Gauge, Search, ChevronLeft, ChevronRight, Fuel } from 'lucide-react';
 import { apiVehiculoEolo } from '@/stores/apiVehiculoEolo';
 
@@ -32,11 +32,12 @@ export const HistorialVehiculo = ({ vehiculoId }: { vehiculoId: string }) => {
         return 'bg-gray-100 text-gray-700 border-gray-200';
     };
 
-    const cargarHistorial = async () => {
+    const cargarHistorial = async (filtros?: any) => {
         setLoading(true);
         try {
-            const data = await apiVehiculoEolo.getHistorial(vehiculoId);
+            const data = await apiVehiculoEolo.getHistorial(vehiculoId, filtros);
             setMovimientos(data);
+            setPaginaActual(1);
         } catch (error) {
             console.error(error);
         } finally {
@@ -45,26 +46,24 @@ export const HistorialVehiculo = ({ vehiculoId }: { vehiculoId: string }) => {
     };
 
     useEffect(() => {
-        cargarHistorial();
-        window.addEventListener('movimiento-registrado', cargarHistorial);
-        return () => window.removeEventListener('movimiento-registrado', cargarHistorial);
-    }, [vehiculoId]);
+        const filtros = {
+            busqueda,
+            tipo: filtroTipo,
+            fechaInicio,
+            fechaFin
+        };
 
-    const movimientosFiltrados = useMemo(() => {
-        return movimientos.filter(m => {
-            const coincideChofer = m.chofer.toLowerCase().includes(busqueda.toLowerCase());
-            const coincideTipo = filtroTipo === 'Todos' || m.tipo === filtroTipo;
-            const fechaMov = m.created_at.split(' ')[0];
-            const coincideFechaInicio = !fechaInicio || fechaMov >= fechaInicio;
-            const coincideFechaFin = !fechaFin || fechaMov <= fechaFin;
-            return coincideChofer && coincideTipo && coincideFechaInicio && coincideFechaFin;
-        });
-    }, [movimientos, busqueda, filtroTipo, fechaInicio, fechaFin]);
+        const timer = setTimeout(() => {
+            cargarHistorial(filtros);
+        }, 400);
 
-    const totalPaginas = Math.ceil(movimientosFiltrados.length / registrosPorPagina);
+        return () => clearTimeout(timer);
+    }, [vehiculoId, busqueda, filtroTipo, fechaInicio, fechaFin]);
+
+    const totalPaginas = Math.ceil(movimientos.length / registrosPorPagina);
     const indiceUltimo = paginaActual * registrosPorPagina;
     const indicePrimero = indiceUltimo - registrosPorPagina;
-    const movimientosPaginados = movimientosFiltrados.slice(indicePrimero, indiceUltimo);
+    const movimientosPaginados = movimientos.slice(indicePrimero, indiceUltimo);
 
     if (loading) {
         return (
@@ -101,7 +100,7 @@ export const HistorialVehiculo = ({ vehiculoId }: { vehiculoId: string }) => {
                             placeholder="Chofer..."
                             className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                             value={busqueda}
-                            onChange={(e) => { setBusqueda(e.target.value); setPaginaActual(1); }}
+                            onChange={(e) => setBusqueda(e.target.value)}
                         />
                     </div>
                     <div className="flex items-center gap-2 md:col-span-2">
@@ -109,20 +108,20 @@ export const HistorialVehiculo = ({ vehiculoId }: { vehiculoId: string }) => {
                             type="date"
                             className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-gray-600 bg-white"
                             value={fechaInicio}
-                            onChange={(e) => { setFechaInicio(e.target.value); setPaginaActual(1); }}
+                            onChange={(e) => setFechaInicio(e.target.value)}
                         />
                         <span className="text-gray-400 text-xs">-</span>
                         <input
                             type="date"
                             className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-gray-600 bg-white"
                             value={fechaFin}
-                            onChange={(e) => { setFechaFin(e.target.value); setPaginaActual(1); }}
+                            onChange={(e) => setFechaFin(e.target.value)}
                         />
                     </div>
                     <select
                         className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-gray-600 bg-white cursor-pointer"
                         value={filtroTipo}
-                        onChange={(e) => { setFiltroTipo(e.target.value as any); setPaginaActual(1); }}
+                        onChange={(e) => setFiltroTipo(e.target.value as any)}
                     >
                         <option value="Todos">Todos los tipos</option>
                         <option value="Entrada">Entradas</option>
@@ -177,7 +176,7 @@ export const HistorialVehiculo = ({ vehiculoId }: { vehiculoId: string }) => {
             {totalPaginas > 1 && (
                 <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
                     <p className="text-[11px] text-gray-400 font-medium">
-                        Mostrando <span className="text-gray-700 font-bold">{indicePrimero + 1}</span> - <span className="text-gray-700 font-bold">{Math.min(indiceUltimo, movimientosFiltrados.length)}</span> de <span className="text-gray-700 font-bold">{movimientosFiltrados.length}</span> registros
+                        Mostrando <span className="text-gray-700 font-bold">{indicePrimero + 1}</span> - <span className="text-gray-700 font-bold">{Math.min(indiceUltimo, movimientos.length)}</span> de <span className="text-gray-700 font-bold">{movimientos.length}</span> registros
                     </p>
                     <div className="flex gap-1.5">
                         <button

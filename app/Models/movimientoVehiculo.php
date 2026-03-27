@@ -20,6 +20,8 @@ class movimientoVehiculo extends Model
         'destino',
         'autoriza',
         'observaciones',
+        'matricula',
+        'motivo',
     ];
 
     protected $casts = [

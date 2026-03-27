@@ -17,30 +17,25 @@ export const ModalMovimiento = ({
     onClose,
     onSubmit
 }: Props) => {
-    // 1. Estado para bloquear el botón
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     if (!isOpen || !vehiculo) return null;
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (isSubmitting) return; // Evitar múltiples envíos
+        if (isSubmitting) return;
 
         setIsSubmitting(true);
         const formData = new FormData(e.currentTarget);
 
         try {
-            // Pasamos el formData al padre
             await onSubmit(formData);
         } finally {
-            // Nota: El cierre del modal suele resetear este estado,
-            // pero lo ponemos en false por si hay un error de validación
             setIsSubmitting(false);
         }
     };
 
-    // 2. Función para forzar mayúsculas visuales y en el valor
-    const handleInputUppercase = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleInputUppercase = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         e.target.value = e.target.value.toUpperCase();
     };
 
@@ -48,7 +43,6 @@ export const ModalMovimiento = ({
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in duration-200">
 
-                {/* Header */}
                 <div
                     className={`p-6 flex justify-between items-center text-white ${
                         tipoAccion === 'Salida' ? 'bg-red-600' : 'bg-blue-600'
@@ -70,10 +64,7 @@ export const ModalMovimiento = ({
                     </button>
                 </div>
 
-                {/* Formulario */}
                 <form onSubmit={handleSubmit} className="p-6 space-y-4">
-
-                    {/* Chofer */}
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                             Nombre del Chofer
@@ -88,7 +79,6 @@ export const ModalMovimiento = ({
                         />
                     </div>
 
-                    {/* Kilometraje / Gasolina */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
@@ -118,40 +108,82 @@ export const ModalMovimiento = ({
                         </div>
                     </div>
 
-                    {/* Solo Salida */}
                     {tipoAccion === 'Salida' && (
-                        <div className="grid grid-cols-2 gap-4 border-t pt-4">
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-                                    Destino
-                                </label>
-                                <input
-                                    name="destino"
-                                    type="text"
-                                    required
-                                    placeholder="¿A DÓNDE VA?"
-                                    onChange={handleInputUppercase}
-                                    className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none uppercase"
-                                />
-                            </div>
+                        <>
+                            <div className="grid grid-cols-2 gap-4 border-t pt-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                                        Destino
+                                    </label>
+                                    <input
+                                        name="destino"
+                                        type="text"
+                                        required
+                                        placeholder="¿A DÓNDE VA?"
+                                        onChange={handleInputUppercase}
+                                        className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none uppercase"
+                                    />
+                                </div>
 
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-                                    Autorizado por
-                                </label>
-                                <input
-                                    name="autoriza"
-                                    type="text"
-                                    required
-                                    placeholder="JEFE DE ÁREA"
-                                    onChange={handleInputUppercase}
-                                    className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none uppercase"
-                                />
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                                        Autorizado por
+                                    </label>
+                                    <input
+                                        name="autoriza"
+                                        type="text"
+                                        required
+                                        placeholder="JEFE DE ÁREA"
+                                        onChange={handleInputUppercase}
+                                        className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none uppercase"
+                                    />
+                                </div>
                             </div>
-                        </div>
+                            <div className="grid grid-cols-2 gap-4 border-t pt-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                                        Matrícula
+                                    </label>
+                                    <input
+                                        name="matricula"
+                                        type="text"
+                                        required
+                                        placeholder="Escribe la matrícula…"
+                                        onChange={handleInputUppercase}
+                                        className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none uppercase"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                                        Motivo de la salida
+                                    </label>
+                                    <input
+                                        name="motivo"
+                                        type="text"
+                                        required
+                                        placeholder="Escribe el motivo"
+                                        onChange={handleInputUppercase}
+                                        className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none uppercase"
+                                    />
+                                </div>
+                            </div>
+                        </>
                     )}
+                    <div className="grid grid-cols-1 gap-4 border-t pt-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                                Notas
+                            </label>
+                            <textarea
+                                name="notas"
+                                onChange={handleInputUppercase}
+                                placeholder=""
+                                className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none h-25 uppercase"
+                            />
+                        </div>
+                    </div>
 
-                    {/* Acciones */}
                     <div className="flex gap-3 pt-4">
                         <button
                             type="button"

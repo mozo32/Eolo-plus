@@ -62,6 +62,9 @@ const ControlVehiculos = () => {
             chofer: formData.get('chofer'),
             autoriza: formData.get('autoriza'),
             destino: formData.get('destino') || 'N/A',
+            matricula: formData.get('matricula') || '',
+            motivo: formData.get('motivo') || '',
+            notas: formData.get('notas') || '',
         };
 
         try {

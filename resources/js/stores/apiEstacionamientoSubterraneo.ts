@@ -87,3 +87,20 @@ export const obtenerDetalleVehiculo = async (fecha: string) => {
 
     return await response.json();
 };
+export async function buscarPlacasExistentes(termino: string) {
+    const res = await fetch(`/api/EstacionamientoSubTerraneo/buscar-placas?q=${termino}`, {
+        method: "GET",
+        headers: { Accept: 'application/json' },
+        credentials: "same-origin",
+    });
+    return await res.json();
+}
+
+export async function obtenerDetallePorPlaca(placa: string) {
+    const res = await fetch(`/api/EstacionamientoSubTerraneo/detalle-placa/${placa}`, {
+        method: "GET",
+        headers: { Accept: 'application/json' },
+        credentials: "same-origin",
+    });
+    return await res.json();
+}

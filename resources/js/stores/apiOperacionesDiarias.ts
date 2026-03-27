@@ -119,3 +119,12 @@ export async function verificarOperacionExistenteApi(matricula: string, fecha: s
     });
     return await res.json();
 }
+export async function obtenerNombresHistoricosApi(matricula: string) {
+    const res = await fetch(`/api/OperacionesDiarias/nombres/${encodeURIComponent(matricula)}`, {
+        method: "GET",
+        headers: { 'Accept': 'application/json' },
+        credentials: "same-origin",
+    });
+    if (!res.ok) return [];
+    return await res.json();
+}

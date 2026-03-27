@@ -95,5 +95,30 @@ class EstacionamientoSubterraneoController extends Controller
 
         return response()->json($registros);
     }
+    public function buscarPlacas(Request $request)
+    {
+        $term = $request->query('q');
+        if (!$term) return response()->json([]);
+
+        $placas = EstacionamientoSubterraneo::where('placas', 'LIKE', "%{$term}%")
+            ->select('placas') // Solo traemos la placa
+            ->distinct()
+            ->limit(10)
+            ->get();
+
+        return response()->json($placas);
+    }
+
+    // 2. Detalle de la placa (Trae registros previos para sugerir datos)
+    public function detallePorPlaca($placa)
+    {
+        $registros = EstacionamientoSubterraneo::where('placas', $placa)
+            ->select('vehiculo', 'color', 'responsable', 'matricula', 'llaves')
+            ->latest() // Trae los más recientes primero
+            ->limit(3) // Traemos los últimos 3 responsables/configuraciones diferentes
+            ->get();
+
+        return response()->json($registros);
+    }
 
 }

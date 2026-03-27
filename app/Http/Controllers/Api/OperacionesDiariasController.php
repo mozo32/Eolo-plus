@@ -234,4 +234,14 @@ class OperacionesDiariasController extends Controller
 
         return response()->json(['existe' => false]);
     }
+    public function obtenerNombresPorMatricula(string $matricula): JsonResponse
+    {
+        $nombres = OperacionDiaria::where('matricula', $matricula)
+            ->whereNotNull('nombre')
+            ->where('nombre', '!=', '')
+            ->distinct()
+            ->pluck('nombre');
+
+        return response()->json($nombres);
+    }
 }

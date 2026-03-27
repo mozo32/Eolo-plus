@@ -1,3 +1,4 @@
+//apiVehiculoEolo.ts
 import { Vehiculo } from "@/pages/seguridad/MovimientosVehiculoEolo/types";
 
 function getXsrfToken(): string {
@@ -32,13 +33,20 @@ export const apiVehiculoEolo = {
 
         return result;
     },
-    getHistorial: async (vehiculoId: string) => {
-        const response = await fetch(`/api/VehiculoEolo/vehiculos/${vehiculoId}/movimientos`,
-            {
-                method: 'GET',
-                headers: headers,
-            }
-        );
+    getHistorial: async (vehiculoId: string, filtros?: any) => {
+        const params = new URLSearchParams();
+        if (filtros) {
+            if (filtros.busqueda) params.append('chofer', filtros.busqueda);
+            if (filtros.tipo && filtros.tipo !== 'Todos') params.append('tipo', filtros.tipo);
+            if (filtros.fechaInicio) params.append('fecha_inicio', filtros.fechaInicio);
+            if (filtros.fechaFin) params.append('fecha_fin', filtros.fechaFin);
+        }
+
+        const response = await fetch(`/api/VehiculoEolo/vehiculos/${vehiculoId}/movimientos?${params.toString()}`, {
+            method: 'GET',
+            headers: headers,
+        });
+
         if (!response.ok) throw new Error('Error al obtener historial');
         return await response.json();
     },

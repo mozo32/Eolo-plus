@@ -81,6 +81,8 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('EstacionamientoSubTerraneo')
     Route::get('/',[EstacionamientoSubterraneoController::class, 'index']);
     Route::post('/',[EstacionamientoSubterraneoController::class, 'store'])->name('estacionamiento.store');
     Route::get('/detalle/{fecha}',[EstacionamientoSubterraneoController::class, 'show']);
+    Route::get('/buscar-placas',[EstacionamientoSubterraneoController::class, 'buscarPlacas']);
+    Route::get('/detalle-placa/{placa}',[EstacionamientoSubterraneoController::class, 'detallePorPlaca']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('ChecklistEquipoSeguridad')->group(function () {
     Route::post('/',[ChecklistEquipoSeguridadController::class, 'store']);
@@ -131,6 +133,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('OperacionesDiarias')->group(
     Route::get('/autocomplete', [OperacionesDiariasController::class, 'autocomplete']);
     Route::get('/buscar/{matricula}', [OperacionesDiariasController::class, 'buscarPorMatricula']);
     Route::get('/verificar', [OperacionesDiariasController::class, 'verificarExistente']);
+    Route::get('/nombres/{matricula}', [OperacionesDiariasController::class, 'obtenerNombresPorMatricula']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('MovimientosCSAE')->group(function () {
     Route::post('/',[MovimientoCSAEController::class, 'store']);
