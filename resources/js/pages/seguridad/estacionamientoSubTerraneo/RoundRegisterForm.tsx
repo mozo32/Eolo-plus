@@ -196,7 +196,7 @@ const RoundRegisterForm: React.FC<VehicleEntryFormProps> = ({ onClose }) => {
 
     const addToList = () => {
         const { placas, vehiculo, color, responsable } = currentVehicle;
-        if (!placas || !vehiculo || !marcaBusqueda || !color || !responsable) {
+        if (!placas || !marcaBusqueda || !color || !responsable) {
             Swal.fire({ icon: "error", title: "Atención", text: "Campos obligatorios incompletos.", confirmButtonColor: '#1e3a8a' });
             return;
         }
@@ -307,7 +307,7 @@ const RoundRegisterForm: React.FC<VehicleEntryFormProps> = ({ onClose }) => {
 
                                 {/* MODELO */}
                                 <div>
-                                    <label className="text-[10px] font-black text-slate-400 ml-1">Modelo *</label>
+                                    <label className="text-[10px] font-black text-slate-400 ml-1">Modelo </label>
                                     <select
                                         disabled={modelosDisponibles.length === 0 || buscandoModelos}
                                         value={currentVehicle.vehiculo}
