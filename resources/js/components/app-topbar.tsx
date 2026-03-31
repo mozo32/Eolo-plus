@@ -81,7 +81,7 @@ export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[]
 
     return (
         <header className="sticky top-0 z-50 border-b border-border bg-background">
-            <div className="mx-auto max-w-7xl px-4 flex items-center justify-between h-16">
+            <div className="flex h-16 w-full items-center justify-between px-4 sm:px-6 lg:px-8">
                 <Link href="/" className="flex items-center gap-3">
                     <AppLogo />
                 </Link>
@@ -109,7 +109,7 @@ export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[]
             </div>
 
             {breadcrumbs.length > 0 && (
-                <div className="mx-auto max-w-7xl px-6 py-2 text-xs text-muted-foreground">
+                <div className="w-full px-6 py-2 text-xs text-muted-foreground">
                     {breadcrumbs.map((b, idx) => (
                         <span key={b.title}>
                             {idx > 0 && ' / '}

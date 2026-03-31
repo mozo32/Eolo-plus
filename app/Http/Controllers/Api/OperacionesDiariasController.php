@@ -102,19 +102,57 @@ class OperacionesDiariasController extends Controller
     {
         $query = OperacionDiaria::with('user');
 
-        if ($request->has('buscar') && $request->buscar != '') {
+        if ($request->filled('buscar')) {
             $query->where('matricula', 'LIKE', '%' . $request->buscar . '%');
         }
-        if ($request->has('tipo') && $request->tipo != '') {
+
+        if ($request->filled('tipo')) {
             $query->where('tipo', $request->tipo);
         }
-        if ($request->has('fecha') && $request->fecha != '') {
-            $query->whereDate('fecha', $request->fecha);
+
+        if ($request->filled('fechaInicio') && $request->filled('fechaFin')) {
+            $query->whereBetween('fecha', [$request->fechaInicio, $request->fechaFin]);
+        } elseif ($request->filled('fechaInicio')) {
+            $query->whereDate('fecha', $request->fechaInicio);
+        }
+
+        if ($request->filled('lugar')) {
+            $query->where('lugar', 'LIKE', '%' . $request->lugar . '%');
+        }
+
+        if ($request->filled('tipo_operacion')) {
+            $query->where('tipo_operacion', $request->tipo_operacion);
+        }
+
+        if ($request->filled('pax')) {
+            $query->where(function ($q) use ($request) {
+                $q->where('pax', $request->pax);
+
+                if ($request->pax == 0) {
+                    $q->orWhereNull('pax')
+                    ->orWhere('pax', '');
+                }
+            });
+        }
+
+        if ($request->filled('eqp')) {
+            $query->where(function ($q) use ($request) {
+                $q->where('equipaje', $request->eqp);
+
+                if ($request->eqp == 0) {
+                    $q->orWhereNull('equipaje')
+                    ->orWhere('equipaje', '');
+                }
+            });
+        }
+
+        if ($request->filled('cliente')) {
+            $query->where('tipo_cliente', $request->cliente);
         }
 
         $registros = $query->orderBy('fecha', 'desc')
                         ->orderBy('hora', 'desc')
-                        ->paginate(100);
+                        ->paginate(20);
 
         return response()->json($registros);
     }
