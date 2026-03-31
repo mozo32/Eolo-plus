@@ -108,9 +108,9 @@ const OperacionesCards = ({ moduloNombre,  nombreRol}: OperacionesCardsProps) =>
                     <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => cerrarModal(false)}></div>
                     <div className="relative z-10 w-full max-w-lg">
                         {creando === 'llegada' ? (
-                            <FormLlegada moduloNombre={moduloNombre} alCerrar={() => cerrarModal(true)} />
+                            <FormLlegada nombreRol={nombreRol} moduloNombre={moduloNombre} alCerrar={() => cerrarModal(true)} />
                         ) : (
-                            <FormSalida moduloNombre={moduloNombre} alCerrar={() => cerrarModal(true)} />
+                            <FormSalida nombreRol={nombreRol} moduloNombre={moduloNombre} alCerrar={() => cerrarModal(true)} />
                         )}
                     </div>
                 </div>

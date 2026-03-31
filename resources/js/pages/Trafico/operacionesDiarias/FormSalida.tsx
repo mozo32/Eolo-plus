@@ -26,11 +26,11 @@ export const FormSalida = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, so
         equipo: datosEdicion?.equipo || '',
         hora: datosEdicion?.hora?.substring(0, 5) || '',
         destino: datosEdicion?.lugar || '',
-        pax: datosEdicion?.pax || null,
+        pax: datosEdicion?.pax ?? null,
         tipo_cliente: datosEdicion?.tipo_cliente || '',
         tipo_operacion: datosEdicion?.tipo_operacion || '',
         departamento: moduloNombre,
-        equipaje: datosEdicion?.equipaje || null,
+        equipaje: datosEdicion?.equipaje ?? null,
         movimiento: 'Salida',
         fecha: fecha || (datosEdicion?.fecha
             ? new Date(datosEdicion.fecha).toISOString().split('T')[0]
@@ -44,7 +44,9 @@ export const FormSalida = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, so
     const [formData, setFormData] = useState(getInitialState());
 
     const estaBloqueado = (moduloRequerido: string) => {
-        return soloLectura || moduloNombre !== moduloRequerido;
+        if (soloLectura) return true;
+        if (nombreRol === 'FBO') return false;
+        return moduloNombre !== moduloRequerido;
     };
 
     const buscarNombres = async (busqueda: string) => {
@@ -280,8 +282,12 @@ export const FormSalida = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, so
                         <input
                             type="text"
                             disabled={estaBloqueado('Trafico')}
-                            value={formData.equipaje || ''}
-                            className={`w-full p-3 border rounded-lg outline-none transition-colors ${estaBloqueado('Trafico') ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-50 border-slate-200 focus:ring-2 focus:ring-red-500'}`}
+                            value={formData.equipaje ?? ''}
+                            className={`w-full p-3 border rounded-lg outline-none transition-colors ${
+                                estaBloqueado('Trafico')
+                                ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                                : 'bg-slate-50 border-slate-200 focus:ring-2 focus:ring-red-500'
+                            }`}
                             onChange={(e) => handleFieldChange("equipaje", e.target.value.toUpperCase())}
                         />
                     </div>
@@ -387,7 +393,7 @@ export const FormSalida = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, so
                                 value={formData.nombre.replace(/^CAPITAN\.\s/, "")}
                                 placeholder="Escriba nombre y apellido..."
                                 className="flex-1 p-3 bg-transparent outline-none uppercase font-semibold text-slate-700 disabled:placeholder-slate-300"
-                                required={moduloNombre === 'Seguridad'}
+                                required={moduloNombre === 'Seguridad' || nombreRol === 'FBO'}
                                 disabled={estaBloqueado('Seguridad')}
                                 onFocus={() => {
                                     const valorLimpio = formData.nombre.replace(/^CAPITAN\.\s/, "");

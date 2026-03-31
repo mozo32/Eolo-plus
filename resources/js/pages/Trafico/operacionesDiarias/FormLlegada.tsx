@@ -19,6 +19,7 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
     const [cargando, setCargando] = useState(false);
     const [sugerenciasNombres, setSugerenciasNombres] = useState<string[]>([]);
     const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
+    const tienePermisoSeguridadFBO = moduloNombre === 'Seguridad' || nombreRol === 'FBO';
 
     const getInitialState = (fecha?: string) => ({
         id: datosEdicion?.id || null,
@@ -26,8 +27,8 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
         equipo: datosEdicion?.equipo || '',
         hora: datosEdicion?.hora?.substring(0, 5) || '',
         procedencia: datosEdicion?.lugar || '',
-        pax: datosEdicion?.pax || null,
-        equipaje: datosEdicion?.equipaje || null,
+        pax: datosEdicion?.pax ?? null,
+        equipaje: datosEdicion?.equipaje ?? null,
         tipo_cliente: datosEdicion?.tipo_cliente || '',
         tipo_operacion: datosEdicion?.tipo_operacion || '',
         departamento: moduloNombre,
@@ -306,12 +307,12 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
                         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Equipaje</label>
                         <input
                             type="text"
-                            disabled={soloLectura || moduloNombre !== 'Trafico'}
-                            value={formData.equipaje || ''}
+                            disabled={soloLectura || (moduloNombre !== 'Trafico' && nombreRol !== 'FBO')}
+                            value={formData.equipaje ?? ''}
                             placeholder={moduloNombre !== 'Trafico' ? "Solo Tráfico" : ""}
                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100 disabled:opacity-70"
                             onChange={(e) => handleFieldChange("equipaje", e.target.value.toUpperCase())}
-                            required={moduloNombre === 'Trafico'}
+                            required={moduloNombre === 'Trafico' || nombreRol === 'FBO'}
                         />
                     </div>
                 </div>
@@ -324,7 +325,7 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
                             className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none appearance-none disabled:bg-slate-100"
                             onChange={(e) => handleFieldChange("tipo_cliente", e.target.value)}
                             required={moduloNombre === 'Trafico'}
-                            disabled={soloLectura || moduloNombre !== 'Trafico'}
+                            disabled={soloLectura || (moduloNombre !== 'Trafico' && nombreRol !== 'FBO')}
                         >
                             <option value="">Seleccione una opción...</option>
                             <option value="TRÁNSITO">TRÁNSITO</option>
@@ -343,14 +344,14 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
                                 <button
                                     key={opcion}
                                     type="button"
-                                    disabled={soloLectura || moduloNombre !== 'Trafico'}
+                                    disabled={soloLectura || (moduloNombre !== 'Trafico' && nombreRol !== 'FBO')}
                                     onClick={() => handleFieldChange("tipo_operacion", opcion)}
                                     className={`py-2.5 px-4 rounded-lg text-xs font-bold transition-all duration-200
                                         ${formData.tipo_operacion === opcion
                                             ? 'bg-white text-emerald-600 shadow-sm ring-1 ring-slate-200'
                                             : 'text-slate-500 hover:bg-slate-200/50'
                                         }
-                                        ${(soloLectura || moduloNombre !== 'Trafico') ? 'cursor-not-allowed opacity-50' : ''}
+                                        ${(soloLectura || (moduloNombre !== 'Trafico' && nombreRol !== 'FBO')) ? 'cursor-not-allowed opacity-50' : ''}
                                     `}
                                 >
                                     {opcion}
@@ -360,17 +361,17 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
                     </div>
                 </div>
 
-                <div className={`p-4 rounded-xl border space-y-4 transition-colors ${moduloNombre === 'Seguridad' ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-200 opacity-80'}`}>
+                <div className={`p-4 rounded-xl border space-y-4 transition-colors ${tienePermisoSeguridadFBO ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-200 opacity-80'}`}>
                     <div>
-                        <label className={`block text-[10px] font-bold uppercase mb-2 ${moduloNombre === 'Seguridad' ? 'text-emerald-600' : 'text-slate-500'}`}>
-                            Tipo de Movimiento (Seguridad)
+                        <label className={`block text-[10px] font-bold uppercase mb-2 ${tienePermisoSeguridadFBO ? 'text-emerald-600' : 'text-slate-500'}`}>
+                            Tipo de Movimiento (Seguridad / FBO)
                         </label>
                         <div className="flex gap-8">
                             {['Propio Impulso', 'Remolcado'].map((opt) => (
-                                <label key={opt} className={`flex items-center cursor-pointer group ${(soloLectura || moduloNombre !== 'Seguridad') ? 'cursor-not-allowed' : ''}`}>
+                                <label key={opt} className={`flex items-center cursor-pointer group ${(soloLectura || !tienePermisoSeguridadFBO) ? 'cursor-not-allowed' : ''}`}>
                                     <input
                                         type="radio"
-                                        disabled={soloLectura || moduloNombre !== 'Seguridad'}
+                                        disabled={soloLectura || !tienePermisoSeguridadFBO}
                                         name="impulso"
                                         value={opt}
                                         checked={formData.impulso === opt}
@@ -384,13 +385,13 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
                     </div>
 
                     <div className="relative">
-                        <label className={`block text-[10px] font-bold uppercase mb-2 tracking-wider ${moduloNombre === 'Seguridad' ? 'text-emerald-600' : 'text-slate-500'}`}>
+                        <label className={`block text-[10px] font-bold uppercase mb-2 tracking-wider ${tienePermisoSeguridadFBO ? 'text-emerald-600' : 'text-slate-500'}`}>
                             Responsable del Movimiento
                         </label>
-                        <div className={`group relative flex items-center border rounded-2xl overflow-hidden transition-all shadow-sm ${moduloNombre === 'Seguridad' ? 'bg-white border-emerald-200' : 'bg-slate-100 border-slate-200'}`}>
+                        <div className={`group relative flex items-center border rounded-2xl overflow-hidden transition-all shadow-sm ${tienePermisoSeguridadFBO ? 'bg-white border-emerald-200' : 'bg-slate-100 border-slate-200'}`}>
                             <button
                                 type="button"
-                                disabled={soloLectura || moduloNombre !== 'Seguridad'}
+                                disabled={soloLectura || !tienePermisoSeguridadFBO}
                                 onMouseDown={(e) => {
                                     e.preventDefault();
                                     setMostrarSugerencias(!mostrarSugerencias);
@@ -405,7 +406,7 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
                             <div className="relative border-r border-emerald-100 bg-white">
                                 <select
                                     value={formData.nombre.startsWith("CAPITAN. ") ? "CAPITAN. " : ""}
-                                    disabled={soloLectura || moduloNombre !== 'Seguridad'}
+                                    disabled={soloLectura || !tienePermisoSeguridadFBO}
                                     onChange={(e) => {
                                         const nuevoPrefijo = e.target.value;
                                         const nombreLimpio = formData.nombre.replace(/^CAPITAN\.\s/, "");
@@ -421,10 +422,10 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
                             <input
                                 type="text"
                                 value={formData.nombre.replace(/^CAPITAN\.\s/, "")}
-                                placeholder={moduloNombre !== 'Seguridad' ? "Campo exclusivo Seguridad" : "Escriba nombre..."}
+                                placeholder={!tienePermisoSeguridadFBO ? "Campo exclusivo Seguridad / FBO" : "Escriba nombre..."}
                                 className="flex-1 p-3 bg-transparent outline-none uppercase font-semibold text-slate-700 disabled:text-slate-500"
-                                required={moduloNombre === 'Seguridad'}
-                                disabled={soloLectura || moduloNombre !== 'Seguridad'}
+                                required={tienePermisoSeguridadFBO}
+                                disabled={soloLectura || !tienePermisoSeguridadFBO}
                                 onFocus={() => {
                                     const valorLimpio = formData.nombre.replace(/^CAPITAN\.\s/, "");
                                     if (valorLimpio.length >= 2) setMostrarSugerencias(true);
@@ -439,7 +440,7 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
                             />
                         </div>
 
-                        {mostrarSugerencias && moduloNombre === 'Seguridad' && sugerenciasNombres.length > 0 && (
+                        {mostrarSugerencias && tienePermisoSeguridadFBO && sugerenciasNombres.length > 0 && (
                             <ul className="absolute z-50 w-full bg-white border border-slate-200 mt-1 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
                                 {sugerenciasNombres.map((nombreSug, index) => (
                                     <li

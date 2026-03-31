@@ -129,7 +129,7 @@ const Dato = ({ Etiqueta, Valor, Highlight = false }: { Etiqueta: string, Valor:
     <div>
         <span className="text-[10px] font-bold text-slate-400 uppercase block tracking-tight">{Etiqueta}</span>
         <span className={`${Highlight ? 'text-lg font-black text-slate-900' : 'text-sm font-semibold text-slate-600'}`}>
-            {Valor || <span className="text-slate-300 font-normal italic">---</span>}
+            {Valor ?? <span className="text-slate-300 font-normal italic">---</span>}
         </span>
     </div>
 );
