@@ -36,12 +36,12 @@ class OperacionesDiariasController extends Controller
                                     ->where('tipo', $validated['movimiento'])
                                     ->first();
 
-            if ($ver) {
-                return response()->json([
-                    'message' => 'ya hay un registro de esta matricula',
-                    'data' => null,
-                ], 422);
-            }
+            // if ($ver) {
+            //     return response()->json([
+            //         'message' => 'ya hay un registro de esta matricula',
+            //         'data' => null,
+            //     ], 422);
+            // }
             $tipoExistente = DB::connection('remota')
                     ->table('tb_tipo')
                     ->where('tipo', $validated['equipo'])
