@@ -13,10 +13,11 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function OperacionesDiarias() {
     const { auth } = usePage<{ auth: { user: any } }>().props;
-
+    const nombreRol = auth.user.roles?.[0]?.nombre;
     const activeModule = useMemo(() => {
         const modules = getNavModules(auth.user);
         const savedModuleKey = localStorage.getItem('activeModule');
+
 
         if (savedModuleKey) {
             const found = modules.find(m => String(m.key) === savedModuleKey);
@@ -36,6 +37,7 @@ export default function OperacionesDiarias() {
             <OperacionesCards
                 key={activeModule?.key}
                 moduloNombre={activeModule?.module}
+                nombreRol={nombreRol}
             />
         </AppLayout>
     );

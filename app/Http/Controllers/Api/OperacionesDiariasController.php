@@ -163,26 +163,28 @@ class OperacionesDiariasController extends Controller
 
         $validaciones = $operacion->validaciones ?? [];
 
-        if ($request->departamento) {
-            $validaciones[] = $request->departamento;
+        $valorAValidar = ($request->nombreRol === 'FBO') ? $request->nombreRol : $request->departamento;
+
+        if ($valorAValidar) {
+            $validaciones[] = $valorAValidar;
         }
 
-        $validaciones = array_unique($validaciones);
+        $validaciones = array_values(array_unique($validaciones));
 
         $operacion->update([
-            'matricula'    => $request->matricula,
-            'equipo'       => $request->equipo,
-            'hora'         => $request->hora,
-            'lugar'        => $request->procedencia ?? $request->destino,
-            'pax'          => $request->pax,
-            'fecha'        => $request->fecha,
-            'validaciones' => array_values($validaciones),
-            'equipaje'     => $request->equipaje,
-            'observaciones'=> $request->observaciones,
-            'tipo_cliente' => $request->tipo_cliente,
+            'matricula'      => $request->matricula,
+            'equipo'         => $request->equipo,
+            'hora'           => $request->hora,
+            'lugar'          => $request->procedencia ?? $request->destino,
+            'pax'            => $request->pax,
+            'fecha'          => $request->fecha,
+            'validaciones'   => $validaciones, // Array actualizado
+            'equipaje'       => $request->equipaje,
+            'observaciones'  => $request->observaciones,
+            'tipo_cliente'   => $request->tipo_cliente,
             'tipo_operacion' => $request->tipo_operacion,
-            'nombre'       => $request->nombre,
-            'impulso'      => $request->impulso,
+            'nombre'         => $request->nombre,
+            'impulso'        => $request->impulso,
         ]);
 
         return response()->json($operacion);

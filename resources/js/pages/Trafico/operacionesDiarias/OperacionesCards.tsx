@@ -7,9 +7,10 @@ import { obtenerOperacionesDiariasApi } from '@/stores/apiOperacionesDiarias';
 
 interface OperacionesCardsProps {
     moduloNombre?: string;
+    nombreRol?:string;
 }
 
-const OperacionesCards = ({ moduloNombre }: OperacionesCardsProps) => {
+const OperacionesCards = ({ moduloNombre,  nombreRol}: OperacionesCardsProps) => {
     const [registros, setRegistros] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [stripExpandida, setStripExpandida] = useState<number | null>(null);
@@ -328,13 +329,13 @@ const OperacionesCards = ({ moduloNombre }: OperacionesCardsProps) => {
                                             {stripExpandida === op.id && (
                                                 <div className="bg-slate-50 border-x border-b border-slate-200 rounded-b-lg p-6 shadow-inner animate-in slide-in-from-top-2 duration-200">
                                                     <div className="w-full mx-auto">
-                                                        {op.validaciones?.includes(moduloNombre) ? (
+                                                        {nombreRol !== 'FBO' && op.validaciones?.includes(moduloNombre) ? (
                                                             <DetalleOperacion datos={op} moduloNombre={moduloNombre} alCerrar={() => setStripExpandida(null)} />
                                                         ) : (
                                                             esLlegada ? (
-                                                                <FormLlegada moduloNombre={moduloNombre} alCerrar={() => { setStripExpandida(null); cargarDatos(); }} datosEdicion={op} />
+                                                                <FormLlegada nombreRol={nombreRol} moduloNombre={moduloNombre} alCerrar={() => { setStripExpandida(null); cargarDatos(); }} datosEdicion={op} />
                                                             ) : (
-                                                                <FormSalida moduloNombre={moduloNombre} alCerrar={() => { setStripExpandida(null); cargarDatos(); }} datosEdicion={op} />
+                                                                <FormSalida nombreRol={nombreRol} moduloNombre={moduloNombre} alCerrar={() => { setStripExpandida(null); cargarDatos(); }} datosEdicion={op} />
                                                             )
                                                         )}
                                                     </div>

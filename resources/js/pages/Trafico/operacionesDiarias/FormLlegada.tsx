@@ -8,11 +8,12 @@ import {
 import InputMatricula from "@/pages/InputMatricula";
 import { useMatriculaAutocompleteStore } from "./useMatriculaAutocompleteStore";
 
-export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura = false }: {
+export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, soloLectura = false }: {
     alCerrar?: () => void,
     moduloNombre?: string,
     datosEdicion?: any,
     soloLectura?: boolean
+    nombreRol?: string;
 }) => {
     const { obtenerTipo } = useMatriculaAutocompleteStore();
     const [cargando, setCargando] = useState(false);
@@ -36,7 +37,8 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
             : new Date().toLocaleDateString('sv-SE')),
         observaciones: datosEdicion?.observaciones || '',
         nombre: datosEdicion?.nombre || '',
-        impulso: datosEdicion?.impulso || ''
+        impulso: datosEdicion?.impulso || '',
+        nombreRol: nombreRol
     });
 
     const [formData, setFormData] = useState(getInitialState());
@@ -92,7 +94,8 @@ export const FormLlegada = ({ alCerrar, moduloNombre, datosEdicion, soloLectura 
                             : new Date().toLocaleDateString('sv-SE'),
                         observaciones: op.observaciones || '',
                         nombre: op.nombre || '',
-                        impulso: op.impulso || ''
+                        impulso: op.impulso || '',
+                        nombreRol: nombreRol
                     });
 
                     if (op.nombre) buscarNombres(op.nombre);

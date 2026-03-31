@@ -8,11 +8,12 @@ import {
     obtenerNombresHistoricosApi
 } from "@/stores/apiOperacionesDiarias";
 
-export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion, soloLectura = false }: {
+export const FormSalida = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, soloLectura = false }: {
     alCerrar?: () => void;
     moduloNombre?: string;
     datosEdicion?: any;
     soloLectura?: boolean
+    nombreRol?: string;
 }) => {
     const { obtenerTipo } = useMatriculaAutocompleteStore();
     const [cargando, setCargando] = useState(false);
@@ -36,7 +37,8 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion, soloLectura =
             : new Date().toLocaleDateString('sv-SE')),
         observaciones: datosEdicion?.observaciones || '',
         nombre: datosEdicion?.nombre || '',
-        impulso: datosEdicion?.impulso || ''
+        impulso: datosEdicion?.impulso || '',
+        nombreRol: nombreRol
     });
 
     const [formData, setFormData] = useState(getInitialState());
@@ -96,7 +98,8 @@ export const FormSalida = ({ alCerrar, moduloNombre, datosEdicion, soloLectura =
                             : new Date().toLocaleDateString('sv-SE'),
                         observaciones: op.observaciones || '',
                         nombre: op.nombre || '',
-                        impulso: op.impulso || ''
+                        impulso: op.impulso || '',
+                        nombreRol: nombreRol
                     });
                     if (op.nombre) buscarNombres(op.nombre);
                     Swal.mixin({
