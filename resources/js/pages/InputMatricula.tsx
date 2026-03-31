@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMatriculaAutocompleteStore } from "@/stores/useMatriculaAutocompleteStore";
 
 interface Props {
@@ -18,22 +18,17 @@ export default function InputMatricula({
     value,
     onSelect,
 }: Props) {
-    const {
-        suggestions,
-        loading,
-        buscar,
-        obtenerTipo,
-        setMatricula,
-        clear,
-    } = useMatriculaAutocompleteStore();
+    const { buscar, obtenerTipo } = useMatriculaAutocompleteStore();
+
+    const [localSuggestions, setLocalSuggestions] = useState<any[]>([]);
+    const [localLoading, setLocalLoading] = useState(false);
 
     useEffect(() => {
-        clear();
         return () => {
-            clear();
-            setMatricula("");
+            setLocalSuggestions([]);
+            setLocalLoading(false);
         };
-    }, [clear, setMatricula]);
+    }, []);
 
     const aplicarFormato = (input: string, prev: string): string => {
         let val = input.toUpperCase().replace(/\s/g, "");
@@ -67,21 +62,28 @@ export default function InputMatricula({
         return { ok: false, msg: "Formato inválido (Ej: XA-ABC o N12345)" };
     }, [value]);
 
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = aplicarFormato(e.target.value, value);
-        setMatricula(newValue);
         onSelect(newValue);
+
         if (newValue.length > 1) {
-            buscar(newValue);
+            setLocalLoading(true);
+            try {
+                const resultados = await buscar(newValue);
+                setLocalSuggestions(Array.isArray(resultados) ? resultados : []);
+            } catch (error) {
+                setLocalSuggestions([]);
+            } finally {
+                setLocalLoading(false);
+            }
         } else {
-            clear();
+            setLocalSuggestions([]);
         }
     };
 
-    // --- NUEVA FUNCIÓN PARA CERRAR LA LISTA ---
     const handleBlur = () => {
         setTimeout(() => {
-            clear();
+            setLocalSuggestions([]);
         }, 200);
     };
 
@@ -100,18 +102,18 @@ export default function InputMatricula({
                     type="text"
                     value={value}
                     onChange={handleInputChange}
-                    onBlur={handleBlur} // <--- AGREGADO
+                    onBlur={handleBlur}
                     disabled={disabled}
                     required={required}
                     placeholder={placeholder}
-                    autoComplete="off" // <--- AGREGADO (para no chocar con el navegador)
+                    autoComplete="off"
                     className={`w-full rounded-lg border px-4 py-2 text-sm outline-none transition-all uppercase
                         ${!status.ok && value.length > 3
                             ? 'border-red-500 focus:ring-2 focus:ring-red-100'
                             : 'border-gray-300 focus:ring-2 focus:ring-blue-500'}`}
                 />
 
-                {loading && (
+                {localLoading && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
                         <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                     </div>
@@ -124,17 +126,16 @@ export default function InputMatricula({
                 </p>
             )}
 
-            {suggestions.length > 0 && (
-                <ul className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-56 overflow-y-auto">
-                    {suggestions.map((item) => (
+            {localSuggestions.length > 0 && (
+                <ul className="absolute z-[100] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-56 overflow-y-auto">
+                    {localSuggestions.map((item) => (
                         <li
                             key={item.id}
                             onClick={() => {
                                 const m = item.matricula.toUpperCase();
-                                setMatricula(m);
                                 obtenerTipo(m);
                                 onSelect(m);
-                                clear();
+                                setLocalSuggestions([]);
                             }}
                             className="px-4 py-2 text-sm hover:bg-blue-50 cursor-pointer flex justify-between items-center border-b last:border-none"
                         >

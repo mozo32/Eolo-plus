@@ -230,13 +230,16 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
 
             <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-4">
-                    <InputMatricula
-                        label="Matrícula"
-                        value={formData.matricula}
-                        onSelect={handleMatriculaSelect}
-                        required
-                        disabled={soloLectura}
-                    />
+                    <div className="relative">
+                        <InputMatricula
+                            label="Matrícula"
+                            value={formData.matricula}
+                            onSelect={handleMatriculaSelect}
+                            required
+                            disabled={soloLectura}
+                        />
+                    </div>
+
                     <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Equipo</label>
                         <input
