@@ -67,7 +67,7 @@ const MatriculasPendientes = ({ listado, onClose, nombreRol, moduloNombre, onAct
                                     <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-tighter ${
                                         op.tipo === 'llegada'
                                             ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                                            : 'bg-sky-100 text-sky-700 border border-sky-200'
+                                            : 'bg-red-100 text-red-700 border border-red-200'
                                     }`}>
                                         {op.tipo}
                                     </span>
