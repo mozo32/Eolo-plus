@@ -343,4 +343,21 @@ class OperacionesDiariasController extends Controller
 
         return response()->json($nombres);
     }
+    public function obtenerPendientes(Request $request): JsonResponse
+    {
+        $modulo = $request->query('modulo');
+
+        if (!$modulo) {
+            return response()->json(['error' => 'El módulo es requerido'], 400);
+        }
+        $pendientes = OperacionDiaria::whereDate('fecha', now()->toDateString())
+            ->where(function ($query) use ($modulo) {
+                $query->whereJsonDoesntContain('validaciones', $modulo)
+                    ->orWhereNull('validaciones');
+            })
+            ->orderBy('hora', 'asc')
+            ->get();
+
+        return response()->json($pendientes);
+    }
 }

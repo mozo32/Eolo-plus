@@ -3,9 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { FormLlegada } from './FormLlegada';
 import { FormSalida } from './FormSalida';
 import { Filter, Calendar, ArrowDownLeft, ArrowUpRight, X, ChevronDown, Info, Download } from 'lucide-react';
-import { obtenerOperacionesDiariasApi, excelOperacionesDiariasApi } from '@/stores/apiOperacionesDiarias';
+import { obtenerOperacionesDiariasApi, excelOperacionesDiariasApi, obtenerPendientesApi } from '@/stores/apiOperacionesDiarias';
 import { exportarOperacionesAExcel } from './excelService';
 import Swal from 'sweetalert2';
+import MatriculasPendientes from './MatriculasPendientes';
 
 interface OperacionesCardsProps {
     moduloNombre?: string;
@@ -23,6 +24,8 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
     const [mostrarLeyenda, setMostrarLeyenda] = useState(false);
+    const [pendientes, setPendientes] = useState<any[]>([]);
+    const [mostrarModal, setMostrarModal] = useState(false);
     const COLORES_DEPARTAMENTOS: Record<string, string> = {
         "Seguridad": "bg-blue-500",
         "Rampa": "bg-amber-500",
@@ -57,6 +60,29 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
         setFiltros({ ...filtrosEdicion });
         setMostrarModalFecha(false);
     };
+    useEffect(() => {
+        console.log(moduloNombre);
+
+    }, [pagina, filtros]);
+    const cargarPendientes = async () => {
+        const identificadorConsulta = (nombreRol?.toUpperCase() === 'FBO' ? 'FBO' : moduloNombre) || '';
+
+        if (!identificadorConsulta) return;
+
+        try {
+            const data = await obtenerPendientesApi(identificadorConsulta);
+            setPendientes(data);
+        } catch (error) {
+            console.error("Error al cargar pendientes:", error);
+        }
+    };
+    useEffect(() => {
+        if (moduloNombre || nombreRol) {
+            cargarPendientes();
+            const interval = setInterval(cargarPendientes, 120000);
+            return () => clearInterval(interval);
+        }
+    }, [moduloNombre, nombreRol]);
 
     const cargarDatos = async () => {
         try {
@@ -195,6 +221,38 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
                                 </div>
                             </>
                         )}
+                    </div>
+                    <div className="flex items-center gap-3 p-4">
+
+                        {/* BOTÓN DE PENDIENTES (Solo se muestra si hay datos) */}
+                        {pendientes.length > 0 && (
+                            <button
+                                onClick={() => setMostrarModal(true)}
+                                className="relative flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md transition-all animate-pulse"
+                            >
+                                <span className="flex h-3 w-3">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+                                </span>
+                                <span className="font-bold text-sm">
+                                    PENDIENTES ({pendientes.length})
+                                </span>
+                            </button>
+                        )}
+
+                        {/* Componente Modal */}
+                        {mostrarModal && (
+                        <MatriculasPendientes
+                            listado={pendientes}
+                            onClose={() => setMostrarModal(false)}
+                            nombreRol={nombreRol}
+                            moduloNombre={moduloNombre}
+                            onActualizar={() => {
+                                cargarPendientes();
+                                cargarDatos();
+                            }}
+                        />
+                    )}
                     </div>
                 </div>
 

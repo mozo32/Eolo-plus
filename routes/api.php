@@ -135,6 +135,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('OperacionesDiarias')->group(
     Route::get('/buscar/{matricula}', [OperacionesDiariasController::class, 'buscarPorMatricula']);
     Route::get('/verificar', [OperacionesDiariasController::class, 'verificarExistente']);
     Route::get('/nombres/{matricula}', [OperacionesDiariasController::class, 'obtenerNombresPorMatricula']);
+    Route::get('/pendientes', [OperacionesDiariasController::class, 'obtenerPendientes']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('MovimientosCSAE')->group(function () {
     Route::post('/',[MovimientoCSAEController::class, 'store']);

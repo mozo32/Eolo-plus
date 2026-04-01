@@ -144,3 +144,20 @@ export async function obtenerNombresHistoricosApi(matricula: string) {
     if (!res.ok) return [];
     return await res.json();
 }
+export async function obtenerPendientesApi(modulo: string) {
+    const res = await fetch(
+        `/api/OperacionesDiarias/pendientes?modulo=${encodeURIComponent(modulo)}`, {
+            method: "GET",
+            headers: { 'Accept': 'application/json' },
+            credentials: "same-origin",
+        }
+    );
+
+    const data = await res.json().catch(() => []);
+
+    if (!res.ok) {
+        throw new Error(data?.message || "Error al obtener las matrículas pendientes");
+    }
+
+    return data;
+}
