@@ -126,7 +126,7 @@ const TablaWalkAround = () => {
                                 <tr className="bg-slate-50/50 border-b border-slate-100">
                                     <th className="px-8 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest">Información Aeronave</th>
                                     <th className="px-6 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest">Movimiento</th>
-                                    <th className="px-6 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest">Ruta / Ubicación</th>
+                                    <th className="px-6 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest">Origen/Destino</th>
                                     <th className="px-6 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest text-center">Fecha y Hora</th>
                                     <th className="px-8 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
                                 </tr>
@@ -151,8 +151,7 @@ const TablaWalkAround = () => {
                                             <tr key={item.id} className="group hover:bg-slate-50/50 transition-all">
                                                 <td className="px-8 py-5">
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 duration-300 ${item.tipo === 'avion' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'
-                                                            }`}>
+                                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 duration-300 bg-gray-50 text-gray-600}`}>
                                                             <Plane size={22} strokeWidth={2.5} />
                                                         </div>
                                                         <div>
@@ -188,12 +187,9 @@ const TablaWalkAround = () => {
                                                 </td>
                                                 <td className="px-6 py-5">
                                                     <div className="flex flex-col items-center justify-center bg-slate-50/50 group-hover:bg-white p-2 rounded-2xl transition-colors border border-transparent group-hover:border-slate-100">
-                                                        <span className="text-[13px] font-bold text-slate-700 tabular-nums">
-                                                            {dateInfo.date}
-                                                        </span>
-                                                        <span className="text-[11px] font-black text-indigo-500 tabular-nums">
-                                                            {dateInfo.time}
-                                                        </span>
+
+                                                        <span className="text-[9px] font-bold text-slate-400 block lowercase first-letter:uppercase">{new Date(item.fecha).toLocaleDateString()}</span>
+                                                        <span className="font-bold text-sm">{item.hora.substring(0, 5)}</span>
                                                     </div>
                                                 </td>
                                                 <td className="px-8 py-5 text-right">

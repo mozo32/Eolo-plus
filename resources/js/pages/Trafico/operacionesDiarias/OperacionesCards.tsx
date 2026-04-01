@@ -2,16 +2,19 @@ import { DetalleOperacion } from './DetalleOperacion';
 import React, { useState, useEffect } from 'react';
 import { FormLlegada } from './FormLlegada';
 import { FormSalida } from './FormSalida';
-import { Filter, Calendar, ArrowDownLeft, ArrowUpRight, X, ChevronDown, Info } from 'lucide-react';
-import { obtenerOperacionesDiariasApi } from '@/stores/apiOperacionesDiarias';
+import { Filter, Calendar, ArrowDownLeft, ArrowUpRight, X, ChevronDown, Info, Download } from 'lucide-react';
+import { obtenerOperacionesDiariasApi, excelOperacionesDiariasApi } from '@/stores/apiOperacionesDiarias';
+import { exportarOperacionesAExcel } from './excelService';
+import Swal from 'sweetalert2';
 
 interface OperacionesCardsProps {
     moduloNombre?: string;
-    nombreRol?:string;
+    nombreRol?: string;
 }
 
-const OperacionesCards = ({ moduloNombre,  nombreRol}: OperacionesCardsProps) => {
+const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) => {
     const [registros, setRegistros] = useState<any[]>([]);
+    const [datosExcel, setDatosExcel] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [stripExpandida, setStripExpandida] = useState<number | null>(null);
     const [creando, setCreando] = useState<'llegada' | 'salida' | null>(null);
@@ -67,7 +70,49 @@ const OperacionesCards = ({ moduloNombre,  nombreRol}: OperacionesCardsProps) =>
             setLoading(false);
         }
     };
+    const cargarExcel = async () => {
+        try {
+            const data = await excelOperacionesDiariasApi({ ...filtros });
+            return Array.isArray(data) ? data : (data.data || []);
+        } catch (error) {
+            console.error("Error al obtener datos para Excel:", error);
+            throw error;
+        }
+    };
+    const handleExportarExcel = async () => {
+        Swal.fire({
+            title: 'Generando Excel',
+            text: 'Estamos recopilando todos los registros, por favor espere...',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
 
+        try {
+            const datosParaExcel = await cargarExcel();
+
+            if (datosParaExcel.length === 0) {
+                Swal.fire('Atención', 'No hay registros para exportar con los filtros seleccionados.', 'warning');
+                return;
+            }
+            await exportarOperacionesAExcel(datosParaExcel);
+            Swal.fire({
+                icon: 'success',
+                title: '¡Descarga lista!',
+                text: 'El reporte se ha generado correctamente.',
+                timer: 2000,
+                showConfirmButton: false
+            });
+
+        } catch (error) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'Hubo un problema al generar el archivo. Intente de nuevo.'
+            });
+        }
+    };
     useEffect(() => {
         cargarDatos();
     }, [pagina, filtros]);
@@ -163,7 +208,17 @@ const OperacionesCards = ({ moduloNombre,  nombreRol}: OperacionesCardsProps) =>
                     </button>
 
                     <div className="w-[1px] bg-slate-200 mx-1"></div>
+                    <button
+                        onClick={handleExportarExcel}
+                        disabled={loading}
+                        className="flex items-center gap-2 bg-white text-slate-600 text-[10px] font-black px-3 py-2 rounded border border-slate-200 shadow-sm hover:bg-slate-50 transition-all active:scale-95 uppercase tracking-wider disabled:opacity-50"
+                        title="Descargar Excel"
+                    >
+                        <Download size={14} className="text-green-600" />
+                        <span className="hidden md:inline">EXCEL</span>
+                    </button>
 
+                    <div className="w-[1px] bg-slate-200 mx-1"></div>
                     <button onClick={() => setCreando('llegada')} className="bg-emerald-600 text-white text-[10px] font-black px-3 py-2 rounded shadow-md hover:bg-emerald-700 transition-all active:scale-95 uppercase tracking-wider">
                         + <span className="hidden sm:inline">LLEGADA</span>
                     </button>

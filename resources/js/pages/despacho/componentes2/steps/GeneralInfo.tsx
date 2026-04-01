@@ -114,7 +114,7 @@ const GeneralInfo = ({ data, onChange }: Props) => {
                         </select>
                     </div>
                     <div>
-                        <label className={subLabelStyle}>Tipo / Modelo</label>
+                        <label className={subLabelStyle}>Equipo</label>
                         <input
                             type="text"
                             value={data.tipo}
