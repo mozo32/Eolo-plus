@@ -32,13 +32,14 @@ class OperacionesDiariasController extends Controller
             'impulso'      => ['nullable', 'string', 'max:100'],
         ]);
         return DB::transaction(function () use ($validated, $request) {
-            $ver = OperacionDiaria::where('matricula', $validated['matricula'])
-                                    ->where('tipo', $validated['movimiento'])
-                                    ->first();
+            $ultimoRegistro = OperacionDiaria::where('matricula', $validated['matricula'])
+                            ->orderBy('fecha', 'desc')
+                            ->orderBy('hora', 'desc')
+                            ->first();
 
-            if ($ver) {
+            if ($ultimoRegistro && strtolower($ultimoRegistro->tipo) === strtolower($validated['movimiento'])) {
                 return response()->json([
-                    'message' => 'ya hay un registro de esta matricula',
+                    'message' => "La matrícula ya cuenta con un registro de {$validated['movimiento']}. Debe registrar una " . ($validated['movimiento'] === 'Llegada' ? 'Salida' : 'Llegada') . " primero.",
                     'data' => null,
                 ], 422);
             }
