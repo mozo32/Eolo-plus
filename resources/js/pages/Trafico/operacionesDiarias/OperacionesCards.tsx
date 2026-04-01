@@ -206,18 +206,20 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
                         <Filter size={14} />
                         <span className="hidden xs:inline">{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                     </button>
-
-                    <div className="w-[1px] bg-slate-200 mx-1"></div>
-                    <button
-                        onClick={handleExportarExcel}
-                        disabled={loading}
-                        className="flex items-center gap-2 bg-white text-slate-600 text-[10px] font-black px-3 py-2 rounded border border-slate-200 shadow-sm hover:bg-slate-50 transition-all active:scale-95 uppercase tracking-wider disabled:opacity-50"
-                        title="Descargar Excel"
-                    >
-                        <Download size={14} className="text-green-600" />
-                        <span className="hidden md:inline">EXCEL</span>
-                    </button>
-
+                    {nombreRol === 'FBO' && (
+                        <>
+                            <div className="w-[1px] bg-slate-200 mx-1"></div>
+                            <button
+                                onClick={handleExportarExcel}
+                                disabled={loading}
+                                className="flex items-center gap-2 bg-white text-slate-600 text-[10px] font-black px-3 py-2 rounded border border-slate-200 shadow-sm hover:bg-slate-50 transition-all active:scale-95 uppercase tracking-wider disabled:opacity-50"
+                                title="Descargar Excel"
+                            >
+                                <Download size={14} className="text-green-600" />
+                                <span className="hidden md:inline">EXCEL</span>
+                            </button>
+                        </>
+                    )}
                     <div className="w-[1px] bg-slate-200 mx-1"></div>
                     <button onClick={() => setCreando('llegada')} className="bg-emerald-600 text-white text-[10px] font-black px-3 py-2 rounded shadow-md hover:bg-emerald-700 transition-all active:scale-95 uppercase tracking-wider">
                         + <span className="hidden sm:inline">LLEGADA</span>
