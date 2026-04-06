@@ -15,33 +15,30 @@ export type RoleApi = {
     slug: string;
     nombre: string;
 };
+
 export type SaveDepartamentosUsuarioPayload = {
     role_id: number;
+    user_ids: number[];
     asignaciones: {
         departamento_id: number;
         subdepartamentos: number[];
     }[];
 };
+
 async function handleResponse(res: Response) {
     const data = await res.json();
-
     if (!res.ok) {
         throw new Error(data?.message || 'Error en la petición');
     }
-
     return data;
 }
 
 export async function fetchUsers(params: any = {}) {
     const qs = new URLSearchParams(params);
-
     const res = await fetch(`/api/administracion/users?${qs.toString()}`, {
-        headers: {
-            Accept: 'application/json',
-        },
+        headers: { Accept: 'application/json' },
         credentials: 'include',
     });
-
     return handleResponse(res);
 }
 
@@ -57,13 +54,10 @@ export async function fetchDepartamentosUsuario(
     const res = await fetch(
         `/api/administracion/users/${userId}/departamentos`,
         {
-            headers: {
-                Accept: 'application/json',
-            },
+            headers: { Accept: 'application/json' },
             credentials: 'include',
         }
     );
-
     return handleResponse(res);
 }
 
@@ -71,15 +65,12 @@ function getXsrfToken(): string {
     const match = document.cookie
         .split('; ')
         .find(row => row.startsWith('XSRF-TOKEN='));
-
     return match ? decodeURIComponent(match.split('=')[1]) : '';
 }
 
 export async function saveDepartamentosUsuario(
-    userId: number,
     payload: SaveDepartamentosUsuarioPayload
 ): Promise<void> {
-
     await fetch('/sanctum/csrf-cookie', {
         credentials: 'include',
         headers: {
@@ -91,7 +82,7 @@ export async function saveDepartamentosUsuario(
     const xsrf = getXsrfToken();
 
     const res = await fetch(
-        `/api/administracion/users/${userId}/departamentos`,
+        `/api/administracion/users/departamentos-masivo`,
         {
             method: 'POST',
             credentials: 'include',

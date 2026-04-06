@@ -16,18 +16,20 @@ type Departamento = {
     subdepartamentos: SubDepartamento[];
 };
 
-type Props = {
-    userId: number;
-    onSaved: () => void;
-    onCancel?: () => void;
-};
 type Role = {
     id: number;
     slug: string;
     nombre: string;
 };
+
+type Props = {
+    userIds: number[];
+    onSaved: () => void;
+    onCancel?: () => void;
+};
+
 export default function TablaAsignacion({
-    userId,
+    userIds,
     onSaved,
     onCancel,
 }: Props) {
@@ -38,14 +40,22 @@ export default function TablaAsignacion({
     const [error, setError] = useState<string | null>(null);
     const [roles, setRoles] = useState<Role[]>([]);
     const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
-    async function fetchDepartamentos() {
+
+    async function fetchData() {
         try {
             setLoading(true);
+            const idToFetch = userIds[0];
+            const data = await fetchDepartamentosUsuario(idToFetch);
 
-            const data = await fetchDepartamentosUsuario(userId);
             setDepartamentos(Array.isArray(data.departamentos) ? data.departamentos : []);
             setRoles(Array.isArray(data.roles) ? data.roles : []);
-            setSelectedRoleId(data.userRoleId ?? null);
+
+            if (userIds.length === 1) {
+                setSelectedRoleId(data.userRoleId ?? null);
+            } else {
+                setSelectedRoleId(null);
+            }
+
             setSelectedDepId(data.departamentos?.[0]?.id ?? null);
         } catch (err: any) {
             setError(err.message);
@@ -55,10 +65,12 @@ export default function TablaAsignacion({
     }
 
     useEffect(() => {
-        fetchDepartamentos();
-    }, [userId]);
+        if (userIds.length > 0) {
+            fetchData();
+        }
+    }, [userIds]);
 
-    const selectedDep = Array.isArray(departamentos) ? departamentos.find((d) => d.id === selectedDepId) : undefined;
+    const selectedDep = departamentos.find((d) => d.id === selectedDepId);
 
     function toggleSub(depId: number, subId: number) {
         setDepartamentos((prev) =>
@@ -99,7 +111,6 @@ export default function TablaAsignacion({
 
         try {
             setSaving(true);
-
             const payload = {
                 role_id: selectedRoleId,
                 asignaciones: departamentos.map((dep) => ({
@@ -108,10 +119,10 @@ export default function TablaAsignacion({
                         .filter((s) => s.activo)
                         .map((s) => s.id),
                 })),
+                user_ids: userIds,
             };
 
-            await saveDepartamentosUsuario(userId, payload);
-
+            await saveDepartamentosUsuario(payload);
             onSaved();
         } catch (err: any) {
             alert(err.message);
@@ -120,15 +131,15 @@ export default function TablaAsignacion({
         }
     }
 
-    if (loading) return <p>Cargando…</p>;
-    if (error) return <p className="text-red-600">{error}</p>;
+    if (loading) return <div className="p-10 text-center">Cargando configuración…</div>;
+    if (error) return <div className="p-10 text-center text-red-600">{error}</div>;
+
     return (
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm p-6 space-y-6">
-            {/* HEADER */}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 space-y-6">
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
                 <div className="w-full md:w-1/3">
                     <label className="block text-sm font-semibold mb-1">
-                        Rol del usuario
+                        Rol para los usuarios seleccionados
                     </label>
                     <select
                         disabled={saving}
@@ -136,87 +147,62 @@ export default function TablaAsignacion({
                         onChange={(e) => setSelectedRoleId(Number(e.target.value))}
                         className="w-full rounded-lg border px-3 py-2 text-sm dark:bg-gray-900 dark:border-gray-700"
                     >
-                        <option value="" disabled>
-                            Selecciona un rol
-                        </option>
+                        <option value="" disabled>Selecciona un rol</option>
                         {roles.map((role) => (
-                            <option key={role.id} value={role.id}>
-                                {role.nombre}
-                            </option>
+                            <option key={role.id} value={role.id}>{role.nombre}</option>
                         ))}
                     </select>
                 </div>
             </div>
 
-            {/* BODY */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                {/* DEPARTAMENTOS */}
                 <aside className="md:col-span-1 border rounded-xl p-3 dark:border-gray-700">
-                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">
-                        Departamentos
-                    </p>
-
+                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Departamentos</p>
                     <div className="space-y-1">
                         {departamentos.map((dep) => {
                             const activeCount = dep.subdepartamentos.filter(s => s.activo).length;
-
                             return (
                                 <button
                                     key={dep.id}
                                     onClick={() => setSelectedDepId(dep.id)}
-                                    className={`w-full flex justify-between items-center px-3 py-2 rounded-lg text-sm transition
-                                        ${dep.id === selectedDepId
-                                            ? 'bg-primary text-white'
-                                            : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-                                        }`}
+                                    className={`w-full flex justify-between items-center px-3 py-2 rounded-lg text-sm transition ${
+                                        dep.id === selectedDepId ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                                    }`}
                                 >
                                     <span>{dep.nombre}</span>
-                                    <span className="text-xs opacity-70">
-                                        {activeCount}/{dep.subdepartamentos.length}
-                                    </span>
+                                    <span className="text-xs opacity-70">{activeCount}/{dep.subdepartamentos.length}</span>
                                 </button>
                             );
                         })}
                     </div>
                 </aside>
 
-                {/* SUBDEPARTAMENTOS */}
                 <section className="md:col-span-3 border rounded-xl p-5 dark:border-gray-700">
                     {selectedDep ? (
                         <>
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-semibold">
-                                    {selectedDep.nombre}
-                                </h3>
-
-                                <label className="flex items-center gap-2 text-sm">
+                                <h3 className="text-lg font-semibold">{selectedDep.nombre}</h3>
+                                <label className="flex items-center gap-2 text-sm cursor-pointer">
                                     <input
                                         type="checkbox"
-                                        checked={selectedDep.subdepartamentos.every(s => s.activo)}
-                                        onChange={(e) =>
-                                            toggleAll(selectedDep.id, e.target.checked)
-                                        }
+                                        checked={selectedDep.subdepartamentos.length > 0 && selectedDep.subdepartamentos.every(s => s.activo)}
+                                        onChange={(e) => toggleAll(selectedDep.id, e.target.checked)}
                                     />
                                     Activar todo
                                 </label>
                             </div>
-
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                 {selectedDep.subdepartamentos.map((sub) => (
                                     <label
                                         key={sub.id}
-                                        className={`flex items-center gap-2 p-3 rounded-lg border text-sm cursor-pointer
-                                            ${sub.activo
-                                                ? 'bg-primary/10 border-primary text-primary'
-                                                : 'hover:bg-gray-100 dark:hover:bg-gray-800 dark:border-gray-700'
-                                            }`}
+                                        className={`flex items-center gap-2 p-3 rounded-lg border text-sm cursor-pointer transition ${
+                                            sub.activo ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/20 dark:border-indigo-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800 dark:border-gray-700'
+                                        }`}
                                     >
                                         <input
                                             type="checkbox"
                                             checked={sub.activo}
-                                            onChange={() =>
-                                                toggleSub(selectedDep.id, sub.id)
-                                            }
+                                            onChange={() => toggleSub(selectedDep.id, sub.id)}
                                         />
                                         {sub.nombre}
                                     </label>
@@ -224,29 +210,21 @@ export default function TablaAsignacion({
                             </div>
                         </>
                     ) : (
-                        <p className="text-gray-500 text-sm">
-                            Selecciona un departamento
-                        </p>
+                        <p className="text-gray-500 text-sm">Selecciona un departamento</p>
                     )}
                 </section>
             </div>
 
-            {/* ACTIONS */}
             <div className="flex justify-end gap-3 pt-4 border-t dark:border-gray-700">
-                <button
-                    type="button"
-                    onClick={onCancel}
-                    className="rounded-lg border px-4 py-2 text-sm"
-                >
+                <button type="button" onClick={onCancel} className="rounded-lg border px-4 py-2 text-sm">
                     Cancelar
                 </button>
-
                 <button
                     disabled={saving}
                     onClick={guardarCambios}
-                    className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-indigo-700"
                 >
-                    {saving ? 'Guardando…' : 'Guardar cambios'}
+                    {saving ? 'Guardando…' : `Aplicar a ${userIds.length} usuarios`}
                 </button>
             </div>
         </div>

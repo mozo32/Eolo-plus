@@ -57,7 +57,8 @@ Route::prefix('walkarounds')->group(function () {
 Route::middleware(['api', 'auth:sanctum'])->prefix('administracion')->group(function () {
     Route::get('/users', [AdministracionController::class, 'index']);
     Route::get('/users/{user}/departamentos', [UserDepartamentoController::class, 'index']);
-    Route::post('/users/{user}/departamentos', [UserDepartamentoController::class, 'store']);
+
+    Route::post('/users/departamentos-masivo', [UserDepartamentoController::class, 'storeMasivo']);
 });
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('EntregarTurno')->group(function () {

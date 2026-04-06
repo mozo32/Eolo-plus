@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
@@ -8,6 +7,7 @@ use App\Models\SubDepartamento;
 use App\Models\Departamento;
 use App\Models\Role;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class UserDepartamentoController extends Controller
 {
@@ -39,10 +39,13 @@ class UserDepartamentoController extends Controller
             'userRoleId' => $user->roles()->value('roles.id'),
         ]);
     }
-    public function store(Request $request, User $user)
+
+    public function storeMasivo(Request $request)
     {
         $request->validate([
             'role_id' => ['required', 'integer', 'exists:roles,id'],
+            'user_ids' => ['required', 'array', 'min:1'],
+            'user_ids.*' => ['integer', 'exists:users,id'],
             'asignaciones' => ['required', 'array'],
             'asignaciones.*.departamento_id' => ['required', 'integer'],
             'asignaciones.*.subdepartamentos' => ['array'],
@@ -55,19 +58,34 @@ class UserDepartamentoController extends Controller
             ->values()
             ->toArray();
 
-        $user->subdepartamentos()->sync($subIds);
-
         $depIds = SubDepartamento::whereIn('id', $subIds)
             ->pluck('departamento_id')
             ->unique()
             ->toArray();
 
-        $user->departamentos()->sync($depIds);
+        try {
+            DB::beginTransaction();
 
-        $user->roles()->sync([$request->role_id]);
+            $users = User::whereIn('id', $request->user_ids)->get();
 
-        return response()->json([
-            'message' => 'Asignaciones y rol guardados correctamente',
-        ]);
+            foreach ($users as $user) {
+                $user->subdepartamentos()->sync($subIds);
+                $user->departamentos()->sync($depIds);
+                $user->roles()->sync([$request->role_id]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Asignaciones aplicadas correctamente a ' . $users->count() . ' usuarios',
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Error al procesar la asignación masiva',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }
