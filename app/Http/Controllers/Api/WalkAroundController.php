@@ -311,6 +311,28 @@ class WalkAroundController extends Controller
      */
     public function store(Request $request)
     {
+        $ultimoRegistro = WalkAround::where('matricula', $request->metadata['matricula'])
+            ->orderBy('fecha', 'desc')
+            ->orderBy('hora', 'desc')
+            ->orderBy('id', 'desc')
+            ->first();
+
+        if ($ultimoRegistro) {
+            $movimientoAnterior = strtolower($ultimoRegistro->movimiento);
+            $movimientoNuevo = strtolower($request->metadata['movimiento']);
+            if ($movimientoAnterior === $movimientoNuevo) {
+                $debeSer = ($movimientoNuevo === 'entrada') ? 'Salida' : 'Entrada';
+                return response()->json([
+                    'message' => "La matrícula {$request->metadata['matricula']} ya cuenta con un registro de {$request->metadata['movimiento']}. Debe registrar una {$debeSer} primero.",
+                    'data' => [
+                        'ultimo_movimiento' => $ultimoRegistro->movimiento,
+                        'fecha' => $ultimoRegistro->fecha,
+                        'hora' => $ultimoRegistro->hora
+                    ],
+                ], 422);
+            }
+        }
+
         DB::beginTransaction();
         try {
             $tipoExistente = DB::connection('remota')
@@ -362,53 +384,6 @@ class WalkAroundController extends Controller
                 'tipo_aeronave_id'         => $idTipo,
             ]);
 
-            $esAvion = ($request->metadata['aeronave'] === 'Avión');
-            $checklistPuro = $request->inspeccionTecnica['checklist'] ?? [];
-
-            WalkaroundChecklist::create([
-                'walk_around_id'        => $walkAround->id,
-                'checklist_avion'       => $esAvion ? $checklistPuro : null,
-                'checklist_helicoptero' => !$esAvion ? $checklistPuro : null,
-            ]);
-
-            if (isset($request->inspeccionTecnica['puntos3D']) && is_array($request->inspeccionTecnica['puntos3D'])) {
-                foreach ($request->inspeccionTecnica['puntos3D'] as $punto) {
-                    WalkaroundMarcaDanio::create([
-                        'walk_around_id' => $walkAround->id,
-                        'x'              => $punto['x'],
-                        'y'              => $punto['y'],
-                        'z'              => $punto['z'] ?? 0,
-                        'descripcion'    => $punto['descripcion'] ?? null,
-                        'severidad'      => $punto['severidad'] ?? null,
-                    ]);
-                }
-            }
-
-            if (isset($request->inspeccionTecnica['fotos']) && is_array($request->inspeccionTecnica['fotos'])) {
-                foreach ($request->inspeccionTecnica['fotos'] as $index => $fotoData) {
-                    $base64String = is_array($fotoData) ? ($fotoData['dataUrl'] ?? null) : $fotoData;
-
-                    if (!empty($base64String)) {
-                        $imagen = $this->guardarImagenBase64(
-                            $base64String,
-                            'walkaround/' . now()->format('Y/m')
-                        );
-
-                        $walkAround->imagenes()->attach($imagen->id, [
-                            'tag'    => 'evidencia',
-                            'orden'  => $index,
-                            'status' => 'A',
-                        ]);
-                    }
-                }
-            }
-
-            $this->guardarFirmaBase64($request->cierreYFirmas['firmaJefe'] ?? '', 'jefe_area', $walkAround);
-            $this->guardarFirmaBase64($request->cierreYFirmas['firmaFbo'] ?? '', 'fbo', $walkAround);
-            $this->guardarFirmaBase64($request->cierreYFirmas['firmaResponsable'] ?? '', 'responsable', $walkAround);
-
-            Bitacora::log('WalkAround', 'CREAR', "Se registró WalkAround ID {$walkAround->id}", auth()->id(), auth()->user()->name);
-
             DB::commit();
             return response()->json(['message' => 'WalkAround guardado correctamente', 'id' => $walkAround->id], 201);
 
@@ -416,8 +391,7 @@ class WalkAroundController extends Controller
             DB::rollBack();
             return response()->json([
                 'message' => 'Error al guardar WalkAround',
-                'error'   => $e->getMessage(),
-                'line'    => $e->getLine()
+                'error'   => $e->getMessage()
             ], 500);
         }
     }

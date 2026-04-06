@@ -20,23 +20,34 @@ export const validateStepOne = (infoData: any): boolean => {
 };
 
 // Validación Paso 2
+// Validación Paso 2
 export const validateStepTwo = (inspeccion: any, currentItems: string[]): boolean => {
     const missingFields: string[] = [];
 
-    // 1. Validar que el número de estáticas esté presente y sea mayor o igual a 0
+    // 1. Validar Número de Estáticas
     if (inspeccion.numeroEstaticas === undefined || inspeccion.numeroEstaticas === '') {
         missingFields.push("<b>Número de Estáticas</b>");
     }
 
-    // 2. Validar que cada componente tenga un estado registrado
-    const incompleteParts = currentItems.filter(item => {
+    // 2. Validar cada componente
+    currentItems.forEach(item => {
         const data = inspeccion[item];
-        return !data || !data.damages || data.damages.length === 0;
-    });
 
-    if (incompleteParts.length > 0) {
-        incompleteParts.forEach(p => missingFields.push(`Estado de: <b>${p}</b>`));
-    }
+        if (!data) {
+            missingFields.push(`Estado de: <b>${item}</b>`);
+            return;
+        }
+
+        const hasDamages = data.damages && data.damages.length > 0;
+        const sideSelected = data.izq || data.der;
+
+        if (hasDamages && !sideSelected) {
+            missingFields.push(`Elige un lado (izq/der) para el daño en: <b>${item}</b>`);
+        }
+        else if (!hasDamages) {
+            missingFields.push(`Registre los hallazgos técnicos de: <b>${item}</b>`);
+        }
+    });
 
     if (missingFields.length > 0) {
         showWarningAlert(

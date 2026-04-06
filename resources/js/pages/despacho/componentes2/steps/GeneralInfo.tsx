@@ -79,7 +79,7 @@ const GeneralInfo = ({ data, onChange }: Props) => {
                         />
                     </div>
                     <div>
-                        <label className={subLabelStyle}>Tipo de Movimiento</label>
+                        <label className={subLabelStyle}>Tipo</label>
                         <div className="flex gap-8 h-11 items-center">
                             {['Entrada', 'Salida'].map((op) => (
                                 <label key={op} className="flex items-center gap-3 cursor-pointer group">
@@ -125,7 +125,7 @@ const GeneralInfo = ({ data, onChange }: Props) => {
                         />
                     </div>
                     <div>
-                        <label className={subLabelStyle}>Hora Operación (24h)</label>
+                        <label className={subLabelStyle}>Hora</label>
                         <div className="relative">
                             <input
                                 type="text"

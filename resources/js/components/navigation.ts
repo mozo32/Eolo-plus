@@ -176,6 +176,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                     { id: 'rampa-autotanque', title: 'Entrega Turno Autotanque', href: reporteEntregaTurno(), icon: LayoutGrid },
                     { id: 'rampa-remision', title: 'Remisión Autotanque', href: remision(), icon: LayoutGrid },
                     { id: 'rampa-verificacion', title: 'Verificacion Estado Autotanque', href: verificacionEstadoAutotanque(), icon: LayoutGrid },
+                    { id: 'rampa-around',title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
                 ],
             },
             {
@@ -186,6 +187,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                     { id: 'trafico-medicamento', title: 'Control de Medicamento', href: controlMedicamento(), icon: LayoutGrid },
                     { id: 'trafico-operaciones', title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },
                     { id: 'trafico-comisariato', title: 'Servicio de Comisariato', href: servicioComisariato(), icon: LayoutGrid },
+                    { id: 'trafico-around',title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
                 ],
             },
         ]

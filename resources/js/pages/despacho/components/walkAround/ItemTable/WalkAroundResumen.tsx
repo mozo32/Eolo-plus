@@ -94,14 +94,11 @@ export default function WalkAroundResumen({ data }: Props) {
                             Matrícula: <b>{data.matricula}</b>
                         </p>
                         <p className="text-xs text-gray-500">
-                            Tipo de Aeronave: <b>{data.tipoAeronave}</b>
+                            Equipo: <b>{data.tipoAeronave}</b>
                         </p>
                     </div>
 
                     <div className="flex gap-2">
-                        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-                            {data.tipo.toUpperCase()}
-                        </span>
                         <span
                             className={`rounded-full px-3 py-1 text-xs font-semibold
                                 ${data.movimiento === "entrada"

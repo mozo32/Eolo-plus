@@ -124,4 +124,8 @@ class WalkAround extends Model
     {
         return $this->belongsTo(Personal::class, 'elabora_personal_id');
     }
+    public function getRolesFirmadosAttribute()
+    {
+        return $this->firmas()->pluck('rol')->toArray();
+    }
 }

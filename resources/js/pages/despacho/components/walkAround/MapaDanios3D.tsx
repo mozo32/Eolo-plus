@@ -168,7 +168,7 @@ function AvionModel({
         >
             {points.map((p, i) => (
                 <mesh key={i} position={[p.x, p.y, p.z]}>
-                    <sphereGeometry args={[0.05, 16, 16]} />
+                    <sphereGeometry args={[0.2, 16, 16]} />
                     <meshStandardMaterial
                         color={p.severidad === "alta" ? "orange" : "red"}
                     />

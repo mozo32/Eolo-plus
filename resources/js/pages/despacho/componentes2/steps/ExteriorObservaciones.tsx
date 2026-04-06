@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { PenTool, Trash2, CheckCircle2, User } from 'lucide-react';
+import { usePage } from '@inertiajs/react';
 
 interface Props {
     data: any;
@@ -144,6 +145,10 @@ const SignaturePad = ({
 };
 
 const ExteriorObservaciones = ({ data, onChange }: Props) => {
+    const { auth } = usePage<{ auth: { user: any } }>().props;
+    const nombreRol = auth.user.roles?.[0]?.slug;
+    const esAdminOFbo = nombreRol === 'admin' || nombreRol === 'fbo';
+    const esJefe = nombreRol === 'jefe_area';
     return (
         <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="bg-white p-8 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100">
@@ -171,22 +176,26 @@ const ExteriorObservaciones = ({ data, onChange }: Props) => {
                     onSave={(blob) => onChange({ firmaResponsable: blob })}
                     onClear={() => onChange({ firmaResponsable: null })}
                 />
-                <SignaturePad
-                    title="Jefe de Área / Supervisor"
-                    nameValue={data.nombreJefe}
-                    signatureValue={data.firmaJefe}
-                    onNameChange={(val) => onChange({ nombreJefe: val })}
-                    onSave={(blob) => onChange({ firmaJefe: blob })}
-                    onClear={() => onChange({ firmaJefe: null })}
-                />
-                <SignaturePad
-                    title="VoBo FBO (Representante)"
-                    nameValue={data.nombreFbo}
-                    signatureValue={data.firmaFbo}
-                    onNameChange={(val) => onChange({ nombreFbo: val })}
-                    onSave={(blob) => onChange({ firmaFbo: blob })}
-                    onClear={() => onChange({ firmaFbo: null })}
-                />
+                {(esAdminOFbo || esJefe) && (
+                    <SignaturePad
+                        title="Jefe de Área / Supervisor"
+                        nameValue={data.nombreJefe}
+                        signatureValue={data.firmaJefe}
+                        onNameChange={(val) => onChange({ nombreJefe: val })}
+                        onSave={(blob) => onChange({ firmaJefe: blob })}
+                        onClear={() => onChange({ firmaJefe: null })}
+                    />
+                )}
+                {esAdminOFbo && (
+                    <SignaturePad
+                        title="VoBo FBO (Representante)"
+                        nameValue={data.nombreFbo}
+                        signatureValue={data.firmaFbo}
+                        onNameChange={(val) => onChange({ nombreFbo: val })}
+                        onSave={(blob) => onChange({ firmaFbo: blob })}
+                        onClear={() => onChange({ firmaFbo: null })}
+                    />
+                )}
             </div>
         </div>
     );

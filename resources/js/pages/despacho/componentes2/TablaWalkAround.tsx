@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { fetchWalkarounds } from '@/stores/apiWalkaround';
+import { fetchWalkarounds, deleteWalkaround } from '@/stores/apiWalkaround';
 import WalkAroundFirmaModal from '../components/walkAround/ItemTable/WalkAroundFirmaModal';
 import WalkAroundFilterModal from './WalkAroundFilterModal';
+import Swal from 'sweetalert2';
+import { Trash2 } from 'lucide-react';
 
 import {
     Search, Loader2, Plane, ChevronLeft,
@@ -12,6 +14,7 @@ import {
 
 import WalkAroundFormV2 from './steps/WalkAroundFormV2';
 import WalkAroundPdfExporter from '../components/walkAround/ItemTable/WalkAroundPdfExporter';
+import { usePage } from '@inertiajs/react';
 
 const TablaWalkAround = () => {
     const [pdfId, setPdfId] = useState<number | null>(null);
@@ -22,12 +25,18 @@ const TablaWalkAround = () => {
     const [loading, setLoading] = useState(true);
     const [firmId, setFirmId] = useState<number | null>(null);
     const [firmOpen, setFirmOpen] = useState(false);
+    const { auth } = usePage<{ auth: { user: any } }>().props;
     const [pagination, setPagination] = useState({
         current_page: 1,
         last_page: 1,
         total: 0,
         per_page: 10
     });
+    const nombreRol = auth.user.roles?.[0]?.slug;
+
+    const esAdminOFbo = nombreRol === 'admin' || nombreRol === 'fbo';
+    const esJefe = nombreRol === 'jefe_area';
+    const esJEmpleado = nombreRol === 'empleado';
     const handleApplyFilters = () => {
         loadData(1);
     };
@@ -83,7 +92,33 @@ const TablaWalkAround = () => {
     const handleNew = () => { setSelectedId(null); setShowForm(true); };
 
     if (showForm) return <WalkAroundFormV2 id={selectedId} onCancel={() => { setShowForm(false); setSelectedId(null); }} />;
+    const handleDelete = async (id: any) => {
+        if (!id) return;
 
+        const r = await Swal.fire({
+            icon: "warning",
+            title: "¿Eliminar registro?",
+            text: "Esta acción no se puede deshacer",
+            showCancelButton: true,
+            confirmButtonColor: "#dc2626",
+            confirmButtonText: "Eliminar",
+            cancelButtonText: "Cancelar",
+        });
+
+        if (!r.isConfirmed) return;
+
+        try {
+            await deleteWalkaround(id);
+
+            Swal.fire("Eliminado", `Registro #${id} eliminado con éxito`, "success");
+
+            loadData(pagination.current_page);
+
+        } catch (error) {
+            console.error("Error al eliminar:", error);
+            Swal.fire("Error", "No se pudo eliminar el registro", "error");
+        }
+    };
     return (
         <div className="min-h-screen bg-slate-50/50 p-4 lg:p-8 font-sans">
             <div className="max-w-[1400px] mx-auto">
@@ -125,7 +160,7 @@ const TablaWalkAround = () => {
                             <thead>
                                 <tr className="bg-slate-50/50 border-b border-slate-100">
                                     <th className="px-8 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest">Información Aeronave</th>
-                                    <th className="px-6 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest">Movimiento</th>
+                                    <th className="px-6 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest">Tipo</th>
                                     <th className="px-6 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest">Origen/Destino</th>
                                     <th className="px-6 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest text-center">Fecha y Hora</th>
                                     <th className="px-8 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
@@ -146,7 +181,6 @@ const TablaWalkAround = () => {
                                     </tr>
                                 ) : data.length > 0 ? (
                                     data.map((item: any) => {
-                                        const dateInfo = formatDate(item.fecha, item.hora);
                                         return (
                                             <tr key={item.id} className="group hover:bg-slate-50/50 transition-all">
                                                 <td className="px-8 py-5">
@@ -158,8 +192,6 @@ const TablaWalkAround = () => {
                                                             <p className="font-black text-slate-900 text-lg leading-none mb-1 uppercase">{item.matricula}</p>
                                                             <div className="flex items-center gap-2">
                                                                 <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md uppercase tracking-tight">{item.tipo_aeronave}</span>
-                                                                <span className="text-[10px] font-bold text-slate-300">|</span>
-                                                                <span className="text-[10px] font-bold text-slate-400 uppercase">{item.tipo}</span>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -194,50 +226,80 @@ const TablaWalkAround = () => {
                                                 </td>
                                                 <td className="px-8 py-5 text-right">
                                                     <div className="flex items-center justify-end gap-2">
-                                                        <button
-                                                            onClick={() => handleEdit(item.id)}
-                                                            className="p-2.5 text-slate-400 hover:text-white hover:bg-indigo-600 rounded-xl transition-all shadow-sm hover:shadow-indigo-200 active:scale-90"
-                                                            title="Editar inspección"
-                                                        >
-                                                            <Edit2 size={18} />
-                                                        </button>
-                                                        <button
-                                                            className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-900 rounded-xl transition-all shadow-sm active:scale-90"
-                                                            onClick={() => {
-                                                                setFirmId(item.id);
-                                                                setFirmOpen(true);
-                                                            }}
-                                                        >
-
-                                                            <svg
-                                                                xmlns="http://www.w3.org/2000/svg"
-                                                                width="32"
-                                                                height="32"
-                                                                viewBox="0 0 24 24"
-                                                                fill="none"
-                                                                stroke="#5856d6"
-                                                                stroke-width="1"
-                                                                stroke-linecap="round"
-                                                                stroke-linejoin="round"
+                                                        {(esAdminOFbo) && (
+                                                            //editar
+                                                            <button
+                                                                onClick={() => handleEdit(item.id)}
+                                                                className="p-2.5 text-slate-400 hover:text-white hover:bg-indigo-600 rounded-xl transition-all shadow-sm active:scale-90"
+                                                                title="Editar inspección"
                                                             >
-                                                                <path d="M3 17c3.333 -3.333 5 -6 5 -8c0 -3 -1 -3 -2 -3s-2.032 1.085 -2 3c.034 2.048 1.658 4.877 2.5 6c1.5 2 2.5 2.5 3.5 1l2 -3c.333 2.667 1.333 4 3 4c.53 0 2.639 -2 3 -2c.517 0 1.517 .667 3 2" />
-                                                            </svg>
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            className="rounded p-1 hover:bg-gray-200 dark:hover:bg-gray-700"
-                                                            title="Exportar PDF"
-                                                            onClick={() => {
-                                                                setPdfId(item.id);
-                                                            }}
-                                                        >
-                                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                                                                fill="none" stroke="#c0841a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                                                <path d="M7 10l5 5 5-5" />
-                                                                <path d="M12 15V3" />
-                                                            </svg>
-                                                        </button>
+                                                                <Edit2 size={18} />
+                                                            </button>
+                                                        )}
+
+                                                        {(esAdminOFbo || esJefe || esJEmpleado) && (
+                                                            //firmas
+                                                            <button
+                                                                onClick={() => {
+                                                                    setFirmId(item.id);
+                                                                    setFirmOpen(true);
+                                                                }}
+                                                                className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-900 rounded-xl transition-all shadow-sm active:scale-90"
+                                                                title="Firmar"
+                                                            >
+                                                                <svg
+                                                                    xmlns="http://www.w3.org/2000/svg"
+                                                                    width="20"
+                                                                    height="20"
+                                                                    viewBox="0 0 24 24"
+                                                                    fill="none"
+                                                                    stroke="currentColor"
+                                                                    strokeWidth="2"
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                >
+                                                                    <path d="M3 17c3.333 -3.333 5 -6 5 -8c0 -3 -1 -3 -2 -3s-2.032 1.085 -2 3c.034 2.048 1.658 4.877 2.5 6c1.5 2 2.5 2.5 3.5 1l2 -3c.333 2.667 1.333 4 3 4c.53 0 2.639 -2 3 -2c.517 0 1.517 .667 3 2" />
+                                                                </svg>
+                                                            </button>
+                                                         )}
+
+                                                        {(esAdminOFbo) && (
+                                                            //pdf
+                                                            <button
+                                                                type="button"
+                                                                className="p-2.5 text-slate-400 hover:text-white hover:bg-amber-600 rounded-xl transition-all shadow-sm active:scale-90"
+                                                                title="Exportar PDF"
+                                                                onClick={() => setPdfId(item.id)}
+                                                            >
+                                                                <svg
+                                                                    xmlns="http://www.w3.org/2000/svg"
+                                                                    width="20"
+                                                                    height="20"
+                                                                    viewBox="0 0 24 24"
+                                                                    fill="none"
+                                                                    stroke="currentColor"
+                                                                    strokeWidth="2"
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                >
+                                                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                                    <path d="M7 10l5 5 5-5" />
+                                                                    <path d="M12 15V3" />
+                                                                </svg>
+                                                            </button>
+                                                        )}
+
+                                                        {(esAdminOFbo) && (
+                                                            //eliminar
+                                                            <button
+                                                                type="button"
+                                                                className="p-2.5 text-slate-400 hover:text-white hover:bg-red-600 rounded-xl transition-all shadow-sm active:scale-90"
+                                                                title="Eliminar"
+                                                                onClick={() => handleDelete(item.id)}
+                                                            >
+                                                                <Trash2 size={18} />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>

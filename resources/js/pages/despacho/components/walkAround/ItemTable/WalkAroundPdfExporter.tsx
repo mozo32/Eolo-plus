@@ -526,8 +526,8 @@ function WalkAroundPdfDoc({
     const totalConDanio = orderedKeys.filter((k) => hasDamage((checklist as any)[k])).length;
 
     const modalidad =
-        (detalle.movimiento || "").toLowerCase().includes("llegada")
-            ? "LLEGADA"
+        (detalle.movimiento || "").toLowerCase().includes("entrada")
+            ? "ENTRADA"
             : "SALIDA";
     const CHUNK = 6;
     const pages = [];
@@ -551,15 +551,8 @@ function WalkAroundPdfDoc({
                             Reporte de Inspección de Aeronave
                         </Text>
                         <Text style={styles.headerSub}>
-                            WalkAround #{detalle.id} · Matrícula {detalle.matricula ?? "-"} ·{" "}
-                            {detalle.fecha ? String(detalle.fecha).split("T")[0] : "-"} · Tipo {detalle.tipoAeronave ?? "-"}
+                            WalkAround #{detalle.id} · Elabora {detalle.elabora ?? "-"}
                         </Text>
-                    </View>
-
-                    <View style={styles.headerRight}>
-                        <Text style={styles.headerRightText}>Tipo: {detalle.tipo ?? "-"}</Text>
-                        <Text style={styles.headerRightText}>Hora: {detalle.hora ?? "-"}</Text>
-                        <Text style={styles.headerRightText}>FBO: {detalle.fbo ?? "-"}</Text>
                     </View>
                 </View>
                 <View style={styles.fieldsWrap}>
@@ -572,8 +565,8 @@ function WalkAroundPdfDoc({
                             <Text style={styles.value}>{detalle.matricula ?? "-"}</Text>
                         </View>
                         <View style={[styles.fieldCell, { width: "16%" }]}>
-                            <Text style={styles.label}>Tipo aeronave</Text>
-                            <Text style={styles.value}>{detalle.tipo ?? "-"}</Text>
+                            <Text style={styles.label}>Equipo</Text>
+                            <Text style={styles.value}>{detalle.tipoAeronave ?? "-"}</Text>
                         </View>
                         <View style={[styles.fieldCell, { width: "22%" }]}>
                             <Text style={styles.label}>Procedencia / Destino</Text>
@@ -736,13 +729,6 @@ function WalkAroundPdfDoc({
                                     ) : (
                                         <Text style={styles.firmaPlaceholder}>Sin firma</Text>
                                     )}
-                                </View>
-                            </View>
-                            <View style={styles.firmaCard}>
-                                <Text style={styles.firmaLabel}>Elabora</Text>
-                                <Text style={styles.firmaNombre}>{detalle.elabora ?? "-"}</Text>
-                                <View style={styles.firmaBoxFooter}>
-                                    <Text style={styles.firmaPlaceholder}>Firma no requerida</Text>
                                 </View>
                             </View>
                         </View>
