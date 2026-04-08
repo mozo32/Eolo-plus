@@ -228,25 +228,20 @@ const MapaDanios3D = forwardRef<MapaDanios3DRef, MapaDanios3DProps>(
         };
 
         const removeNearestPoint = (p: THREE.Vector3) => {
-            if (!onChange || readOnly || tool !== "erase" || !value.length)
-                return;
+            if (!onChange || readOnly || tool !== "erase" || !value.length) return;
 
             let minDist = Infinity;
             let index = -1;
 
             value.forEach((d, i) => {
-                const dist = new THREE.Vector3(
-                    d.x,
-                    d.y,
-                    d.z
-                ).distanceTo(p);
+                const dist = new THREE.Vector3(d.x, d.y, d.z).distanceTo(p);
                 if (dist < minDist) {
                     minDist = dist;
                     index = i;
                 }
             });
 
-            if (minDist > 0.15) return;
+            if (minDist > 0.5) return;
 
             const next = [...value];
             next.splice(index, 1);
