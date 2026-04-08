@@ -157,10 +157,14 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('RegistroVisitantes')->group(
     Route::put('/{registroVisitante}', [RegistroVisitantesController::class, 'salida']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('Remision')->group(function () {
+    Route::post('/enviar-correo', [RemisionController::class, 'enviarCorreo']);
+    Route::get('/ultimaLectura', [RemisionController::class, 'ultimaLectura']);
     Route::post('/remisiones', [RemisionController::class, 'store']);
     Route::get('/', [RemisionController::class, 'index']);
     Route::get('/{id}', [RemisionController::class, 'show']);
     Route::put('/{id}', [RemisionController::class, 'update']);
+    Route::get('/matricula/{matricula}', [RemisionController::class, 'matriculaHora']);
+
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('TurnoAutoTanque')->group(function () {
     Route::post('/', [TurnoAutotanqueController::class, 'store']);

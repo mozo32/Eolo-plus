@@ -19,17 +19,13 @@ export const validateStepOne = (infoData: any): boolean => {
     return true;
 };
 
-// Validación Paso 2
-// Validación Paso 2
 export const validateStepTwo = (inspeccion: any, currentItems: string[]): boolean => {
     const missingFields: string[] = [];
 
-    // 1. Validar Número de Estáticas
     if (inspeccion.numeroEstaticas === undefined || inspeccion.numeroEstaticas === '') {
         missingFields.push("<b>Número de Estáticas</b>");
     }
 
-    // 2. Validar cada componente
     currentItems.forEach(item => {
         const data = inspeccion[item];
 
@@ -39,9 +35,10 @@ export const validateStepTwo = (inspeccion: any, currentItems: string[]): boolea
         }
 
         const hasDamages = data.damages && data.damages.length > 0;
+        const needsSide = hasDamages && data.damages.some((d: any) => d !== "sin_danio");
         const sideSelected = data.izq || data.der;
 
-        if (hasDamages && !sideSelected) {
+        if (needsSide && !sideSelected) {
             missingFields.push(`Elige un lado (izq/der) para el daño en: <b>${item}</b>`);
         }
         else if (!hasDamages) {
@@ -62,7 +59,6 @@ export const validateStepTwo = (inspeccion: any, currentItems: string[]): boolea
 export const validateStepThree = (exteriorData: any): boolean => {
     const missingFields: string[] = [];
 
-    // Solo validamos al Responsable como obligatorio
     if (!exteriorData.nombreResponsable || exteriorData.nombreResponsable.trim() === "") {
         missingFields.push("<b>Nombre del Responsable</b>");
     }
@@ -78,7 +74,6 @@ export const validateStepThree = (exteriorData: any): boolean => {
 
     return true;
 };
-// Función auxiliar para alertas estéticas
 const showWarningAlert = (title: string, text: string, list: string[]) => {
     Swal.fire({
         title: title,

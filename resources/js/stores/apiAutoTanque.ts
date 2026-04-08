@@ -5,11 +5,21 @@ function getXsrfToken(): string {
 
     return match ? decodeURIComponent(match.split('=')[1]) : '';
 }
-export async function fetchRemisionesDelDia(fecha: string) {
-    const params = new URLSearchParams({ fecha: fecha || '' });
+export async function fetchRemisionesDelDia(filtros: any) {
+    const cleanParams = {
+        ...filtros.params,
+        page: filtros.page,
+        per_page: filtros.per_page
+    };
 
-    const res = await fetch(`/api/Remision?${params.toString()}`, {
-        headers: { Accept: "application/json" },
+    const queryParams = new URLSearchParams(cleanParams);
+
+    const res = await fetch(`/api/Remision?${queryParams.toString()}`, {
+        method: "GET",
+        headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        },
         credentials: "same-origin",
     });
 

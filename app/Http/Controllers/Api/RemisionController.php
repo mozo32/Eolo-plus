@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Remision;
+use App\Models\OperacionDiaria;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Firma;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\RemisionMail;
 
 class RemisionController extends Controller
 {
@@ -44,7 +47,7 @@ class RemisionController extends Controller
                     'hora_final'      => $request->horaFinal,
                     'lectura_inicial' => $request->lecturaInicial,
                     'lectura_final'   => $request->lecturaFinal,
-                    'total_litros'    => (float)$request->lecturaFinal - (float)$request->lecturaInicial,
+                    'total_litros'    => (float)$request->lecturaInicial - (float)$request->lecturaFinal,
                 ]);
 
                 $this->guardarFirmaBase64($request->firmaCliente ?? '', 'cliente', $remision);
@@ -66,10 +69,35 @@ class RemisionController extends Controller
 
     public function index(Request $request)
     {
-        $fecha = $request->query('fecha', now()->toDateString());
-        $remisiones = Remision::whereDate('fecha', $fecha)
-            ->orderBy('id', 'desc')
-            ->get();
+        $type = $request->query('type', 'day');
+        $perPage = $request->query('per_page', 20);
+
+        $query = Remision::where('status', 'A');
+
+        switch ($type) {
+            case 'range':
+                $start = $request->query('start');
+                $end = $request->query('end');
+                if ($start && $end) $query->whereBetween('fecha', [$start, $end]);
+                break;
+            case 'month':
+                $month = $request->query('month');
+                $year = $request->query('year');
+                if ($month && $year) $query->whereMonth('fecha', $month)->whereYear('fecha', $year);
+                break;
+            case 'year':
+                $year = $request->query('year');
+                if ($year) $query->whereYear('fecha', $year);
+                break;
+            case 'day':
+            default:
+                $fecha = $request->query('date') ?? $request->query('fecha', now()->toDateString());
+                $query->whereDate('fecha', $fecha);
+                break;
+        }
+
+        // Cambiamos ->get() por ->paginate()
+        $remisiones = $query->orderBy('id', 'desc')->paginate($perPage);
 
         return response()->json($remisiones);
     }
@@ -175,7 +203,7 @@ class RemisionController extends Controller
                     'hora_final'      => $request->horaFinal,
                     'lectura_inicial' => $request->lecturaInicial,
                     'lectura_final'   => $request->lecturaFinal,
-                    'total_litros'    => (float)$request->lecturaFinal - (float)$request->lecturaInicial,
+                    'total_litros'    => (float)$request->lecturaInicial - (float)$request->lecturaFinal,
                 ]);
                 if ($request->filled('firmaCliente')) {
                     $this->guardarFirmaBase64($request->firmaCliente, 'cliente', $remision);
@@ -194,6 +222,54 @@ class RemisionController extends Controller
             return response()->json([
                 'message' => 'Error al actualizar el registro',
                 'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function matriculaHora($matricula){
+        $op = OperacionDiaria::where('matricula', $matricula)
+                            ->where('tipo', 'llegada')
+                            ->selectRaw("DATE_FORMAT(hora, '%H:%i') as hora")
+                            ->orderBy('fecha', 'desc')
+                            ->orderBy('hora', 'desc')
+                            ->first();
+
+        return response()->json($op);
+    }
+
+    public function ultimaLectura(){
+        $rem = Remision::select('lectura_final')
+                        ->orderBy('fecha', 'desc')
+                        ->first();
+
+        return response()->json($rem);
+    }
+    public function enviarCorreo(Request $request) {
+        $request->validate([
+            'id' => 'required|exists:remisiones,id',
+            'email' => 'required|email'
+        ]);
+
+        config([
+            'mail.default' => 'smtp',
+            'mail.mailers.smtp.host' => 'smtp.gmail.com',
+            'mail.mailers.smtp.port' => 587,
+            'mail.mailers.smtp.encryption' => 'tls',
+            'mail.mailers.smtp.username' => 'mozorodriguez32@gmail.com',
+            'mail.mailers.smtp.password' => 'truaoxrvmrxxsxnn',
+            'mail.from.address' => 'mozorodriguez32@gmail.com',
+            'mail.from.name' => 'Eolo Plus',
+        ]);
+
+        $remision = Remision::findOrFail($request->id);
+
+        try {
+            Mail::to($request->email)->send(new RemisionMail($remision));
+            return response()->json(['message' => '¡Correo enviado con éxito a Gmail!']);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error de conexión con Gmail',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

@@ -3,6 +3,8 @@ import { useForm, usePage } from '@inertiajs/react';
 import Swal from 'sweetalert2';
 import PressureGauge from './PressureGauge';
 import MatriculaAutocomplete from '@/pages/despacho/components/walkAround/MatriculaAutocomplete';
+import { obtenerHora, ultimaLectura } from '@/stores/apiRemision';
+import { updateRemision } from '@/stores/apiAutoTanque';
 
 interface EoloFormData {
     fecha: string;
@@ -187,7 +189,6 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
         const firmaOperador = canvasOperadorRef.current?.toDataURL('image/png');
 
         try {
-            const xsrf = getXsrfToken();
             const payload = {
                 ...data,
                 totalLitros,
@@ -195,40 +196,41 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                 firmaOperador
             };
 
-            const response = await fetch('api/Remision/remisiones', {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                    'X-XSRF-TOKEN': xsrf,
-                },
-                body: JSON.stringify(payload)
+            let result;
+
+            if (isEdit && externalData?.id) {
+                // --- LÓGICA DE ACTUALIZACIÓN ---
+                result = await updateRemision(externalData.id, payload);
+            } else {
+                // --- LÓGICA DE CREACIÓN (Tu fetch actual) ---
+                const xsrf = getXsrfToken();
+                const response = await fetch('api/Remision/remisiones', {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-XSRF-TOKEN': xsrf,
+                    },
+                    body: JSON.stringify(payload)
+                });
+                result = await response.json();
+                if (!response.ok) throw new Error(result.message || 'Error al guardar');
+            }
+
+            Swal.fire({
+                icon: 'success',
+                title: isEdit ? '¡Actualizado!' : '¡Guardado!',
+                text: isEdit ? 'El registro se actualizó correctamente' : 'La remisión se ha registrado correctamente',
+                timer: 2000
             });
 
-            const result = await response.json();
+            if (!isEdit) reset(); // Solo resetear si es nuevo
+            if (onSuccess) onSuccess();
 
-            if (response.ok) {
-                [canvasClienteRef, canvasOperadorRef].forEach(ref => {
-                    const ctx = ref.current?.getContext('2d');
-                    ctx?.clearRect(0, 0, ref.current?.width || 0, ref.current?.height || 0);
-                });
-
-                Swal.fire({
-                    icon: 'success',
-                    title: '¡Guardado!',
-                    text: 'La remisión se ha registrado correctamente',
-                    timer: 2000
-                });
-
-                reset();
-                if (onSuccess) onSuccess();
-            } else {
-                throw new Error(result.message || 'Error al guardar la remisión');
-            }
         } catch (error: any) {
             Swal.fire({
                 icon: 'error',
-                title: 'Error de Suministro',
+                title: isEdit ? 'Error al actualizar' : 'Error de Suministro',
                 text: error.message
             });
         } finally {
@@ -281,7 +283,42 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
             reset();
         }
     }, [externalData]);
+    useEffect(() => {
+        if (!isEdit) {
+            const consultarUltimaHora = async () => {
+                if (data.matricula && data.matricula.length >= 3) {
+                    try {
+                        const resultado = await obtenerHora(data.matricula);
+                        if (resultado && resultado.hora) {
+                            setData('horaLlegada', resultado.hora);
+                        }
+                    } catch (error) {
+                        console.error("Error al obtener la hora de la matrícula:", error);
+                    }
+                }
+            };
 
+            consultarUltimaHora();
+        }
+    }, [data.matricula]);
+    useEffect(() => {
+        if (!isEdit) {
+            const consultarUltimaLectura = async () => {
+                try {
+                    const resultado = await ultimaLectura();
+                    console.log(resultado);
+
+                    if (resultado && resultado.lectura_final) {
+                        setData('lecturaInicial', resultado.lectura_final);
+                    }
+                } catch (error) {
+                    console.error("Error al obtener la hora de la matrícula:", error);
+                }
+            };
+
+            consultarUltimaLectura();
+        }
+    }, []);
     return (
         <div className="min-h-screen bg-[#f8fafc] p-6 font-sans">
             <div className="mx-auto max-w-5xl">
@@ -351,6 +388,12 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                                 onChange={e => handleUppercaseChange('formaPago', e.target.value)}
                                 className="w-full border-slate-100 border-2 rounded-2xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-all uppercase"
                             />
+                            <MatriculaAutocomplete
+                                matricula={data.matricula}
+                                onMatriculaChange={(val) => setData('matricula', val.toUpperCase())}
+                                onAeronaveData={handleAeronaveData}
+                                onNuevaMatricula={() => { }}
+                            />
                             <input
                                 placeholder="Tipo de Aeronave"
                                 value={data.aeronaveTipo}
@@ -358,12 +401,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                                 className="w-full border-slate-100 border-2 rounded-2xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-all uppercase"
                             />
 
-                            <MatriculaAutocomplete
-                                matricula={data.matricula}
-                                onMatriculaChange={(val) => setData('matricula', val.toUpperCase())}
-                                onAeronaveData={handleAeronaveData}
-                                onNuevaMatricula={() => { }}
-                            />
+
 
                             <div className="md:col-span-2">
                                 <input
@@ -464,11 +502,10 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                                             placeholder="000000"
                                             value={data.lecturaFinal}
                                             onChange={e => setData('lecturaFinal', e.target.value)}
-                                            className={`w-full border-2 rounded-2xl px-6 py-4 text-3xl font-mono text-center outline-none transition-all ${
-                                                isLecturaInvalid
-                                                    ? 'bg-red-50 border-red-200 text-red-700 focus:border-red-400 shadow-red-50'
-                                                    : 'bg-blue-50 border-blue-100 text-blue-700 focus:bg-white focus:border-blue-400 shadow-blue-50'
-                                            }`}
+                                            className={`w-full border-2 rounded-2xl px-6 py-4 text-3xl font-mono text-center outline-none transition-all ${isLecturaInvalid
+                                                ? 'bg-red-50 border-red-200 text-red-700 focus:border-red-400 shadow-red-50'
+                                                : 'bg-blue-50 border-blue-100 text-blue-700 focus:bg-white focus:border-blue-400 shadow-blue-50'
+                                                }`}
                                         />
                                         {isLecturaInvalid && (
                                             <p className="text-[10px] text-red-500 font-black uppercase mt-2 text-center animate-pulse">
@@ -506,17 +543,21 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
 
                             <button
                                 onClick={handleSubmit}
-                                disabled={isSubmitting || isEdit || isLecturaInvalid}
+                                disabled={isSubmitting || isLecturaInvalid}
                                 className={`mt-10 w-full p-4 rounded-2xl font-bold text-white transition-all ${
-                                    isEdit || isLecturaInvalid ? 'bg-slate-800' : isSubmitting ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'
+                                    isLecturaInvalid
+                                        ? 'bg-slate-800'
+                                        : isSubmitting
+                                            ? 'bg-slate-400'
+                                            : 'bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100'
                                 }`}
                             >
-                                {isEdit ? (
-                                    <span className="text-lg">Documento en Modo Lectura</span>
+                                {isSubmitting ? (
+                                    "Procesando..."
                                 ) : isLecturaInvalid ? (
                                     "Error en Lecturas"
-                                ) : isSubmitting ? (
-                                    "Procesando..."
+                                ) : isEdit ? (
+                                    "Actualizar Registro"
                                 ) : (
                                     "Finalizar y Registrar Suministro"
                                 )}
