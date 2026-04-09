@@ -47,7 +47,7 @@ class RemisionController extends Controller
                     'hora_final'      => $request->horaFinal,
                     'lectura_inicial' => $request->lecturaInicial,
                     'lectura_final'   => $request->lecturaFinal,
-                    'total_litros'    => (float)$request->lecturaInicial - (float)$request->lecturaFinal,
+                    'total_litros'    => (float)$request->lecturaFinal - (float)$request->lecturaInicial,
                 ]);
 
                 $this->guardarFirmaBase64($request->firmaCliente ?? '', 'cliente', $remision);
@@ -203,7 +203,7 @@ class RemisionController extends Controller
                     'hora_final'      => $request->horaFinal,
                     'lectura_inicial' => $request->lecturaInicial,
                     'lectura_final'   => $request->lecturaFinal,
-                    'total_litros'    => (float)$request->lecturaInicial - (float)$request->lecturaFinal,
+                    'total_litros'    => (float)$request->lecturaFinal - (float)$request->lecturaInicial ,
                 ]);
                 if ($request->filled('firmaCliente')) {
                     $this->guardarFirmaBase64($request->firmaCliente, 'cliente', $remision);

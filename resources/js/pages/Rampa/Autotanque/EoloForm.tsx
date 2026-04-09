@@ -3,7 +3,7 @@ import { useForm, usePage } from '@inertiajs/react';
 import Swal from 'sweetalert2';
 import PressureGauge from './PressureGauge';
 import MatriculaAutocomplete from '@/pages/despacho/components/walkAround/MatriculaAutocomplete';
-import { obtenerHora, ultimaLectura } from '@/stores/apiRemision';
+import { ultimaLectura } from '@/stores/apiRemision';
 import { updateRemision } from '@/stores/apiAutoTanque';
 
 interface EoloFormData {
@@ -133,8 +133,10 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
         presionDif: 0,
     });
 
-    const totalLitros = (Number(data.lecturaInicial) || 0) - (Number(data.lecturaFinal) || 0);
-    const isLecturaInvalid = Number(data.lecturaFinal) > Number(data.lecturaInicial) && data.lecturaInicial !== '';
+    const totalLitros = (Number(data.lecturaFinal) || 0) - (Number(data.lecturaInicial) || 0);
+    const isLecturaInvalid = data.lecturaFinal !== '' &&
+        data.lecturaInicial !== '' &&
+        Number(data.lecturaFinal) < Number(data.lecturaInicial);
 
     const handleSwapLecturas = () => {
         setData(prev => ({
@@ -283,24 +285,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
             reset();
         }
     }, [externalData]);
-    useEffect(() => {
-        if (!isEdit) {
-            const consultarUltimaHora = async () => {
-                if (data.matricula && data.matricula.length >= 3) {
-                    try {
-                        const resultado = await obtenerHora(data.matricula);
-                        if (resultado && resultado.hora) {
-                            setData('horaLlegada', resultado.hora);
-                        }
-                    } catch (error) {
-                        console.error("Error al obtener la hora de la matrícula:", error);
-                    }
-                }
-            };
 
-            consultarUltimaHora();
-        }
-    }, [data.matricula]);
     useEffect(() => {
         if (!isEdit) {
             const consultarUltimaLectura = async () => {
@@ -422,7 +407,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                                 <div className="relative pl-6 border-l-2 border-slate-200 space-y-8">
                                     <div className="relative">
                                         <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-white border-4 border-slate-300"></div>
-                                        <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1 ml-1">Llegada a Plataforma</label>
+                                        <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1 ml-1">Llegada de Autotanque</label>
                                         <input
                                             type="text"
                                             placeholder="HH:MM"
@@ -495,7 +480,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
 
                                     <div className="group">
                                         <label className={`block text-[10px] uppercase font-bold mb-1 ml-2 tracking-widest text-center lg:text-left ${isLecturaInvalid ? 'text-red-500' : 'text-blue-600'}`}>
-                                            Final {isLecturaInvalid}
+                                            Final
                                         </label>
                                         <input
                                             type="number"
@@ -509,7 +494,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                                         />
                                         {isLecturaInvalid && (
                                             <p className="text-[10px] text-red-500 font-black uppercase mt-2 text-center animate-pulse">
-                                                Lectura final inválida
+                                                La lectura final debe ser mayor a la inicial
                                             </p>
                                         )}
                                     </div>
@@ -544,13 +529,12 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                             <button
                                 onClick={handleSubmit}
                                 disabled={isSubmitting || isLecturaInvalid}
-                                className={`mt-10 w-full p-4 rounded-2xl font-bold text-white transition-all ${
-                                    isLecturaInvalid
+                                className={`mt-10 w-full p-4 rounded-2xl font-bold text-white transition-all ${isLecturaInvalid
                                         ? 'bg-slate-800'
                                         : isSubmitting
                                             ? 'bg-slate-400'
                                             : 'bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100'
-                                }`}
+                                    }`}
                             >
                                 {isSubmitting ? (
                                     "Procesando..."
