@@ -71,36 +71,46 @@ class RemisionController extends Controller
     {
         $type = $request->query('type', 'day');
         $perPage = $request->query('per_page', 20);
-
         $query = Remision::where('status', 'A');
 
         switch ($type) {
             case 'range':
                 $start = $request->query('start');
                 $end = $request->query('end');
-                if ($start && $end) $query->whereBetween('fecha', [$start, $end]);
+                if ($start && $end) {
+                    $query->whereBetween('fecha', [$start, $end]);
+                }
                 break;
+
             case 'month':
                 $month = $request->query('month');
                 $year = $request->query('year');
-                if ($month && $year) $query->whereMonth('fecha', $month)->whereYear('fecha', $year);
+                if ($month && $year) {
+                    $query->whereMonth('fecha', $month)->whereYear('fecha', $year);
+                }
                 break;
+
             case 'year':
                 $year = $request->query('year');
-                if ($year) $query->whereYear('fecha', $year);
+                if ($year) {
+                    $query->whereYear('fecha', $year);
+                }
                 break;
+
             case 'day':
             default:
-                $fecha = $request->query('date') ?? $request->query('fecha', now()->toDateString());
-                $query->whereDate('fecha', $fecha);
+                $fecha = $request->query('date') ?? $request->query('fecha');
+                if ($fecha) {
+                    $query->whereDate('fecha', $fecha);
+                }
                 break;
         }
 
-        // Cambiamos ->get() por ->paginate()
         $remisiones = $query->orderBy('id', 'desc')->paginate($perPage);
 
         return response()->json($remisiones);
     }
+
     private function guardarFirmaBase64(string $value, string $rol, Remision $entrega): void
     {
         if (trim($value) === '') return;

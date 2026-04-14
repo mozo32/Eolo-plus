@@ -177,5 +177,11 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('TurnoAutoTanque')->group(fun
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('InspeccionAutoTanque')->group(function () {
     Route::post('/', [InspeccioAutotanqueController::class, 'store']);
-
+    Route::get('/turno/{id}', [InspeccioAutotanqueController::class, 'showTurno']);
+    Route::post('/validar-color', [InspeccioAutotanqueController::class, 'validarColor']);
+    Route::post('/guardar-inspeccion', [InspeccioAutotanqueController::class, 'guardarInspeccionCompleta']);
+    Route::get('/index-inspeccion', [InspeccioAutotanqueController::class, 'indexCombustibles']);
+    Route::get('/show-inspeccion/{id}', [InspeccioAutotanqueController::class, 'showCombustibles']);
+    Route::post('/aprender-color', [InspeccioAutotanqueController::class, 'aprenderColorManual']);
+    Route::get('/eliminar/{id}', [InspeccioAutotanqueController::class, 'eliminar']);
 });

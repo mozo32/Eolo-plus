@@ -63,7 +63,7 @@ export const TablaRemisiones = ({
                             <th className="pb-2"># Folio</th>
                             <th className="pb-2">Litros</th>
                             <th className="pb-2 text-center">Estado</th>
-                            <th className="pb-2"></th>
+                            {/* <th className="pb-2"></th> */}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
@@ -86,7 +86,7 @@ export const TablaRemisiones = ({
                                         {item.isCancelled ? 'CANCELADA' : 'REGISTRADA'}
                                     </span>
                                 </td>
-                                <td className="py-2 text-right text-gray-400">
+                                {/* <td className="py-2 text-right text-gray-400">
                                     {!item.isCancelled && (
                                         <Trash2
                                             size={16}
@@ -94,7 +94,7 @@ export const TablaRemisiones = ({
                                             onClick={() => item.tipo === 'VENTA' ? onDeleteVenta(item.originalIdx) : onDeleteSuma(item.originalIdx)}
                                         />
                                     )}
-                                </td>
+                                </td> */}
                             </tr>
                         ))}
                         {dataUnificada.length === 0 && (

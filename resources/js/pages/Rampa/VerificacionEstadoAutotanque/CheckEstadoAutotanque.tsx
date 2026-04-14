@@ -1,5 +1,5 @@
 import Swal from 'sweetalert2';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { usePage } from '@inertiajs/react';
 import { ClipboardCheck, Truck, PenTool, CheckCircle2, ArrowRight, Save, Layout } from 'lucide-react';
 import { SeccionChecklist } from './SeccionChecklist';
@@ -7,6 +7,7 @@ import { SeccionVehiculo } from './SeccionVehiculo';
 import { SeccionFirmas } from './SeccionFirmas';
 import { guardarInspeccion } from '@/stores/apiInspeccionAutoTanque';
 import { router } from '@inertiajs/react';
+import { fetchInspeccionPorTurno } from '@/stores/apiInspeccionAutoTanque';
 import { reporteEntregaTurno } from '@/routes';
 const SECCIONES_CHECK = [
     {
@@ -20,6 +21,10 @@ const SECCIONES_CHECK = [
     {
         titulo: "Seguridad",
         items: ["Banderines", "Carrete y Cable de tierra", "Interruptor maestro", "Extintores", "Rombo de seguridad", "Alarma de reversa"]
+    },
+    {
+        titulo: "Pruebas de Calidad de Combustible",
+        items: ["Toma de Muestra de Combustible", "Prueba de claridad y Brillantez", "Presencia de Sólidos y/o agua de forma visual"]
     }
 ];
 
@@ -40,7 +45,8 @@ export type AuthUser = {
 export const CheckEstadoAutotanque = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const turnoId = urlParams.get('id');
-
+    const [cargando, setCargando] = useState(false);
+    const [firmasCargadas, setFirmasCargadas] = useState<Record<string, string>>({});
     const [tabActiva, setTabActiva] = useState('checklist');
     const [respuestas, setRespuestas] = useState<Record<string, string>>({});
     const [datosVehiculo, setDatosVehiculo] = useState({ km: '', combustible: '50' });
@@ -52,7 +58,33 @@ export const CheckEstadoAutotanque = () => {
     const checklistCompleto = Object.keys(respuestas).length === totalItems;
     const vehiculoCompleto = datosVehiculo.km.length > 0;
     const todoListo = checklistCompleto && vehiculoCompleto;
+    useEffect(() => {
+        const cargarDatosExistentes = async () => {
+            if (!turnoId) return;
 
+            setCargando(true);
+            try {
+
+                const data = await fetchInspeccionPorTurno(turnoId);
+
+                if (data) {
+                    setRespuestas(data.checklist || {});
+                    setDatosVehiculo({
+                        km: data.km?.toString() || '',
+                        combustible: data.combustible?.toString() || '50'
+                    });
+                    setMarcasDanos(data.danos || []);
+                    setFirmasCargadas(data.firmas_db || {});
+                }
+            } catch (error) {
+                console.error("Error cargando inspección previa:", error);
+            } finally {
+                setCargando(false);
+            }
+        };
+
+        cargarDatosExistentes();
+    }, [turnoId]);
     const finalizarInspeccion = async(datosFirmas: any) => {
         const dataLog = {
             turno_id: turnoId,
@@ -83,7 +115,6 @@ export const CheckEstadoAutotanque = () => {
                 title: "Completado con éxito",
                 text: "La inspección ha sido enviada correctamente."
             }).then(() => {
-                // Opcional: Redirigir de vuelta al reporte después de guardar
                 router.get(reporteEntregaTurno());
             });
 
@@ -161,6 +192,7 @@ export const CheckEstadoAutotanque = () => {
                             marcas={marcasDanos}
                             setMarcas={setMarcasDanos}
                             onGuardar={finalizarInspeccion}
+                            firmasExistentes={firmasCargadas}
                         />
                     )}
                 </div>

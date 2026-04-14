@@ -27,3 +27,15 @@ export async function guardarInspeccion(form: any) {
     return data;
 }
 
+
+export async function fetchInspeccionPorTurno(id: any) {
+    const res = await fetch(`/api/InspeccionAutoTanque/turno/${id}`, {
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || 'Error al obtener los datos');
+
+    return data;
+}

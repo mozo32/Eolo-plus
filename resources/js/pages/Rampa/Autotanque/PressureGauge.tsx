@@ -8,7 +8,6 @@ interface PressureGaugeProps {
 const PressureGauge = ({ value, onChange }: PressureGaugeProps) => {
     const svgRef = useRef<SVGSVGElement>(null);
     const [isDragging, setIsDragging] = useState(false);
-
     const handleUpdate = (clientY: number) => {
         if (!svgRef.current) return;
         const rect = svgRef.current.getBoundingClientRect();
@@ -22,8 +21,8 @@ const PressureGauge = ({ value, onChange }: PressureGaugeProps) => {
 
         onChange(Math.max(0, Math.min(30, psiValue)));
     };
-
-    const pistonY = 50 + (value / 30) * 350;
+    const getPointY = (psi: number) => 50 + (psi / 30) * 350;
+    const pistonY = getPointY(value);
 
     return (
         <div className="flex flex-col items-center bg-slate-50 p-8 rounded-[3rem] shadow-xl border border-slate-200">
@@ -54,15 +53,17 @@ const PressureGauge = ({ value, onChange }: PressureGaugeProps) => {
                             <stop offset="100%" stopColor="#1d4ed8" />
                         </linearGradient>
                     </defs>
-
                     <rect x="10" y="10" width="120" height="440" rx="25" fill="url(#metal-grad)" stroke="#94a3b8" strokeWidth="1" />
+                    <rect x="52" y={getPointY(0)} width="36" height={getPointY(8) - getPointY(0)} fill="#22c55e" opacity="0.2" />
+                    <rect x="52" y={getPointY(8)} width="36" height={getPointY(14) - getPointY(8)} fill="#eab308" opacity="0.3" />
+                    <rect x="52" y={getPointY(14)} width="36" height={getPointY(30) - getPointY(14)} fill="#ef4444" opacity="0.2" />
                     <rect x="52" y="30" width="36" height="390" rx="18" fill="#0f172a" opacity="0.05" />
                     <rect x="55" y="35" width="30" height="380" rx="15" fill="white" stroke="#e2e8f0" />
-                    <text x="35" y="35" fontSize="9" fontWeight="900" textAnchor="middle" className="fill-slate-400 font-sans">P.S.I.</text>
 
+                    <text x="35" y="35" fontSize="9" fontWeight="900" textAnchor="middle" className="fill-slate-400 font-sans">P.S.I.</text>
                     {Array.from({ length: 16 }).map((_, i) => {
                         const psi = i * 2;
-                        const y = 50 + (psi / 30) * 350;
+                        const y = getPointY(psi);
                         return (
                             <g key={`psi-${i}`}>
                                 <line x1="45" y1={y} x2="55" y2={y} stroke="#475569" strokeWidth="1.5" />
@@ -95,15 +96,20 @@ const PressureGauge = ({ value, onChange }: PressureGaugeProps) => {
                         <polygon points="50,0 45,-4 45,4" fill="#ef4444" />
                         <polygon points="90,0 95,-4 95,4" fill="#ef4444" />
                     </g>
+
                     <text x="70" y="440" fontSize="7" textAnchor="middle" fontWeight="bold" className="fill-slate-400 uppercase tracking-tighter">
                         Read at top of piston
                     </text>
                 </svg>
                 <div
-                    className="absolute -right-20 bg-white border-2 border-blue-500 px-3 py-1 rounded-lg shadow-xl transition-all duration-300"
+                    className={`absolute -right-20 border-2 px-3 py-1 rounded-lg shadow-xl transition-all duration-300 ${
+                        value >= 14 ? 'bg-red-50 border-red-500' : value >= 8 ? 'bg-yellow-50 border-yellow-500' : 'bg-green-50 border-green-500'
+                    }`}
                     style={{ top: `${(pistonY / 460) * 100}%`, transform: 'translateY(-50%)' }}
                 >
-                    <span className="text-blue-600 font-black text-lg tabular-nums">{value}</span>
+                    <span className={`font-black text-lg tabular-nums ${
+                        value >= 14 ? 'text-red-600' : value >= 8 ? 'text-yellow-700' : 'text-blue-600'
+                    }`}>{value}</span>
                     <span className="text-[10px] text-slate-400 ml-1 font-bold">PSI</span>
                 </div>
             </div>

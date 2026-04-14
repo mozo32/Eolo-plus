@@ -16,7 +16,7 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Reporte de Entrega de Turno' }]
 export default function ReporteEntregaTurno() {
     const [data, setData] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
+    const [filterDate, setFilterDate] = useState("");
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
     const [meta, setMeta] = useState<any>(null);
@@ -162,9 +162,47 @@ export default function ReporteEntregaTurno() {
             )
         },
 
-        { header: "Fecha", render: (row: any) => <span className="text-xs font-medium text-slate-500">{row.fecha}</span> },
-        { header: "Diferencia", render: (row: any) => <span className={`text-sm font-mono font-bold ${row.diferenciaFinal < 0 ? 'text-red-600' : 'text-slate-600'}`}>{row.diferenciaFinal} Lts</span> },
+        {
+            header: "Fecha",
+            render: (row: any) => {
+                if (!row.fecha) return <span className="text-xs text-slate-400">N/A</span>;
 
+                const dateObj = new Date(row.fecha);
+
+                const fecha = new Intl.DateTimeFormat('es-MX', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                }).format(dateObj);
+
+                const hora = new Intl.DateTimeFormat('es-MX', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                }).format(dateObj);
+
+                return (
+                    <div className="flex flex-col">
+                        <span className="text-xs font-bold text-slate-700">{fecha}</span>
+                        <span className="text-[10px] font-mono text-slate-400 uppercase">{hora} hrs</span>
+                    </div>
+                );
+            }
+        },
+        {
+            header: "Diferencia",
+            render: (row: any) => {
+                const diferenciaFormateada = Number(row.diferenciaFinal || 0).toLocaleString('en-US', {
+                    maximumFractionDigits: 0
+                });
+
+                return (
+                    <span className={`text-sm font-mono font-bold ${row.diferenciaFinal < 0 ? 'text-red-600' : 'text-slate-600'}`}>
+                        {diferenciaFormateada} Lts
+                    </span>
+                );
+            }
+        },
         {
             header: "Acciones",
             align: 'right' as const,

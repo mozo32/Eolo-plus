@@ -11,25 +11,98 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
+use App\Models\Imagen;
+use Illuminate\Support\Facades\Cache;
+use App\Models\InspeccionCombustibles;
 
 class InspeccioAutotanqueController extends Controller
 {
     public function store(Request $request)
     {
-        $inspeccion = inspeccionAutotanque::create([
-            'turno_autotanque_id' => $request->turno_id,
-            'fecha_inspeccion' => Carbon::parse($request->fecha),
-            'operador' => $request->operador,
-            'kilometraje' => $request->km,
-            'porcentaje_combustible' => $request->combustible,
-            'checklist_respuestas' => $request->checklist,
-            'danos_grafico' => $request->danos,
+        $request->validate([
+            'turno_id' => 'required',
+            'fecha' => 'required',
         ]);
-        $this->guardarFirmaBase64($request->firmas['entrega']['imagen'] ?? '', 'quien_entrega', $inspeccion);
-        $this->guardarFirmaBase64($request->firmas['operaciones']['imagen'] ?? '', 'fbo', $inspeccion);
-        $this->guardarFirmaBase64($request->firmas['receptor']['imagen'] ?? '', 'quien_recibe', $inspeccion);
-    }
 
+        try {
+            return DB::transaction(function () use ($request) {
+                $inspeccion = InspeccionAutotanque::updateOrCreate(
+                    ['turno_autotanque_id' => $request->turno_id],
+                    [
+                        'fecha_inspeccion'       => Carbon::parse($request->fecha),
+                        'operador'               => $request->operador,
+                        'kilometraje'            => $request->km,
+                        'porcentaje_combustible' => $request->combustible,
+                        'checklist_respuestas'   => $request->checklist,
+                        'danos_grafico'          => $request->danos,
+                    ]
+                );
+
+                if (!empty($request->firmas['entrega']['imagen'])) {
+                    $this->guardarFirmaBase64($request->firmas['entrega']['imagen'], 'quien_entrega', $inspeccion);
+                }
+
+                if (!empty($request->firmas['operaciones']['imagen'])) {
+                    $this->guardarFirmaBase64($request->firmas['operaciones']['imagen'], 'fbo', $inspeccion);
+                }
+
+                if (!empty($request->firmas['receptor']['imagen'])) {
+                    $this->guardarFirmaBase64($request->firmas['receptor']['imagen'], 'quien_recibe', $inspeccion);
+                }
+
+                return response()->json([
+                    'message' => 'Inspección guardada correctamente',
+                    'data' => $inspeccion
+                ], 200);
+            });
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error al procesar la inspección',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    public function showTurno($id)
+    {
+        try {
+            $inspeccion = InspeccionAutotanque::with('firmas')
+                ->where('turno_autotanque_id', $id)
+                ->first();
+
+            if (!$inspeccion) {
+                return response()->json([
+                    'message' => 'No se encontró una inspección para este turno',
+                    'data' => null
+                ], 200);
+            }
+
+            // Mapeo corregido usando 'path' y Storage para obtener la URL real
+            $firmasMapeadas = $inspeccion->firmas->mapWithKeys(function ($firma) {
+                // Usamos el tag que viene en el pivot ("Firma quien entrega", etc)
+                // y generamos la URL pública del archivo
+                return [
+                    $firma->pivot->tag => \Illuminate\Support\Facades\Storage::url($firma->path)
+                ];
+            });
+
+            return response()->json([
+                'checklist'    => $inspeccion->checklist_respuestas,
+                'km'           => $inspeccion->kilometraje,
+                'combustible'  => $inspeccion->porcentaje_combustible,
+                'danos'        => $inspeccion->danos_grafico,
+                'operador'     => $inspeccion->operador,
+                'firmas_db'    => $firmasMapeadas,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error al obtener los datos de la inspección',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
     private function guardarFirmaBase64(string $value, string $rol, inspeccionAutotanque $entrega): void
     {
         if (trim($value) === '') return;
@@ -94,4 +167,298 @@ class InspeccioAutotanqueController extends Controller
         };
     }
 
+    public function validarColor(Request $request)
+    {
+        $request->validate([
+            'image' => 'required|string',
+            'tipo'  => 'required|string'
+        ]);
+
+        try {
+            $tipo = $request->input('tipo');
+            $base64Image = $request->input('image');
+            $imageData = base64_decode(preg_replace('#^data:image/\w+;base64,#i', '', $base64Image));
+
+            $img = imagecreatefromstring($imageData);
+            if (!$img) {
+                return response()->json(['alerta' => false, 'mensaje' => 'Error al procesar imagen'], 400);
+            }
+
+            $width = imagesx($img);
+            $height = imagesy($img);
+            $centerX = (int)($width / 2);
+            $centerY = (int)($height / 2);
+            $rgb = imagecolorat($img, $centerX, $centerY);
+
+            $r = ($rgb >> 16) & 0xFF;
+            $g = ($rgb >> 8) & 0xFF;
+            $b = $rgb & 0xFF;
+
+            $hsl = $this->rgbToHsl($r, $g, $b);
+            $h = $hsl['h'];
+            $s = $hsl['s'];
+            $v = $hsl['v'];
+
+            $coloresAprendidos = Cache::get("colores_manuales_{$tipo}", []);
+            foreach ($coloresAprendidos as $ca) {
+                if (abs($h - $ca) <= 7) {
+                    imagedestroy($img);
+                    return response()->json([
+                        'alerta' => true,
+                        'mensaje' => "ALERTA: DETECTADO POR APRENDIZAJE PREVIO",
+                        'debug' => [
+                            'h' => $h,
+                            's' => round($s, 2),
+                            'rgb' => "R:$r G:$g B:$b",
+                            'aprendizaje' => true
+                        ]
+                    ]);
+                }
+            }
+
+            $alerta = false;
+            $mensaje = "PRODUCTO CONFORME";
+
+            if ($tipo === 'SHELL') {
+                if ($h >= 75 && $h <= 250 && $s > 0.15) {
+                    $alerta = true;
+                    $mensaje = ($h > 160) ? "PRODUCTO NO CONFORME (AZUL)" : "PRODUCTO NO CONFORME (VERDE)";
+                } else {
+                    $mensaje = "PRODUCTO CONFORME (AMARILLO)";
+                }
+            } else {
+                if ($h >= 280 && $h <= 360 && $s > 0.15 && $v > 0.2) {
+                    $alerta = true;
+                    $mensaje = "ALERTA: TONO ROSA DETECTADO (AGUA PRESENTE)";
+                }
+            }
+
+            imagedestroy($img);
+
+            return response()->json([
+                'alerta' => $alerta,
+                'mensaje' => $mensaje,
+                'debug' => [
+                    'h' => $h,
+                    's' => round($s, 2),
+                    'rgb' => "R:$r G:$g B:$b"
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error en validación de color: " . $e->getMessage());
+            return response()->json(['alerta' => false, 'mensaje' => 'Error interno del servidor'], 500);
+        }
+    }
+
+
+    private function rgbToHsl($r, $g, $b) {
+        $r /= 255; $g /= 255; $b /= 255;
+        $max = \max($r, $g, $b);
+        $min = \min($r, $g, $b);
+
+        $h = 0; $s = 0; $v = $max;
+        $delta = $max - $min;
+
+        if ($delta != 0) {
+            $s = $delta / $max;
+            if ($max == $r) {
+                $h = \fmod(($g - $b) / $delta, 6);
+            } else if ($max == $g) {
+                $h = (($b - $r) / $delta) + 2;
+            } else {
+                $h = (($r - $g) / $delta) + 4;
+            }
+
+            $h = \round($h * 60);
+            if ($h < 0) {
+                $h += 360;
+            }
+        }
+
+        return ['h' => $h, 's' => $s, 'v' => $v];
+    }
+
+    public function guardarInspeccionCompleta(Request $request)
+    {
+        $request->validate([
+            'shell' => 'array',
+            'hydrokit' => 'array',
+        ]);
+
+        return DB::transaction(function () use ($request) {
+            $inspeccion = InspeccionCombustibles::create([
+                'user_id' => Auth::id() ?? 1,
+                'fecha' => now(),
+            ]);
+
+            $folder = 'inspecciones/combustibles/' . now()->format('Y/m');
+            if ($request->has('shell')) {
+                foreach ($request->shell as $item) {
+                    $this->procesarEvidencia($item, 'SHELL', $inspeccion, $folder);
+                }
+            }
+            if ($request->has('hydrokit')) {
+                foreach ($request->hydrokit as $item) {
+                    $this->procesarEvidencia($item, 'HYDROKIT', $inspeccion, $folder);
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Inspección guardada correctamente',
+                'id' => $inspeccion->id
+            ]);
+        });
+    }
+    private function procesarEvidencia(array $data, string $modulo, InspeccionCombustibles $inspeccion, string $folder): void
+    {
+        if (empty($data['file'])) return;
+
+        $imagen = $this->guardarImagenBase64($data['file'], $folder);
+
+        $inspeccion->imagenes()->attach($imagen->id, [
+            'tag'         => $modulo,          // 'SHELL' o 'HYDROKIT'
+            'observacion' => $data['observacion'],
+            'alerta'      => $data['alertaRosa'],
+            'status'      => 'A'
+        ]);
+    }
+    private function guardarImagenBase64(string $base64, string $folder): Imagen
+    {
+        if (!str_contains($base64, ',')) {
+            throw new \Exception('Formato base64 inválido');
+        }
+
+        [$meta, $content] = explode(',', $base64);
+        $binaryData = base64_decode($content);
+        $src = imagecreatefromstring($binaryData);
+        if (!$src) throw new \Exception('No se pudo procesar la imagen');
+
+        $width = imagesx($src);
+        $height = imagesy($src);
+
+        $newWidth = 640;
+        $newHeight = floor($height * ($newWidth / $width));
+
+        $tmp = imagecreatetruecolor($newWidth, $newHeight);
+
+        imagecopyresampled($tmp, $src, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+
+        $fileName = Str::uuid() . '.webp';
+        $path = $folder . '/' . $fileName;
+        $fullPath = Storage::disk('public')->path($path);
+
+        if (!file_exists(dirname($fullPath))) {
+            mkdir(dirname($fullPath), 0755, true);
+        }
+
+        imagewebp($tmp, $fullPath, 60);
+
+        imagedestroy($src);
+        imagedestroy($tmp);
+
+        return Imagen::create([
+            'disk'          => 'public',
+            'path'          => $path,
+            'original_name' => $fileName,
+            'mime'          => 'image/webp',
+            'size'          => Storage::disk('public')->size($path),
+        ]);
+    }
+    public function indexCombustibles(Request $request)
+    {
+        $inspecciones = InspeccionCombustibles::with('user:id,name')
+            ->where('status', 'A')
+            ->select('id', 'user_id', 'fecha')
+            ->withCount('imagenes')
+            ->orderBy('fecha', 'desc')
+            ->paginate(20);
+
+        return response()->json($inspecciones);
+    }
+    public function showCombustibles($id)
+    {
+        try {
+            $inspeccion = InspeccionCombustibles::with(['imagenes' => function($query) {
+                $query->orderBy('imageables.tag', 'asc');
+            }])->find($id);
+
+            if (!$inspeccion) {
+                return response()->json(['mensaje' => 'Inspección no encontrada'], 404);
+            }
+
+            $resultado = [
+                'id' => $inspeccion->id,
+                'fecha' => $inspeccion->fecha,
+                'usuario_id' => $inspeccion->user_id,
+                'evidencias' => $inspeccion->imagenes->map(function ($img) {
+                    return [
+                        'id' => $img->id,
+                        'url' => $img->url,
+                        'modulo' => $img->pivot->tag,
+                        'observacion' => $img->pivot->observacion,
+                        'alerta' => (bool)$img->pivot->alerta,
+                        'status' => $img->pivot->status,
+                    ];
+                })
+            ];
+
+            return response()->json($resultado);
+
+        } catch (\Exception $e) {
+            Log::error("Error al obtener inspección: " . $e->getMessage());
+            return response()->json(['mensaje' => 'Error al recuperar los datos'], 500);
+        }
+    }
+    public function aprenderColorManual(Request $request)
+    {
+        $request->validate([
+            'h' => 'required|numeric',
+            'tipo' => 'required|string'
+        ]);
+
+        $tipo = $request->tipo;
+        $nuevoH = $request->h;
+
+        $key = "colores_manuales_{$tipo}";
+        $colores = Cache::get($key, []);
+
+        if (!in_array($nuevoH, $colores)) {
+            $colores[] = $nuevoH;
+            Cache::forever($key, $colores);
+        }
+
+        return response()->json(['success' => true]);
+    }
+    public function eliminar($id)
+    {
+        try {
+            $registro = InspeccionCombustibles::find($id);
+            if (!$registro) {
+                return response()->json([
+                    'message' => 'El registro no existe.'
+                ], 404);
+            }
+            $registro->update([
+                'status' => 'N'
+            ]);
+            $registro->imagenesAll()->get()->each(function ($imagen) {
+                $imagen->update(['status' => 'N']);
+            });
+
+            $registro->firmasAll()->get()->each(function ($firma) {
+                $firma->update(['status' => 'N']);
+            });
+            return response()->json([
+                'message' => 'Inspección eliminado correctamente (lógicamente)',
+                'data' => $registro
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Error al intentar eliminar el registro',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

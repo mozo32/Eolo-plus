@@ -96,6 +96,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('registroVisitantes', function () {
         return Inertia::render('seguridad/RegistroVisitantes');
     })->name('registroVisitantes');
+
+    Route::get('inspeccionCombustible', function () {
+        return Inertia::render('Rampa/InspeccionCombustible');
+    })->name('inspeccionCombustible');
 });
 
 require __DIR__.'/settings.php';

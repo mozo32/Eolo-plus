@@ -38,7 +38,7 @@ class MovimientoCSAE extends Model
         'fecha_hora_entrada' => 'datetime:Y-m-d H:i:s',
         'fecha_hora_salida'  => 'datetime:Y-m-d H:i:s',
     ];
-     public function firmas()
+    public function firmas()
     {
         return $this->morphToMany(
             Firma::class,

@@ -17,7 +17,8 @@ import { dashboard,
     movimientosVehiculoEolo,
     reporteEntregaTurno,
     verificacionEstadoAutotanque,
-    remision
+    remision,
+    inspeccionCombustible
 } from '@/routes'
 import { LayoutGrid } from 'lucide-react'
 
@@ -177,6 +178,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                     { id: 'rampa-remision', title: 'Remisión Autotanque', href: remision(), icon: LayoutGrid },
                     { id: 'rampa-verificacion', title: 'Verificacion Estado Autotanque', href: verificacionEstadoAutotanque(), icon: LayoutGrid },
                     { id: 'rampa-around',title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
+                    { id: 'rampa-around',title: 'Inspección Combustible', href: inspeccionCombustible(), icon: LayoutGrid },
                 ],
             },
             {

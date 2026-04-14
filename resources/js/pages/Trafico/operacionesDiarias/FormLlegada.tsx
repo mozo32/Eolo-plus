@@ -188,8 +188,8 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
         <form onSubmit={handleSubmit} className="bg-white p-4 md:p-6 rounded-xl border-t-8 border-emerald-600 shadow-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-6">
                 <div>
-                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">
-                        {datosEdicion ? 'EDITAR LLEGADA' : 'NUEVA LLEGAGA'}
+                    <h2 className="text-[21px] font-black text-slate-800 tracking-tight">
+                        {datosEdicion ? 'EDITAR LLEGADA' : 'NUEVA LLEGADA'}
                     </h2>
                     <div className="flex items-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -242,9 +242,10 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
                     </div>
 
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Equipo</label>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Equipo</label>
                         <input
                             type="text"
+                            placeholder="Ejem. H25B"
                             value={formData.equipo}
                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100 disabled:text-slate-500"
                             onChange={(e) => handleFieldChange("equipo", e.target.value.toUpperCase())}
@@ -256,7 +257,7 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Hora Llegada (24h)</label>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Hora Llegada (24h)</label>
                         <input
                             type="text"
                             placeholder="HH:MM"
@@ -279,10 +280,11 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
                         />
                     </div>
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Procedencia</label>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Procedencia</label>
                         <input
                             type="text"
                             disabled={soloLectura}
+                            placeholder="Ejem. ACA"
                             value={formData.procedencia}
                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100"
                             onChange={(e) => handleFieldChange("procedencia", e.target.value.toUpperCase())}
@@ -293,10 +295,11 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Pax</label>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Pax</label>
                         <input
                             type="number"
                             disabled={soloLectura}
+                            placeholder="0"
                             value={formData.pax ?? ''}
                             required
                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100"
@@ -304,12 +307,12 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
                         />
                     </div>
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Equipaje</label>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Equipaje</label>
                         <input
                             type="text"
                             disabled={soloLectura || (moduloNombre !== 'Trafico' && nombreRol !== 'FBO')}
                             value={formData.equipaje ?? ''}
-                            placeholder={moduloNombre !== 'Trafico' ? "Solo Tráfico" : ""}
+                            placeholder={moduloNombre !== 'Trafico' ? "Solo Tráfico" : "0"}
                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100 disabled:opacity-70"
                             onChange={(e) => handleFieldChange("equipaje", e.target.value.toUpperCase())}
                             required={moduloNombre === 'Trafico' || nombreRol === 'FBO'}
@@ -319,20 +322,22 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tipo Cliente</label>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Tipo Cliente</label>
                         <select
                             value={formData.tipo_cliente}
-                            className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none appearance-none disabled:bg-slate-100"
+                            className={`w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none appearance-none disabled:bg-slate-100
+                                ${formData.tipo_cliente === "" ? "text-slate-400" : "text-slate-800"}
+                                ${soloLectura ? "bg-slate-100" : "bg-white"}`}
                             onChange={(e) => handleFieldChange("tipo_cliente", e.target.value)}
                             required={moduloNombre === 'Trafico'}
                             disabled={soloLectura || (moduloNombre !== 'Trafico' && nombreRol !== 'FBO')}
                         >
-                            <option value="">Seleccione una opción...</option>
-                            <option value="TRÁNSITO">TRÁNSITO</option>
-                            <option value="GUARDA">GUARDA</option>
-                            <option value="AEROTAXI">AEROTAXI</option>
-                            <option value="MANTENIMIENTO">MANTENIMIENTO</option>
-                            <option value="HANDLING">HANDLING</option>
+                            <option value="" className="text-slate-400">Seleccione una opción...</option>
+                            <option value="TRÁNSITO" className="text-slate-800">TRÁNSITO</option>
+                            <option value="GUARDA" className="text-slate-800">GUARDA</option>
+                            <option value="AEROTAXI" className="text-slate-800">AEROTAXI</option>
+                            <option value="MANTENIMIENTO" className="text-slate-800">MANTENIMIENTO</option>
+                            <option value="HANDLING" className="text-slate-800">HANDLING</option>
                         </select>
                     </div>
                     <div>

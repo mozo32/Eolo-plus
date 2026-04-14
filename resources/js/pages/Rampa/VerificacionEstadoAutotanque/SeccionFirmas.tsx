@@ -1,4 +1,4 @@
-import React, { useState, useRef, useLayoutEffect } from 'react';
+import React, { useState, useRef, useLayoutEffect, useEffect} from 'react';
 import { Trash2, ClipboardCheck, PenTool, XCircle, Circle, Save } from 'lucide-react';
 import { usePage } from '@inertiajs/react';
 import camioPipa from '../../../../../resources/js/assets/Captura de pantalla 2026-02-10 121721.png';
@@ -26,6 +26,7 @@ interface Props {
     onGuardar: (datosFirmas: any) => void;
     marcas: Marca[];
     setMarcas: React.Dispatch<React.SetStateAction<Marca[]>>;
+    firmasExistentes?: Record<string, string>;
 }
 
 const CardFirma = ({ titulo, id, nombre, setNombres, canvasRef }: any) => {
@@ -60,7 +61,7 @@ const CardFirma = ({ titulo, id, nombre, setNombres, canvasRef }: any) => {
     );
 };
 
-export const SeccionFirmas = ({ estaCompleto, onGuardar, marcas, setMarcas }: Props) => {
+export const SeccionFirmas = ({ estaCompleto, onGuardar, marcas, setMarcas, firmasExistentes }: Props) => {
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
     const user = auth?.user;
     const [modo, setModo] = useState<'X' | 'O'>('X');
@@ -70,6 +71,31 @@ export const SeccionFirmas = ({ estaCompleto, onGuardar, marcas, setMarcas }: Pr
         receptor: useRef<HTMLCanvasElement>(null),
         operaciones: useRef<HTMLCanvasElement>(null)
     };
+
+    useEffect(() => {
+        if (!firmasExistentes) return;
+        const cargarImagenEnCanvas = (tag: string, canvasRef: React.RefObject<HTMLCanvasElement | null>) => {
+             const url = firmasExistentes[tag];
+             const canvas = canvasRef.current;
+
+            if (!url || !canvas) return;
+
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.src = url;
+            img.onload = () => {
+                // Limpiar y dibujar la imagen
+                ctx?.clearRect(0, 0, canvas.width, canvas.height);
+                ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+            };
+        };
+
+        cargarImagenEnCanvas("Firma quien entrega", canvasRefs.entrega);
+        cargarImagenEnCanvas("Firma quien recibe", canvasRefs.receptor);
+        cargarImagenEnCanvas("Firma fbo", canvasRefs.operaciones);
+
+    }, [firmasExistentes]);
 
     const prepararGuardado = () => {
         const firmasFinales = {

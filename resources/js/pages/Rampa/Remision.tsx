@@ -20,7 +20,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 export default function Remision() {
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any[]>([]);
-    const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
+    const [filterDate, setFilterDate] = useState("");
     const [openForm, setOpenForm] = useState(false);
     const [isEdit, setIsEdit] = useState(false);
     const [detalle, setDetalle] = useState<any>(null);
@@ -31,8 +31,8 @@ export default function Remision() {
     const [page, setPage] = useState(1);
     const [meta, setMeta] = useState<any>(null);
     const [filterType, setFilterType] = useState<'day' | 'range' | 'month' | 'year'>('day');
-    const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-    const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const getXsrfToken = () => {
@@ -170,7 +170,10 @@ export default function Remision() {
             header: "Cantidad",
             render: (row: any) => (
                 <span className="text-sm font-mono font-bold text-slate-600">
-                    {row.total_litros?.toLocaleString() || '0'} Lts
+                    {/* maximumFractionDigits: 0 elimina los decimales .00 */}
+                    {Number(row.total_litros || 0).toLocaleString('en-US', {
+                        maximumFractionDigits: 0
+                    })} Lts
                 </span>
             ),
         },
@@ -219,7 +222,6 @@ export default function Remision() {
 
                             <div className="flex items-center gap-3">
                                 <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-2 rounded-3xl border border-slate-100">
-                                    {/* Selector de Tipo de Filtro */}
                                     <select
                                         value={filterType}
                                         onChange={(e) => setFilterType(e.target.value as any)}
@@ -240,9 +242,17 @@ export default function Remision() {
                                                 <input
                                                     type="date"
                                                     value={filterDate}
-                                                    onChange={(e) => {setPage(1);setFilterDate(e.target.value)}}
-                                                    className="pl-10 pr-4 py-2 text-sm rounded-xl border-none bg-white shadow-sm font-bold text-slate-600 focus:ring-2 focus:ring-indigo-500"
+                                                    onChange={(e) => {setPage(1); setFilterDate(e.target.value)}}
+                                                    className="pl-10 pr-10 py-2 text-sm rounded-xl border-none bg-white shadow-sm font-bold text-slate-600 focus:ring-2 focus:ring-indigo-500"
                                                 />
+                                                {filterDate && (
+                                                    <button
+                                                        onClick={() => setFilterDate("")}
+                                                        className="absolute right-3 text-slate-400 hover:text-red-500 transition-colors"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                )}
                                             </div>
                                         )}
 

@@ -172,8 +172,8 @@ export const FormSalida = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, so
         <form onSubmit={handleSubmit} className="bg-white p-4 md:p-6 rounded-xl border-t-8 border-red-500 shadow-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-6">
                 <div>
-                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">
-                        {formData.id ? 'ACTUALIZAR SALIDA' : 'REGISTRO DE SALIDA'}
+                    <h2 className="text-[21px] font-black text-slate-800 tracking-tight">
+                        {formData.id ? 'ACTUALIZAR SALIDA' : 'NUEVA SALIDA'}
                     </h2>
                     <div className="flex items-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse"></span>
@@ -216,10 +216,11 @@ export const FormSalida = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, so
                         disabled={soloLectura}
                     />
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Equipo</label>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Equipo</label>
                         <input
                             type="text"
                             disabled={soloLectura}
+                            placeholder="Ejem. H25B"
                             value={formData.equipo}
                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500 outline-none"
                             onChange={(e) => handleFieldChange("equipo", e.target.value.toUpperCase())}
@@ -230,7 +231,7 @@ export const FormSalida = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, so
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Hora Salida (24h)</label>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Hora Salida (24h)</label>
                         <input
                             type="text"
                             disabled={soloLectura}
@@ -253,10 +254,11 @@ export const FormSalida = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, so
                         />
                     </div>
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Destino</label>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Destino</label>
                         <input
                             type="text"
                             disabled={soloLectura}
+                            placeholder="Ejem. ACA"
                             value={formData.destino}
                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500 outline-none"
                             onChange={(e) => handleFieldChange("destino", e.target.value.toUpperCase())}
@@ -267,9 +269,10 @@ export const FormSalida = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, so
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Pax</label>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Pax</label>
                         <input
                             type="number"
+                            placeholder="0"
                             disabled={soloLectura}
                             value={formData.pax ?? ''}
                             required
@@ -278,11 +281,12 @@ export const FormSalida = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, so
                         />
                     </div>
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Equipaje</label>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Equipaje</label>
                         <input
                             type="text"
                             disabled={estaBloqueado('Trafico')}
                             value={formData.equipaje ?? ''}
+                            placeholder={moduloNombre !== 'Trafico' ? "Solo Tráfico" : "0"}
                             className={`w-full p-3 border rounded-lg outline-none transition-colors ${
                                 estaBloqueado('Trafico')
                                 ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
@@ -295,23 +299,26 @@ export const FormSalida = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, so
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tipo Cliente</label>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Tipo Cliente</label>
                         <select
-                            disabled={estaBloqueado('Trafico')}
                             value={formData.tipo_cliente}
-                            className={`w-full p-3 border rounded-lg outline-none appearance-none ${estaBloqueado('Trafico') ? 'bg-slate-100 border-slate-200 text-slate-400' : 'bg-white border-slate-200 focus:ring-2 focus:ring-red-500'}`}
+                            className={`w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none appearance-none disabled:bg-slate-100
+                                ${formData.tipo_cliente === "" ? "text-slate-400" : "text-slate-800"}
+                                ${soloLectura ? "bg-slate-100" : "bg-white"}`}
                             onChange={(e) => handleFieldChange("tipo_cliente", e.target.value)}
+                            required={moduloNombre === 'Trafico'}
+                            disabled={soloLectura || (moduloNombre !== 'Trafico' && nombreRol !== 'FBO')}
                         >
-                            <option value="">Seleccione una opción...</option>
-                            <option value="TRÁNSITO">TRÁNSITO</option>
-                            <option value="GUARDA">GUARDA</option>
-                            <option value="AEROTAXI">AEROTAXI</option>
-                            <option value="MANTENIMIENTO">MANTENIMIENTO</option>
-                            <option value="HANDLING">HANDLING</option>
+                            <option value="" className="text-slate-400">Seleccione una opción...</option>
+                            <option value="TRÁNSITO" className="text-slate-800">TRÁNSITO</option>
+                            <option value="GUARDA" className="text-slate-800">GUARDA</option>
+                            <option value="AEROTAXI" className="text-slate-800">AEROTAXI</option>
+                            <option value="MANTENIMIENTO" className="text-slate-800">MANTENIMIENTO</option>
+                            <option value="HANDLING" className="text-slate-800">HANDLING</option>
                         </select>
                     </div>
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Tipo operación</label>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-2">Tipo operación</label>
                         <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl border border-slate-200">
                             {['NACIONAL', 'INTERNACIONAL'].map((opcion) => (
                                 <button
@@ -436,7 +443,7 @@ export const FormSalida = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, so
                 </div>
 
                 <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Observaciones</label>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">Observaciones</label>
                     <textarea
                         value={formData.observaciones}
                         disabled={soloLectura}

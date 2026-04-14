@@ -192,7 +192,6 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
                     <h1 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Panel Operativo</h1>
                     <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-500 border border-slate-200">{moduloNombre}</span>
 
-                    {/* SEMÁFORO EN POPOVER PARA TABLETS/MÓVIL */}
                     <div className="relative border-l border-slate-200 pl-4">
                         <button
                             onClick={() => setMostrarLeyenda(!mostrarLeyenda)}
@@ -205,10 +204,8 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
 
                         {mostrarLeyenda && (
                             <>
-                                {/* Backdrop para cerrar al hacer clic fuera */}
                                 <div className="fixed inset-0 z-10" onClick={() => setMostrarLeyenda(false)}></div>
 
-                                {/* Menú flotante */}
                                 <div className="absolute top-full left-0 mt-2 w-40 bg-white border border-slate-200 rounded-xl shadow-xl z-20 p-3 animate-in fade-in zoom-in-95 duration-100">
                                     <div className="flex flex-col gap-2.5">
                                         {Object.entries(COLORES_DEPARTAMENTOS).map(([nombre, color]) => (
@@ -223,8 +220,6 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
                         )}
                     </div>
                     <div className="flex items-center gap-3 p-4">
-
-                        {/* BOTÓN DE PENDIENTES (Solo se muestra si hay datos) */}
                         {pendientes.length > 0 && (
                             <button
                                 onClick={() => setMostrarModal(true)}
@@ -239,8 +234,6 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
                                 </span>
                             </button>
                         )}
-
-                        {/* Componente Modal */}
                         {mostrarModal && (
                         <MatriculasPendientes
                             listado={pendientes}
@@ -264,7 +257,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
                         <Filter size={14} />
                         <span className="hidden xs:inline">{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                     </button>
-                    {nombreRol === 'FBO' && (
+                    {(nombreRol === 'FBO' || nombreRol === 'Administrador') && (
                         <>
                             <div className="w-[1px] bg-slate-200 mx-1"></div>
                             <button
@@ -294,7 +287,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
                         <div className="grid grid-cols-12 px-4 py-3 bg-white rounded-t-lg border-x border-t border-slate-200 shadow-sm items-center">
                             <div className="col-span-1 text-center text-[9px] font-black text-slate-400 uppercase">ID</div>
                             <div className="col-span-1 text-center text-[9px] font-black text-slate-400 uppercase">Tipo</div>
-                            <div className="col-span-1 text-center text-[9px] font-black text-slate-400 uppercase">Matrícula</div>
+                            <div className="col-span-1 text-center text-[9px] font-black text-slate-400 uppercase">Matrícula/Equipo</div>
                             <div className="col-span-2 text-center text-[9px] font-black text-slate-400 uppercase">Fecha/Hora</div>
                             <div className="col-span-1 text-center text-[9px] font-black text-slate-400 uppercase">Origen/Destino</div>
                             <div className="col-span-1 text-center text-[9px] font-black text-slate-400 uppercase">Tipo de Operación</div>
