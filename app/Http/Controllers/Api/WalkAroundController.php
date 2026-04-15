@@ -44,7 +44,8 @@ class WalkAroundController extends Controller
                 'procedensia',
                 'created_at',
             ])
-            ->orderByDesc('id');
+            ->orderBy('fecha', 'desc')
+            ->orderBy('hora', 'desc');
 
         if ($q !== '') {
             $query->where(function ($sub) use ($q) {
@@ -314,7 +315,6 @@ class WalkAroundController extends Controller
         $ultimoRegistro = WalkAround::where('matricula', $request->metadata['matricula'])
             ->orderBy('fecha', 'desc')
             ->orderBy('hora', 'desc')
-            ->orderBy('id', 'desc')
             ->first();
 
         if ($ultimoRegistro) {
