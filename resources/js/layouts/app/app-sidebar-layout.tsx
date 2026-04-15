@@ -11,10 +11,8 @@ export default function AppSidebarLayout({
 }: PropsWithChildren<{ breadcrumbs?: BreadcrumbItem[] }>) {
     return (
         <AppShell variant="header">
-            {/* 🔝 SOLO Topbar */}
             <AppTopbar breadcrumbs={breadcrumbs} />
 
-            {/* 📄 Contenido real */}
             <AppContent
                 variant="header"
                 className="px-3 py-4 sm:px-6"

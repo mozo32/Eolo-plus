@@ -130,6 +130,10 @@ const ROUTE_CONFIG: Record<
         href: verificacionEstadoAutotanque,
         title: 'Verificacion Estado Autotanque',
     },
+    inspeccioncombustible: {
+        href: inspeccionCombustible,
+        title: 'Inspección Combustible',
+    },
 }
 
 
@@ -178,7 +182,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                     { id: 'rampa-remision', title: 'Remisión Autotanque', href: remision(), icon: LayoutGrid },
                     { id: 'rampa-verificacion', title: 'Verificacion Estado Autotanque', href: verificacionEstadoAutotanque(), icon: LayoutGrid },
                     { id: 'rampa-around',title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
-                    { id: 'rampa-around',title: 'Inspección Combustible', href: inspeccionCombustible(), icon: LayoutGrid },
+                    { id: 'rampa-Combustible',title: 'Inspección Combustible', href: inspeccionCombustible(), icon: LayoutGrid },
                 ],
             },
             {
