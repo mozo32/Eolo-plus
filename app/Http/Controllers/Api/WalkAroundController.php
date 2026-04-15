@@ -45,7 +45,8 @@ class WalkAroundController extends Controller
                 'created_at',
             ])
             ->orderBy('fecha', 'desc')
-            ->orderBy('hora', 'desc');
+            ->orderBy('hora', 'desc')
+            ->orderBy('id', 'desc');
 
         if ($q !== '') {
             $query->where(function ($sub) use ($q) {
