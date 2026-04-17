@@ -370,10 +370,25 @@ class InspeccioAutotanqueController extends Controller
     {
         $inspecciones = InspeccionCombustibles::with('user:id,name')
             ->where('status', 'A')
-            ->select('id', 'user_id', 'fecha')
             ->withCount('imagenes')
+
+            ->when($request->id, function ($query, $id) {
+                $query->where('id', $id);
+            })
+
+            ->when($request->inspector, function ($query, $inspector) {
+                $query->whereHas('user', function ($q) use ($inspector) {
+                    $q->where('name', 'like', '%' . $inspector . '%');
+                });
+            })
+
+            ->when($request->start && $request->end, function ($query) use ($request) {
+                $query->whereBetween('fecha', [$request->start . ' 00:00:00', $request->end . ' 23:59:59']);
+            })
+
             ->orderBy('fecha', 'desc')
-            ->paginate(20);
+            ->orderBy('id', 'desc')
+            ->paginate($request->per_page ?? 20);
 
         return response()->json($inspecciones);
     }

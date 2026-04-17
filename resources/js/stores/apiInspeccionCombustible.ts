@@ -1,3 +1,4 @@
+//apiInspeccionCombustible.ts
 function getXsrfToken(): string {
     const match = document.cookie
         .split('; ')
@@ -48,8 +49,20 @@ export async function apiGuardarInspeccionCompleta(datos: { shell: FotoData[], h
     return await response.json();
 }
 
-export async function indexCombustible(params: { page?: number; per_page?: number }) {
-    const qs = new URLSearchParams(params as any).toString();
+export async function indexCombustible(params: {
+    page?: number;
+    per_page?: number;
+    type?: string;
+    start?: string;
+    end?: string;
+    id?: string | number;
+    inspector?: string;
+}) {
+    const cleanParams = Object.fromEntries(
+        Object.entries(params).filter(([_, v]) => v !== null && v !== '')
+    );
+
+    const qs = new URLSearchParams(cleanParams as any).toString();
     const res = await fetch(`/api/InspeccionAutoTanque/index-inspeccion?${qs}`, {
         headers: { Accept: "application/json" },
         credentials: "same-origin",

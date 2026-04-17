@@ -1,40 +1,67 @@
 import PdfExporterRemision from './Autotanque/PdfExporterRemision';
-import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import AppLayout from '@/layouts/app-layout';
-import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import EoloForm from './Autotanque/EoloForm';
-import UniversalTable from '../UniversalTable';
 import { useState, useEffect, useCallback } from 'react';
 import { fetchRemisionesDelDia, fetchRemisionById } from '@/stores/apiAutoTanque';
-import { ChevronLeft, Plus, Mail, Calendar, X, Edit2 } from "lucide-react";
+import { Plus, Mail, Calendar, X, Edit2, Filter, ChevronDown, Download, Eye} from "lucide-react";
 import ModalEnviarCorreo from './Autotanque/ModalEnviarCorreo';
 import Swal from 'sweetalert2';
-const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Remisiones',
-    },
-];
+import { ExcelRemisiones } from './Autotanque/ExcelRemisiones';
+import { excelRemisionesApi } from '@/stores/apiRemision';
+import VistaPreviaRemision from './Autotanque/VistaPreviaRemision';
+
+const breadcrumbs: BreadcrumbItem[] = [{ title: 'Remisiones' }];
 
 export default function Remision() {
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any[]>([]);
-    const [filterDate, setFilterDate] = useState("");
     const [openForm, setOpenForm] = useState(false);
     const [isEdit, setIsEdit] = useState(false);
     const [detalle, setDetalle] = useState<any>(null);
-    const [loadingDetalle, setLoadingDetalle] = useState(false);
     const [pdfId, setPdfId] = useState<number | null>(null);
     const [emailModalOpen, setEmailModalOpen] = useState(false);
     const [selectedRow, setSelectedRow] = useState<any>(null);
-    const [page, setPage] = useState(1);
+    const [pagina, setPagina] = useState(1);
     const [meta, setMeta] = useState<any>(null);
-    const [filterType, setFilterType] = useState<'day' | 'range' | 'month' | 'year'>('day');
-    const [startDate, setStartDate] = useState("");
-    const [endDate, setEndDate] = useState("");
-    const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+    const [mostrarFiltros, setMostrarFiltros] = useState(false);
+    const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [datosPreview, setDatosPreview] = useState<any>(null);
+
+    const [filtros, setFiltros] = useState({
+        buscar: '',
+        matricula: '',
+        cantidad: '',
+        fechaInicio: new Date().toLocaleDateString('en-CA'),
+        fechaFin: new Date().toLocaleDateString('en-CA'),
+        periodo: 'dia'
+    });
+
+    const [filtrosEdicion, setFiltrosEdicion] = useState({ ...filtros });
+
+    useEffect(() => {
+        if (mostrarModalFecha) setFiltrosEdicion({ ...filtros });
+    }, [mostrarModalFecha, filtros]);
+
+    const aplicarFiltroFecha = () => {
+        setFiltros({ ...filtrosEdicion });
+        setMostrarModalFecha(false);
+        setPagina(1);
+    };
+
+    const limpiarFiltros = () => {
+        setFiltros({
+            buscar: '',
+            matricula: '',
+            cantidad: '',
+            fechaInicio: new Date().toLocaleDateString('en-CA'),
+            fechaFin: new Date().toLocaleDateString('en-CA'),
+            periodo: 'dia'
+        });
+    };
+
     const getXsrfToken = () => {
         return decodeURIComponent(
             document.cookie
@@ -43,15 +70,14 @@ export default function Remision() {
                 ?.split('=')[1] || ''
         );
     };
+
     const handleSendEmail = async (email: string) => {
         const xsrf = getXsrfToken();
         Swal.fire({
             title: 'Enviando correo',
-            text: 'Por favor, espere un momento...',
+            text: 'Espere un momento...',
             allowOutsideClick: false,
-            didOpen: () => {
-                Swal.showLoading(); // Esto activa el spinner de carga
-            }
+            didOpen: () => { Swal.showLoading(); }
         });
         try {
             const response = await fetch('api/Remision/enviar-correo', {
@@ -61,49 +87,30 @@ export default function Remision() {
                     'Content-Type': 'application/json',
                     'X-XSRF-TOKEN': xsrf,
                 },
-                body: JSON.stringify({
-                    id: selectedRow?.id,
-                    email: email
-                })
+                body: JSON.stringify({ id: selectedRow?.id, email: email })
             });
-
-            if (!response.ok) {
-                throw new Error('Error en la respuesta del servidor');
-            }
-
-            Swal.fire({
-                icon: 'success',
-                title: '¡Enviado!',
-                text: 'La remisión ha sido enviada correctamente.',
-                confirmButtonColor: '#4f46e5',
-            });
+            if (!response.ok) throw new Error('Error');
+            Swal.fire({ icon: 'success', title: '¡Enviado!', confirmButtonColor: '#4f46e5' });
         } catch (error) {
-            console.error(error);
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: 'Hubo un problema al conectar con el servidor.',
-                confirmButtonColor: '#ef4444',
-            });
+            Swal.fire({ icon: 'error', title: 'Error', confirmButtonColor: '#ef4444' });
         }
     };
+
     const handlePdfDone = useCallback(() => setPdfId(null), []);
+
     const cargarDatos = async () => {
         try {
             setLoading(true);
-            let params: any = { type: filterType };
-
-            if (filterType === 'day') params.date = filterDate;
-            if (filterType === 'range') { params.start = startDate; params.end = endDate; }
-            if (filterType === 'month') { params.month = selectedMonth; params.year = selectedYear; }
-            if (filterType === 'year') params.year = selectedYear;
-
-            const res = await fetchRemisionesDelDia({
-                params,
-                page,
-                per_page: 20,
-            });
-
+            const params = {
+                page: pagina,
+                type: filtros.periodo,
+                start: filtros.fechaInicio,
+                end: filtros.fechaFin,
+                folio: filtros.buscar,
+                matricula: filtros.matricula,
+                cantidad: filtros.cantidad
+            };
+            const res = await fetchRemisionesDelDia({ params, page: pagina, per_page: 20 });
             setData(res.data || []);
             setMeta(res);
         } catch (error) {
@@ -115,26 +122,30 @@ export default function Remision() {
 
     useEffect(() => {
         cargarDatos();
-    }, [page,filterDate, startDate, endDate, selectedMonth, selectedYear, filterType]);
+    }, [pagina, filtros]);
 
     const handleEdit = async (row: any) => {
         try {
-            setLoadingDetalle(true);
+            Swal.fire({ title: 'Cargando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             const datosCompletos = await fetchRemisionById(row.id);
-
             setDetalle(datosCompletos);
             setIsEdit(true);
             setOpenForm(true);
+            Swal.close();
         } catch (error) {
-            console.error("Error al obtener detalle:", error);
-            Swal.fire({
-                icon: 'warning',
-                title: 'No se pudo cargar',
-                text: 'No logramos obtener la información detallada de la remisión.',
-                confirmButtonColor: '#4f46e5',
-            });
-        } finally {
-            setLoadingDetalle(false);
+            Swal.fire({ icon: 'warning', title: 'Error', text: 'No se pudo cargar.' });
+        }
+    };
+    const handleEye = async (row: any) => {
+        try {
+            Swal.fire({ title: 'Cargando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            const datosCompletos = await fetchRemisionById(row.id);
+            setDatosPreview(datosCompletos);
+            setPreviewOpen(true);
+
+            Swal.close();
+        } catch (error) {
+            Swal.fire({ icon: 'warning', title: 'Error', text: 'No se pudo cargar la vista previa.' });
         }
     };
 
@@ -144,229 +155,258 @@ export default function Remision() {
         setDetalle(null);
     };
 
-    const columns = [
-        {
-            header: "Folio",
-            render: (row: any) => <span className="font-bold text-slate-900">{row.folio || `#${row.id}`}</span>
-        },
-        {
-            header: "Cliente / Destino",
-            render: (row: any) => (
-                <div className="flex flex-col">
-                    <span className="text-sm font-semibold text-slate-700">{row.cliente || 'N/A'}</span>
-                    <span className="text-[10px] text-slate-400 uppercase font-bold">{row.destino || 'Sin destino'}</span>
-                </div>
-            ),
-        },
-        {
-            header: "Producto",
-            render: (row: any) => (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                    {row.producto || 'Combustible'}
-                </span>
-            ),
-        },
-        {
-            header: "Cantidad",
-            render: (row: any) => (
-                <span className="text-sm font-mono font-bold text-slate-600">
-                    {/* maximumFractionDigits: 0 elimina los decimales .00 */}
-                    {Number(row.total_litros || 0).toLocaleString('en-US', {
-                        maximumFractionDigits: 0
-                    })} Lts
-                </span>
-            ),
-        },
-        {
-            header: "Acciones",
-            align: 'right' as const,
-            render: (row: any) => (
-                <div className="flex items-center justify-end gap-2">
-                    <button
-                        onClick={() => handleEdit(row)}
-                        className="p-2.5 text-slate-400 hover:text-white hover:bg-[#00677F] rounded-xl transition-all shadow-sm"
-                    >
-                        <Edit2 size={18} />
-                    </button>
-                    <button onClick={() => setPdfId(row.id)} className="p-2.5 text-slate-400 hover:text-white hover:bg-amber-600 rounded-xl transition-all shadow-sm" >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
-                    </button>
-                    <button
-                        onClick={() => {
-                            setSelectedRow(row);
-                            setEmailModalOpen(true);
-                        }}
-                        className="p-2.5 text-slate-400 hover:text-white hover:bg-[#00677F] rounded-xl transition-all shadow-sm"
-                    >
-                        <Mail size={18} />
-                    </button>
-                    <button className="p-2.5 text-slate-400 hover:text-white hover:bg-red-600 rounded-xl transition-all shadow-sm">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3l18 18" /><path d="M4 7h3m4 0h9" /><path d="M10 11l0 6" /><path d="M14 14l0 3" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l.077 -.923" /><path d="M18.384 14.373l.616 -7.373" /><path d="M9 5v-1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>
-                    </button>
-                </div>
-            ),
-        },
-    ];
+    const cargarExcel = async () => {
+        try {
+            const data = await excelRemisionesApi({ ...filtros });
+            return Array.isArray(data) ? data : (data.data || []);
+        } catch (error) {
+            console.error("Error al obtener datos para Excel:", error);
+            throw error;
+        }
+    };
+
+    const handleExportarExcel = async () => {
+        Swal.fire({
+            title: 'Generando Excel',
+            text: 'Estamos recopilando todos los registros, por favor espere...',
+            allowOutsideClick: false,
+            didOpen: () => { Swal.showLoading(); }
+        });
+        try {
+            const datosParaExcel = await cargarExcel();
+            if (datosParaExcel.length === 0) {
+                Swal.fire('Atención', 'No hay registros para exportar con los filtros seleccionados.', 'warning');
+                return;
+            }
+            await ExcelRemisiones(datosParaExcel);
+            Swal.fire({
+                icon: 'success',
+                title: '¡Descarga lista!',
+                text: 'El reporte se ha generado correctamente.',
+                timer: 2000,
+                showConfirmButton: false
+            });
+        } catch (error) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'Hubo un problema al generar el archivo. Intente de nuevo.'
+            });
+        }
+    };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Remisiones" />
-            <div className="p-6">
-                {!openForm ? (
-                    <div className="space-y-6 animate-in fade-in duration-500">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div>
-                                <h2 className="text-3xl font-black tracking-tight text-slate-900">Remisiones</h2>
-                                <p className="text-sm text-slate-500 font-medium">Gestión y control de remisiones de autotanques.</p>
-                            </div>
-
-                            <div className="flex items-center gap-3">
-                                <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-2 rounded-3xl border border-slate-100">
-                                    <select
-                                        value={filterType}
-                                        onChange={(e) => setFilterType(e.target.value as any)}
-                                        className="pl-4 pr-8 py-2.5 rounded-2xl border-none bg-white text-xs font-black uppercase tracking-wider shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                    >
-                                        <option value="day">Día</option>
-                                        <option value="range">Rango</option>
-                                        <option value="month">Mes</option>
-                                        <option value="year">Año</option>
-                                    </select>
-
-                                    <div className="h-8 w-[1px] bg-slate-200 hidden md:block"></div>
-
-                                    <div className="flex items-center gap-2">
-                                        {filterType === 'day' && (
-                                            <div className="relative flex items-center">
-                                                <Calendar className="absolute left-3 text-indigo-500" size={16} />
-                                                <input
-                                                    type="date"
-                                                    value={filterDate}
-                                                    onChange={(e) => {setPage(1); setFilterDate(e.target.value)}}
-                                                    className="pl-10 pr-10 py-2 text-sm rounded-xl border-none bg-white shadow-sm font-bold text-slate-600 focus:ring-2 focus:ring-indigo-500"
-                                                />
-                                                {filterDate && (
-                                                    <button
-                                                        onClick={() => setFilterDate("")}
-                                                        className="absolute right-3 text-slate-400 hover:text-red-500 transition-colors"
-                                                    >
-                                                        <X size={14} />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {filterType === 'range' && (
-                                            <div className="flex items-center gap-2">
-                                                <input
-                                                    type="date"
-                                                    value={startDate}
-                                                    onChange={(e) => {setPage(1);setStartDate(e.target.value)}}
-                                                    className="pl-4 pr-4 py-2 text-sm rounded-xl border-none bg-white shadow-sm font-bold text-slate-600 focus:ring-2 focus:ring-indigo-500"
-                                                />
-                                                <span className="text-slate-400 font-bold">al</span>
-                                                <input
-                                                    type="date"
-                                                    value={endDate}
-                                                    onChange={(e) => {setPage(1);setEndDate(e.target.value)}}
-                                                    className="pl-4 pr-4 py-2 text-sm rounded-xl border-none bg-white shadow-sm font-bold text-slate-600 focus:ring-2 focus:ring-indigo-500"
-                                                />
-                                            </div>
-                                        )}
-
-                                        {filterType === 'month' && (
-                                            <div className="flex gap-2">
-                                                <select
-                                                    value={selectedMonth}
-                                                    onChange={(e) => {setPage(1);setSelectedMonth(parseInt(e.target.value))}}
-                                                    className="pl-4 pr-8 py-2 text-sm rounded-xl border-none bg-white shadow-sm font-bold text-slate-600 focus:ring-2 focus:ring-indigo-500"
-                                                >
-                                                    {["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"].map((m, i) => (
-                                                        <option key={m} value={i + 1}>{m}</option>
-                                                    ))}
-                                                </select>
-                                                <input
-                                                    type="number"
-                                                    value={selectedYear}
-                                                    onChange={(e) => {setPage(1);setSelectedYear(parseInt(e.target.value))}}
-                                                    className="w-24 pl-4 py-2 text-sm rounded-xl border-none bg-white shadow-sm font-bold text-slate-600 focus:ring-2 focus:ring-indigo-500"
-                                                />
-                                            </div>
-                                        )}
-
-                                        {filterType === 'year' && (
-                                            <input
-                                                type="number"
-                                                value={selectedYear}
-                                                onChange={(e) => {setPage(1);setSelectedYear(parseInt(e.target.value))}}
-                                                className="w-32 pl-4 py-2 text-sm rounded-xl border-none bg-white shadow-sm font-bold text-slate-600 focus:ring-2 focus:ring-indigo-500"
-                                                placeholder="Año"
-                                            />
-                                        )}
-                                    </div>
-                                </div>
-
-                                <button
-                                    onClick={() => setOpenForm(true)}
-                                    className="flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white transition-all hover:bg-indigo-700 shadow-lg shadow-indigo-100 active:scale-95"
-                                >
-                                    <Plus size={18} strokeWidth={3} />
-                                    <span>Nueva Remisión</span>
-                                </button>
-                            </div>
+            <div className="p-6 bg-[#f3f4f6] min-h-screen relative">
+                <div className="space-y-4 animate-in fade-in duration-500">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                        <div>
+                            <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Remisiones</h2>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Gestión de Autotanques</p>
                         </div>
 
-                        <UniversalTable
-                            columns={columns}
-                            data={data}
-                            loading={loading}
-                            pagination={{
-                                current_page: meta?.current_page || 1,
-                                last_page: meta?.last_page || 1,
-                                total: meta?.total || 0
-                            }}
-                            onPageChange={(p) => setPage(p)}
-                            emptyMessage="No se encontraron remisiones para la fecha seleccionada"
-                            loadingMessage="Consultando remisiones..."
-                        />
-                    </div>
-                ) : (
-                    <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
-                        <div className="flex items-center gap-4">
+                        <div className="flex gap-2">
+                            <div className="w-[1px] bg-slate-200 mx-1"></div>
                             <button
-                                onClick={handleBack}
-                                className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white p-3 text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-all shadow-sm"
+                                onClick={handleExportarExcel}
+                                disabled={loading}
+                                className="flex items-center gap-2 bg-white text-slate-600 text-[10px] font-black px-3 py-2 rounded border border-slate-200 shadow-sm hover:bg-slate-50 transition-all active:scale-95 uppercase tracking-wider disabled:opacity-50"
+                                title="Descargar Excel"
                             >
-                                <ChevronLeft size={20} strokeWidth={3} />
+                                <Download size={14} className="text-green-600" />
+                                <span className="hidden md:inline">EXCEL</span>
                             </button>
-                            <div>
-                                <h2 className="text-2xl font-black text-slate-900">
-                                    {isEdit ? 'Detalle de Remisión' : 'Nueva Remisión'}
-                                </h2>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Registro de carga y transporte</p>
+                            <button
+                                onClick={() => setMostrarFiltros(!mostrarFiltros)}
+                                className={`flex items-center gap-2 text-[10px] font-black px-4 py-2 rounded border transition-all ${mostrarFiltros ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                            >
+                                <Filter size={14} />
+                                <span>{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
+                            </button>
+                            <button
+                                onClick={() => { setIsEdit(false); setDetalle(null); setOpenForm(true); }}
+                                className="bg-indigo-600 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-indigo-700 transition-all active:scale-95 uppercase tracking-wider"
+                            >
+                                + NUEVA REMISIÓN
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[800px]">
+                                <thead>
+                                    <tr className="bg-white border-b border-slate-100">
+                                        <th className="px-4 py-4 text-[9px] font-black uppercase text-slate-400 text-center w-10">#</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center">Folio</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center">Matrícula / Destino</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center">Fecha / Hora</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center">Cantidad</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-right">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr className={`bg-slate-50 border-b border-slate-200 overflow-hidden transition-all duration-300 ${mostrarFiltros ? 'opacity-100' : 'hidden'}`}>
+                                        <td className="px-2 py-2"></td>
+                                        <td className="px-2 py-2 text-center">
+                                            <div className="flex items-center gap-1 justify-center">
+                                                <button onClick={limpiarFiltros} className="text-slate-400 hover:text-red-500"><X size={14} /></button>
+                                                <input type="text" placeholder="Folio..." className="w-24 text-[10px] border border-slate-200 p-1 rounded bg-white outline-none focus:border-blue-400" value={filtros.buscar} onChange={(e) => setFiltros({ ...filtros, buscar: e.target.value })} />
+                                            </div>
+                                        </td>
+                                        <td className="px-2 py-2">
+                                            <input type="text" placeholder="Matrícula..." className="w-full text-[10px] border border-slate-200 p-1 rounded bg-white outline-none focus:border-blue-400 uppercase" value={filtros.matricula} onChange={(e) => setFiltros({ ...filtros, matricula: e.target.value.toUpperCase() })} />
+                                        </td>
+                                        <td className="px-2 py-2">
+                                            <button onClick={() => setMostrarModalFecha(true)} className="w-full flex items-center justify-between text-[10px] border border-slate-200 p-1.5 rounded bg-white hover:border-blue-400 transition-colors shadow-sm">
+                                                <div className="flex items-center gap-1 overflow-hidden">
+                                                    <Calendar size={12} className="text-blue-500 shrink-0" />
+                                                    <span className="truncate font-bold text-slate-600 uppercase">
+                                                        {filtros.periodo === 'dia' ? filtros.fechaInicio : filtros.periodo === 'rango' ? `${filtros.fechaInicio} / ${filtros.fechaFin}` : filtros.periodo.toUpperCase()}
+                                                    </span>
+                                                </div>
+                                                <ChevronDown size={12} className="text-slate-400" />
+                                            </button>
+                                        </td>
+                                        <td className="px-2 py-2">
+                                            <input type="number" placeholder="Lts..." className="w-full text-[10px] border border-slate-200 p-1 rounded bg-white outline-none focus:border-blue-400 text-center" value={filtros.cantidad} onChange={(e) => setFiltros({ ...filtros, cantidad: e.target.value })} />
+                                        </td>
+                                        <td></td>
+                                    </tr>
+                                    {loading ? (
+                                        <tr><td colSpan={6} className="px-6 py-20 text-center text-[10px] font-black text-slate-400 uppercase">Cargando datos...</td></tr>
+                                    ) : data.map((row, index) => {
+                                        const numeroFila = (pagina - 1) * (meta?.per_page || 20) + (index + 1);
+                                        return (
+                                            <tr key={row.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors">
+                                                <td className="px-4 py-4 text-center font-bold text-[10px] text-slate-400">{numeroFila}</td>
+                                                <td className="px-6 py-4 text-center font-black text-[10px] text-slate-700">{row.folio || `#${row.id}`}</td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-black text-slate-800 uppercase tracking-tighter">{row.matricula || 'N/A'}</span>
+                                                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{row.destino || 'S/D'}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="text-[10px] font-bold text-slate-400 block">{new Date(row.fecha + 'T00:00:00').toLocaleDateString('es-ES')}</span>
+                                                    <span className="text-sm font-black text-slate-700">{row.hora_llegada?.substring(0, 5)}</span>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="font-mono text-sm font-black text-indigo-600">
+                                                        {Number(row.total_litros || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} <small className="text-[9px] text-slate-400">LTS</small>
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <button onClick={() => handleEdit(row)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Edit2 size={16} /></button>
+                                                        <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors uppercase font-black text-[10px]">PDF</button>
+                                                        <button onClick={() => { setSelectedRow(row); setEmailModalOpen(true); }} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"><Mail size={16} /></button>
+                                                        <button onClick={() => handleEye(row)} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"><Eye  size={16} /></button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {meta && meta.last_page > 1 && (
+                        <div className="flex items-center justify-between bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                            <span className="text-[10px] font-black text-slate-500 uppercase">PÁGINA {meta.current_page} DE {meta.last_page}</span>
+                            <div className="flex gap-1">
+                                <button disabled={pagina === 1} onClick={() => setPagina(pagina - 1)} className="px-3 py-1 border border-slate-200 rounded text-[10px] font-black hover:bg-slate-50 disabled:opacity-50">ANTERIOR</button>
+                                <button disabled={pagina === meta.last_page} onClick={() => setPagina(pagina + 1)} className="px-3 py-1 border border-slate-200 rounded text-[10px] font-black hover:bg-slate-50 disabled:opacity-50">SIGUIENTE</button>
                             </div>
                         </div>
+                    )}
+                </div>
 
-                        <div className="mx-auto max-w-5xl">
-                            <EoloForm
-                                data={detalle}
-                                isEdit={isEdit}
-                                onSuccess={() => {
-                                    handleBack();
-                                    cargarDatos();
-                                }}
-                            />
+                {openForm && (
+                    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={handleBack}></div>
+                        <div className="relative z-10 w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+                            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-lg font-black uppercase text-slate-800 tracking-tighter">{isEdit ? 'Editar Remisión' : 'Nueva Remisión'}</h3>
+                                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Formulario de Control de Combustible</p>
+                                </div>
+                                <button onClick={handleBack} className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors"><X size={20} /></button>
+                            </div>
+                            <div className="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
+                                <EoloForm data={detalle} isEdit={isEdit} onSuccess={() => { handleBack(); cargarDatos(); }} />
+                            </div>
                         </div>
                     </div>
                 )}
+
+                {mostrarModalFecha && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMostrarModalFecha(false)}></div>
+                        <div className="relative z-10 bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden">
+                            <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
+                                <h3 className="text-sm font-black uppercase text-slate-700">Período</h3>
+                                <button onClick={() => setMostrarModalFecha(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+                            </div>
+                            <div className="p-4 space-y-4">
+                                <div className="flex bg-slate-100 p-1 rounded-lg">
+                                    {['dia', 'rango', 'mes', 'año'].map((modo) => (
+                                        <button key={modo} onClick={() => setFiltrosEdicion({ ...filtrosEdicion, periodo: modo })} className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all uppercase ${filtrosEdicion.periodo === modo ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>{modo}</button>
+                                    ))}
+                                </div>
+                                <div className="space-y-3">
+                                    {filtrosEdicion.periodo === 'dia' && (
+                                        <input type="date" className="w-full border border-slate-200 p-2 rounded-lg text-sm" value={filtrosEdicion.fechaInicio} onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: e.target.value, fechaFin: e.target.value })} />
+                                    )}
+                                    {filtrosEdicion.periodo === 'rango' && (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <input type="date" className="w-full border border-slate-200 p-2 rounded-lg text-sm" value={filtrosEdicion.fechaInicio} onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: e.target.value })} />
+                                            <input type="date" className="w-full border border-slate-200 p-2 rounded-lg text-sm" value={filtrosEdicion.fechaFin} onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaFin: e.target.value })} />
+                                        </div>
+                                    )}
+                                    {filtrosEdicion.periodo === 'mes' && (
+                                        <input type="month" className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => {
+                                            const [y, m] = e.target.value.split('-');
+                                            setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${y}-${m}-01`, fechaFin: `${y}-${m}-31` });
+                                        }} />
+                                    )}
+                                    {filtrosEdicion.periodo === 'año' && (
+                                        <input type="number" min="2020" max="2030" placeholder="Año" className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${e.target.value}-01-01`, fechaFin: `${e.target.value}-12-31` })} />
+                                    )}
+                                </div>
+                                <button onClick={aplicarFiltroFecha} className="w-full bg-slate-800 text-white py-3 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">Aplicar Filtro</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                {previewOpen && (
+                    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+                        <div
+                            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
+                            onClick={() => setPreviewOpen(false)}
+                        ></div>
+                        <div className="relative z-10 w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-300">
+                            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-lg font-black uppercase text-slate-800 tracking-tighter">Detalle de Remisión</h3>
+                                    <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{datosPreview?.folio}</p>
+                                </div>
+                                <button onClick={() => setPreviewOpen(false)} className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors">
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <div className="p-6 max-h-[80vh] overflow-y-auto">
+                                {/* Llamada a tu componente con los datos */}
+                                <VistaPreviaRemision data={datosPreview} />
+                            </div>
+                        </div>
+                    </div>
+                )}
+                <ModalEnviarCorreo isOpen={emailModalOpen} onClose={() => setEmailModalOpen(false)} onSend={handleSendEmail} row={selectedRow} />
+                <PdfExporterRemision id={pdfId} onDone={handlePdfDone} />
             </div>
-            <ModalEnviarCorreo
-                isOpen={emailModalOpen}
-                onClose={() => setEmailModalOpen(false)}
-                onSend={handleSendEmail}
-                row={selectedRow}
-            />
-            <PdfExporterRemision id={pdfId} onDone={handlePdfDone} />
         </AppLayout>
     );
 }

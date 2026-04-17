@@ -70,9 +70,19 @@ export type WalkAroundBitacora = {
     elabora?: string | null;
 };
 export async function fetchWalkarounds(params: any = {}) {
-    const qs = new URLSearchParams(params);
+    const cleanParams = {
+        q: params.q || '',
+        movimiento: params.movimiento || '',
+        ubicacion: params.ubicacion || '',
+        fecha_inicio: params.start || '',
+        fecha_fin: params.end || '',
+        page: params.page || 1,
+        per_page: params.per_page || 20
+    };
 
-    const res = await fetch(`/api/walkarounds?${qs.toString()}`, {
+    const qs = new URLSearchParams(cleanParams as any).toString();
+
+    const res = await fetch(`/api/walkarounds?${qs}`, {
         headers: { Accept: "application/json" },
         credentials: "same-origin",
     });

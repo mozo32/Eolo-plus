@@ -30,51 +30,37 @@ class WalkAroundController extends Controller
     public function index(Request $request)
     {
         $q = trim((string) $request->get('q', ''));
+        $ubicacion = trim((string) $request->get('ubicacion', ''));
 
         $query = WalkAround::query()
             ->select([
-                'id',
-                'fecha',
-                'movimiento',
-                'matricula',
-                'tipo',
-                'tipo_aeronave',
-                'hora',
-                'destino',
-                'procedensia',
-                'created_at',
-            ])
-            ->orderByDesc('id');
+                'id', 'fecha', 'movimiento', 'matricula',
+                'tipo', 'tipo_aeronave', 'hora',
+                'destino', 'procedensia', 'created_at'
+            ]);
 
         if ($q !== '') {
-            $query->where(function ($sub) use ($q) {
-                $sub->where('matricula', 'like', "%{$q}%")
-                    ->orWhere('destino', 'like', "%{$q}%")
-                    ->orWhere('procedensia', 'like', "%{$q}%")
-                    ->orWhere('tipo', 'like', "%{$q}%")
-                    ->orWhere('movimiento', 'like', "%{$q}%")
-                    ->orWhere('fecha', 'like', "%{$q}%");
-            });
+            $query->where('matricula', 'like', "%{$q}%");
         }
 
+        if ($ubicacion !== '') {
+            $query->where(function($sub) use ($ubicacion) {
+                $sub->where('procedensia', 'like', "%{$ubicacion}%")
+                    ->orWhere('destino', 'like', "%{$ubicacion}%");
+            });
+        }
 
         if ($request->filled('movimiento')) {
             $query->where('movimiento', $request->movimiento);
         }
 
-        if ($request->filled('tipo')) {
-            $query->where('tipo', $request->tipo);
+        if ($request->filled('fecha_inicio') && $request->filled('fecha_fin')) {
+            $query->whereBetween('fecha', [$request->fecha_inicio, $request->fecha_fin]);
         }
 
-        if ($request->filled('fecha_inicio')) {
-            $query->whereDate('fecha', '>=', $request->fecha_inicio);
-        }
+        $query->orderByDesc('id');
 
-        if ($request->filled('fecha_fin')) {
-            $query->whereDate('fecha', '<=', $request->fecha_fin);
-        }
-
-        return response()->json($query->paginate(10));
+        return response()->json($query->paginate($request->get('per_page', 20)));
     }
 
     /**
@@ -312,8 +298,7 @@ class WalkAroundController extends Controller
     public function store(Request $request)
     {
         $ultimoRegistro = WalkAround::where('matricula', $request->metadata['matricula'])
-            ->orderBy('fecha', 'desc')
-            ->orderBy('hora', 'desc')
+            ->latest()
             ->first();
 
         if ($ultimoRegistro) {

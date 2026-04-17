@@ -1,10 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { indexCombustible, apiEliminar} from '@/stores/apiInspeccionCombustible';
-import Inspeccion from './Combustible/Inspeccion';
-import { fetchInspeccionId } from "@/stores/apiInspeccionCombustible";
+import { indexCombustible, apiEliminar, fetchInspeccionId } from '@/stores/apiInspeccionCombustible';
 import PdfInspeccionCombustible from './Combustible/components/PdfInspeccionCombustible';
 import Swal from 'sweetalert2';
 import {
@@ -13,15 +11,15 @@ import {
     User,
     Edit2,
     Plus,
-    ChevronLeft,
-    ChevronRight,
-    Loader2,
-    X
+    X,
+    Filter,
+    ChevronDown,
+    Trash2,
+    Loader2
 } from 'lucide-react';
+const Inspeccion = lazy(() => import('./Combustible/Inspeccion'));
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Inspección de Combustible' },
-];
+const breadcrumbs: BreadcrumbItem[] = [{ title: 'Inspección de Combustible' }];
 
 interface InspeccionResumen {
     id: number;
@@ -32,22 +30,73 @@ interface InspeccionResumen {
 }
 
 export default function InspeccionCombustible() {
-    const [inspecciones, setInspecciones] = useState<InspeccionResumen[]>([]);
     const [loading, setLoading] = useState(true);
+    const [inspecciones, setInspecciones] = useState<InspeccionResumen[]>([]);
     const [showForm, setShowForm] = useState(false);
     const [pdfId, setPdfId] = useState<number | null>(null);
     const [detalle, setDetalle] = useState<any>(null);
     const [isEdit, setIsEdit] = useState(false);
-    const [pagination, setPagination] = useState({
-        current_page: 1,
-        last_page: 1,
-        total: 0
+    const [mostrarFiltros, setMostrarFiltros] = useState(false);
+    const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
+
+    const [filtros, setFiltros] = useState({
+        buscar: '',
+        inspector: '',
+        fechaInicio: new Date().toLocaleDateString('en-CA'),
+        fechaFin: new Date().toLocaleDateString('en-CA'),
+        periodo: 'dia'
     });
 
+    const [filtrosEdicion, setFiltrosEdicion] = useState({ ...filtros });
+    const [pagina, setPagina] = useState(1);
+    const [meta, setMeta] = useState<any>(null);
+
     useEffect(() => {
-        loadData(pagination.current_page);
-    }, [pagination.current_page]);
-    const handlePdfDone = useCallback(() => setPdfId(null), []);
+        if (mostrarModalFecha) setFiltrosEdicion({ ...filtros });
+    }, [mostrarModalFecha, filtros]);
+
+    const loadData = async () => {
+        try {
+            setLoading(true);
+            const params = {
+                page: pagina,
+                per_page: 20,
+                type: filtros.periodo,
+                start: filtros.fechaInicio,
+                end: filtros.fechaFin,
+                id: filtros.buscar,
+                inspector: filtros.inspector
+            };
+            const data = await indexCombustible(params);
+            setInspecciones(data.data || []);
+            setMeta(data);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadData();
+    }, [pagina, filtros]);
+
+    const aplicarFiltroFecha = () => {
+        setFiltros({ ...filtrosEdicion });
+        setMostrarModalFecha(false);
+        setPagina(1);
+    };
+
+    const limpiarFiltros = () => {
+        setFiltros({
+            buscar: '',
+            inspector: '',
+            fechaInicio: new Date().toLocaleDateString('en-CA'),
+            fechaFin: new Date().toLocaleDateString('en-CA'),
+            periodo: 'dia'
+        });
+    };
+
     const handleEliminar = async (id: number) => {
         const result = await Swal.fire({
             title: '¿Estás seguro?',
@@ -65,255 +114,217 @@ export default function InspeccionCombustible() {
             try {
                 const res = await apiEliminar(id);
                 if (res.ok) {
-                    Swal.fire({
-                        title: '¡Eliminado!',
-                        text: 'El registro ha sido borrado con éxito.',
-                        icon: 'success',
-                        timer: 1500,
-                        showConfirmButton: false
-                    });
-                    loadData(1);
+                    Swal.fire({ icon: 'success', title: '¡Eliminado!', timer: 1500, showConfirmButton: false });
+                    loadData();
                 } else {
-                    throw new Error(res.message || "Error al eliminar");
+                    throw new Error(res.message);
                 }
             } catch (error: any) {
-                Swal.fire('Error', error.message || 'No se pudo eliminar el registro', 'error');
+                Swal.fire('Error', error.message || 'No se pudo eliminar', 'error');
             }
         }
     };
-    const loadData = async (page: number) => {
-        try {
-            setLoading(true);
-            const data = await indexCombustible({ page, per_page: 20 });
-            setInspecciones(data.data);
-            setPagination({
-                current_page: data.current_page,
-                last_page: data.last_page,
-                total: data.total
-            });
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setLoading(false);
-        }
-    };
 
-    const handleSaveSuccess = () => {
-        setShowForm(false);
-        loadData(1);
-    };
-    const show = async (id: number) => {
+    const handleEdit = async (id: number) => {
         try {
+            Swal.fire({ title: 'Cargando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             const dat = await fetchInspeccionId(id);
             setDetalle(dat);
             setIsEdit(true);
             setShowForm(true);
+            Swal.close();
         } catch (error) {
             console.error(error);
         }
     };
+
     const formatFecha = (dateString: string) => {
         const date = new Date(dateString);
-
-        // Formato para la fecha (ej: 14/04/2026)
-        const fecha = new Intl.DateTimeFormat('es-MX', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric'
-        }).format(date);
-
-        // Formato para la hora 24h (ej: 14:30)
-        const hora = new Intl.DateTimeFormat('es-MX', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false // <--- Esto fuerza el formato 24h
-        }).format(date);
-
+        const fecha = new Intl.DateTimeFormat('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+        const hora = new Intl.DateTimeFormat('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
         return { fecha, hora };
     };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Historial de Inspecciones" />
+            <Head title="Control de Combustible" />
 
-            <div className="p-6 space-y-6 max-w-7xl mx-auto">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tight">
-                            {showForm
-                                ? (isEdit ? 'Editar Captura' : 'Nueva Captura')
-                                : 'Control de Combustible'
-                            }
-                        </h1>
-                        <p className="text-slate-500 text-sm">
-                            {showForm
-                                ? 'Complete las pruebas de Shell e Hydrokit'
-                                : 'Registro histórico de pruebas'}
-                        </p>
-                    </div>
+            <div className="p-6 bg-[#f3f4f6] min-h-screen relative text-sm">
+                <div className="space-y-4 animate-in fade-in duration-500">
 
-                    <button
-                        onClick={() => {
-                            setDetalle(null);
-                            setIsEdit(false);
-                            setShowForm(!showForm)
-                        }}
-                        className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all shadow-lg ${showForm
-                                ? 'bg-slate-200 text-slate-700 hover:bg-slate-300 shadow-slate-100'
-                                : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200'
-                            }`}
-                    >
-                        {showForm ? <X size={20} /> : <Plus size={20} />}
-                        {showForm ? 'Cancelar' : 'Nueva Inspección'}
-                    </button>
-                </div>
-
-                {/* Renderizado Condicional */}
-                {showForm ? (
-                    <div className="animate-in fade-in zoom-in duration-300">
-                        <Inspeccion dataInitial={detalle} onSuccess={handleSaveSuccess} />
-                    </div>
-                ) : (
-                    <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm text-sm">
-                        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                            <h2 className="font-bold text-slate-700 flex items-center gap-2 uppercase tracking-tighter">
-                                <Calendar size={18} className="text-blue-500" />
-                                Últimos Registros
-                            </h2>
-                            <span className="text-xs font-bold px-3 py-1 bg-slate-200 text-slate-600 rounded-full">
-                                TOTAL: {pagination.total}
-                            </span>
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                        <div>
+                            <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Control de Combustible</h2>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Historial de Inspecciones Shell e Hydrokit</p>
                         </div>
 
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setMostrarFiltros(!mostrarFiltros)}
+                                className={`flex items-center gap-2 text-[10px] font-black px-4 py-2 rounded border transition-all ${mostrarFiltros ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                            >
+                                <Filter size={14} />
+                                <span>{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
+                            </button>
+
+                            <button
+                                onClick={() => { setDetalle(null); setIsEdit(false); setShowForm(true); }}
+                                className="bg-blue-600 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-blue-700 transition-all active:scale-95 uppercase tracking-wider"
+                            >
+                                + NUEVA INSPECCIÓN
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
+                            <table className="w-full text-left border-collapse min-w-[800px]">
                                 <thead>
-                                    <tr className="text-slate-400 text-[10px] uppercase tracking-[0.15em] bg-slate-50/50">
-                                        <th className="px-6 py-4 font-black">ID</th>
-                                        <th className="px-6 py-4 font-black">Fecha y Hora</th>
-                                        <th className="px-6 py-4 font-black">Inspector</th>
-                                        <th className="px-6 py-4 font-black text-center">Evidencias</th>
-                                        <th className="px-6 py-4 font-black text-right">Acciones</th>
+                                    <tr className="bg-white border-b border-slate-100">
+                                        <th className="px-4 py-4 text-[9px] font-black uppercase text-slate-400 text-center w-10">#</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center">Fecha y Hora</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center">Inspector</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center">Evidencias</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-right">Acciones</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {loading ? (
-                                        <tr>
-                                            <td colSpan={5} className="py-20 text-center">
-                                                <div className="flex flex-col items-center gap-2">
-                                                    <Loader2 className="animate-spin text-blue-500" size={32} />
-                                                    <span className="text-slate-400 font-bold uppercase text-[10px]">Cargando...</span>
+                                <tbody>
+                                    <tr className={`bg-slate-50 border-b border-slate-200 overflow-hidden transition-all duration-300 ${mostrarFiltros ? 'opacity-100' : 'hidden'}`}>
+                                        <td className="px-2 text-center">
+                                            <button onClick={limpiarFiltros} className="text-slate-300 hover:text-red-500 transition-colors"><X size={14} /></button>
+                                        </td>
+                                        <td className="px-2 py-2">
+                                            <button onClick={() => setMostrarModalFecha(true)} className="w-full flex items-center justify-between text-[10px] border border-slate-200 p-1.5 rounded bg-white hover:border-blue-400 shadow-sm transition-colors">
+                                                <div className="flex items-center gap-1 overflow-hidden font-bold text-slate-600 uppercase">
+                                                    <Calendar size={12} className="text-blue-500" />
+                                                    {filtros.periodo === 'dia' ? filtros.fechaInicio : filtros.periodo.toUpperCase()}
                                                 </div>
-                                            </td>
-                                        </tr>
-                                    ) : inspecciones.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={5} className="py-20 text-center text-slate-400 font-medium">
-                                                No se encontraron registros.
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        inspecciones.map((row) => (
-                                            <tr key={row.id} className="hover:bg-slate-50/80 transition-colors">
-                                                <td className="px-6 py-4 font-mono text-xs text-slate-400">#{row.id}</td>
-                                                <td className="px-6 py-4">
-                                                    <td className="px-6 py-4">
-                                                        {(() => {
-                                                            const { fecha, hora } = formatFecha(row.fecha);
-                                                            return (
-                                                                <div className="flex flex-col">
-                                                                    <span className="font-bold text-slate-700">
-                                                                        {fecha}
-                                                                    </span>
-                                                                    <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider">
-                                                                        {hora} HRS
-                                                                    </span>
-                                                                </div>
-                                                            );
-                                                        })()}
-                                                    </td>
+                                                <ChevronDown size={12} className="text-slate-400" />
+                                            </button>
+                                        </td>
+                                        <td className="px-2 py-2">
+                                            <input type="text" placeholder="Inspector..." className="w-full text-[10px] border border-slate-200 p-1 rounded bg-white outline-none focus:border-blue-400 uppercase" value={filtros.inspector} onChange={(e) => setFiltros({ ...filtros, inspector: e.target.value.toUpperCase() })} />
+                                        </td>
+                                        <td colSpan={2}></td>
+                                    </tr>
+
+                                    {loading ? (
+                                        <tr><td colSpan={6} className="py-20 text-center"><Loader2 className="animate-spin text-blue-500 mx-auto" size={32} /></td></tr>
+                                    ) : inspecciones.map((row, index) => {
+                                        const { fecha, hora } = formatFecha(row.fecha);
+                                        const nFila = (pagina - 1) * 20 + (index + 1);
+                                        return (
+                                            <tr key={row.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors">
+                                                <td className="px-4 py-4 text-center font-bold text-[10px] text-slate-400">{nFila}</td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="text-[10px] font-bold text-slate-400 block">{fecha}</span>
+                                                    <span className="text-sm font-black text-slate-700">{hora}</span>
                                                 </td>
-                                                <td className="px-6 py-4 uppercase text-xs font-bold text-slate-600">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
-                                                            <User size={14} />
-                                                        </div>
-                                                        {row.user?.name || `ID: ${row.user_id}`}
-                                                    </div>
+                                                <td className="px-6 py-4 text-center">
+                                                   <div className="flex flex-col items-center">
+                                                        <span className="text-xs font-black text-slate-800 uppercase tracking-tighter">{row.user?.name || '---'}</span>
+                                                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">ID: {row.user_id}</span>
+                                                   </div>
                                                 </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex justify-center">
-                                                        <span className="flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-700 rounded-lg text-[10px] font-black border border-green-200">
-                                                            <ImageIcon size={12} />
-                                                            {row.imagenes_count} FOTOS
-                                                        </span>
-                                                    </div>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-600 rounded text-[9px] font-black border border-green-100 uppercase">
+                                                        <ImageIcon size={10} /> {row.imagenes_count} FOTOS
+                                                    </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
-                                                    <button onClick={() => show(row.id)} className="p-2.5 text-slate-400 hover:text-white hover:bg-indigo-600 rounded-xl transition-all shadow-sm" >
-                                                        <Edit2 size={18} />
-                                                    </button>
-                                                    <button onClick={() => setPdfId(row.id)} className="p-2.5 text-slate-400 hover:text-white hover:bg-amber-600 rounded-xl transition-all shadow-sm">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className="p-2.5 text-slate-400 hover:text-white hover:bg-red-600 rounded-xl transition-all shadow-sm"
-                                                        title="Eliminar"
-                                                        onClick={() => handleEliminar(row.id)}
-                                                    >
-                                                        <svg
-                                                            xmlns="http://www.w3.org/2000/svg"
-                                                            width="20"
-                                                            height="20"
-                                                            viewBox="0 0 24 24"
-                                                            fill="none"
-                                                            stroke="currentColor"
-                                                            strokeWidth="1.5"
-                                                            strokeLinecap="round"
-                                                            strokeLinejoin="round"
-                                                        >
-                                                            <path d="M3 3l18 18" />
-                                                            <path d="M4 7h3m4 0h9" />
-                                                            <path d="M10 11l0 6" />
-                                                            <path d="M14 14l0 3" />
-                                                            <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l.077 -.923" />
-                                                            <path d="M18.384 14.373l.616 -7.373" />
-                                                            <path d="M9 5v-1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
-                                                        </svg>
-                                                    </button>
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <button onClick={() => handleEdit(row.id)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Edit2 size={16} /></button>
+                                                        <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]">PDF</button>
+                                                        <button onClick={() => handleEliminar(row.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={16} /></button>
+                                                    </div>
                                                 </td>
                                             </tr>
-                                        ))
-                                    )}
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
+                    </div>
 
-                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                Página {pagination.current_page} de {pagination.last_page}
-                            </span>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => setPagination(prev => ({ ...prev, current_page: prev.current_page - 1 }))}
-                                    disabled={pagination.current_page === 1 || loading}
-                                    className="p-2 rounded-xl border border-slate-200 bg-white disabled:opacity-30 hover:bg-slate-100 transition-all shadow-sm"
-                                >
-                                    <ChevronLeft size={18} className="text-slate-600" />
-                                </button>
-                                <button
-                                    onClick={() => setPagination(prev => ({ ...prev, current_page: prev.current_page + 1 }))}
-                                    disabled={pagination.current_page === pagination.last_page || loading}
-                                    className="p-2 rounded-xl border border-slate-200 bg-white disabled:opacity-30 hover:bg-slate-100 transition-all shadow-sm"
-                                >
-                                    <ChevronRight size={18} className="text-slate-600" />
-                                </button>
+                    {meta && meta.last_page > 1 && (
+                        <div className="flex items-center justify-between bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                            <span className="text-[10px] font-black text-slate-500 uppercase">PÁGINA {meta.current_page} DE {meta.last_page}</span>
+                            <div className="flex gap-1">
+                                <button disabled={pagina === 1} onClick={() => setPagina(pagina - 1)} className="px-3 py-1 border border-slate-200 rounded text-[10px] font-black hover:bg-slate-50 disabled:opacity-50 transition-colors">ANTERIOR</button>
+                                <button disabled={pagina === meta.last_page} onClick={() => setPagina(pagina + 1)} className="px-3 py-1 border border-slate-200 rounded text-[10px] font-black hover:bg-slate-50 disabled:opacity-50 transition-colors">SIGUIENTE</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {showForm && (
+                    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setShowForm(false)}></div>
+                        <div className="relative z-10 w-full max-w-6xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200">
+                            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-lg font-black uppercase text-slate-800 tracking-tighter">{isEdit ? 'Editar Inspección' : 'Nueva Inspección'}</h3>
+                                    <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Formulario de Calidad de Combustible</p>
+                                </div>
+                                <button onClick={() => setShowForm(false)} className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors"><X size={20} /></button>
+                            </div>
+                            <div className="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
+                                {/* SUSPENSE MANEJA EL DELAY DEL CARGADO PESADO */}
+                                <Suspense fallback={
+                                    <div className="flex flex-col items-center justify-center py-20 gap-4">
+                                        <Loader2 className="animate-spin text-blue-600" size={40} />
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cargando Formulario...</p>
+                                    </div>
+                                }>
+                                    <Inspeccion dataInitial={detalle} onSuccess={() => { setShowForm(false); loadData(); }} />
+                                </Suspense>
                             </div>
                         </div>
                     </div>
                 )}
+
+                {mostrarModalFecha && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMostrarModalFecha(false)}></div>
+                        <div className="relative z-10 bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden">
+                            <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
+                                <h3 className="text-sm font-black uppercase text-slate-700">Período</h3>
+                                <button onClick={() => setMostrarModalFecha(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+                            </div>
+                            <div className="p-4 space-y-4">
+                                <div className="flex bg-slate-100 p-1 rounded-lg">
+                                    {['dia', 'rango', 'mes', 'año'].map((modo) => (
+                                        <button key={modo} onClick={() => setFiltrosEdicion({ ...filtrosEdicion, periodo: modo })} className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all uppercase ${filtrosEdicion.periodo === modo ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>{modo}</button>
+                                    ))}
+                                </div>
+                                <div className="space-y-3">
+                                    {filtrosEdicion.periodo === 'dia' && (
+                                        <input type="date" className="w-full border border-slate-200 p-2 rounded-lg text-sm" value={filtrosEdicion.fechaInicio} onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: e.target.value, fechaFin: e.target.value })} />
+                                    )}
+                                    {filtrosEdicion.periodo === 'rango' && (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <input type="date" className="w-full border border-slate-200 p-2 rounded-lg text-sm" value={filtrosEdicion.fechaInicio} onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: e.target.value })} />
+                                            <input type="date" className="w-full border border-slate-200 p-2 rounded-lg text-sm" value={filtrosEdicion.fechaFin} onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaFin: e.target.value })} />
+                                        </div>
+                                    )}
+                                    {filtrosEdicion.periodo === 'mes' && (
+                                        <input type="month" className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => {
+                                            const [y, m] = e.target.value.split('-');
+                                            setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${y}-${m}-01`, fechaFin: `${y}-${m}-31` });
+                                        }} />
+                                    )}
+                                    {filtrosEdicion.periodo === 'año' && (
+                                        <input type="number" min="2020" max="2030" placeholder="Año" className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${e.target.value}-01-01`, fechaFin: `${e.target.value}-12-31` })} />
+                                    )}
+                                </div>
+                                <button onClick={aplicarFiltroFecha} className="w-full bg-slate-800 text-white py-3 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">Aplicar Filtro</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <PdfInspeccionCombustible id={pdfId} onDone={() => setPdfId(null)} />
             </div>
-            <PdfInspeccionCombustible id={pdfId} onDone={handlePdfDone} />
         </AppLayout>
     );
 }

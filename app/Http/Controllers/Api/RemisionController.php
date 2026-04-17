@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Storage;
 use App\Models\Firma;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\RemisionMail;
+use Illuminate\Http\JsonResponse;
 
 class RemisionController extends Controller
 {
@@ -69,40 +70,54 @@ class RemisionController extends Controller
 
     public function index(Request $request)
     {
-        $type = $request->query('type', 'day');
         $perPage = $request->query('per_page', 20);
         $query = Remision::where('status', 'A');
 
+        if ($request->filled('folio')) {
+            $query->where('folio', 'LIKE', '%' . $request->query('folio') . '%');
+        }
+
+        if ($request->filled('matricula')) {
+            $query->where('matricula', 'LIKE', '%' . $request->query('matricula') . '%');
+        }
+
+        if ($request->filled('cantidad')) {
+            $query->where('total_litros', '>=', $request->query('cantidad'));
+        }
+
+        $type = $request->query('type', 'day');
+        $start = $request->query('start');
+        $end = $request->query('end');
+
         switch ($type) {
             case 'range':
-                $start = $request->query('start');
-                $end = $request->query('end');
+            case 'rango':
                 if ($start && $end) {
                     $query->whereBetween('fecha', [$start, $end]);
                 }
                 break;
 
             case 'month':
-                $month = $request->query('month');
-                $year = $request->query('year');
-                if ($month && $year) {
-                    $query->whereMonth('fecha', $month)->whereYear('fecha', $year);
+            case 'mes':
+                if ($start) {
+                    $date = \Carbon\Carbon::parse($start);
+                    $query->whereMonth('fecha', $date->month)
+                        ->whereYear('fecha', $date->year);
                 }
                 break;
 
             case 'year':
-                $year = $request->query('year');
-                if ($year) {
-                    $query->whereYear('fecha', $year);
+            case 'año':
+                if ($start) {
+                    $query->whereYear('fecha', \Carbon\Carbon::parse($start)->year);
                 }
                 break;
 
             case 'day':
+            case 'dia':
             default:
-                $fecha = $request->query('date') ?? $request->query('fecha');
-                if ($fecha) {
-                    $query->whereDate('fecha', $fecha);
-                }
+                $fecha = $start ?? $request->query('date') ?? now()->format('Y-m-d');
+                $query->whereDate('fecha', $fecha);
                 break;
         }
 
@@ -248,10 +263,9 @@ class RemisionController extends Controller
     }
 
     public function ultimaLectura(){
-        $rem = Remision::select('lectura_final')
-                        ->orderBy('fecha', 'desc')
+        $rem = Remision::select('lectura_final', 'id')
+                        ->latest()
                         ->first();
-
         return response()->json($rem);
     }
     public function enviarCorreo(Request $request) {
@@ -282,5 +296,79 @@ class RemisionController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+    public function obtenerResponsablesPorMatricula(string $matricula): JsonResponse
+    {
+        $nombres = Remision::where('matricula', $matricula)
+            ->whereNotNull('cliente')
+            ->where('cliente', '!=', '')
+            ->select(DB::raw('DISTINCT UPPER(TRIM(cliente)) as nombre_limpio'))
+            ->pluck('nombre_limpio');
+        return response()->json($nombres);
+    }
+    public function obtenerExcel(Request $request)
+    {
+        $query = Remision::where('status', 'A');
+
+        if ($request->filled('buscar')) {
+            $query->where('folio', 'LIKE', '%' . $request->query('buscar') . '%');
+        }
+        if ($request->filled('matricula')) {
+            $query->where('matricula', 'LIKE', '%' . $request->query('matricula') . '%');
+        }
+
+        if ($request->filled('cantidad')) {
+            $query->where('total_litros', '>=', $request->query('cantidad'));
+        }
+
+        $type = $request->query('periodo', 'dia');
+        $start = $request->query('fechaInicio');
+        $end = $request->query('fechaFin');
+
+        switch ($type) {
+            case 'range':
+            case 'rango':
+                if ($start && $end) {
+                    $query->whereBetween('fecha', [$start, $end]);
+                }
+                break;
+
+            case 'month':
+            case 'mes':
+                if ($start) {
+                    $date = \Carbon\Carbon::parse($start);
+                    $query->whereMonth('fecha', $date->month)
+                        ->whereYear('fecha', $date->year);
+                }
+                break;
+
+            case 'year':
+            case 'año':
+                if ($start) {
+                    $query->whereYear('fecha', \Carbon\Carbon::parse($start)->year);
+                }
+                break;
+
+            case 'day':
+            case 'dia':
+            default:
+                $fecha = $start ?? $request->query('date') ?? now()->format('Y-m-d');
+                $query->whereDate('fecha', $fecha);
+                break;
+        }
+
+        $remisiones = $query->orderBy('id', 'desc')->get();
+
+        $remisionesConDetalle = $remisiones->map(function ($remision) {
+            $operacion = OperacionDiaria::where('matricula', $remision->matricula)
+                ->select('tipo_cliente')
+                ->latest('fecha')
+                ->first();
+
+            $remision->tipo_cliente = $operacion ? $operacion->tipo_cliente : 'N/A';
+            return $remision;
+        });
+
+        return response()->json($remisionesConDetalle);
     }
 }

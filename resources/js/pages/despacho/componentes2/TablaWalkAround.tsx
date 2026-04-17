@@ -1,100 +1,109 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { fetchWalkarounds, deleteWalkaround } from '@/stores/apiWalkaround';
 import WalkAroundFirmaModal from '../components/walkAround/ItemTable/WalkAroundFirmaModal';
-import WalkAroundFilterModal from './WalkAroundFilterModal';
+import WalkAroundFormV2 from './steps/WalkAroundFormV2';
+import WalkAroundPdfExporter from '../components/walkAround/ItemTable/WalkAroundPdfExporter';
+import AppLayout from '@/layouts/app-layout';
+import { type BreadcrumbItem } from '@/types';
+import { Head, usePage } from '@inertiajs/react';
 import Swal from 'sweetalert2';
-import { Trash2 } from 'lucide-react';
-
 import {
     Search, Loader2, Plane, ChevronLeft,
     ChevronRight, ArrowUpRight,
-    ArrowDownLeft, Info, Plus, X, SlidersHorizontal, Edit2,
-    Calendar, MapPin, MousePointerClick
+    ArrowDownLeft, Plus, X, Filter, Edit2,
+    Calendar, MapPin, Trash2, ChevronDown
 } from 'lucide-react';
 
-import WalkAroundFormV2 from './steps/WalkAroundFormV2';
-import WalkAroundPdfExporter from '../components/walkAround/ItemTable/WalkAroundPdfExporter';
-import { usePage } from '@inertiajs/react';
+const breadcrumbs: BreadcrumbItem[] = [{ title: 'Walkaround' }];
 
 const TablaWalkAround = () => {
     const [pdfId, setPdfId] = useState<number | null>(null);
     const [showForm, setShowForm] = useState(false);
     const [selectedId, setSelectedId] = useState<number | null>(null);
-    const [showFilterModal, setShowFilterModal] = useState(false);
+    const [mostrarFiltros, setMostrarFiltros] = useState(false);
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [firmId, setFirmId] = useState<number | null>(null);
     const [firmOpen, setFirmOpen] = useState(false);
-    const { auth } = usePage<{ auth: { user: any } }>().props;
-    const [pagination, setPagination] = useState({
-        current_page: 1,
-        last_page: 1,
-        total: 0,
-        per_page: 10
-    });
-    const nombreRol = auth.user.roles?.[0]?.slug;
 
+    const { auth } = usePage<{ auth: { user: any } }>().props;
+    const [pagina, setPagina] = useState(1);
+    const [meta, setMeta] = useState<any>(null);
+    const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
+
+    const nombreRol = auth.user.roles?.[0]?.slug;
     const esAdminOFbo = nombreRol === 'admin' || nombreRol === 'fbo';
     const esJefe = nombreRol === 'jefe_area';
-    const esJEmpleado = nombreRol === 'empleado';
-    const handleApplyFilters = () => {
-        loadData(1);
-    };
-    const handlePdfDone = useCallback(() => {
-        setPdfId(null);
-    }, []);
-    const [filters, setFilters] = useState({
+    const esEmpleado = nombreRol === 'empleado';
+
+    const [filtros, setFiltros] = useState({
         q: '',
-        fecha_inicio: '',
-        fecha_fin: '',
+        fechaInicio: new Date().toLocaleDateString('en-CA'),
+        fechaFin: new Date().toLocaleDateString('en-CA'),
+        periodo: 'dia',
         movimiento: '',
-        tipo: ''
+        ubicacion: ''
     });
 
-    const formatDate = (dateString: string, timeString?: string) => {
-        if (!dateString) return { date: '---', time: '---' };
+    const [filtrosEdicion, setFiltrosEdicion] = useState({ ...filtros });
 
-        const date = new Date(dateString);
-        const formattedDate = date.toLocaleDateString('es-MX', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
-        });
-        const formattedTime = timeString
-            ? timeString.substring(0, 5)
-            : date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    useEffect(() => {
+        if (mostrarModalFecha) setFiltrosEdicion({ ...filtros });
+    }, [mostrarModalFecha, filtros]);
 
-        return {
-            date: formattedDate,
-            time: formattedTime
-        };
-    };
     const loadData = useCallback(async (page = 1) => {
         setLoading(true);
         try {
-            const response = await fetchWalkarounds({ ...filters, page, per_page: pagination.per_page });
+            const params = {
+                q: filtros.q,
+                start: filtros.fechaInicio,
+                end: filtros.fechaFin,
+                type: filtros.periodo,
+                movimiento: filtros.movimiento,
+                ubicacion: filtros.ubicacion,
+                page,
+                per_page: 20
+            };
+            const response = await fetchWalkarounds(params);
             setData(response.data);
-            setPagination({
-                current_page: response.current_page,
-                last_page: response.last_page,
-                total: response.total,
-                per_page: response.per_page
-            });
-        } catch (error) { console.error(error); } finally { setLoading(false); }
-    }, [filters, pagination.per_page]);
+            setMeta(response);
+            setPagina(response.current_page);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    }, [filtros]);
 
     useEffect(() => {
-        const timeout = setTimeout(() => { if (!showForm) loadData(1); }, 300);
+        const timeout = setTimeout(() => {
+            if (!showForm) loadData(pagina);
+        }, 300);
         return () => clearTimeout(timeout);
-    }, [filters.q, showForm, loadData]);
+    }, [filtros, pagina, showForm, loadData]);
+
+    const aplicarFiltroFecha = () => {
+        setFiltros({ ...filtrosEdicion });
+        setMostrarModalFecha(false);
+        setPagina(1);
+    };
+
+    const limpiarFiltros = () => {
+        setFiltros({
+            q: '',
+            fechaInicio: new Date().toLocaleDateString('en-CA'),
+            fechaFin: new Date().toLocaleDateString('en-CA'),
+            periodo: 'dia',
+            movimiento: '',
+            ubicacion: ''
+        });
+    };
 
     const handleEdit = (id: number) => { setSelectedId(id); setShowForm(true); };
     const handleNew = () => { setSelectedId(null); setShowForm(true); };
+    const handleBack = () => { setShowForm(false); setSelectedId(null); loadData(pagina); };
 
-    if (showForm) return <WalkAroundFormV2 id={selectedId} onCancel={() => { setShowForm(false); setSelectedId(null); }} />;
     const handleDelete = async (id: any) => {
-        if (!id) return;
-
         const r = await Swal.fire({
             icon: "warning",
             title: "¿Eliminar registro?",
@@ -103,269 +112,246 @@ const TablaWalkAround = () => {
             confirmButtonColor: "#dc2626",
             confirmButtonText: "Eliminar",
             cancelButtonText: "Cancelar",
+            reverseButtons: true
         });
 
         if (!r.isConfirmed) return;
 
         try {
             await deleteWalkaround(id);
-
-            Swal.fire("Eliminado", `Registro #${id} eliminado con éxito`, "success");
-
-            loadData(pagination.current_page);
-
+            Swal.fire({ icon: "success", title: "Eliminado", timer: 1500, showConfirmButton: false });
+            loadData(pagina);
         } catch (error) {
-            console.error("Error al eliminar:", error);
             Swal.fire("Error", "No se pudo eliminar el registro", "error");
         }
     };
+
     return (
-        <div className="min-h-screen bg-slate-50/50 p-4 lg:p-8 font-sans">
-            <div className="max-w-[1400px] mx-auto">
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
-                    <div>
+        <>
+            <div className="p-6 bg-[#f3f4f6] min-h-screen relative text-sm">
+                <div className="space-y-4 animate-in fade-in duration-500">
 
-                        <h1 className="text-4xl font-black text-slate-900 tracking-tight">Walkaround </h1>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3">
-                        <div className="relative group flex-1 md:flex-none">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" size={18} />
-                            <input
-                                name="q"
-                                value={filters.q}
-                                onChange={(e) => setFilters(prev => ({ ...prev, q: e.target.value }))}
-                                placeholder="Buscar matrícula..."
-                                className="bg-white border-0 shadow-sm ring-1 ring-slate-200 rounded-2xl py-3 pl-11 pr-4 w-full md:w-72 focus:ring-2 focus:ring-indigo-600 outline-none text-sm transition-all"
-                            />
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                        <div>
+                            <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Walkaround</h2>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Inspección de Aeronaves</p>
                         </div>
-                        <button
-                            onClick={() => setShowFilterModal(true)}
-                            className="bg-white p-3 rounded-2xl shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 transition-all active:scale-95"
-                        >
-                            <SlidersHorizontal size={20} className="text-slate-600" />
-                        </button>
-                        <button
-                            onClick={handleNew}
-                            className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 active:scale-95"
-                        >
-                            <Plus size={20} strokeWidth={3} />
-                            <span>Nuevo Registro</span>
-                        </button>
+
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setMostrarFiltros(!mostrarFiltros)}
+                                className={`flex items-center gap-2 text-[10px] font-black px-4 py-2 rounded border transition-all ${mostrarFiltros ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                            >
+                                <Filter size={14} />
+                                <span>{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
+                            </button>
+
+                            <button
+                                onClick={handleNew}
+                                className="bg-indigo-600 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-indigo-700 transition-all active:scale-95 uppercase tracking-wider"
+                            >
+                                + NUEVO REGISTRO
+                            </button>
+                        </div>
                     </div>
-                </div>
-                <div className="bg-white rounded-[2.5rem] border border-slate-200/60 shadow-xl shadow-slate-200/40 overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-slate-50/50 border-b border-slate-100">
-                                    <th className="px-8 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest">Información Aeronave</th>
-                                    <th className="px-6 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest">Tipo</th>
-                                    <th className="px-6 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest">Origen/Destino</th>
-                                    <th className="px-6 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest text-center">Fecha y Hora</th>
-                                    <th className="px-8 py-5 text-[11px] font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-50">
-                                {loading ? (
-                                    <tr>
-                                        <td colSpan={5} className="py-24 text-center">
-                                            <div className="flex flex-col items-center gap-3">
-                                                <div className="relative">
-                                                    <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
-                                                    <Plane className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-indigo-600" size={16} />
-                                                </div>
-                                                <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Actualizando flota...</span>
+
+                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[900px]">
+                                <thead>
+                                    <tr className="bg-white border-b border-slate-100">
+                                        <th className="px-4 py-4 text-[9px] font-black uppercase text-slate-400 text-center w-10">#</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400">Matrícula/Equipo</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center">Tipo</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center">Origen / Destino</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center">Fecha y Hora</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-right">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr className={`bg-slate-50 border-b border-slate-200 overflow-hidden transition-all duration-300 ${mostrarFiltros ? 'opacity-100' : 'hidden'}`}>
+                                        <td className="px-2 py-2 text-center">
+                                            <button onClick={limpiarFiltros} className="text-slate-400 hover:text-red-500"><X size={14} /></button>
+                                        </td>
+                                        <td className="px-2 py-2">
+                                            <div className="relative">
+                                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={12} />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Matrícula..."
+                                                    className="w-full pl-7 text-[10px] border border-slate-200 p-1 rounded bg-white outline-none focus:border-indigo-400 uppercase"
+                                                    value={filtros.q}
+                                                    onChange={(e) => setFiltros({ ...filtros, q: e.target.value })}
+                                                />
                                             </div>
                                         </td>
+                                        <td className="px-2 py-2 text-center">
+                                            <select
+                                                className="w-full text-[10px] border border-slate-200 p-1 rounded bg-white outline-none focus:border-indigo-400 uppercase"
+                                                value={filtros.movimiento}
+                                                onChange={(e) => setFiltros({ ...filtros, movimiento: e.target.value })}
+                                            >
+                                                <option value="">TODOS</option>
+                                                <option value="entrada">ENTRADA</option>
+                                                <option value="salida">SALIDA</option>
+                                            </select>
+                                        </td>
+                                        <td className="px-2 py-2">
+                                            <div className="relative">
+                                                <MapPin className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={12} />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Lugar..."
+                                                    className="w-full pl-7 text-[10px] border border-slate-200 p-1 rounded bg-white outline-none focus:border-indigo-400 uppercase"
+                                                    value={filtros.ubicacion}
+                                                    onChange={(e) => setFiltros({ ...filtros, ubicacion: e.target.value })}
+                                                />
+                                            </div>
+                                        </td>
+                                        <td className="px-2 py-2">
+                                            <button onClick={() => setMostrarModalFecha(true)} className="w-full flex items-center justify-between text-[10px] border border-slate-200 p-1.5 rounded bg-white hover:border-blue-400 shadow-sm transition-colors">
+                                                <div className="flex items-center gap-1 overflow-hidden font-bold text-slate-600 uppercase">
+                                                    <Calendar size={12} className="text-blue-500" />
+                                                    {filtros.periodo === 'dia' ? filtros.fechaInicio : filtros.periodo.toUpperCase()}
+                                                </div>
+                                                <ChevronDown size={12} className="text-slate-400" />
+                                            </button>
+                                        </td>
+                                        <td></td>
                                     </tr>
-                                ) : data.length > 0 ? (
-                                    data.map((item: any) => {
+
+                                    {loading ? (
+                                        <tr><td colSpan={6} className="py-20 text-center"><Loader2 className="animate-spin text-indigo-500 mx-auto" size={32} /></td></tr>
+                                    ) : data.map((item: any, index: number) => {
+                                        const nFila = (pagina - 1) * (meta?.per_page || 20) + (index + 1);
                                         return (
-                                            <tr key={item.id} className="group hover:bg-slate-50/50 transition-all">
-                                                <td className="px-8 py-5">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 duration-300 bg-gray-50 text-gray-600}`}>
-                                                            <Plane size={22} strokeWidth={2.5} />
+                                            <tr key={item.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors">
+                                                <td className="px-4 py-4 text-center font-bold text-[10px] text-slate-400">{nFila}</td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                                                            <Plane size={16} />
                                                         </div>
                                                         <div>
-                                                            <p className="font-black text-slate-900 text-lg leading-none mb-1 uppercase">{item.matricula}</p>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md uppercase tracking-tight">{item.tipo_aeronave}</span>
-                                                            </div>
+                                                            <p className="font-black text-slate-800 text-sm leading-none uppercase tracking-tighter">{item.matricula}</p>
+                                                            <p className="text-[9px] font-bold text-slate-400 uppercase">{item.tipo_aeronave}</p>
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-5">
-                                                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider ${item.movimiento === 'entrada'
-                                                        ? 'bg-emerald-100/50 text-emerald-700 ring-1 ring-emerald-200'
-                                                        : 'bg-orange-100/50 text-orange-700 ring-1 ring-orange-200'
-                                                        }`}>
-                                                        {item.movimiento === 'entrada' ? <ArrowDownLeft size={14} strokeWidth={3} /> : <ArrowUpRight size={14} strokeWidth={3} />}
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter ${item.movimiento === 'entrada' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-orange-50 text-orange-600 border border-orange-100'}`}>
+                                                        {item.movimiento === 'entrada' ? <ArrowDownLeft size={10} /> : <ArrowUpRight size={10} />}
                                                         {item.movimiento}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-5">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="p-2 bg-slate-50 rounded-lg group-hover:bg-white transition-colors">
-                                                            <MapPin size={16} className="text-slate-400" />
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-sm font-bold text-slate-700">
-                                                                {item.movimiento === 'entrada' ? item.procedensia : item.destino}
-                                                            </span>
-                                                        </div>
-                                                    </div>
+                                                <td className="px-6 py-4 text-center uppercase text-xs font-bold text-slate-700">
+                                                    {item.movimiento === 'entrada' ? item.procedensia : item.destino}
                                                 </td>
-                                                <td className="px-6 py-5">
-                                                    <div className="flex flex-col items-center justify-center bg-slate-50/50 group-hover:bg-white p-2 rounded-2xl transition-colors border border-transparent group-hover:border-slate-100">
-
-                                                        <span className="text-[9px] font-bold text-slate-400 block lowercase first-letter:uppercase">{new Date(item.fecha).toLocaleDateString()}</span>
-                                                        <span className="font-bold text-sm">{item.hora.substring(0, 5)}</span>
-                                                    </div>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="text-[10px] font-bold text-slate-400 block">{new Date(item.fecha).toLocaleDateString()}</span>
+                                                    <span className="text-sm font-black text-slate-700">{item.hora.substring(0, 5)}</span>
                                                 </td>
-                                                <td className="px-8 py-5 text-right">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        {(esAdminOFbo) && (
-                                                            //editar
-                                                            <button
-                                                                onClick={() => handleEdit(item.id)}
-                                                                className="p-2.5 text-slate-400 hover:text-white hover:bg-indigo-600 rounded-xl transition-all shadow-sm active:scale-90"
-                                                                title="Editar inspección"
-                                                            >
-                                                                <Edit2 size={18} />
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        {esAdminOFbo && (
+                                                            <button onClick={() => handleEdit(item.id)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Edit2 size={16} /></button>
+                                                        )}
+                                                        {(esAdminOFbo || esJefe || esEmpleado) && (
+                                                            <button onClick={() => { setFirmId(item.id); setFirmOpen(true); }} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors" title="Firmar">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 17c3.333 -3.333 5 -6 5 -8c0 -3 -1 -3 -2 -3s-2.032 1.085 -2 3c.034 2.048 1.658 4.877 2.5 6c1.5 2 2.5 2.5 3.5 1l2 -3c.333 2.667 1.333 4 3 4c.53 0 2.639 -2 3 -2c.517 0 1.517 .667 3 2" /></svg>
                                                             </button>
                                                         )}
-
-                                                        {(esAdminOFbo || esJefe || esJEmpleado) && (
-                                                            //firmas
-                                                            <button
-                                                                onClick={() => {
-                                                                    setFirmId(item.id);
-                                                                    setFirmOpen(true);
-                                                                }}
-                                                                className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-900 rounded-xl transition-all shadow-sm active:scale-90"
-                                                                title="Firmar"
-                                                            >
-                                                                <svg
-                                                                    xmlns="http://www.w3.org/2000/svg"
-                                                                    width="20"
-                                                                    height="20"
-                                                                    viewBox="0 0 24 24"
-                                                                    fill="none"
-                                                                    stroke="currentColor"
-                                                                    strokeWidth="2"
-                                                                    strokeLinecap="round"
-                                                                    strokeLinejoin="round"
-                                                                >
-                                                                    <path d="M3 17c3.333 -3.333 5 -6 5 -8c0 -3 -1 -3 -2 -3s-2.032 1.085 -2 3c.034 2.048 1.658 4.877 2.5 6c1.5 2 2.5 2.5 3.5 1l2 -3c.333 2.667 1.333 4 3 4c.53 0 2.639 -2 3 -2c.517 0 1.517 .667 3 2" />
-                                                                </svg>
-                                                            </button>
-                                                         )}
-
-                                                        {(esAdminOFbo) && (
-                                                            //pdf
-                                                            <button
-                                                                type="button"
-                                                                className="p-2.5 text-slate-400 hover:text-white hover:bg-amber-600 rounded-xl transition-all shadow-sm active:scale-90"
-                                                                title="Exportar PDF"
-                                                                onClick={() => setPdfId(item.id)}
-                                                            >
-                                                                <svg
-                                                                    xmlns="http://www.w3.org/2000/svg"
-                                                                    width="20"
-                                                                    height="20"
-                                                                    viewBox="0 0 24 24"
-                                                                    fill="none"
-                                                                    stroke="currentColor"
-                                                                    strokeWidth="2"
-                                                                    strokeLinecap="round"
-                                                                    strokeLinejoin="round"
-                                                                >
-                                                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                                                    <path d="M7 10l5 5 5-5" />
-                                                                    <path d="M12 15V3" />
-                                                                </svg>
-                                                            </button>
-                                                        )}
-
-                                                        {(esAdminOFbo) && (
-                                                            //eliminar
-                                                            <button
-                                                                type="button"
-                                                                className="p-2.5 text-slate-400 hover:text-white hover:bg-red-600 rounded-xl transition-all shadow-sm active:scale-90"
-                                                                title="Eliminar"
-                                                                onClick={() => handleDelete(item.id)}
-                                                            >
-                                                                <Trash2 size={18} />
-                                                            </button>
+                                                        {esAdminOFbo && (
+                                                            <>
+                                                                <button onClick={() => setPdfId(item.id)} className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]">PDF</button>
+                                                                <button onClick={() => handleDelete(item.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={16} /></button>
+                                                            </>
                                                         )}
                                                     </div>
                                                 </td>
                                             </tr>
                                         );
-                                    })
-                                ) : (
-                                    <tr>
-                                        <td colSpan={5} className="py-32 text-center">
-                                            <div className="max-w-xs mx-auto flex flex-col items-center">
-                                                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                                                    <Search size={24} className="text-slate-200" />
-                                                </div>
-                                                <p className="text-slate-900 font-bold mb-1 text-lg">Sin resultados</p>
-                                                <p className="text-slate-400 text-sm">No encontramos registros que coincidan con tu búsqueda.</p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                    <div className="px-8 py-6 bg-slate-50/30 flex items-center justify-between border-t border-slate-100">
-                        <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Mostrando</span>
-                            <span className="px-3 py-1 bg-white ring-1 ring-slate-200 rounded-lg text-sm font-bold text-slate-900">{data.length}</span>
-                            <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">de {pagination.total}</span>
-                        </div>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => loadData(pagination.current_page - 1)}
-                                disabled={pagination.current_page === 1}
-                                className="px-4 py-2 bg-white ring-1 ring-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-30 transition-all font-bold text-xs flex items-center gap-2 text-slate-600 shadow-sm"
-                            >
-                                <ChevronLeft size={16} strokeWidth={3} /> Anterior
-                            </button>
-                            <button
-                                onClick={() => loadData(pagination.current_page + 1)}
-                                disabled={pagination.current_page === pagination.last_page}
-                                className="px-4 py-2 bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-30 transition-all font-bold text-xs flex items-center gap-2 text-white shadow-lg shadow-indigo-100"
-                            >
-                                Siguiente <ChevronRight size={16} strokeWidth={3} />
-                            </button>
+                                    })}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
+
+                    {meta && meta.last_page > 1 && (
+                        <div className="flex items-center justify-between bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                            <span className="text-[10px] font-black text-slate-500 uppercase">PÁGINA {meta.current_page} DE {meta.last_page}</span>
+                            <div className="flex gap-1">
+                                <button disabled={pagina === 1} onClick={() => setPagina(pagina - 1)} className="px-3 py-1 border border-slate-200 rounded text-[10px] font-black hover:bg-slate-50 disabled:opacity-50">ANTERIOR</button>
+                                <button disabled={pagina === meta.last_page} onClick={() => setPagina(pagina + 1)} className="px-3 py-1 border border-slate-200 rounded text-[10px] font-black hover:bg-slate-50 disabled:opacity-50">SIGUIENTE</button>
+                            </div>
+                        </div>
+                    )}
                 </div>
+                {showForm && (
+                    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={handleBack}></div>
+                        <div className="relative z-10 w-full max-w-6xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+                            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-lg font-black uppercase text-slate-800 tracking-tighter">{selectedId ? 'Editar Walkaround' : 'Nuevo Walkaround'}</h3>
+                                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Inspección de seguridad de aeronave</p>
+                                </div>
+                                <button onClick={handleBack} className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors"><X size={20} /></button>
+                            </div>
+                            <div className="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
+                                <WalkAroundFormV2 id={selectedId} onCancel={handleBack} />
+                            </div>
+                        </div>
+                    </div>
+                )}
+                {mostrarModalFecha && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMostrarModalFecha(false)}></div>
+                        <div className="relative z-10 bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden">
+                            <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
+                                <h3 className="text-sm font-black uppercase text-slate-700">Período</h3>
+                                <button onClick={() => setMostrarModalFecha(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+                            </div>
+                            <div className="p-4 space-y-4">
+                                <div className="flex bg-slate-100 p-1 rounded-lg">
+                                    {['dia', 'rango', 'mes', 'año'].map((modo) => (
+                                        <button key={modo} onClick={() => setFiltrosEdicion({ ...filtrosEdicion, periodo: modo })} className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all uppercase ${filtrosEdicion.periodo === modo ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>{modo}</button>
+                                    ))}
+                                </div>
+                                <div className="space-y-3">
+                                    {filtrosEdicion.periodo === 'dia' && (
+                                        <input type="date" className="w-full border border-slate-200 p-2 rounded-lg text-sm" value={filtrosEdicion.fechaInicio} onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: e.target.value, fechaFin: e.target.value })} />
+                                    )}
+                                    {filtrosEdicion.periodo === 'rango' && (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <input type="date" className="w-full border border-slate-200 p-2 rounded-lg text-sm" value={filtrosEdicion.fechaInicio} onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: e.target.value })} />
+                                            <input type="date" className="w-full border border-slate-200 p-2 rounded-lg text-sm" value={filtrosEdicion.fechaFin} onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaFin: e.target.value })} />
+                                        </div>
+                                    )}
+                                    {filtrosEdicion.periodo === 'mes' && (
+                                        <input type="month" className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => {
+                                            const [y, m] = e.target.value.split('-');
+                                            setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${y}-${m}-01`, fechaFin: `${y}-${m}-31` });
+                                        }} />
+                                    )}
+                                    {filtrosEdicion.periodo === 'año' && (
+                                        <input type="number" min="2020" max="2030" placeholder="Año" className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${e.target.value}-01-01`, fechaFin: `${e.target.value}-12-31` })} />
+                                    )}
+                                </div>
+                                <button onClick={aplicarFiltroFecha} className="w-full bg-slate-800 text-white py-3 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">Aplicar Filtro</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
-            <WalkAroundPdfExporter
-                id={pdfId}
-                onDone={handlePdfDone}
-            />
+
+            <WalkAroundPdfExporter id={pdfId} onDone={() => setPdfId(null)} />
             <WalkAroundFirmaModal
                 open={firmOpen}
                 id={firmId}
-                onClose={() => {
-                    setFirmOpen(false);
-                    setFirmId(null);
-                }}
+                onClose={() => { setFirmOpen(false); setFirmId(null); loadData(pagina); }}
             />
-            <WalkAroundFilterModal
-                open={showFilterModal}
-                onClose={() => setShowFilterModal(false)}
-                filters={filters}
-                setFilters={setFilters}
-                onApply={handleApplyFilters}
-            />
-        </div>
+        </>
     );
 };
 

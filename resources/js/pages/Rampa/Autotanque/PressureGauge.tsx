@@ -26,7 +26,7 @@ const PressureGauge = ({ value, onChange }: PressureGaugeProps) => {
 
     return (
         <div className="flex flex-col items-center bg-slate-50 p-8 rounded-[3rem] shadow-xl border border-slate-200">
-            <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] mb-6">Differential Pressure</h3>
+            <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] mb-6">Presión diferencial</h3>
 
             <div className="relative touch-none select-none">
                 <svg

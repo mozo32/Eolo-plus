@@ -18,3 +18,29 @@ export async function ultimaLectura() {
     if (!res.ok) return [];
     return await res.json();
 }
+
+export async function obtenerResponsableHistoricosApi(matricula: string) {
+    const res = await fetch(`/api/Remision/buscarResponsable/${encodeURIComponent(matricula)}`, {
+        method: "GET",
+        headers: { 'Accept': 'application/json' },
+        credentials: "same-origin",
+    });
+    if (!res.ok) return [];
+    return await res.json();
+}
+export async function excelRemisionesApi(filtros = {}) {
+    const params = new URLSearchParams(filtros).toString();
+
+    const res = await fetch(`/api/Remision/Excel?${params}`, {
+        method: "GET",
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+        },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || "Error al obtener registros");
+    return data;
+}

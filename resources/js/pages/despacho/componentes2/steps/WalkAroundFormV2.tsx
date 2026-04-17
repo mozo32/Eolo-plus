@@ -156,14 +156,6 @@ const WalkAroundFormV2 = ({ id, onCancel }: Props) => {
 
     return (
         <div className="min-h-screen bg-slate-50 p-4 md:p-8">
-            <button
-                onClick={() => {
-                    if (onCancel) onCancel();
-                }}
-                className="text-sm font-bold text-slate-500 hover:text-blue-600 flex items-center gap-2 transition-colors"
-            >
-                ← Volver a la lista
-            </button>
             <div className="max-w-4xl mx-auto">
                 <div className="mb-8 px-4">
                     <div className="flex justify-between mb-2">

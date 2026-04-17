@@ -3,7 +3,7 @@ import { useForm, usePage } from '@inertiajs/react';
 import Swal from 'sweetalert2';
 import PressureGauge from './PressureGauge';
 import MatriculaAutocomplete from '@/pages/despacho/components/walkAround/MatriculaAutocomplete';
-import { ultimaLectura } from '@/stores/apiRemision';
+import { ultimaLectura, obtenerResponsableHistoricosApi } from '@/stores/apiRemision';
 import { updateRemision } from '@/stores/apiAutoTanque';
 
 interface EoloFormData {
@@ -116,7 +116,8 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
     const user = auth?.user;
     const canvasClienteRef = useRef<HTMLCanvasElement>(null);
     const canvasOperadorRef = useRef<HTMLCanvasElement>(null);
-
+    const [sugerenciasNombres, setSugerenciasNombres] = useState<string[]>([]);
+    const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
     const { data, setData, reset } = useForm<EoloFormData>({
         fecha: today,
         operador: user?.name || '',
@@ -137,14 +138,6 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
     const isLecturaInvalid = data.lecturaFinal !== '' &&
         data.lecturaInicial !== '' &&
         Number(data.lecturaFinal) < Number(data.lecturaInicial);
-
-    const handleSwapLecturas = () => {
-        setData(prev => ({
-            ...prev,
-            lecturaInicial: prev.lecturaFinal,
-            lecturaFinal: prev.lecturaInicial
-        }));
-    };
 
     const getXsrfToken = () => {
         return decodeURIComponent(
@@ -172,7 +165,15 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
         setData(name, value.toUpperCase());
     };
 
-    const handleAeronaveData = (aeronave: any) => {
+    const handleAeronaveData = async (aeronave: any) => {
+
+        try {
+            const nombres = await obtenerResponsableHistoricosApi(aeronave.matricula);
+            setSugerenciasNombres(nombres);
+            setMostrarSugerencias(true);
+        } catch (error) {
+            console.error(error);
+        }
         setData(prev => ({
             ...prev,
             aeronaveTipo: (aeronave.tipo || '').toUpperCase(),
@@ -291,7 +292,6 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
             const consultarUltimaLectura = async () => {
                 try {
                     const resultado = await ultimaLectura();
-                    console.log(resultado);
 
                     if (resultado && resultado.lectura_final) {
                         setData('lecturaInicial', resultado.lectura_final);
@@ -303,14 +303,20 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
 
             consultarUltimaLectura();
         }
-    }, []);
+    }, [isEdit]);
+    const formatVisual = (val: string | number) => {
+        if (!val && val !== 0) return "";
+        let stringVal = val.toString().split('.')[0];
+        const numericValue = stringVal.replace(/\D/g, "");
+        return numericValue.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    };
     return (
         <div className="min-h-screen bg-[#f8fafc] p-6 font-sans">
             <div className="mx-auto max-w-5xl">
                 <header className="mb-8 flex items-end justify-between px-2">
                     <div>
-                        <h1 className="text-4xl font-black text-slate-900 tracking-tight">EOLO<span className="text-blue-600">.</span></h1>
-                        <p className="text-sm font-medium text-slate-500 uppercase tracking-widest">Aviation Fuel Control</p>
+                        <h1 className="text-4xl font-black text-slate-900 tracking-tight">EOLO</h1>
+                        <p className="text-sm font-medium text-slate-500 uppercase tracking-widest">Control de combustible de aviación</p>
                     </div>
                     <div className="text-right">
                         <p className="text-xs font-bold text-slate-400 uppercase">Unidad Operativa</p>
@@ -320,7 +326,6 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
 
                 <div className="mb-6 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-wrap items-center justify-between gap-6">
                     <div className="flex items-center gap-4">
-                        <h2 className="text-xs font-black text-blue-600 uppercase tracking-tighter border-r pr-4 border-slate-200">Logística</h2>
                         <div className="flex gap-4">
                             <div>
                                 <label className="block text-[10px] font-bold text-slate-400 uppercase ml-1 mb-1">Operador Responsable</label>
@@ -342,8 +347,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                         </div>
                     </div>
                     <div className="flex gap-8 text-[11px] text-slate-500">
-                        <p><strong>Producto:</strong> Turbosina</p>
-                        <p><strong>Placas:</strong> LC-44-020</p>
+                        <p><strong>Producto:</strong> Turbosina JET A</p>
                     </div>
                 </div>
 
@@ -359,26 +363,69 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                     <div className="md:col-span-8 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
                         <h2 className="text-xs font-black text-blue-600 uppercase mb-4 tracking-tighter">Detalles del Vuelo</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="md:col-span-2">
-                                <input
-                                    placeholder="Nombre del Cliente"
-                                    value={data.cliente}
-                                    onChange={e => handleUppercaseChange('cliente', e.target.value)}
-                                    className="w-full border-slate-100 border-2 rounded-2xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-all uppercase"
-                                />
-                            </div>
-                            <input
-                                placeholder="Forma de Pago"
-                                value={data.formaPago}
-                                onChange={e => handleUppercaseChange('formaPago', e.target.value)}
-                                className="w-full border-slate-100 border-2 rounded-2xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-all uppercase"
-                            />
                             <MatriculaAutocomplete
                                 matricula={data.matricula}
                                 onMatriculaChange={(val) => setData('matricula', val.toUpperCase())}
                                 onAeronaveData={handleAeronaveData}
                                 onNuevaMatricula={() => { }}
                             />
+                            <input
+                                placeholder="Forma de Pago"
+                                value={data.formaPago}
+                                onChange={e => handleUppercaseChange('formaPago', e.target.value)}
+                                className="w-full border-slate-100 border-2 rounded-2xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-all uppercase"
+                            />
+                            <div className="relative group">
+                                <input
+                                    placeholder="Nombre del Cliente"
+                                    value={data.cliente}
+                                    onChange={e => {
+                                        handleUppercaseChange('cliente', e.target.value);
+                                        setMostrarSugerencias(true);
+                                    }}
+                                    onFocus={() => setMostrarSugerencias(true)}
+                                    className="w-full border-slate-100 border-2 rounded-2xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-all uppercase"
+                                />
+                                {mostrarSugerencias && sugerenciasNombres.length > 0 && (
+                                    <>
+                                        <div
+                                            className="fixed inset-0 z-10"
+                                            onClick={() => setMostrarSugerencias(false)}
+                                        ></div>
+
+                                        <ul className="absolute z-20 w-full mt-2 bg-white border border-slate-100 rounded-2xl shadow-xl max-h-48 overflow-y-auto overflow-x-hidden py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                                            <li className="px-4 py-1 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 mb-1">
+                                                Sugerencias históricas
+                                            </li>
+                                            {sugerenciasNombres
+                                                .filter(nombre =>
+                                                    nombre.toLowerCase().includes(data.cliente.toLowerCase())
+                                                )
+                                                .map((nombre, index) => (
+                                                    <li
+                                                        key={index}
+                                                        onClick={() => {
+                                                            setData('cliente', nombre.toUpperCase());
+                                                            setMostrarSugerencias(false);
+                                                        }}
+                                                        className="px-4 py-2 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer transition-colors flex items-center gap-2 font-medium"
+                                                    >
+                                                        <svg className="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                        {nombre}
+                                                    </li>
+                                                ))
+                                            }
+                                            {sugerenciasNombres.filter(n => n.toLowerCase().includes(data.cliente.toLowerCase())).length === 0 && (
+                                                <li className="px-4 py-3 text-xs text-slate-400 italic">
+                                                    No hay coincidencias exactas...
+                                                </li>
+                                            )}
+                                        </ul>
+                                    </>
+                                )}
+                            </div>
                             <input
                                 placeholder="Tipo de Aeronave"
                                 value={data.aeronaveTipo}
@@ -400,8 +447,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
 
                         <div className="mt-8 p-6 bg-slate-50/50 rounded-2xl">
                             <div className="flex items-center gap-2 mb-6">
-                                <div className="w-1.5 h-4 bg-blue-500 rounded-full"></div>
-                                <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest">Cronología</h2>
+                                <h2 className="text-xs font-black text-blue-600 uppercase mb-4 tracking-tighter">Cronología</h2>
                             </div>
                             <div className="space-y-4">
                                 <div className="relative pl-6 border-l-2 border-slate-200 space-y-8">
@@ -451,46 +497,41 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                         <div className="grid grid-cols-1 lg:grid-cols-12">
                             <div className="lg:col-span-5 p-8 flex flex-col justify-center border-y lg:border-y-0 lg:border-r border-slate-100">
                                 <div className="flex items-center gap-2 mb-6 justify-center lg:justify-start">
-                                    <div className="w-1.5 h-4 bg-blue-600 rounded-full"></div>
-                                    <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest">Lecturas (Lts)</h2>
+                                    <h2 className="text-xs font-black text-blue-600 uppercase mb-4 tracking-tighter">Lecturas (Lts)</h2>
                                 </div>
                                 <div className="space-y-4 relative">
                                     <div className="group">
-                                        <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1 ml-2 text-center lg:text-left">Inicial</label>
+                                        <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1 ml-2 text-center lg:text-left">Lectura Inicial</label>
                                         <input
-                                            type="number"
+                                            type="text"
                                             placeholder="000000"
-                                            value={data.lecturaInicial}
-                                            onChange={e => setData('lecturaInicial', e.target.value)}
+                                            value={formatVisual(data.lecturaInicial)}
+                                            onChange={e => {
+                                                const rawValue = e.target.value.replace(/\D/g, "");
+                                                setData('lecturaInicial', rawValue);
+                                            }}
                                             className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-3xl font-mono text-slate-700 text-center focus:bg-white focus:border-blue-200 outline-none transition-all shadow-inner"
                                         />
                                     </div>
 
-                                    <div className="flex justify-center -my-4 relative z-20">
-                                        <button
-                                            type="button"
-                                            onClick={handleSwapLecturas}
-                                            className="bg-white p-2 rounded-full border border-slate-200 shadow-md hover:shadow-lg hover:scale-110 active:scale-95 transition-all group/swap"
-                                        >
-                                            <svg className="w-6 h-6 text-blue-500 group-hover/swap:rotate-180 transition-transform duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M7 16V4m0 0L3 8m4-4l4 4m9 4v12m0 0l4-4m-4 4l-4-4" />
-                                            </svg>
-                                        </button>
-                                    </div>
-
                                     <div className="group">
                                         <label className={`block text-[10px] uppercase font-bold mb-1 ml-2 tracking-widest text-center lg:text-left ${isLecturaInvalid ? 'text-red-500' : 'text-blue-600'}`}>
-                                            Final
+                                            Lectura Final
                                         </label>
                                         <input
-                                            type="number"
-                                            placeholder="000000"
-                                            value={data.lecturaFinal}
-                                            onChange={e => setData('lecturaFinal', e.target.value)}
-                                            className={`w-full border-2 rounded-2xl px-6 py-4 text-3xl font-mono text-center outline-none transition-all ${isLecturaInvalid
-                                                ? 'bg-red-50 border-red-200 text-red-700 focus:border-red-400 shadow-red-50'
-                                                : 'bg-blue-50 border-blue-100 text-blue-700 focus:bg-white focus:border-blue-400 shadow-blue-50'
-                                                }`}
+                                            type="text"
+                                            inputMode="numeric"
+                                            placeholder="000,000"
+                                            value={formatVisual(data.lecturaFinal)}
+                                            onChange={e => {
+                                                const rawValue = e.target.value.replace(/\D/g, "");
+                                                setData('lecturaFinal', rawValue);
+                                            }}
+                                            className={`w-full border-2 rounded-2xl px-6 py-4 text-3xl font-mono text-center outline-none transition-all ${
+                                                isLecturaInvalid
+                                                    ? 'bg-red-50 border-red-200 text-red-700 focus:border-red-400 shadow-red-50'
+                                                    : 'bg-blue-50 border-blue-100 text-blue-700 focus:bg-white focus:border-blue-400 shadow-blue-50'
+                                            }`}
                                         />
                                         {isLecturaInvalid && (
                                             <p className="text-[10px] text-red-500 font-black uppercase mt-2 text-center animate-pulse">
@@ -518,8 +559,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
 
                         <div className="border-t border-slate-100 p-8 bg-white">
                             <div className="flex items-center gap-2 mb-6">
-                                <div className="w-1.5 h-4 bg-slate-800 rounded-full"></div>
-                                <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest">Validación y Firmas</h2>
+                                <h2 className="text-xs font-black text-blue-600 uppercase mb-4 tracking-tighter">Validación y Firmas</h2>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <SignaturePad label="Firma del Cliente / Receptor" canvasRef={canvasClienteRef} onClear={() => { }} />
@@ -530,10 +570,10 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                                 onClick={handleSubmit}
                                 disabled={isSubmitting || isLecturaInvalid}
                                 className={`mt-10 w-full p-4 rounded-2xl font-bold text-white transition-all ${isLecturaInvalid
-                                        ? 'bg-slate-800'
-                                        : isSubmitting
-                                            ? 'bg-slate-400'
-                                            : 'bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100'
+                                    ? 'bg-slate-800'
+                                    : isSubmitting
+                                        ? 'bg-slate-400'
+                                        : 'bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100'
                                     }`}
                             >
                                 {isSubmitting ? (
