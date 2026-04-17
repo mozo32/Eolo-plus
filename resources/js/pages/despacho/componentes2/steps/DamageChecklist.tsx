@@ -170,8 +170,9 @@ const VehicleInspection = ({ aeronaveType, inspeccion, setInspeccion }: Props) =
                         <div className="grid grid-cols-1 gap-4 pb-10">
                             {currentItems.map((item) => {
                                 const partData = inspeccion[item] || { izq: false, der: false, damages: [] };
-                                const isClean = partData.damages.includes('sin_danio');
-                                const hasDamages = partData.damages.length > 0 && !isClean;
+                                const damagesList = partData.damages || [];
+                                const isClean = damagesList.includes('sin_danio');
+                                const hasDamages = damagesList.length > 0 && !isClean;
 
                                 return (
                                     <div
@@ -212,10 +213,11 @@ const VehicleInspection = ({ aeronaveType, inspeccion, setInspeccion }: Props) =
                                                     type='button'
                                                     key={d.key}
                                                     onClick={() => handleToggle(item, d.key)}
-                                                    className={`py-3 rounded-xl text-[9px] font-black border-2 transition-all ${partData.damages.includes(d.key)
-                                                            ? (d.key === 'sin_danio' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-amber-500 border-amber-500 text-white')
-                                                            : 'bg-white border-slate-50 text-slate-400 hover:border-slate-200 hover:text-slate-600'
-                                                        }`}
+                                                    className={`py-3 rounded-xl text-[9px] font-black border-2 transition-all ${
+                                                        damagesList.includes(d.key) // <--- Aquí usamos la lista protegida
+                                                        ? (d.key === 'sin_danio' ? 'bg-emerald-600 ...' : 'bg-amber-500 ...')
+                                                        : 'bg-white ...'
+                                                    }`}
                                                 >
                                                     {d.label}
                                                 </button>
