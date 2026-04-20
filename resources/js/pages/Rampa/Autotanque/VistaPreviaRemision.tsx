@@ -51,15 +51,15 @@ export default function VistaPreviaRemision({ data }: Props) {
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-700 pb-2">Registro de Tiempo</p>
                     <div className="space-y-3">
                         <div className="flex justify-between items-center">
-                            <span className="text-[10px] font-bold text-slate-400">LLEGADA</span>
+                            <span className="text-[10px] font-bold text-slate-400">LLEGADA DE AUTOTANQUE</span>
                             <span className="text-xs font-black">{data.hora_llegada}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                            <span className="text-[10px] font-bold text-slate-400">INICIO</span>
+                            <span className="text-[10px] font-bold text-slate-400">INICIO DE CARGA</span>
                             <span className="text-xs font-black">{data.hora_inicial?.substring(0, 5)}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                            <span className="text-[10px] font-bold text-slate-400">FINAL</span>
+                            <span className="text-[10px] font-bold text-slate-400">FINAL DE CARGA</span>
                             <span className="text-xs font-black">{data.hora_final}</span>
                         </div>
                     </div>

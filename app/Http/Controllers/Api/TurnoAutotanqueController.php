@@ -151,33 +151,50 @@ class TurnoAutotanqueController extends Controller
     }
     public function index(Request $request)
     {
-        $search = $request->query('search');
-        $fecha  = $request->query('date');
-        $perPage = $request->query('per_page', 10);
+        $id          = $request->query('id');
+        $responsable = $request->query('responsable');
+        $estado      = $request->query('estado');
+        $inspeccion  = $request->query('inspeccion');
+        $diferencia  = $request->query('diferencia');
+        $start       = $request->query('start');
+        $end         = $request->query('end');
+        $perPage     = $request->query('per_page', 15);
 
-        $turnos = TurnoAutotanque::query()
-            // Cargamos la relación para verificar la inspección
+        $query = TurnoAutotanque::query()
             ->with('inspeccion:id,turno_autotanque_id')
-            ->when($search, function ($query, $search) {
-                $query->where(function($q) use ($search) {
-                    $q->where('nombre', 'like', "%{$search}%")
-                    ->orWhere('nombreCierre', 'like', "%{$search}%");
-                });
-            })
-            ->when($fecha, function ($query, $fecha) {
-                $query->whereDate('fecha', $fecha);
-            })
-            ->where('status', 'A')
-            ->orderBy('id', 'desc')
-            ->paginate($perPage);
+            ->where('status', 'A');
+
+        $query->when($id, function ($q, $id) {
+            $q->where('id', $id);
+        });
+
+        $query->when($responsable, function ($q, $responsable) {
+            $q->where(function($sub) use ($responsable) {
+                $sub->where('nombre', 'like', "%{$responsable}%")
+                    ->orWhere('nombreCierre', 'like', "%{$responsable}%");
+            });
+        });
+
+        $query->when($start && $end, function ($q) use ($start, $end) {
+            if ($start === $end) {
+                $q->whereDate('fecha', $start);
+            } else {
+                $q->whereBetween('fecha', [
+                    $start . ' 00:00:00',
+                    $end . ' 23:59:59'
+                ]);
+            }
+        });
+
+        $query->when($diferencia !== null && $diferencia !== '', function ($q, $diferencia) {
+            $q->where('diferenciaFinal', 'like', "%{$diferencia}%");
+        });
+
+        $turnos = $query->orderBy('id', 'desc')->paginate($perPage);
 
         $turnos->getCollection()->transform(function ($turno) {
-            // 1. Verificación de Inspección (la que ya tenías)
             $turno->tiene_inspeccion = $turno->inspeccion !== null;
             unset($turno->inspeccion);
-
-            // 2. Verificación de Finalizado
-            // Comprobamos que todos los campos requeridos para el cierre tengan contenido
             $turno->finalizado = !empty($turno->nombreCierre) &&
                                 !empty($turno->fechaCierre) &&
                                 $turno->cmCierre !== null &&
@@ -186,6 +203,19 @@ class TurnoAutotanqueController extends Controller
 
             return $turno;
         });
+        if ($estado !== null && $estado !== '') {
+            $filtered = $turnos->getCollection()->filter(function ($item) use ($estado) {
+                return $item->finalizado == $estado;
+            });
+            $turnos->setCollection($filtered->values());
+        }
+
+        if ($inspeccion !== null && $inspeccion !== '') {
+            $filtered = $turnos->getCollection()->filter(function ($item) use ($inspeccion) {
+                return $item->tiene_inspeccion == $inspeccion;
+            });
+            $turnos->setCollection($filtered->values());
+        }
 
         return response()->json($turnos);
     }

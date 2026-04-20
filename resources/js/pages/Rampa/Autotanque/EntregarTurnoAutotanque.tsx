@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save } from 'lucide-react';
+import { Save, X } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { Header } from './Header';
 import { SeccionInicio } from './SeccionInicio';
@@ -9,6 +9,7 @@ import { SeccionCierre } from './SeccionCierre';
 import { BuscadorRemisiones } from './BuscadorRemisiones';
 import { ModalConceptosSuman } from './ModalConceptosSuman';
 import { guardarEntregarTurno, fetchTurnoActivo, fetchUltimoTotalizador, cancelarRemisionAPI } from '@/stores/apiAutoTanque';
+import { CheckEstadoAutotanque } from '../VerificacionEstadoAutotanque/CheckEstadoAutotanque';
 
 const TABLA_CALIBRACION: Record<number, number> = { 0: 0, 1: 38, 2: 76, 3: 114, 4: 152, 5: 190, 6: 228, 7: 266, 8: 304, 9: 342, 10: 380, 11: 418, 12: 456, 13: 493, 14: 559, 15: 624, 16: 690, 17: 756, 18: 822, 19: 888, 20: 954, 21: 994, 22: 1066, 23: 1137, 24: 1208, 25: 1279, 26: 1350, 27: 1422, 28: 1496, 29: 1574, 30: 1653, 31: 1731, 32: 1809, 33: 1887, 34: 1996, 35: 2085, 36: 2174, 37: 2263, 38: 2352, 39: 2441, 40: 2491, 41: 2587, 42: 2684, 43: 2780, 44: 2876, 45: 2999, 46: 3096, 47: 3193, 48: 3290, 49: 3388, 50: 3497 };
 
@@ -34,6 +35,7 @@ const EntregarTurnoAutotanque = ({ initialData, onSuccess }: { initialData?: any
     const [entradasASA, setEntradasASA] = useState<{ litros: number, remision: string }[]>([]);
     const [showBuscador, setShowBuscador] = useState(false);
     const [showSuman, setShowSuman] = useState(false);
+    const [showInspeccion, setShowInspeccion] = useState(false);
     const [cargando, setCargando] = useState(false);
 
     const obtenerFechaMexico = () => {
@@ -51,7 +53,6 @@ const EntregarTurnoAutotanque = ({ initialData, onSuccess }: { initialData?: any
         setCargando(true);
         try {
             const source = initialData?.data ? initialData.data : initialData;
-
             if (source && source.turno) {
                 const t = source.turno;
                 setIdTurno(t.id);
@@ -67,13 +68,11 @@ const EntregarTurnoAutotanque = ({ initialData, onSuccess }: { initialData?: any
                     litrosCierre: parseFloat(t.litrosCierre) || 0,
                     totalizadorCierre: t.totalizadorCierre
                 });
-
                 if (source.remision) {
                     setRemisiones(source.remision.map((r: any) => ({
                         id: r.id, folio: r.folio, litros: parseFloat(r.total_litros), isCancelled: r.status === 'N' || r.status === 'cancelado'
                     })));
                 }
-
                 if (source.sumaAutotanque) {
                     setEntradasASA(source.sumaAutotanque.map((s: any) => ({
                         litros: parseFloat(s.litros), remision: s.folio
@@ -84,7 +83,6 @@ const EntregarTurnoAutotanque = ({ initialData, onSuccess }: { initialData?: any
                 setRemisiones([]);
                 setEntradasASA([]);
                 const response = await fetchTurnoActivo();
-
                 if (response?.active && response.data) {
                     const active = response.data.turno;
                     setIdTurno(active.id);
@@ -99,13 +97,11 @@ const EntregarTurnoAutotanque = ({ initialData, onSuccess }: { initialData?: any
                         cmCierre: active.cmCierre || null,
                         totalizadorCierre: active.totalizadorCierre || null
                     }));
-
                     if (response.data.remision) {
                         setRemisiones(response.data.remision.map((r: any) => ({
                             id: r.id, folio: r.folio, litros: parseFloat(r.total_litros), isCancelled: r.status === 'N' || r.status === 'cancelado'
                         })));
                     }
-
                     if (response.data.sumaAutotanque) {
                         setEntradasASA(response.data.sumaAutotanque.map((s: any) => ({
                             litros: parseFloat(s.litros), remision: s.folio
@@ -187,7 +183,8 @@ const EntregarTurnoAutotanque = ({ initialData, onSuccess }: { initialData?: any
                 });
 
                 if (result.isConfirmed) {
-                    window.location.href = `/verificacionEstadoAutotanque?id=${turnoIdFinal}`;
+                    setIdTurno(turnoIdFinal);
+                    setShowInspeccion(true);
                 } else if (onSuccess) {
                     onSuccess();
                 }
@@ -198,7 +195,6 @@ const EntregarTurnoAutotanque = ({ initialData, onSuccess }: { initialData?: any
                     icon: 'success',
                     confirmButtonColor: '#2563eb',
                 });
-
                 if (onSuccess) onSuccess();
             }
 
@@ -215,9 +211,30 @@ const EntregarTurnoAutotanque = ({ initialData, onSuccess }: { initialData?: any
     }, [datos.totalizadorIni, totalVendidos]);
 
     return (
-        <div className="max-w-4xl mx-auto p-6 bg-gray-50 min-h-screen">
+        <div className="max-w-4xl mx-auto p-6 bg-gray-50 min-h-screen relative">
             {showBuscador && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"><BuscadorRemisiones onSelect={(res) => { if (remisiones.some(r => r.folio === res.folio)) return Swal.fire('Error', 'Ya existe', 'warning'); setRemisiones(prev => [...prev, { id: res.id, folio: res.folio, litros: Number(res.total_litros), isCancelled: res.status === 'cancelado' || res.status === 'N' }]); setShowBuscador(false); }} onClose={() => setShowBuscador(false)} foliosExistentes={remisiones.map(r => r.folio)} /></div>}
             {showSuman && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"><ModalConceptosSuman onAdd={(d) => { setEntradasASA(prev => [...prev, d]); setShowSuman(false); }} onClose={() => setShowSuman(false)} /></div>}
+            {showInspeccion && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="relative z-10 w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+                        <div className="absolute top-4 right-4 z-50">
+                            <button onClick={() => setShowInspeccion(false)} className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="max-h-[90vh] overflow-y-auto">
+                            <CheckEstadoAutotanque
+                                data={{ id: idTurno }}
+                                onSuccess={() => {
+                                    setShowInspeccion(false);
+                                    if (onSuccess) onSuccess();
+                                }}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <Header />
             <form className="bg-white shadow-xl rounded-b-lg p-6 space-y-8" onSubmit={e => e.preventDefault()}>
                 <SeccionInicio {...datos} onUpdate={handleUpdate} />

@@ -160,9 +160,26 @@ function RemisionPdfDoc({ data }: { data: any }) {
                 {/* Lecturas y Totales */}
                 <Text style={styles.sectionTitle}>Lecturas del Contador</Text>
                 <View style={styles.grid}>
-                    <View style={styles.col3}><Text style={styles.label}>Lectura Inicial</Text><Text style={styles.value}>{data.lectura_inicial} L</Text></View>
-                    <View style={styles.col3}><Text style={styles.label}>Lectura Final</Text><Text style={styles.value}>{data.lectura_final} L</Text></View>
-                    <View style={[styles.col3, { backgroundColor: "#e5e7eb" }]}><Text style={styles.label}>Total Suministrado</Text><Text style={[styles.value, { color: GREEN, fontSize: 12 }]}>{data.total_litros} L</Text></View>
+                    <View style={styles.col3}>
+                        <Text style={styles.label}>Lectura Inicial</Text>
+                        <Text style={styles.value}>
+                            {Number(data.lectura_inicial || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L
+                        </Text>
+                    </View>
+
+                    <View style={styles.col3}>
+                        <Text style={styles.label}>Lectura Final</Text>
+                        <Text style={styles.value}>
+                            {Number(data.lectura_final || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L
+                        </Text>
+                    </View>
+
+                    <View style={[styles.col3, { backgroundColor: "#e5e7eb" }]}>
+                        <Text style={styles.label}>Total Suministrado</Text>
+                        <Text style={[styles.value, { color: GREEN, fontSize: 12 }]}>
+                            {Number(data.total_litros || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L
+                        </Text>
+                    </View>
 
                     <View style={styles.col}><Text style={styles.label}>Presión Diferencial</Text><Text style={styles.value}>{data.presionDif} PSI</Text></View>
                     <View style={styles.col}><Text style={styles.label}>Forma de Pago</Text><Text style={styles.value}>{data.forma_pago}</Text></View>

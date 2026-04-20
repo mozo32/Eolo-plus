@@ -3,36 +3,54 @@ import Swal from 'sweetalert2';
 import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
 import EntregarTurnoAutotanque from './Autotanque/EntregarTurnoAutotanque';
-import UniversalTable from '../UniversalTable';
-import { Calendar, Plus, X, ChevronLeft, Edit2, AlertCircle, ClipboardList } from 'lucide-react';
+import { Calendar, Plus, X, ChevronLeft, Edit2, AlertCircle, ClipboardList, Filter, ChevronDown } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { fetchAutotanque, eliminarTurno, showAutotanque, fetchTurnoActivo } from '@/stores/apiAutoTanque';
 import PdfExporterAutotanque from './Autotanque/PdfExporterAutotanque';
 import { router } from '@inertiajs/react';
-import { verificacionEstadoAutotanque } from '@/routes';
+import { CheckEstadoAutotanque } from './VerificacionEstadoAutotanque/CheckEstadoAutotanque';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Reporte de Entrega de Turno' }];
 
 export default function ReporteEntregaTurno() {
     const [data, setData] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [filterDate, setFilterDate] = useState("");
-    const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
     const [meta, setMeta] = useState<any>(null);
     const [openForm, setOpenForm] = useState(false);
+    const [tipoModal, setTipoModal] = useState<'entrega' | 'inspeccion'>('entrega');
     const [pdfId, setPdfId] = useState<number | null>(null);
     const [detalle, setDetalle] = useState<any>(null);
     const [turnoPendiente, setTurnoPendiente] = useState<any>(null);
+    const [mostrarFiltros, setMostrarFiltros] = useState(false);
+    const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
+
+    const [filtros, setFiltros] = useState({
+        id: '',
+        responsable: '',
+        estado: '',
+        inspeccion: '',
+        diferencia: '',
+        fechaInicio: new Date().toLocaleDateString('en-CA'),
+        fechaFin: new Date().toLocaleDateString('en-CA'),
+        periodo: 'dia'
+    });
+
+    const [filtrosEdicion, setFiltrosEdicion] = useState({ ...filtros });
 
     const cargarDatos = async () => {
         try {
             setLoading(true);
             const res = await fetchAutotanque({
                 page,
-                search,
-                date: filterDate,
-                per_page: 10
+                id: filtros.id,
+                responsable: filtros.responsable,
+                estado: filtros.estado,
+                inspeccion: filtros.inspeccion,
+                diferencia: filtros.diferencia,
+                start: filtros.fechaInicio,
+                end: filtros.fechaFin,
+                per_page: 15
             });
             setData(res.data || []);
             setMeta(res);
@@ -43,25 +61,43 @@ export default function ReporteEntregaTurno() {
         }
     };
 
+    const handleBack = () => {
+        setOpenForm(false);
+        setDetalle(null);
+    };
+
+    const limpiarFiltros = () => {
+        setFiltros({
+            id: '', responsable: '', estado: '', inspeccion: '', diferencia: '',
+            fechaInicio: new Date().toLocaleDateString('en-CA'),
+            fechaFin: new Date().toLocaleDateString('en-CA'),
+            periodo: 'dia'
+        });
+    };
+
+    const aplicarFiltroFecha = () => {
+        setFiltros({ ...filtrosEdicion });
+        setMostrarModalFecha(false);
+        setPage(1);
+    };
+
+    useEffect(() => {
+        cargarDatos();
+        verificarTurnoActivo();
+    }, [page, filtros]);
+
     const verificarTurnoActivo = async () => {
         try {
             const res = await fetchTurnoActivo();
-            if (res?.active) {
-                setTurnoPendiente(res.data);
-            } else {
-                setTurnoPendiente(null);
-            }
-        } catch (error) {
-            console.error(error);
-        }
+            if (res?.active) setTurnoPendiente(res.data);
+            else setTurnoPendiente(null);
+        } catch (error) { console.error(error); }
     };
 
     const handleAccionReporte = () => {
-        if (turnoPendiente) {
-            setDetalle(turnoPendiente);
-        } else {
-            setDetalle(null);
-        }
+        setTipoModal('entrega');
+        if (turnoPendiente) setDetalle(turnoPendiente);
+        else setDetalle(null);
         setOpenForm(true);
     };
 
@@ -70,13 +106,11 @@ export default function ReporteEntregaTurno() {
     const handleEliminar = async (id: number) => {
         const result = await Swal.fire({
             title: '¿Estás seguro?',
-            text: "El registro se marcará como inactivo.",
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#4f46e5',
             cancelButtonColor: '#f87171',
             confirmButtonText: 'Sí, eliminar',
-            cancelButtonText: 'Cancelar',
             reverseButtons: true
         });
 
@@ -86,227 +120,227 @@ export default function ReporteEntregaTurno() {
                 if (res.ok) {
                     Swal.fire({ title: '¡Eliminado!', icon: 'success', timer: 1500, showConfirmButton: false });
                     cargarDatos();
-                    verificarTurnoActivo();
-                } else {
-                    throw new Error(res.message || "Error al eliminar");
                 }
-            } catch (error: any) {
-                Swal.fire('Error', error.message || 'No se pudo eliminar', 'error');
+            } catch (error) {
+                Swal.fire('Error', 'No se pudo eliminar', 'error');
             }
         }
     };
 
-    const show = async (id: number) => {
+    const show = async (id: number, tipo: 'entrega' | 'inspeccion') => {
         try {
             const dat = await showAutotanque(id);
             setDetalle(dat);
+            setTipoModal(tipo);
             setOpenForm(true);
-        } catch (error) {
-            console.error(error);
-        }
+        } catch (error) { console.error(error); }
     };
-
-    const columns = [
-        {
-            header: "ID",
-            render: (row: any) => (
-                <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900">#{row.id}</span>
-                    {/* Alerta si el turno está incompleto o falta inspección */}
-                    {(!row.tiene_inspeccion || !row.finalizado) && (
-                        <div className="group relative">
-                            <AlertCircle size={14} className="text-amber-500" />
-                            <span className="absolute bottom-full mb-2 hidden group-hover:block w-40 bg-slate-800 text-white text-[10px] p-2 rounded shadow-lg z-50">
-                                Pendiente: {!row.finalizado && '• Datos de Cierre '} {!row.tiene_inspeccion && '• Inspección'}
-                            </span>
-                        </div>
-                    )}
-                </div>
-            )
-        },
-        { header: "Nombre de quien entrega", render: (row: any) => <span className="text-sm font-semibold text-slate-700">{row.nombre || 'N/A'}</span> },
-
-        // --- ESTADO DE CIERRE (NUEVA) ---
-        {
-            header: "Estado Turno",
-            render: (row: any) => (
-                row.finalizado ? (
-                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 w-fit uppercase">
-                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                        Finalizado
-                    </span>
-                ) : (
-                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1 w-fit uppercase">
-                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                        Abierto / Pendiente
-                    </span>
-                )
-            )
-        },
-
-        // --- ESTADO DE INSPECCIÓN ---
-        {
-            header: "Inspección",
-            render: (row: any) => (
-                row.tiene_inspeccion ? (
-                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 w-fit uppercase">
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        Completada
-                    </span>
-                ) : (
-                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1 w-fit uppercase">
-                        <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-bounce" />
-                        Falta llenar
-                    </span>
-                )
-            )
-        },
-
-        {
-            header: "Fecha",
-            render: (row: any) => {
-                if (!row.fecha) return <span className="text-xs text-slate-400">N/A</span>;
-
-                const dateObj = new Date(row.fecha);
-
-                const fecha = new Intl.DateTimeFormat('es-MX', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric'
-                }).format(dateObj);
-
-                const hora = new Intl.DateTimeFormat('es-MX', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false
-                }).format(dateObj);
-
-                return (
-                    <div className="flex flex-col">
-                        <span className="text-xs font-bold text-slate-700">{fecha}</span>
-                        <span className="text-[10px] font-mono text-slate-400 uppercase">{hora} hrs</span>
-                    </div>
-                );
-            }
-        },
-        {
-            header: "Diferencia",
-            render: (row: any) => {
-                const diferenciaFormateada = Number(row.diferenciaFinal || 0).toLocaleString('en-US', {
-                    maximumFractionDigits: 0
-                });
-
-                return (
-                    <span className={`text-sm font-mono font-bold ${row.diferenciaFinal < 0 ? 'text-red-600' : 'text-slate-600'}`}>
-                        {diferenciaFormateada} Lts
-                    </span>
-                );
-            }
-        },
-        {
-            header: "Acciones",
-            align: 'right' as const,
-            render: (row: any) => (
-                <div className="flex items-center justify-end gap-2">
-                    {/* Botón de inspección inteligente: Solo si no tiene inspección */}
-                    {!row.tiene_inspeccion && (
-                        <button
-                            className="p-2.5 text-rose-600 bg-rose-50 hover:bg-rose-600 hover:text-white rounded-xl transition-all shadow-sm border border-rose-100"
-                            onClick={() => router.get(verificacionEstadoAutotanque(), { id: row.id })}
-                            title="Realizar Inspección Pendiente"
-                        >
-                            <ClipboardList size={18} />
-                        </button>
-                    )}
-                    <button
-                        className={`p-2.5 rounded-xl transition-all shadow-sm ${!row.finalizado ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'text-slate-400 hover:bg-slate-100'}`}
-                        onClick={() => show(row.id)}
-                        title={!row.finalizado ? "Completar Cierre" : "Editar"}
-                    >
-                        <Edit2 size={18} />
-                    </button>
-                    <button className="p-2.5 text-slate-400 hover:text-white hover:bg-amber-600 rounded-xl transition-all shadow-sm" onClick={() => setPdfId(row.id)}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
-                    </button>
-                    <button className="p-2.5 text-slate-400 hover:text-white hover:bg-red-600 rounded-xl transition-all shadow-sm" onClick={() => handleEliminar(row.id)}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3l18 18" /><path d="M4 7h3m4 0h9" /><path d="M10 11l0 6" /><path d="M14 14l0 3" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l.077 -.923" /><path d="M18.384 14.373l.616 -7.373" /><path d="M9 5v-1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>
-                    </button>
-                </div>
-            )
-        },
-    ];
-
-    useEffect(() => {
-        const timeoutId = setTimeout(() => {
-            if (!openForm) {
-                cargarDatos();
-                verificarTurnoActivo();
-            }
-        }, 300);
-        return () => clearTimeout(timeoutId);
-    }, [page, search, filterDate, openForm]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Reporte de Entrega de Turno" />
-            <div className="p-6">
-                {openForm ? (
-                    <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
-                        <div className="flex items-center gap-4">
-                            <button onClick={() => { setOpenForm(false); setDetalle(null); }} className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white p-3 text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-all shadow-sm">
-                                <ChevronLeft size={20} strokeWidth={3} />
-                            </button>
-                            <div>
-                                <h2 className="text-2xl font-black text-slate-900">{detalle ? 'Finalizar Turno' : 'Nuevo Reporte'}</h2>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">
-                                    {detalle ? `Editando Folio #${detalle.turno?.id || detalle.id}` : 'Entrega de turno autotanque'}
-                                </p>
-                            </div>
+            <div className="p-6 bg-[#f3f4f6] min-h-screen relative">
+                <div className="space-y-4 animate-in fade-in duration-500">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                        <div>
+                            <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Autotanque</h2>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Reporte de entrega de turno</p>
                         </div>
-                        <EntregarTurnoAutotanque initialData={detalle} />
-                    </div>
-                ) : (
-                    <div className="space-y-6 animate-in fade-in duration-500">
-                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                            <div>
-                                <h2 className="text-3xl font-black tracking-tight text-slate-900 uppercase">Autotanque</h2>
-                                <p className="text-sm text-slate-500 font-medium uppercase">Reporte de entrega de turno.</p>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-3">
-                                {turnoPendiente && (
-                                    <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 px-3 py-2 rounded-xl animate-pulse">
-                                        <AlertCircle size={14} className="text-amber-600" />
-                                        <span className="text-[10px] font-bold text-amber-700 uppercase tracking-tight">Turno abierto detectado</span>
-                                    </div>
-                                )}
-                                <div className="relative flex items-center">
-                                    <input type="date" value={filterDate} onChange={(e) => { setPage(1); setFilterDate(e.target.value); }} className="pl-4 pr-10 py-2.5 rounded-2xl border border-slate-200 bg-white text-sm outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 transition-all text-slate-600 font-bold" />
-                                    {filterDate && <button onClick={() => setFilterDate("")} className="absolute right-3 text-slate-400 hover:text-red-500"><X size={16} /></button>}
+
+                        <div className="flex gap-2">
+                            {turnoPendiente && (
+                                <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 px-3 py-1 rounded animate-pulse mr-2">
+                                    <AlertCircle size={12} className="text-amber-600" />
+                                    <span className="text-[9px] font-black text-amber-700 uppercase">Turno abierto detectado</span>
                                 </div>
-                                <button
-                                    onClick={handleAccionReporte}
-                                    className={`flex items-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold text-white transition-all shadow-lg active:scale-95 ${turnoPendiente ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-100' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'
-                                        }`}
-                                >
-                                    {turnoPendiente ? (
-                                        <>
-                                            <Edit2 size={18} strokeWidth={3} />
-                                            <span>CONTINUAR / CERRAR TURNO</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Plus size={18} strokeWidth={3} />
-                                            <span>NUEVO REPORTE</span>
-                                        </>
-                                    )}
-                                </button>
+                            )}
+                            <button onClick={() => setMostrarFiltros(!mostrarFiltros)} className={`flex items-center gap-2 text-[10px] font-black px-4 py-2 rounded border transition-all ${mostrarFiltros ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                                <Filter size={14} />
+                                <span>{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
+                            </button>
+                            <button onClick={handleAccionReporte} className={`text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-white ${turnoPendiente ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-100' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'}`}>
+                                {turnoPendiente ? 'CONTINUAR / CERRAR TURNO' : '+ NUEVO REPORTE'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[950px]">
+                                <thead>
+                                    <tr className="bg-white border-b border-slate-100">
+                                        <th className="px-4 py-4 text-[9px] font-black uppercase text-slate-400 text-center w-20">#</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400">Responsable</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center">Estado Turno</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center">Inspección</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center">Fecha / Hora</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center">Diferencia</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-right">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr className={`bg-slate-50 border-b border-slate-200 transition-all duration-300 ${mostrarFiltros ? 'opacity-100' : 'hidden'}`}>
+                                        <td className="px-2 py-2 text-center">
+                                            <div className="flex items-center gap-1 justify-center">
+                                                <button onClick={limpiarFiltros} className="text-slate-400 hover:text-red-500"><X size={12} /></button>
+                                                <input type="text" placeholder="ID" className="w-16 text-[10px] border border-slate-200 p-1 rounded bg-white outline-none" value={filtros.id} onChange={(e) => setFiltros({ ...filtros, id: e.target.value })} />
+                                            </div>
+                                        </td>
+                                        <td className="px-2 py-2">
+                                            <input type="text" placeholder="Buscar responsable..." className="w-full text-[10px] border border-slate-200 p-1 rounded bg-white uppercase font-bold" value={filtros.responsable} onChange={(e) => setFiltros({ ...filtros, responsable: e.target.value })} />
+                                        </td>
+                                        <td className="px-2 py-2 text-center">
+                                            <select className="text-[10px] border border-slate-200 p-1 rounded bg-white font-bold" value={filtros.estado} onChange={(e) => setFiltros({ ...filtros, estado: e.target.value })}>
+                                                <option value="">TODOS</option>
+                                                <option value="1">FINALIZADO</option>
+                                                <option value="0">PENDIENTE</option>
+                                            </select>
+                                        </td>
+                                        <td className="px-2 py-2 text-center">
+                                            <select className="text-[10px] border border-slate-200 p-1 rounded bg-white font-bold" value={filtros.inspeccion} onChange={(e) => setFiltros({ ...filtros, inspeccion: e.target.value })}>
+                                                <option value="">TODOS</option>
+                                                <option value="1">OK</option>
+                                                <option value="0">FALTA</option>
+                                            </select>
+                                        </td>
+                                        <td className="px-2 py-2">
+                                            <button onClick={() => setMostrarModalFecha(true)} className="w-full flex items-center justify-between text-[10px] border border-slate-200 p-1.5 rounded bg-white shadow-sm hover:border-indigo-400 transition-colors">
+                                                <span className="truncate font-black text-slate-600 uppercase">{filtros.periodo === 'dia' ? filtros.fechaInicio : 'RANGO'}</span>
+                                                <ChevronDown size={12} className="text-slate-400" />
+                                            </button>
+                                        </td>
+                                        <td className="px-2 py-2">
+                                            <input type="number" placeholder="Lts..." className="w-full text-[10px] border border-slate-200 p-1 rounded bg-white font-bold" value={filtros.diferencia} onChange={(e) => setFiltros({ ...filtros, diferencia: e.target.value })} />
+                                        </td>
+                                        <td className="px-2 py-2"></td>
+                                    </tr>
+
+                                    {loading ? (
+                                        <tr><td colSpan={7} className="px-6 py-20 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Cargando datos...</td></tr>
+                                    ) : data.map((row) => (
+                                        <tr key={row.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors">
+                                            <td className="px-4 py-4 text-center font-black text-[10px] text-slate-700">#{row.id}</td>
+                                            <td className="px-6 py-4">
+                                                <span className="text-sm font-black text-slate-800 uppercase tracking-tighter">{row.nombre || 'N/A'}</span>
+                                            </td>
+                                            <td className="px-6 py-4 text-center">
+                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-black border uppercase ${row.finalizado ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
+                                                    <div className={`w-1 h-1 rounded-full ${row.finalizado ? 'bg-blue-500' : 'bg-amber-500 animate-pulse'}`} />
+                                                    {row.finalizado ? 'Finalizado' : 'Pendiente'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-center">
+                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-black border uppercase ${row.tiene_inspeccion ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>
+                                                    {row.tiene_inspeccion ? 'OK' : 'FALTA'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-center text-[10px]">
+                                                <div className="flex flex-col">
+                                                    <span className="font-bold text-slate-400">{row.fecha ? new Date(row.fecha.split(' ')[0] + 'T12:00:00').toLocaleDateString('es-MX') : 'N/A'}</span>
+                                                    <span className="font-black text-slate-700 uppercase">{row.fecha && row.fecha.includes(' ') ? row.fecha.split(' ')[1].substring(0, 5) : '--:--'}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-center font-mono text-xs font-black">
+                                                <span className={row.diferenciaFinal < 0 ? 'text-red-600' : 'text-slate-600'}>
+                                                    {Number(row.diferenciaFinal || 0).toLocaleString('en-US')} <small className="text-[9px]">LTS</small>
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {!row.tiene_inspeccion && (
+                                                        <button onClick={() => show(row.id, 'inspeccion')} className="p-2 text-rose-500 hover:bg-rose-50 rounded transition-colors" title="Inspección"><ClipboardList size={16} /></button>
+                                                    )}
+                                                    <button onClick={() => show(row.id, 'entrega')} className={`p-2 rounded transition-colors ${!row.finalizado ? 'text-indigo-600 hover:bg-indigo-50' : 'text-slate-400 hover:text-blue-600'}`}><Edit2 size={16} /></button>
+                                                    <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]">PDF</button>
+                                                    <button onClick={() => handleEliminar(row.id)} className="p-2 text-slate-300 hover:text-red-600 transition-colors"><X size={16} /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {meta && meta.last_page > 1 && (
+                        <div className="flex items-center justify-between bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                            <span className="text-[10px] font-black text-slate-500 uppercase">PÁGINA {meta.current_page} DE {meta.last_page}</span>
+                            <div className="flex gap-1">
+                                <button disabled={page === 1} onClick={() => setPage(page - 1)} className="px-3 py-1 border border-slate-200 rounded text-[10px] font-black hover:bg-slate-50 disabled:opacity-50 tracking-tighter">ANTERIOR</button>
+                                <button disabled={page === meta.last_page} onClick={() => setPage(page + 1)} className="px-3 py-1 border border-slate-200 rounded text-[10px] font-black hover:bg-slate-50 disabled:opacity-50 tracking-tighter">SIGUIENTE</button>
                             </div>
                         </div>
-                        <UniversalTable columns={columns} data={data} loading={loading} pagination={{ current_page: meta?.current_page || 1, last_page: meta?.last_page || 1, total: meta?.total || 0 }} onPageChange={(p) => setPage(p)} emptyMessage="No se encontraron registros" />
+                    )}
+                </div>
+
+                {openForm && (
+                    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={handleBack}></div>
+                        <div className="relative z-10 w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+                            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-lg font-black uppercase text-slate-800 tracking-tighter">
+                                        {tipoModal === 'inspeccion' ? 'Verificación de Estado' : (detalle ? 'Finalizar Turno' : 'Nuevo Reporte')}
+                                    </h3>
+                                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">
+                                        {tipoModal === 'inspeccion' ? 'Inspección de combustible' : 'Entrega de turno autotanque'}
+                                    </p>
+                                </div>
+                                <button onClick={handleBack} className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors"><X size={20} /></button>
+                            </div>
+                            <div className="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
+                                {tipoModal === 'inspeccion' ? (
+                                    <CheckEstadoAutotanque data={detalle} onSuccess={() => { handleBack(); cargarDatos(); }} />
+                                ) : (
+                                    <EntregarTurnoAutotanque initialData={detalle} onSuccess={() => { handleBack(); cargarDatos(); }} />
+                                )}
+                            </div>
+                        </div>
                     </div>
                 )}
+
+                {mostrarModalFecha && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMostrarModalFecha(false)}></div>
+                        <div className="relative z-10 bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden">
+                            <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
+                                <h3 className="text-sm font-black uppercase text-slate-700">Período</h3>
+                                <button onClick={() => setMostrarModalFecha(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+                            </div>
+                            <div className="p-4 space-y-4">
+                                <div className="flex bg-slate-100 p-1 rounded-lg">
+                                    {['dia', 'rango', 'mes', 'año'].map((modo) => (
+                                        <button key={modo} onClick={() => setFiltrosEdicion({ ...filtrosEdicion, periodo: modo })} className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all uppercase ${filtrosEdicion.periodo === modo ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>{modo}</button>
+                                    ))}
+                                </div>
+                                <div className="space-y-3">
+                                    {filtrosEdicion.periodo === 'dia' && (
+                                        <input type="date" className="w-full border border-slate-200 p-2 rounded-lg text-sm" value={filtrosEdicion.fechaInicio} onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: e.target.value, fechaFin: e.target.value })} />
+                                    )}
+                                    {filtrosEdicion.periodo === 'rango' && (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <input type="date" className="w-full border border-slate-200 p-2 rounded-lg text-sm" value={filtrosEdicion.fechaInicio} onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: e.target.value })} />
+                                            <input type="date" className="w-full border border-slate-200 p-2 rounded-lg text-sm" value={filtrosEdicion.fechaFin} onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaFin: e.target.value })} />
+                                        </div>
+                                    )}
+                                    {filtrosEdicion.periodo === 'mes' && (
+                                        <input type="month" className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => {
+                                            const [y, m] = e.target.value.split('-');
+                                            setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${y}-${m}-01`, fechaFin: `${y}-${m}-31` });
+                                        }} />
+                                    )}
+                                    {filtrosEdicion.periodo === 'año' && (
+                                        <input type="number" min="2020" max="2030" placeholder="Año" className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${e.target.value}-01-01`, fechaFin: `${e.target.value}-12-31` })} />
+                                    )}
+                                </div>
+                                <button onClick={aplicarFiltroFecha} className="w-full bg-slate-800 text-white py-3 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">Aplicar Filtro</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <PdfExporterAutotanque id={pdfId} onDone={handlePdfDone} />
             </div>
-            <PdfExporterAutotanque id={pdfId} onDone={handlePdfDone} />
         </AppLayout>
     );
 }

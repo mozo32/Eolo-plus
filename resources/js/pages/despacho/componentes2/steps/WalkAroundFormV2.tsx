@@ -16,7 +16,7 @@ const STEPS = [
 
 const INITIAL_INFO = {
     matricula: '', movimiento: '', aeronave: '', tipo: '', hora: '', destino: '', procedencia: '',
-    fecha: new Date().toISOString().split('T')[0]
+    fecha: new Date().toLocaleDateString('en-CA')
 };
 
 const INITIAL_EXTERIOR = {

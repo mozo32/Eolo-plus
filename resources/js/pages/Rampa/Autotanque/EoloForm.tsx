@@ -466,7 +466,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                                     <div className="relative grid grid-cols-2 gap-3">
                                         <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-blue-500 border-4 border-white shadow-md"></div>
                                         <div>
-                                            <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1 ml-1">Inicio</label>
+                                            <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1 ml-1">Inicio de Carga</label>
                                             <input
                                                 type="text"
                                                 placeholder="HH:MM"
@@ -477,7 +477,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1 ml-1">Fin</label>
+                                            <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1 ml-1">Fin de Carga</label>
                                             <input
                                                 type="text"
                                                 placeholder="HH:MM"
@@ -545,7 +545,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                             <div className="lg:col-span-7 p-8 flex flex-col justify-center bg-blue-50/30">
                                 <div className="text-center">
                                     <span className="inline-block px-4 py-1.5 bg-white border border-blue-100 rounded-full text-[10px] font-black uppercase text-blue-600 mb-4 tracking-[0.2em] shadow-sm">
-                                        Total Neto
+                                        Total Suministrado
                                     </span>
                                     <div className="flex flex-col items-center">
                                         <span className="text-7xl lg:text-8xl font-black tracking-tighter text-slate-900 tabular-nums">

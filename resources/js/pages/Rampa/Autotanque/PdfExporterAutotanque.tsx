@@ -219,11 +219,11 @@ function AutotanquePdfDoc({ detalle }: { detalle: any }) {
                 <View style={styles.fieldsWrap}>
                     <View style={styles.fieldsRow}>
                         <View style={styles.fieldCell}><Text style={styles.label}>Responsable Apertura</Text><Text style={styles.value}>{turno.nombre || "-"}</Text></View>
-                        <View style={styles.fieldCell}><Text style={styles.label}>Litros Iniciales</Text><Text style={styles.value}>{turno.litrosIni || 0} L</Text></View>
+                        <View style={styles.fieldCell}><Text style={styles.label}>Litros Iniciales</Text><Text style={styles.value}>{Number(turno.litrosIni|| 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L</Text></View>
                     </View>
                     <View style={[styles.fieldsRow, { borderBottomWidth: 0 }]}>
                         <View style={styles.fieldCell}><Text style={styles.label}>Responsable Cierre</Text><Text style={styles.value}>{turno.nombreCierre || "-"}</Text></View>
-                        <View style={styles.fieldCell}><Text style={styles.label}>Litros Finales</Text><Text style={styles.value}>{turno.litrosCierre} L</Text></View>
+                        <View style={styles.fieldCell}><Text style={styles.label}>Litros Finales</Text><Text style={styles.value}>{Number(turno.litrosCierre|| 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L</Text></View>
                     </View>
                 </View>
 
@@ -279,8 +279,8 @@ function AutotanquePdfDoc({ detalle }: { detalle: any }) {
 
                 {/* Balances */}
                 <View style={styles.balanceBox}>
-                    <View style={styles.balanceCard}><Text style={styles.label}>Total Vendido</Text><Text style={[styles.value, { color: GREEN }]}>{turno.totalVendidos || 0} L</Text></View>
-                    <View style={styles.balanceCard}><Text style={styles.label}>Diferencia Final</Text><Text style={[styles.value, { color: "#dc2626" }]}>{turno.diferenciaFinal || 0} L</Text></View>
+                    <View style={styles.balanceCard}><Text style={styles.label}>Total Vendido</Text><Text style={[styles.value, { color: GREEN }]}>{Number(turno.totalVendidos || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L</Text></View>
+                    <View style={styles.balanceCard}><Text style={styles.label}>Diferencia Final</Text><Text style={[styles.value, { color: "#dc2626" }]}>{Number(turno.diferenciaFinal || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L</Text></View>
                 </View>
             </Page>
         </Document>

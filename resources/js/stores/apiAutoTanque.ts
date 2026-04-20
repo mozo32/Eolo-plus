@@ -116,9 +116,14 @@ export async function updateRemision(id: number | string, form: any) {
 export async function fetchAutotanque(
     params: {
         page?: number;
-        date?: string;
-        search?: string;
         per_page?: number;
+        id?: string;
+        responsable?: string;
+        estado?: string;
+        inspeccion?: string;
+        diferencia?: string;
+        start?: string;
+        end?: string;
     }
 ) {
     const qs = new URLSearchParams(params as any).toString();
