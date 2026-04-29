@@ -178,7 +178,8 @@ function InspeccionPdfDoc({ data }: { data: any }) {
                                     )}
                                 </View>
 
-                                <Image src={urlLimpia} style={styles.evidenceImg} />
+                                {/* USA ev.url DIRECTAMENTE (Trae el Base64) */}
+                                <Image src={ev.url} style={styles.evidenceImg} />
 
                                 <Text style={styles.label}>Observación:</Text>
                                 <Text style={[styles.value, { color: ev.alerta ? RED_ALERTA : '#111827' }]}>
