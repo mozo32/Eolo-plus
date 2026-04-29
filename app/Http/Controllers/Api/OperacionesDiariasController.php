@@ -33,8 +33,7 @@ class OperacionesDiariasController extends Controller
         ]);
         return DB::transaction(function () use ($validated, $request) {
             $ultimoRegistro = OperacionDiaria::where('matricula', $validated['matricula'])
-                            ->orderBy('fecha', 'desc')
-                            ->orderBy('hora', 'desc')
+                            ->latest()
                             ->first();
 
             if ($ultimoRegistro && strtolower($ultimoRegistro->tipo) === strtolower($validated['movimiento'])) {

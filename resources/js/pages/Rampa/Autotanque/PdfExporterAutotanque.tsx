@@ -15,7 +15,14 @@ import {
 const GREEN = "#003E51";
 const BORDER = "#111111";
 const GRAY_TEXT = "#374151";
-
+interface ImageItem {
+    id: number;
+    path: string;
+    pivot?: {
+        tag?: string;
+        observacion?: string;
+    };
+}
 const styles = StyleSheet.create({
     page: {
         padding: 20,
@@ -175,6 +182,54 @@ const styles = StyleSheet.create({
         padding: 6,
         minWidth: 100,
         alignItems: "center"
+    },
+    evidenciasTitle: {
+        fontSize: 9,
+        fontWeight: "bold" as any,
+        textTransform: "uppercase",
+        color: GREEN,
+        marginTop: 15,
+        marginBottom: 5,
+    },
+    evidenciasGrid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 5,
+    },
+    evidenciaImage: {
+        width: 130,
+        height: 100,
+        borderWidth: 1,
+        borderColor: BORDER,
+        objectFit: 'cover',
+    },
+    firmasSection: {
+        flexDirection: "row",
+        justifyContent: "space-around",
+        marginTop: 30,
+        paddingBottom: 20,
+    },
+    firmaBox: {
+        alignItems: "center",
+        width: 150,
+    },
+    firmaImage: {
+        width: 120,
+        height: 60,
+        marginBottom: 5,
+    },
+    firmaLine: {
+        width: "100%",
+        borderTopWidth: 1,
+        borderColor: BORDER,
+        marginTop: 2,
+    },
+    firmaLabel: {
+        fontSize: 7,
+        fontWeight: "bold" as any,
+        textTransform: "uppercase",
+        marginTop: 4,
+        textAlign: 'center'
     }
 });
 
@@ -200,7 +255,19 @@ function AutotanquePdfDoc({ detalle }: { detalle: any }) {
     const inspeccion = detalle?.data?.inspeccion || turno?.inspeccion;
     const remisiones = Array.isArray(detalle?.data?.remision) ? detalle.data.remision : [];
     const watermarkUrl = `${window.location.origin}/1c463caa-e3a1-4093-a00b-1c0da40795f6.jpg`;
+    const firmas = Array.isArray(inspeccion?.firmas) ? inspeccion.firmas : [];
+    const fotos = Array.isArray(inspeccion?.imagenes) ? inspeccion.imagenes : [];
+    useEffect(() => {
+        console.log(fotos);
 
+    }, [fotos]);
+    const getFullUrl = (path: string) => {
+        if (!path) return '';
+        if (path.startsWith('http')) return path;
+        console.log(`${window.location.origin}/storage/${path.replace('public/', '')}`);
+
+        return `${window.location.origin}/storage/${path.replace('public/', '')}`;
+    };
     return (
         <Document>
             <Page size="A4" style={styles.page}>
@@ -219,11 +286,11 @@ function AutotanquePdfDoc({ detalle }: { detalle: any }) {
                 <View style={styles.fieldsWrap}>
                     <View style={styles.fieldsRow}>
                         <View style={styles.fieldCell}><Text style={styles.label}>Responsable Apertura</Text><Text style={styles.value}>{turno.nombre || "-"}</Text></View>
-                        <View style={styles.fieldCell}><Text style={styles.label}>Litros Iniciales</Text><Text style={styles.value}>{Number(turno.litrosIni|| 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L</Text></View>
+                        <View style={styles.fieldCell}><Text style={styles.label}>Litros Iniciales</Text><Text style={styles.value}>{Number(turno.litrosIni || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L</Text></View>
                     </View>
                     <View style={[styles.fieldsRow, { borderBottomWidth: 0 }]}>
                         <View style={styles.fieldCell}><Text style={styles.label}>Responsable Cierre</Text><Text style={styles.value}>{turno.nombreCierre || "-"}</Text></View>
-                        <View style={styles.fieldCell}><Text style={styles.label}>Litros Finales</Text><Text style={styles.value}>{Number(turno.litrosCierre|| 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L</Text></View>
+                        <View style={styles.fieldCell}><Text style={styles.label}>Litros Finales</Text><Text style={styles.value}>{Number(turno.litrosCierre || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L</Text></View>
                     </View>
                 </View>
 
@@ -255,7 +322,6 @@ function AutotanquePdfDoc({ detalle }: { detalle: any }) {
                         </View>
                     </>
                 )}
-
                 {/* Tabla Remisiones */}
                 <Text style={styles.boxTitle}>Remisiones de Combustible</Text>
                 <View style={styles.tableWrap}>
@@ -282,6 +348,37 @@ function AutotanquePdfDoc({ detalle }: { detalle: any }) {
                     <View style={styles.balanceCard}><Text style={styles.label}>Total Vendido</Text><Text style={[styles.value, { color: GREEN }]}>{Number(turno.totalVendidos || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L</Text></View>
                     <View style={styles.balanceCard}><Text style={styles.label}>Diferencia Final</Text><Text style={[styles.value, { color: "#dc2626" }]}>{Number(turno.diferenciaFinal || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L</Text></View>
                 </View>
+                {fotos.length > 0 && (
+                    <View>
+                        <Text style={styles.evidenciasTitle}>Evidencias Fotográficas</Text>
+                        <View style={styles.evidenciasGrid}>
+                            {fotos.map((foto: any, idx: number) => (
+                                <Image
+                                    key={idx}
+                                    src={getFullUrl(foto.path)}
+                                    style={styles.evidenciaImage}
+                                />
+                            ))}
+                        </View>
+                    </View>
+                )}
+                {firmas.length > 0 && (
+                    <View style={styles.firmasSection}>
+                        {firmas.map((firma: any, idx: number) => (
+                            <View key={idx} style={styles.firmaBox}>
+                                <Image
+                                    src={getFullUrl(firma.path)}
+                                    style={styles.firmaImage}
+                                />
+                                <View style={styles.firmaLine} />
+                                <Text style={styles.firmaLabel}>
+                                    {firma.pivot?.tag || "Firma Autorizada"}
+                                </Text>
+                            </View>
+                        ))}
+                    </View>
+                )}
+
             </Page>
         </Document>
     );
@@ -294,6 +391,8 @@ export default function PdfExporterAutotanque({ id, onDone }: { id: number | nul
             Swal.fire({ title: "Generando Reporte", text: "Espere un momento...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             try {
                 const response = await showAutotanque(id);
+                console.log(response);
+
                 if (!response?.data) throw new Error("Sin datos");
                 const blob = await pdf(<AutotanquePdfDoc detalle={response} />).toBlob();
                 const url = URL.createObjectURL(blob);

@@ -71,7 +71,8 @@ class RemisionController extends Controller
     public function index(Request $request)
     {
         $perPage = $request->query('per_page', 20);
-        $query = Remision::where('status', 'A');
+        $query = Remision::where('status', 'A')
+                    ->whereNull('id_turno');
 
         if ($request->filled('folio')) {
             $query->where('folio', 'LIKE', '%' . $request->query('folio') . '%');

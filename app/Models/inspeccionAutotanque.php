@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 class inspeccionAutotanque extends Model
 {
     protected $table = 'inspecciones_autotanque';
@@ -45,5 +45,21 @@ class inspeccionAutotanque extends Model
     {
         return $this->morphToMany(Firma::class, 'firmable', 'firmables')
         ->withPivot(['rol', 'tag', 'orden', 'status']);
+    }
+    public function imagenes(): MorphToMany
+    {
+        return $this->morphToMany(Imagen::class, 'imageable', 'imageables')
+            ->withPivot(['tag', 'orden', 'status', 'observacion', 'alerta'])
+            ->withTimestamps();
+    }
+    public function imagenesAll(): MorphToMany
+    {
+        return $this->morphToMany(
+            Imagen::class,
+            'imageable',
+            'imageables',
+            'imageable_id',
+            'imagen_id'
+        );
     }
 }

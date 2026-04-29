@@ -80,7 +80,12 @@ export const SeccionChecklist = ({ secciones, respuestas, onToggle, fotos, setFo
     };
 
     const eliminarFoto = (index: number) => {
-        setFotos(prev => prev.filter((_, i) => i !== index));
+        const previewAEliminar = previews[index];
+
+        if (previewAEliminar.startsWith('data:') || previewAEliminar.startsWith('blob:')) {
+            setFotos(prev => prev.filter((_, i) => i !== index));
+        }
+
         setPreviews(prev => prev.filter((_, i) => i !== index));
     };
 

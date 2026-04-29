@@ -221,7 +221,10 @@ class TurnoAutotanqueController extends Controller
     }
     public function show($id)
     {
-        $turno = TurnoAutotanque::with('inspeccion')
+        $turno = TurnoAutotanque::with([
+                'inspeccion.firmas',
+                'inspeccion.imagenes'
+            ])
             ->where('id', $id)
             ->first();
 
@@ -232,13 +235,28 @@ class TurnoAutotanqueController extends Controller
         $remision = Remision::where('id_turno', $id)->get();
         $sumaAutotanque = SumaAutotanque::where('id_turno', $id)->get();
 
+        $inspeccionData = null;
+        if ($turno->inspeccion) {
+            $inspeccion = $turno->inspeccion;
+            $firmas = $inspeccion->firmas->map(function($f) {
+                $f->url = \Storage::url($f->path);
+                return $f;
+            });
+            $imagenes = $inspeccion->imagenes->map(function($i) {
+                $i->url = \Storage::url($i->path);
+                return $i;
+            });
+
+            $inspeccionData = $inspeccion;
+        }
+
         return response()->json([
             'message' => 'Se encontró el registro',
             'data' => [
                 'turno'          => $turno,
                 'remision'       => $remision,
                 'sumaAutotanque' => $sumaAutotanque,
-                'inspeccion'     => $turno->inspeccion,
+                'inspeccion'     => $inspeccionData,
             ],
         ]);
     }

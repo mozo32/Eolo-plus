@@ -42,18 +42,33 @@ class InspeccioAutotanqueController extends Controller
                 if (!empty($request->firmas['entrega']['imagen'])) {
                     $this->guardarFirmaBase64($request->firmas['entrega']['imagen'], 'quien_entrega', $inspeccion);
                 }
-
                 if (!empty($request->firmas['operaciones']['imagen'])) {
                     $this->guardarFirmaBase64($request->firmas['operaciones']['imagen'], 'fbo', $inspeccion);
                 }
-
                 if (!empty($request->firmas['receptor']['imagen'])) {
                     $this->guardarFirmaBase64($request->firmas['receptor']['imagen'], 'quien_recibe', $inspeccion);
                 }
 
+                if ($request->has('evidencias') && is_array($request->evidencias)) {
+                    $folder = 'evidencias/autotanques/' . now()->format('Y/m');
+
+                    foreach ($request->evidencias as $index => $base64Data) {
+                        if (!empty($base64Data)) {
+                            $imagen = $this->guardarImagenBase64($base64Data, $folder);
+
+                            $inspeccion->imagenes()->attach($imagen->id, [
+                                'tag'         => 'EVIDENCIA_GENERAL',
+                                'observacion' => 'Evidencia #' . ($index + 1),
+                                'alerta'      => false,
+                                'status'      => 'A'
+                            ]);
+                        }
+                    }
+                }
+
                 return response()->json([
-                    'message' => 'Inspección guardada correctamente',
-                    'data' => $inspeccion
+                    'message' => 'Inspección y evidencias guardadas correctamente',
+                    'data' => $inspeccion->load('imagenes')
                 ], 200);
             });
 
@@ -67,7 +82,9 @@ class InspeccioAutotanqueController extends Controller
     public function showTurno($id)
     {
         try {
-            $inspeccion = InspeccionAutotanque::with('firmas')
+            $inspeccion = InspeccionAutotanque::with(['firmas', 'imagenes' => function($query) {
+                    $query->where('imageables.status', 'A'); // Solo imágenes activas
+                }])
                 ->where('turno_autotanque_id', $id)
                 ->first();
 
@@ -78,12 +95,18 @@ class InspeccioAutotanqueController extends Controller
                 ], 200);
             }
 
-            // Mapeo corregido usando 'path' y Storage para obtener la URL real
             $firmasMapeadas = $inspeccion->firmas->mapWithKeys(function ($firma) {
-                // Usamos el tag que viene en el pivot ("Firma quien entrega", etc)
-                // y generamos la URL pública del archivo
                 return [
                     $firma->pivot->tag => \Illuminate\Support\Facades\Storage::url($firma->path)
+                ];
+            });
+
+            $fotosMapeadas = $inspeccion->imagenes->map(function ($img) {
+                return [
+                    'id'          => $img->id,
+                    'url'         => \Illuminate\Support\Facades\Storage::url($img->path),
+                    'tag'         => $img->pivot->tag,
+                    'observacion' => $img->pivot->observacion,
                 ];
             });
 
@@ -94,12 +117,13 @@ class InspeccioAutotanqueController extends Controller
                 'danos'        => $inspeccion->danos_grafico,
                 'operador'     => $inspeccion->operador,
                 'firmas_db'    => $firmasMapeadas,
+                'evidencias'   => $fotosMapeadas, // <-- Nueva clave con las fotos
             ], 200);
 
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Error al obtener los datos de la inspección',
-                'error' => $e->getMessage()
+                'error'   => $e->getMessage()
             ], 500);
         }
     }
@@ -286,30 +310,41 @@ class InspeccioAutotanqueController extends Controller
             'hydrokit' => 'array',
         ]);
 
-        return DB::transaction(function () use ($request) {
-            $inspeccion = InspeccionCombustibles::create([
-                'user_id' => Auth::id() ?? 1,
-                'fecha' => now(),
-            ]);
+        try {
+            return DB::transaction(function () use ($request) {
+                $inspeccion = InspeccionCombustibles::create([
+                    'user_id' => Auth::id() ?? 1,
+                    'fecha' => now(),
+                ]);
 
-            $folder = 'inspecciones/combustibles/' . now()->format('Y/m');
-            if ($request->has('shell')) {
-                foreach ($request->shell as $item) {
-                    $this->procesarEvidencia($item, 'SHELL', $inspeccion, $folder);
-                }
-            }
-            if ($request->has('hydrokit')) {
-                foreach ($request->hydrokit as $item) {
-                    $this->procesarEvidencia($item, 'HYDROKIT', $inspeccion, $folder);
-                }
-            }
+                $folder = 'inspecciones/combustibles/' . now()->format('Y/m');
 
+                if ($request->has('shell')) {
+                    foreach ($request->shell as $item) {
+                        $this->procesarEvidencia($item, 'SHELL', $inspeccion, $folder);
+                    }
+                }
+                if ($request->has('hydrokit')) {
+                    foreach ($request->hydrokit as $item) {
+                        $this->procesarEvidencia($item, 'HYDROKIT', $inspeccion, $folder);
+                    }
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Inspección guardada correctamente',
+                    'id' => $inspeccion->id
+                ]);
+            });
+        } catch (\Throwable $e) {
+            // Esto te dirá el archivo, la línea y el mensaje real del error
             return response()->json([
-                'success' => true,
-                'message' => 'Inspección guardada correctamente',
-                'id' => $inspeccion->id
-            ]);
-        });
+                'success' => false,
+                'message' => 'Error en el servidor: ' . $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ], 500);
+        }
     }
     private function procesarEvidencia(array $data, string $modulo, InspeccionCombustibles $inspeccion, string $folder): void
     {
@@ -338,14 +373,18 @@ class InspeccioAutotanqueController extends Controller
         $width = imagesx($src);
         $height = imagesy($src);
 
-        $newWidth = 640;
+        // 1. Reducimos más la resolución para asegurar un peso bajo (ej. 480px)
+        // 640px suele pesar más de 10KB a menos que la calidad sea muy mala.
+        $newWidth = 480;
         $newHeight = floor($height * ($newWidth / $width));
 
         $tmp = imagecreatetruecolor($newWidth, $newHeight);
 
+        // Preservar calidad en el redimensionamiento
         imagecopyresampled($tmp, $src, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
 
-        $fileName = Str::uuid() . '.webp';
+        // 2. Cambiamos extensión a .jpg
+        $fileName = Str::uuid() . '.jpg';
         $path = $folder . '/' . $fileName;
         $fullPath = Storage::disk('public')->path($path);
 
@@ -353,7 +392,9 @@ class InspeccioAutotanqueController extends Controller
             mkdir(dirname($fullPath), 0755, true);
         }
 
-        imagewebp($tmp, $fullPath, 60);
+        // 3. Guardar como JPEG con calidad baja para forzar el peso (calidad entre 30 y 50)
+        // Nota: 10KB es un límite extremadamente agresivo para una foto.
+        imagejpeg($tmp, $fullPath, 40);
 
         imagedestroy($src);
         imagedestroy($tmp);
@@ -362,7 +403,7 @@ class InspeccioAutotanqueController extends Controller
             'disk'          => 'public',
             'path'          => $path,
             'original_name' => $fileName,
-            'mime'          => 'image/webp',
+            'mime'          => 'image/jpeg', // Cambiado de image/webp
             'size'          => Storage::disk('public')->size($path),
         ]);
     }

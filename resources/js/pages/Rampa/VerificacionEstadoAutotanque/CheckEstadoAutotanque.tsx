@@ -81,6 +81,10 @@ export const CheckEstadoAutotanque = ({ data: dataProp, onSuccess }: CheckEstado
                     });
                     setMarcasDanos(data.danos || []);
                     setFirmasCargadas(data.firmas_db || {});
+                    if (data.evidencias && data.evidencias.length > 0) {
+                        const urlsExistentes = data.evidencias.map((ev: any) => ev.url);
+                        setPreviews(urlsExistentes);
+                    }
                 }
             } catch (error) {
                 console.error("Error cargando inspección previa:", error);
@@ -90,31 +94,36 @@ export const CheckEstadoAutotanque = ({ data: dataProp, onSuccess }: CheckEstado
         };
         cargarDatosExistentes();
     }, [turnoId]);
-    useEffect(() => {
-        console.log(fotos);
 
-    }, [fotos]);
-
-    const finalizarInspeccion = async(datosFirmas: any) => {
-        const dataLog = {
-            turno_id: turnoId,
-            fecha: new Date().toLocaleDateString('en-CA'),
-            operador: user?.name,
-            checklist: respuestas,
-            km: datosVehiculo.km,
-            combustible: datosVehiculo.combustible,
-            danos: marcasDanos,
-            firmas: datosFirmas,
-            evidencias: fotos
-        };
-
+    const fileToBase64 = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = (error) => reject(error);
+        });
+    };
+    const finalizarInspeccion = async (datosFirmas: any) => {
         try {
             Swal.fire({
                 title: "Guardando...",
                 didOpen: () => Swal.showLoading(),
                 allowOutsideClick: false
             });
-
+            const nuevasEvidenciasBase64 = await Promise.all(
+                fotos.map(foto => fileToBase64(foto))
+            );
+            const dataLog = {
+                turno_id: turnoId,
+                fecha: new Date().toLocaleDateString('en-CA'),
+                operador: user?.name,
+                checklist: respuestas,
+                km: datosVehiculo.km,
+                combustible: datosVehiculo.combustible,
+                danos: marcasDanos,
+                firmas: datosFirmas,
+                evidencias: nuevasEvidenciasBase64,
+            };
             await guardarInspeccion(dataLog);
             setRespuestas({});
             setDatosVehiculo({ km: '', combustible: '50' });
@@ -217,9 +226,8 @@ export const CheckEstadoAutotanque = ({ data: dataProp, onSuccess }: CheckEstado
 const StepButton = ({ label, active, done, onClick }: any) => (
     <button
         onClick={onClick}
-        className={`flex-1 py-3 px-2 rounded-xl transition-all flex items-center justify-center gap-2 border-2 ${
-            active ? 'bg-white border-blue-500 text-blue-600 shadow-sm' : 'bg-transparent border-transparent text-slate-400'
-        }`}
+        className={`flex-1 py-3 px-2 rounded-xl transition-all flex items-center justify-center gap-2 border-2 ${active ? 'bg-white border-blue-500 text-blue-600 shadow-sm' : 'bg-transparent border-transparent text-slate-400'
+            }`}
     >
         {done ? <CheckCircle2 size={14} className="text-emerald-500" /> : <div className={`w-2 h-2 rounded-full ${active ? 'bg-blue-500' : 'bg-slate-300'}`}></div>}
         <span className="text-[10px] font-bold uppercase tracking-tighter">{label}</span>
