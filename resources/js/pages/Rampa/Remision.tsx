@@ -5,7 +5,7 @@ import { Head } from '@inertiajs/react';
 import EoloForm from './Autotanque/EoloForm';
 import { useState, useEffect, useCallback } from 'react';
 import { fetchRemisionesDelDia, fetchRemisionById } from '@/stores/apiAutoTanque';
-import { Plus, Mail, Calendar, X, Edit2, Filter, ChevronDown, Download, Eye} from "lucide-react";
+import { Plus, Mail, Calendar, X, Edit2, Filter, ChevronDown, Download, Eye } from "lucide-react";
 import ModalEnviarCorreo from './Autotanque/ModalEnviarCorreo';
 import Swal from 'sweetalert2';
 import { ExcelRemisiones } from './Autotanque/ExcelRemisiones';
@@ -108,7 +108,8 @@ export default function Remision() {
                 end: filtros.fechaFin,
                 folio: filtros.buscar,
                 matricula: filtros.matricula,
-                cantidad: filtros.cantidad
+                cantidad: filtros.cantidad,
+                vinculado: true
             };
             const res = await fetchRemisionesDelDia({ params, page: pagina, per_page: 20 });
             setData(res.data || []);
@@ -136,13 +137,13 @@ export default function Remision() {
             Swal.fire({ icon: 'warning', title: 'Error', text: 'No se pudo cargar.' });
         }
     };
+
     const handleEye = async (row: any) => {
         try {
             Swal.fire({ title: 'Cargando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             const datosCompletos = await fetchRemisionById(row.id);
             setDatosPreview(datosCompletos);
             setPreviewOpen(true);
-
             Swal.close();
         } catch (error) {
             Swal.fire({ icon: 'warning', title: 'Error', text: 'No se pudo cargar la vista previa.' });
@@ -279,9 +280,16 @@ export default function Remision() {
                                     ) : data.map((row, index) => {
                                         const numeroFila = (pagina - 1) * (meta?.per_page || 20) + (index + 1);
                                         return (
-                                            <tr key={row.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors">
+                                            <tr key={row.id} className={`border-b border-slate-50 transition-colors ${row.id_turno ? 'bg-emerald-50/40 hover:bg-emerald-100/60 border-l-4 border-l-emerald-500' : 'hover:bg-slate-50/80 border-l-4 border-l-transparent'}`}>
                                                 <td className="px-4 py-4 text-center font-bold text-[10px] text-slate-400">{numeroFila}</td>
-                                                <td className="px-6 py-4 text-center font-black text-[10px] text-slate-700">{row.folio || `#${row.id}`}</td>
+                                                <td className="px-6 py-4 text-center font-black text-[10px] text-slate-700">
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        {row.folio || `#${row.id}`}
+                                                        {row.id_turno && (
+                                                            <span className="text-[7px] bg-emerald-600 text-white px-1 rounded-sm tracking-widest">VINCULADO</span>
+                                                        )}
+                                                    </div>
+                                                </td>
                                                 <td className="px-6 py-4 text-center">
                                                     <div className="flex flex-col">
                                                         <span className="text-sm font-black text-slate-800 uppercase tracking-tighter">{row.matricula || 'N/A'}</span>
@@ -302,7 +310,7 @@ export default function Remision() {
                                                         <button onClick={() => handleEdit(row)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Edit2 size={16} /></button>
                                                         <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors uppercase font-black text-[10px]">PDF</button>
                                                         <button onClick={() => { setSelectedRow(row); setEmailModalOpen(true); }} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"><Mail size={16} /></button>
-                                                        <button onClick={() => handleEye(row)} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"><Eye  size={16} /></button>
+                                                        <button onClick={() => handleEye(row)} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"><Eye size={16} /></button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -398,7 +406,6 @@ export default function Remision() {
                                 </button>
                             </div>
                             <div className="p-6 max-h-[80vh] overflow-y-auto">
-                                {/* Llamada a tu componente con los datos */}
                                 <VistaPreviaRemision data={datosPreview} />
                             </div>
                         </div>
