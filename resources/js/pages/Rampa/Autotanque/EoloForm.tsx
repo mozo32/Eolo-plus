@@ -182,11 +182,53 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
     };
 
     const handleSubmit = async () => {
-        if (!data.cliente || !data.lecturaFinal || isLecturaInvalid) {
-            Swal.fire('Error', 'Verifica los campos obligatorios y lecturas', 'error');
+        const camposObligatorios: { key: keyof EoloFormData; label: string }[] = [
+            { key: 'operador', label: 'Operador Responsable' },
+            { key: 'fecha', label: 'Fecha de Servicio' },
+            { key: 'matricula', label: 'Matrícula' },
+            { key: 'formaPago', label: 'Forma de Pago' },
+            { key: 'cliente', label: 'Nombre del Cliente' },
+            { key: 'aeronaveTipo', label: 'Tipo de Aeronave' },
+            { key: 'destino', label: 'Destino' },
+            { key: 'horaLlegada', label: 'Llegada de Autotanque' },
+            { key: 'horaInicial', label: 'Inicio de Carga' },
+            { key: 'horaFinal', label: 'Fin de Carga' },
+            { key: 'lecturaInicial', label: 'Lectura Inicial' },
+            { key: 'lecturaFinal', label: 'Lectura Final' }
+        ];
+
+        const camposFaltantes = camposObligatorios
+            .filter(campo => {
+                const valor = data[campo.key];
+                return valor === undefined || valor === null || String(valor).trim() === '';
+            })
+            .map(campo => campo.label);
+
+        if (camposFaltantes.length > 0) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Campos incompletos',
+                html: `Por favor llena los siguientes campos para continuar:<br><br>
+                       <div style="text-align: left; background: #f8fafc; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                           <ul style="margin: 0; padding-left: 20px; color: #ef4444; font-size: 13px; font-weight: 600;">
+                               ${camposFaltantes.map(c => `<li style="margin-bottom: 4px;">${c}</li>`).join('')}
+                           </ul>
+                       </div>`,
+                confirmButtonColor: '#2563eb',
+                confirmButtonText: 'Entendido'
+            });
             return;
         }
 
+        if (isLecturaInvalid) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error de Lectura',
+                text: 'La lectura final debe ser mayor a la lectura inicial.',
+                confirmButtonColor: '#2563eb'
+            });
+            return;
+        }
         setIsSubmitting(true);
         const firmaCliente = canvasClienteRef.current?.toDataURL('image/png');
         const firmaOperador = canvasOperadorRef.current?.toDataURL('image/png');
@@ -202,10 +244,8 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
             let result;
 
             if (isEdit && externalData?.id) {
-                // --- LÓGICA DE ACTUALIZACIÓN ---
                 result = await updateRemision(externalData.id, payload);
             } else {
-                // --- LÓGICA DE CREACIÓN (Tu fetch actual) ---
                 const xsrf = getXsrfToken();
                 const response = await fetch('api/Remision/remisiones', {
                     method: 'POST',
@@ -224,17 +264,18 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                 icon: 'success',
                 title: isEdit ? '¡Actualizado!' : '¡Guardado!',
                 text: isEdit ? 'El registro se actualizó correctamente' : 'La remisión se ha registrado correctamente',
-                timer: 2000
+                timer: 2000,
+                showConfirmButton: false
             });
 
-            if (!isEdit) reset(); // Solo resetear si es nuevo
+            if (!isEdit) reset();
             if (onSuccess) onSuccess();
 
         } catch (error: any) {
             Swal.fire({
                 icon: 'error',
                 title: isEdit ? 'Error al actualizar' : 'Error de Suministro',
-                text: error.message
+                text: error.message || 'Ocurrió un error desconocido'
             });
         } finally {
             setIsSubmitting(false);
@@ -527,11 +568,10 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                                                 const rawValue = e.target.value.replace(/\D/g, "");
                                                 setData('lecturaFinal', rawValue);
                                             }}
-                                            className={`w-full border-2 rounded-2xl px-6 py-4 text-3xl font-mono text-center outline-none transition-all ${
-                                                isLecturaInvalid
-                                                    ? 'bg-red-50 border-red-200 text-red-700 focus:border-red-400 shadow-red-50'
-                                                    : 'bg-blue-50 border-blue-100 text-blue-700 focus:bg-white focus:border-blue-400 shadow-blue-50'
-                                            }`}
+                                            className={`w-full border-2 rounded-2xl px-6 py-4 text-3xl font-mono text-center outline-none transition-all ${isLecturaInvalid
+                                                ? 'bg-red-50 border-red-200 text-red-700 focus:border-red-400 shadow-red-50'
+                                                : 'bg-blue-50 border-blue-100 text-blue-700 focus:bg-white focus:border-blue-400 shadow-blue-50'
+                                                }`}
                                         />
                                         {isLecturaInvalid && (
                                             <p className="text-[10px] text-red-500 font-black uppercase mt-2 text-center animate-pulse">
@@ -565,7 +605,19 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                                 <SignaturePad label="Firma del Cliente / Receptor" canvasRef={canvasClienteRef} onClear={() => { }} />
                                 <SignaturePad label="Firma del Operador EOLO" canvasRef={canvasOperadorRef} onClear={() => { }} />
                             </div>
-
+                            <div className="mt-8 p-5 bg-slate-50/80 border border-slate-100 rounded-2xl flex gap-3 text-slate-500 text-[10px] sm:text-xs leading-relaxed">
+                                <svg className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <div>
+                                    <p className="mb-2">
+                                        Acepto ser el representante del cliente y aeronave descrita, por lo que me obligo a pagar a <strong className="text-slate-700 font-black">Eolo Plus S.A. de C.V.</strong> el importe total que se haya generado por este servicio.
+                                    </p>
+                                    <p className="font-medium">
+                                        Aclaraciones y quejas: <a href="mailto:sales@eolo.com.mx" className="text-blue-600 font-bold hover:text-blue-800 hover:underline transition-colors tracking-wide">sales@eolo.com.mx</a>
+                                    </p>
+                                </div>
+                            </div>
                             <button
                                 onClick={handleSubmit}
                                 disabled={isSubmitting || isLecturaInvalid}

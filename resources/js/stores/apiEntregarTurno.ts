@@ -28,9 +28,10 @@ export type Copiadoras = {
     paquetes: number;
     fallas?: string | null;
 };
-
+export type NumeroVacio = number | "";
 export type FondoDocumentacion = {
     fondoRecibido: number;
+    gastos: NumeroVacio[];
     cantidadValesGasolina: number;
     fondoEntregado: number;
     folioValesGasolina: number;
@@ -38,7 +39,6 @@ export type FondoDocumentacion = {
     cantidadReporteAterisaje: number;
     totalLlegadaOperacion: number;
     totalSalidaOperacion: number;
-    reportesEnviadosCorreo: string;
     cantidadOperacionesCordinadasEntregadas: number;
     cuantosWalkArounds: number;
 };
@@ -148,5 +148,28 @@ export async function actualizarEntregarTurnoApi(id: number, form: any) {
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.message || "No se pudo actualizar");
+    return data;
+}
+
+export async function OperacionesDiarias() {
+
+    const res = await fetch(`/api/EntregarTurno/OperacionDiaria`, {
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message);
+    return data;
+}
+export async function WalkAround() {
+
+    const res = await fetch(`/api/EntregarTurno/WalkAround`, {
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message);
     return data;
 }

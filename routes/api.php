@@ -62,6 +62,8 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('administracion')->group(func
 });
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('EntregarTurno')->group(function () {
+    Route::get('/OperacionDiaria', [EntregaTurnoController::class, 'OperacionDiaria']);
+    Route::get('/WalkAround', [EntregaTurnoController::class, 'WalkAround']);
     Route::get('/', [EntregaTurnoController::class, 'index']);
     Route::post('/', [EntregaTurnoController::class, 'store']);
     Route::get('/{entregarTurno}', [EntregaTurnoController::class, 'show']);
@@ -170,6 +172,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('Remision')->group(function (
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('TurnoAutoTanque')->group(function () {
     Route::post('/', [TurnoAutotanqueController::class, 'store']);
+    Route::get('/Excel/', [TurnoAutotanqueController::class, 'obtenerExcel']);
     Route::get('/check-active', [TurnoAutotanqueController::class, 'checkActiveTurno']);
     Route::get('/ultimo-totalizador', [TurnoAutotanqueController::class, 'getLastTotalizador']);
     Route::put('/remisiones/{remision}/cancelar', [TurnoAutotanqueController::class, 'cancelarRemision']);

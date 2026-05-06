@@ -147,17 +147,16 @@ function Watermark({ src }: { src: string }) {
 export default function EntregaTurnoPdfDoc({
     detalle,
 }: {
-    detalle: EntregaTurnoDetalle;
+    detalle: any; // Ajusta esto a tu tipo real o extiende EntregaTurnoDetalle si es necesario
 }) {
     const watermarkUrl = `${window.location.origin}/storage/6e611b3e-6b18-4232-9946-2c340de5c753.jpg`;
-    const logokUrl = `${window.location.origin}/storage/fc3de74e-ec9b-4341-a210-41878ccae559.jpg`;
+
     return (
         <Document>
             <Page size="A4" style={styles.page}>
                 <Watermark src={watermarkUrl} />
                 {/* HEADER */}
                 <View style={styles.header}>
-                    {/* TEXTO IZQUIERDA */}
                     <View style={styles.headerTextWrap}>
                         <Text style={styles.headerTitle}>ENTREGA DE TURNO</Text>
                         <Text style={styles.headerSub}>
@@ -227,7 +226,7 @@ export default function EntregaTurnoPdfDoc({
                             <Text style={styles.th}>Recibidas</Text>
                         </View>
 
-                        {detalle.equipo_oficina?.map((e, i) => (
+                        {detalle.equipo_oficina?.map((e: any, i: number) => (
                             <View key={i} style={styles.tr}>
                                 <Text style={[styles.td, styles.tdLeft]}>{e.equipo}</Text>
                                 <Text style={styles.td}>{e.existencia}</Text>
@@ -279,10 +278,13 @@ export default function EntregaTurnoPdfDoc({
                             <Text style={styles.td}>{detalle.fondo_documentacion?.fondoRecibido}</Text>
                         </View>
 
+                        {/* NUEVO: Fila de Gastos */}
                         <View style={styles.tr}>
-                            <Text style={[styles.td, styles.tdLeft]}>Vales de gasolina</Text>
+                            <Text style={[styles.td, styles.tdLeft]}>Gastos (Lista)</Text>
                             <Text style={styles.td}>
-                                {detalle.fondo_documentacion?.cantidadValesGasolina}
+                                {detalle.fondo_documentacion?.gastos && detalle.fondo_documentacion.gastos.length > 0
+                                    ? detalle.fondo_documentacion.gastos.map((g: number) => `$${g}`).join(', ')
+                                    : "Ninguno"}
                             </Text>
                         </View>
 
@@ -292,8 +294,20 @@ export default function EntregaTurnoPdfDoc({
                         </View>
 
                         <View style={styles.tr}>
-                            <Text style={[styles.td, styles.tdLeft]}>Folio vales gasolina</Text>
-                            <Text style={styles.td}>{detalle.fondo_documentacion?.folioValesGasolina}</Text>
+                            <Text style={[styles.td, styles.tdLeft]}>Vales de gasolina</Text>
+                            <Text style={styles.td}>
+                                {detalle.fondo_documentacion?.cantidadValesGasolina}
+                            </Text>
+                        </View>
+
+                        {/* ACTUALIZADO: Fila de Folios vales gasolina */}
+                        <View style={styles.tr}>
+                            <Text style={[styles.td, styles.tdLeft]}>Folio(s) vales gasolina</Text>
+                            <Text style={styles.td}>
+                                {detalle.fondo_documentacion?.folioValesGasolina && detalle.fondo_documentacion.folioValesGasolina.length > 0
+                                    ? detalle.fondo_documentacion.folioValesGasolina.join(', ')
+                                    : "Ninguno"}
+                            </Text>
                         </View>
 
                         <View style={styles.tr}>
@@ -327,7 +341,7 @@ export default function EntregaTurnoPdfDoc({
                         <View style={styles.tr}>
                             <Text style={[styles.td, styles.tdLeft]}>Reportes enviados por correo</Text>
                             <Text style={styles.td}>
-                                {detalle.fondo_documentacion?.reportesEnviadosCorreo}
+                                {detalle.fondo_documentacion?.reportesEnviadosCorreo ?? "N/A"}
                             </Text>
                         </View>
 
@@ -348,7 +362,6 @@ export default function EntregaTurnoPdfDoc({
                         </View>
                     </View>
                 </View>
-
 
                 {/* CAJA FUERTE */}
                 <View style={styles.card}>

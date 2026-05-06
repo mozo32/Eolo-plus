@@ -9,6 +9,9 @@ import {
     StyleSheet,
     pdf,
     Image,
+    Link,
+    Svg,
+    Path
 } from "@react-pdf/renderer";
 
 const GREEN = "#003E51";
@@ -115,6 +118,39 @@ const styles = StyleSheet.create({
         width: 120,
         height: 60,
         marginBottom: 5,
+    },
+    disclaimerBox: {
+        marginTop: 20,
+        padding: 10,
+        backgroundColor: '#f8fafc',
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
+        borderRadius: 8,
+        flexDirection: 'row',
+    },
+    disclaimerIcon: {
+        width: 14,
+        height: 14,
+        marginRight: 8,
+        marginTop: 2,
+    },
+    disclaimerTextCol: {
+        flex: 1,
+    },
+    disclaimerText: {
+        fontSize: 8,
+        color: '#64748b',
+        lineHeight: 1.4,
+        marginBottom: 4,
+    },
+    boldText: {
+        fontWeight: 'bold' as any,
+        color: '#334155',
+    },
+    linkText: {
+        color: '#2563eb',
+        textDecoration: 'none',
+        fontWeight: 'bold' as any,
     }
 });
 
@@ -196,6 +232,21 @@ function RemisionPdfDoc({ data }: { data: any }) {
                         {firmaCliente && <Image src={getFirmaUrl(firmaCliente.path)} style={styles.signatureImg} />}
                         <Text style={styles.label}>Firma del Cliente</Text>
                         <Text style={{ fontSize: 8 }}>{data.cliente}</Text>
+                    </View>
+                </View>
+                <View style={styles.disclaimerBox}>
+                    <View style={styles.disclaimerIcon}>
+                        <Svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth={2}>
+                            <Path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </Svg>
+                    </View>
+                    <View style={styles.disclaimerTextCol}>
+                        <Text style={styles.disclaimerText}>
+                            Acepto ser el representante del cliente y aeronave descrita, por lo que me obligo a pagar a <Text style={styles.boldText}>Eolo Plus S.A. de C.V.</Text> el importe total que se haya generado por este servicio.
+                        </Text>
+                        <Text style={styles.disclaimerText}>
+                            Aclaraciones y quejas: <Link src="mailto:sales@eolo.com.mx" style={styles.linkText}>sales@eolo.com.mx</Link>
+                        </Text>
                     </View>
                 </View>
             </Page>

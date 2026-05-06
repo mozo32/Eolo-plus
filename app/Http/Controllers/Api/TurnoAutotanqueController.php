@@ -297,4 +297,74 @@ class TurnoAutotanqueController extends Controller
             ], 500);
         }
     }
+    public function obtenerExcel(Request $request)
+    {
+        $id          = $request->query('id');
+        $responsable = $request->query('responsable');
+        $estado      = $request->query('estado');
+        $inspeccion  = $request->query('inspeccion');
+        $diferencia  = $request->query('diferencia');
+        $start       = $request->query('fechaInicio');
+        $end         = $request->query('fechaFin');
+        $perPage     = $request->query('per_page', 15);
+
+        $query = TurnoAutotanque::query()
+            ->with('inspeccion:id,turno_autotanque_id')
+            ->where('status', 'A');
+
+        $query->when($id, function ($q, $id) {
+            $q->where('id', $id);
+        });
+
+        $query->when($responsable, function ($q, $responsable) {
+            $q->where(function($sub) use ($responsable) {
+                $sub->where('nombre', 'like', "%{$responsable}%")
+                    ->orWhere('nombreCierre', 'like', "%{$responsable}%");
+            });
+        });
+
+        $query->when($start && $end, function ($q) use ($start, $end) {
+            if ($start === $end) {
+                $q->whereDate('fecha', $start);
+            } else {
+                $q->whereBetween('fecha', [
+                    $start . ' 00:00:00',
+                    $end . ' 23:59:59'
+                ]);
+            }
+        });
+
+        $query->when($diferencia !== null && $diferencia !== '', function ($q, $diferencia) {
+            $q->where('diferenciaFinal', 'like', "%{$diferencia}%");
+        });
+
+        $turnos = $query->orderBy('id', 'desc')->paginate($perPage);
+
+        $turnos->getCollection()->transform(function ($turno) {
+            $turno->tiene_inspeccion = $turno->inspeccion !== null;
+            unset($turno->inspeccion);
+            $turno->finalizado = !empty($turno->nombreCierre) &&
+                                !empty($turno->fechaCierre) &&
+                                $turno->cmCierre !== null &&
+                                $turno->litrosCierre !== null &&
+                                $turno->totalizadorCierre !== null;
+
+            return $turno;
+        });
+        if ($estado !== null && $estado !== '') {
+            $filtered = $turnos->getCollection()->filter(function ($item) use ($estado) {
+                return $item->finalizado == $estado;
+            });
+            $turnos->setCollection($filtered->values());
+        }
+
+        if ($inspeccion !== null && $inspeccion !== '') {
+            $filtered = $turnos->getCollection()->filter(function ($item) use ($inspeccion) {
+                return $item->tiene_inspeccion == $inspeccion;
+            });
+            $turnos->setCollection($filtered->values());
+        }
+
+        return response()->json($turnos);
+    }
 }

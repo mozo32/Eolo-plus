@@ -1,20 +1,15 @@
-import { useEffect } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { showAutotanque } from "@/stores/apiAutoTanque";
 import Swal from "sweetalert2";
-import camioPipa from '../../../../../resources/js/assets/Captura de pantalla 2026-02-10 121721.png';
-import {
-    Document,
-    Page,
-    Text,
-    View,
-    StyleSheet,
-    pdf,
-    Image,
-} from "@react-pdf/renderer";
+import { Document, Page, Text, View, StyleSheet, pdf, Image } from "@react-pdf/renderer";
+import { Canvas, useThree } from '@react-three/fiber';
+import { useGLTF } from '@react-three/drei';
+import * as THREE from 'three';
 
 const GREEN = "#003E51";
 const BORDER = "#111111";
 const GRAY_TEXT = "#374151";
+
 interface ImageItem {
     id: number;
     path: string;
@@ -23,257 +18,78 @@ interface ImageItem {
         observacion?: string;
     };
 }
-const styles = StyleSheet.create({
-    page: {
-        padding: 20,
-        fontSize: 9,
-        color: "#111827",
-        fontFamily: "Helvetica",
-        backgroundColor: "#ffffff",
-    },
-    headerWrap: {
-        flexDirection: "row",
-        borderWidth: 2,
-        borderColor: BORDER,
-        marginBottom: 8,
-    },
-    headerLeft: {
-        width: 95,
-        backgroundColor: GREEN,
-        color: "#ffffff",
-        justifyContent: "center",
-        alignItems: "center",
-        paddingVertical: 10,
-    },
-    headerLeftText: {
-        fontSize: 16,
-        fontWeight: "bold" as any,
-        letterSpacing: 4,
-    },
-    headerMid: {
-        flex: 1,
-        paddingVertical: 6,
-        paddingHorizontal: 10,
-        justifyContent: "center",
-    },
-    headerTitle: {
-        fontSize: 11,
-        fontWeight: "bold" as any,
-        textTransform: "uppercase",
-        marginBottom: 2,
-    },
-    headerSub: {
-        fontSize: 8,
-        color: GRAY_TEXT,
-    },
-    fieldsWrap: {
-        borderWidth: 2,
-        borderColor: BORDER,
-        marginBottom: 8,
-    },
-    fieldsRow: {
-        flexDirection: "row",
-        borderBottomWidth: 1,
-        borderColor: BORDER,
-    },
-    fieldCell: {
-        flex: 1,
-        borderRightWidth: 1,
-        borderColor: BORDER,
-        paddingVertical: 4,
-        paddingHorizontal: 6,
-    },
-    fieldCellLast: { borderRightWidth: 0 },
-    label: {
-        fontSize: 7,
-        fontWeight: "bold" as any,
-        textTransform: "uppercase",
-        color: "#111",
-        marginBottom: 1,
-    },
-    value: {
-        fontSize: 9,
-        fontWeight: "bold" as any,
-        textTransform: "uppercase",
-    },
-    boxTitle: {
-        fontSize: 9,
-        fontWeight: "bold" as any,
-        textTransform: "uppercase",
-        color: GREEN,
-        marginBottom: 4,
-        marginTop: 8,
-    },
-    // Estilos de Inspección
-    inspeccionBox: {
-        borderWidth: 2,
-        borderColor: BORDER,
-        padding: 8,
-        marginBottom: 8,
-    },
-    checklistGrid: {
-        flexDirection: "row",
-        flexWrap: "wrap",
-        marginTop: 5,
-        borderTopWidth: 1,
-        borderColor: "#eee",
-        paddingTop: 5,
-    },
-    checkItem: {
-        width: "33%",
-        fontSize: 7,
-        marginBottom: 3,
-    },
-    damageContainer: {
-        position: 'relative',
-        width: 320,
-        height: 140,
-        marginTop: 10,
-        alignSelf: 'center',
-    },
 
-    damageMarker: {
-        position: 'absolute',
-        color: 'red',
-        fontSize: 12,
-        fontWeight: 'bold',
-    },
-    // Estilos de Tabla
-    tableWrap: {
-        borderWidth: 2,
-        borderColor: BORDER,
-    },
-    tableHeader: {
-        flexDirection: "row",
-        backgroundColor: "#e5e7eb",
-        borderBottomWidth: 1,
-        borderColor: BORDER,
-    },
-    th: {
-        paddingVertical: 4,
-        fontSize: 7.5,
-        fontWeight: "bold" as any,
-        textTransform: "uppercase",
-        borderRightWidth: 1,
-        borderColor: BORDER,
-        textAlign: "center",
-    },
-    tr: {
-        flexDirection: "row",
-        borderBottomWidth: 1,
-        borderColor: BORDER,
-    },
-    td: {
-        paddingVertical: 4,
-        fontSize: 8,
-        borderRightWidth: 1,
-        borderColor: BORDER,
-        textAlign: "center",
-    },
-    balanceBox: {
-        marginTop: 10,
-        flexDirection: "row",
-        justifyContent: "flex-end",
-        gap: 10
-    },
-    balanceCard: {
-        borderWidth: 2,
-        borderColor: BORDER,
-        padding: 6,
-        minWidth: 100,
-        alignItems: "center"
-    },
-    evidenciasTitle: {
-        fontSize: 9,
-        fontWeight: "bold" as any,
-        textTransform: "uppercase",
-        color: GREEN,
-        marginTop: 15,
-        marginBottom: 5,
-    },
-    evidenciasGrid: {
-        flexDirection: "row",
-        flexWrap: "wrap",
-        gap: 5,
-    },
-    evidenciaImage: {
-        width: 130,
-        height: 100,
-        borderWidth: 1,
-        borderColor: BORDER,
-        objectFit: 'cover',
-    },
-    firmasSection: {
-        flexDirection: "row",
-        justifyContent: "space-around",
-        marginTop: 30,
-        paddingBottom: 20,
-    },
-    firmaBox: {
-        alignItems: "center",
-        width: 150,
-    },
-    firmaImage: {
-        width: 120,
-        height: 60,
-        marginBottom: 5,
-    },
-    firmaLine: {
-        width: "100%",
-        borderTopWidth: 1,
-        borderColor: BORDER,
-        marginTop: 2,
-    },
-    firmaLabel: {
-        fontSize: 7,
-        fontWeight: "bold" as any,
-        textTransform: "uppercase",
-        marginTop: 4,
-        textAlign: 'center'
-    }
+const styles = StyleSheet.create({
+    page: { padding: 20, fontSize: 9, color: "#111827", fontFamily: "Helvetica", backgroundColor: "#ffffff" },
+    headerWrap: { flexDirection: "row", borderWidth: 2, borderColor: BORDER, marginBottom: 8 },
+    headerLeft: { width: 95, backgroundColor: GREEN, color: "#ffffff", justifyContent: "center", alignItems: "center", paddingVertical: 10 },
+    headerLeftText: { fontSize: 16, fontWeight: "bold" as any, letterSpacing: 4 },
+    headerMid: { flex: 1, paddingVertical: 6, paddingHorizontal: 10, justifyContent: "center" },
+    headerTitle: { fontSize: 11, fontWeight: "bold" as any, textTransform: "uppercase", marginBottom: 2 },
+    headerSub: { fontSize: 8, color: GRAY_TEXT },
+    fieldsWrap: { borderWidth: 2, borderColor: BORDER, marginBottom: 8 },
+    fieldsRow: { flexDirection: "row", borderBottomWidth: 1, borderColor: BORDER },
+    fieldCell: { flex: 1, borderRightWidth: 1, borderColor: BORDER, paddingVertical: 4, paddingHorizontal: 6 },
+    fieldCellLast: { borderRightWidth: 0 },
+    label: { fontSize: 7, fontWeight: "bold" as any, textTransform: "uppercase", color: "#111", marginBottom: 1 },
+    value: { fontSize: 9, fontWeight: "bold" as any, textTransform: "uppercase" },
+    boxTitle: { fontSize: 9, fontWeight: "bold" as any, textTransform: "uppercase", color: GREEN, marginBottom: 4, marginTop: 8 },
+    inspeccionBox: { borderWidth: 2, borderColor: BORDER, padding: 8, marginBottom: 8 },
+    checklistGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 5, borderTopWidth: 1, borderColor: "#eee", paddingTop: 5 },
+    checkItem: { width: "33%", fontSize: 7, marginBottom: 3 },
+    damageContainer: { width: '100%', marginTop: 10, alignSelf: 'center', borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc', padding: 10 },
+
+    leyendaContainer: { flexDirection: 'row', justifyContent: 'center', gap: 30, marginBottom: 12, padding: 6, backgroundColor: '#ffffff', borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0' },
+    leyendaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    dotRojo: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#ef4444' },
+    dotAmarillo: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#f59e0b' },
+    leyendaText: { fontSize: 8, fontWeight: 'bold' as any, textTransform: 'uppercase' },
+
+    capturasGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
+    capturaImg: { width: 250, height: 180, borderWidth: 1, borderColor: '#cbd5e1', objectFit: 'cover' },
+
+    tableWrap: { borderWidth: 2, borderColor: BORDER },
+    tableHeader: { flexDirection: "row", backgroundColor: "#e5e7eb", borderBottomWidth: 1, borderColor: BORDER },
+    th: { paddingVertical: 4, fontSize: 7.5, fontWeight: "bold" as any, textTransform: "uppercase", borderRightWidth: 1, borderColor: BORDER, textAlign: "center" },
+    tr: { flexDirection: "row", borderBottomWidth: 1, borderColor: BORDER },
+    td: { paddingVertical: 4, fontSize: 8, borderRightWidth: 1, borderColor: BORDER, textAlign: "center" },
+    balanceBox: { marginTop: 10, flexDirection: "row", justifyContent: "flex-end", gap: 10 },
+    balanceCard: { borderWidth: 2, borderColor: BORDER, padding: 6, minWidth: 100, alignItems: "center" },
+    evidenciasTitle: { fontSize: 9, fontWeight: "bold" as any, textTransform: "uppercase", color: GREEN, marginTop: 15, marginBottom: 5 },
+    evidenciasGrid: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
+    evidenciaImage: { width: 130, height: 100, borderWidth: 1, borderColor: BORDER, objectFit: 'cover' },
+    firmasSection: { flexDirection: "row", justifyContent: "space-around", marginTop: 30, paddingBottom: 20 },
+    firmaBox: { alignItems: "center", width: 150 },
+    firmaImage: { width: 120, height: 60, marginBottom: 5 },
+    firmaLine: { width: "100%", borderTopWidth: 1, borderColor: BORDER, marginTop: 2 },
+    firmaLabel: { fontSize: 7, fontWeight: "bold" as any, textTransform: "uppercase", marginTop: 4, textAlign: 'center' }
 });
 
 function Watermark({ src }: { src: string }) {
     return (
-        <Image
-            src={src}
-            style={{
-                position: "absolute",
-                top: 150,
-                left: 50,
-                width: 500,
-                height: 500,
-                opacity: 0.1,
-                zIndex: -1,
-            }}
-        />
+        <Image src={src} style={{ position: "absolute", top: 150, left: 50, width: 500, height: 500, opacity: 0.1, zIndex: -1 }} />
     );
 }
 
-function AutotanquePdfDoc({ detalle }: { detalle: any }) {
+function AutotanquePdfDoc({ detalle, capturas3D }: { detalle: any, capturas3D: string[] }) {
     const turno = detalle?.data?.turno || {};
     const inspeccion = detalle?.data?.inspeccion || turno?.inspeccion;
     const remisiones = Array.isArray(detalle?.data?.remision) ? detalle.data.remision : [];
     const watermarkUrl = `${window.location.origin}/1c463caa-e3a1-4093-a00b-1c0da40795f6.jpg`;
     const firmas = Array.isArray(inspeccion?.firmas) ? inspeccion.firmas : [];
     const fotos = Array.isArray(inspeccion?.imagenes) ? inspeccion.imagenes : [];
-    useEffect(() => {
-        console.log(fotos);
 
-    }, [fotos]);
     const getFullUrl = (path: string) => {
         if (!path) return '';
-        if (path.startsWith('http')) return path;
-        console.log(`${window.location.origin}/storage/${path.replace('public/', '')}`);
-
+        if (path.startsWith('http') || path.startsWith('data:image')) return path;
         return `${window.location.origin}/storage/${path.replace('public/', '')}`;
     };
+
     return (
         <Document>
             <Page size="A4" style={styles.page}>
                 <Watermark src={watermarkUrl} />
 
-                {/* Header */}
                 <View style={styles.headerWrap}>
                     <View style={styles.headerLeft}><Text style={styles.headerLeftText}>EOLO</Text></View>
                     <View style={styles.headerMid}>
@@ -282,7 +98,6 @@ function AutotanquePdfDoc({ detalle }: { detalle: any }) {
                     </View>
                 </View>
 
-                {/* Apertura y Cierre */}
                 <View style={styles.fieldsWrap}>
                     <View style={styles.fieldsRow}>
                         <View style={styles.fieldCell}><Text style={styles.label}>Responsable Apertura</Text><Text style={styles.value}>{turno.nombre || "-"}</Text></View>
@@ -294,7 +109,6 @@ function AutotanquePdfDoc({ detalle }: { detalle: any }) {
                     </View>
                 </View>
 
-                {/* Sección Inspección */}
                 {inspeccion && (
                     <>
                         <Text style={styles.boxTitle}>Inspección de Unidad (Checklist)</Text>
@@ -314,15 +128,34 @@ function AutotanquePdfDoc({ detalle }: { detalle: any }) {
                             </View>
 
                             <View style={styles.damageContainer}>
-                                <Image src={camioPipa} style={{ width: '100%', height: '100%' }} />
-                                {(inspeccion.danos_grafico || []).map((d: any, idx: number) => (
-                                    <Text key={idx} style={[styles.damageMarker, { left: `${d.x}%`, top: `${d.y}%` }]}>X</Text>
-                                ))}
+                                {capturas3D.length > 0 ? (
+                                    <>
+                                        <View style={styles.leyendaContainer}>
+                                            <View style={styles.leyendaItem}>
+                                                <View style={styles.dotRojo} />
+                                                <Text style={styles.leyendaText}>Faltante</Text>
+                                            </View>
+                                            <View style={styles.leyendaItem}>
+                                                <View style={styles.dotAmarillo} />
+                                                <Text style={styles.leyendaText}>Daño</Text>
+                                            </View>
+                                        </View>
+                                        <View style={styles.capturasGrid}>
+                                            {capturas3D.map((src, idx) => (
+                                                <Image key={idx} src={src} style={styles.capturaImg} />
+                                            ))}
+                                        </View>
+                                    </>
+                                ) : (
+                                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 20 }}>
+                                        <Text style={{ color: '#9ca3af' }}>No se adjuntó captura del modelo 3D de los daños.</Text>
+                                    </View>
+                                )}
                             </View>
                         </View>
                     </>
                 )}
-                {/* Tabla Remisiones */}
+
                 <Text style={styles.boxTitle}>Remisiones de Combustible</Text>
                 <View style={styles.tableWrap}>
                     <View style={styles.tableHeader}>
@@ -343,70 +176,160 @@ function AutotanquePdfDoc({ detalle }: { detalle: any }) {
                     )}
                 </View>
 
-                {/* Balances */}
                 <View style={styles.balanceBox}>
                     <View style={styles.balanceCard}><Text style={styles.label}>Total Vendido</Text><Text style={[styles.value, { color: GREEN }]}>{Number(turno.totalVendidos || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L</Text></View>
                     <View style={styles.balanceCard}><Text style={styles.label}>Diferencia Final</Text><Text style={[styles.value, { color: "#dc2626" }]}>{Number(turno.diferenciaFinal || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L</Text></View>
                 </View>
+
                 {fotos.length > 0 && (
                     <View>
                         <Text style={styles.evidenciasTitle}>Evidencias Fotográficas</Text>
                         <View style={styles.evidenciasGrid}>
                             {fotos.map((foto: any, idx: number) => (
-                                <Image
-                                    key={idx}
-                                    src={getFullUrl(foto.path)}
-                                    style={styles.evidenciaImage}
-                                />
+                                <Image key={idx} src={getFullUrl(foto.path)} style={styles.evidenciaImage} />
                             ))}
                         </View>
                     </View>
                 )}
+
                 {firmas.length > 0 && (
                     <View style={styles.firmasSection}>
                         {firmas.map((firma: any, idx: number) => (
                             <View key={idx} style={styles.firmaBox}>
-                                <Image
-                                    src={getFullUrl(firma.path)}
-                                    style={styles.firmaImage}
-                                />
+                                <Image src={getFullUrl(firma.path)} style={styles.firmaImage} />
                                 <View style={styles.firmaLine} />
-                                <Text style={styles.firmaLabel}>
-                                    {firma.pivot?.tag || "Firma Autorizada"}
-                                </Text>
+                                <Text style={styles.firmaLabel}>{firma.pivot?.tag || "Firma Autorizada"}</Text>
                             </View>
                         ))}
                     </View>
                 )}
-
             </Page>
         </Document>
     );
 }
 
+const CaptureScene = ({ danos, onComplete }: { danos: any[], onComplete: (photos: string[]) => void }) => {
+    const { gl, camera, scene } = useThree();
+    const { scene: gltfScene } = useGLTF('/models/result.glb');
+    const meshesRef = useRef<(THREE.Mesh | null)[]>([]);
+
+    useEffect(() => {
+        const capture = async () => {
+            const photos: string[] = [];
+            await new Promise(r => setTimeout(r, 800));
+
+            for (let i = 0; i < danos.length; i++) {
+                meshesRef.current.forEach((m) => { if (m) m.visible = false; });
+
+                if (meshesRef.current[i]) meshesRef.current[i]!.visible = true;
+
+                const d = danos[i];
+                const target = new THREE.Vector3(d.x, d.y, d.z);
+
+                const dir = target.clone().normalize();
+                if (dir.lengthSq() === 0) dir.set(0, 0, 1);
+
+                // ZOOM EXTREMO: La multiplicamos por 1.2 en lugar de 3.5, y bajamos el offset vertical a 0.2
+                camera.position.copy(target.clone().add(dir.multiplyScalar(1.2)).add(new THREE.Vector3(0, 0.2, 0)));
+                camera.lookAt(target);
+
+                gl.render(scene, camera);
+                await new Promise(r => setTimeout(r, 150));
+                photos.push(gl.domElement.toDataURL('image/png'));
+            }
+            onComplete(photos);
+        };
+        capture();
+    }, [danos, camera, gl, scene, onComplete]);
+
+    return (
+        <group>
+            <color attach="background" args={['#f8fafc']} />
+            <ambientLight intensity={0.7} />
+            <directionalLight position={[10, 10, 10]} intensity={1.5} />
+            <directionalLight position={[-10, 5, -10]} intensity={0.5} />
+
+            <primitive object={gltfScene} scale={2.5} />
+
+            {danos.map((d, i) => (
+                <mesh key={i} position={[d.x, d.y, d.z]} ref={el => meshesRef.current[i] = el}>
+                    <sphereGeometry args={[0.15, 32, 32]} />
+                    <meshStandardMaterial
+                        color={d.tipo === 'X' ? "#ef4444" : "#f59e0b"}
+                        emissive={d.tipo === 'X' ? "#ef4444" : "#f59e0b"}
+                        emissiveIntensity={0.4}
+                    />
+                </mesh>
+            ))}
+        </group>
+    );
+};
+
+const ModelCapturer = ({ danos, onComplete }: { danos: any[], onComplete: (photos: string[]) => void }) => {
+    return (
+        <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '1024px', height: '768px' }}>
+            {/* FOV en 40 (en lugar del default 75) para evitar distorsión "ojo de pez" al estar muy cerca */}
+            <Canvas gl={{ preserveDrawingBuffer: true }} camera={{ fov: 40 }}>
+                <CaptureScene danos={danos} onComplete={onComplete} />
+            </Canvas>
+        </div>
+    );
+};
+
 export default function PdfExporterAutotanque({ id, onDone }: { id: number | null; onDone: () => void }) {
+    const [needsCapture, setNeedsCapture] = useState(false);
+    const [dataToRender, setDataToRender] = useState<any>(null);
+
     useEffect(() => {
         if (!id) return;
-        const generatePdf = async () => {
-            Swal.fire({ title: "Generando Reporte", text: "Espere un momento...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        const fetchData = async () => {
+            Swal.fire({ title: "Generando Reporte", text: "Procesando capturas 3D...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             try {
                 const response = await showAutotanque(id);
-                console.log(response);
-
                 if (!response?.data) throw new Error("Sin datos");
-                const blob = await pdf(<AutotanquePdfDoc detalle={response} />).toBlob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `Reporte_Autotanque_${id}.pdf`;
-                a.click();
-                URL.revokeObjectURL(url);
-                Swal.fire({ icon: "success", title: "PDF Generado", timer: 1500, showConfirmButton: false });
+
+                setDataToRender(response);
+                if (response.data.inspeccion?.danos_grafico?.length > 0) {
+                    setNeedsCapture(true);
+                } else {
+                    generatePdf(response, []);
+                }
             } catch (e) {
                 Swal.fire("Error", "No se pudo obtener la información", "error");
-            } finally { onDone(); }
+                onDone();
+            }
         };
-        generatePdf();
+        fetchData();
     }, [id]);
+
+    const generatePdf = async (detalle: any, fotos3D: string[]) => {
+        try {
+            const blob = await pdf(<AutotanquePdfDoc detalle={detalle} capturas3D={fotos3D} />).toBlob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `Reporte_Autotanque_${detalle.data.turno.id}.pdf`;
+            a.click();
+            URL.revokeObjectURL(url);
+            Swal.fire({ icon: "success", title: "PDF Generado", timer: 1500, showConfirmButton: false });
+        } catch (error) {
+            Swal.fire("Error", "No se pudo generar el PDF", "error");
+        } finally {
+            onDone();
+        }
+    };
+
+    if (needsCapture && dataToRender) {
+        return (
+            <ModelCapturer
+                danos={dataToRender.data.inspeccion.danos_grafico}
+                onComplete={(fotos) => {
+                    setNeedsCapture(false);
+                    generatePdf(dataToRender, fotos);
+                }}
+            />
+        );
+    }
+
     return null;
 }

@@ -3,11 +3,11 @@ import Swal from 'sweetalert2';
 import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
 import EntregarTurnoAutotanque from './Autotanque/EntregarTurnoAutotanque';
-import { Calendar, Plus, X, ChevronLeft, Edit2, AlertCircle, ClipboardList, Filter, ChevronDown } from 'lucide-react';
+import { Download, Plus, X, ChevronLeft, Edit2, AlertCircle, ClipboardList, Filter, ChevronDown } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
-import { fetchAutotanque, eliminarTurno, showAutotanque, fetchTurnoActivo } from '@/stores/apiAutoTanque';
+import { fetchAutotanque, eliminarTurno, showAutotanque, fetchTurnoActivo, excelAutoTanqueApi } from '@/stores/apiAutoTanque';
 import PdfExporterAutotanque from './Autotanque/PdfExporterAutotanque';
-import { router } from '@inertiajs/react';
+import { exportarAutotanqueAExcel } from './Autotanque/excelService';
 import { CheckEstadoAutotanque } from './VerificacionEstadoAutotanque/CheckEstadoAutotanque';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Reporte de Entrega de Turno' }];
@@ -135,7 +135,52 @@ export default function ReporteEntregaTurno() {
             setOpenForm(true);
         } catch (error) { console.error(error); }
     };
+    const cargarExcel = async () => {
+        try {
+            const data = await excelAutoTanqueApi({ ...filtros });
 
+            return Array.isArray(data) ? data : (data.data || []);
+        } catch (error) {
+            console.error("Error al obtener datos para Excel:", error);
+            throw error;
+        }
+    };
+    const handleExportarExcel = async () => {
+        Swal.fire({
+            title: 'Generando Excel',
+            text: 'Estamos recopilando todos los registros, por favor espere...',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        try {
+            const datosParaExcel = await cargarExcel();
+
+            if (datosParaExcel.length === 0) {
+                Swal.fire('Atención', 'No hay registros para exportar con los filtros seleccionados.', 'warning');
+                return;
+            }
+
+            await exportarAutotanqueAExcel(datosParaExcel);
+
+            Swal.fire({
+                icon: 'success',
+                title: '¡Descarga lista!',
+                text: 'El reporte se ha generado correctamente.',
+                timer: 2000,
+                showConfirmButton: false
+            });
+
+        } catch (error) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'Hubo un problema al generar el archivo. Intente de nuevo.'
+            });
+        }
+    };
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Reporte de Entrega de Turno" />
@@ -154,6 +199,18 @@ export default function ReporteEntregaTurno() {
                                     <span className="text-[9px] font-black text-amber-700 uppercase">Turno abierto detectado</span>
                                 </div>
                             )}
+                            <>
+                                <div className="w-[1px] bg-slate-200 mx-1"></div>
+                                <button
+                                    onClick={handleExportarExcel}
+                                    disabled={loading}
+                                    className="flex items-center gap-2 bg-white text-slate-600 text-[10px] font-black px-3 py-2 rounded border border-slate-200 shadow-sm hover:bg-slate-50 transition-all active:scale-95 uppercase tracking-wider disabled:opacity-50"
+                                    title="Descargar Excel"
+                                >
+                                    <Download size={14} className="text-green-600" />
+                                    <span className="hidden md:inline">EXCEL</span>
+                                </button>
+                            </>
                             <button onClick={() => setMostrarFiltros(!mostrarFiltros)} className={`flex items-center gap-2 text-[10px] font-black px-4 py-2 rounded border transition-all ${mostrarFiltros ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
                                 <Filter size={14} />
                                 <span>{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>

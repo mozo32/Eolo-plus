@@ -349,8 +349,7 @@ class OperacionesDiariasController extends Controller
         if (!$modulo) {
             return response()->json(['error' => 'El módulo es requerido'], 400);
         }
-        $pendientes = OperacionDiaria::whereDate('fecha', now()->toDateString())
-            ->where(function ($query) use ($modulo) {
+        $pendientes = OperacionDiaria::where(function ($query) use ($modulo) {
                 $query->whereJsonDoesntContain('validaciones', $modulo)
                     ->orWhereNull('validaciones');
             })

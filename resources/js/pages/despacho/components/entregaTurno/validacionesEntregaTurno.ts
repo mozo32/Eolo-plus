@@ -56,7 +56,6 @@ export function validarEntregaTurno({
         if (fondo.fondoRecibido === "") faltantes.push("• Fondo recibido");
         if (fondo.cantidadValesGasolina === "") faltantes.push("• Cantidad de vales de gasolina");
         if (fondo.fondoEntregado === "") faltantes.push("• Fondo entregado");
-        if (fondo.folioValesGasolina === "") faltantes.push("• Folio de vales de gasolina");
 
         if (!fondo.reporteAterisaje) {
             faltantes.push("• Reporte de aterrizajes");
@@ -72,9 +71,7 @@ export function validarEntregaTurno({
             faltantes.push("• Operaciones coordinadas entregadas");
         }
         if (fondo.cuantosWalkArounds === "") faltantes.push("• Walk-Arounds");
-        if (!cajaFuerte.trim()) {
-            faltantes.push("• Estado de la caja fuerte");
-        }
+
     }
 
     if (step >= 5) {

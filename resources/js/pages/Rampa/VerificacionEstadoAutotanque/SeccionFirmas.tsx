@@ -1,14 +1,18 @@
-import React, { useState, useRef, useLayoutEffect, useEffect} from 'react';
+import React, { useState, useRef, useLayoutEffect, useEffect, Suspense } from 'react';
 import { Trash2, ClipboardCheck, PenTool, XCircle, Circle, Save } from 'lucide-react';
 import { usePage } from '@inertiajs/react';
-import camioPipa from '../../../../../resources/js/assets/Captura de pantalla 2026-02-10 121721.png';
+import { Canvas } from '@react-three/fiber';
+import { useGLTF, OrbitControls, Environment, Html } from '@react-three/drei';
 
-interface Marca {
+export interface Marca3D {
     x: number;
     y: number;
+    z: number;
     tipo: 'X' | 'O';
 }
+
 type Role = { slug: string; nombre: string; };
+
 export type AuthUser = {
     id: number;
     name: string;
@@ -21,13 +25,45 @@ export type AuthUser = {
         subdepartamentos: { id: number; nombre: string; route: string; }[];
     }[];
 };
+
 interface Props {
     estaCompleto: boolean;
     onGuardar: (datosFirmas: any) => void;
-    marcas: Marca[];
-    setMarcas: React.Dispatch<React.SetStateAction<Marca[]>>;
+    marcas: Marca3D[];
+    setMarcas: React.Dispatch<React.SetStateAction<Marca3D[]>>;
     firmasExistentes?: Record<string, string>;
 }
+
+const Visor3D = ({ marcas, setMarcas, modo }: { marcas: Marca3D[], setMarcas: any, modo: 'X' | 'O' }) => {
+    const { scene } = useGLTF('/models/result.glb');
+
+    const manejarClicModelo = (e: any) => {
+        e.stopPropagation();
+        const puntoClic = e.point;
+        setMarcas([...marcas, { x: puntoClic.x, y: puntoClic.y, z: puntoClic.z, tipo: modo }]);
+    };
+
+    return (
+        <group>
+            <primitive
+                object={scene}
+                scale={2.5}
+                onClick={manejarClicModelo}
+                onPointerOver={() => (document.body.style.cursor = 'crosshair')}
+                onPointerOut={() => (document.body.style.cursor = 'auto')}
+            />
+            {marcas.map((m, i) => (
+                <Html key={i} position={[m.x, m.y, m.z]} center>
+                    <div className="pointer-events-none transform -translate-y-1/2">
+                        {m.tipo === 'X'
+                            ? <XCircle className="text-red-500 fill-white" size={24} />
+                            : <Circle className="text-amber-500 fill-white" size={24} />}
+                    </div>
+                </Html>
+            ))}
+        </group>
+    );
+};
 
 const CardFirma = ({ titulo, id, nombre, setNombres, canvasRef }: any) => {
     const limpiarCanvas = () => {
@@ -65,7 +101,8 @@ export const SeccionFirmas = ({ estaCompleto, onGuardar, marcas, setMarcas, firm
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
     const user = auth?.user;
     const [modo, setModo] = useState<'X' | 'O'>('X');
-    const [nombres, setNombres] = useState({ entrega: user?.name, receptor: '', operaciones: '' });
+    const [nombres, setNombres] = useState({ entrega: user?.name || '', receptor: '', operaciones: '' });
+
     const canvasRefs = {
         entrega: useRef<HTMLCanvasElement>(null),
         receptor: useRef<HTMLCanvasElement>(null),
@@ -74,6 +111,7 @@ export const SeccionFirmas = ({ estaCompleto, onGuardar, marcas, setMarcas, firm
 
     useEffect(() => {
         if (!firmasExistentes) return;
+
         const cargarImagenEnCanvas = (tag: string, canvasRef: React.RefObject<HTMLCanvasElement | null>) => {
              const url = firmasExistentes[tag];
              const canvas = canvasRef.current;
@@ -85,7 +123,6 @@ export const SeccionFirmas = ({ estaCompleto, onGuardar, marcas, setMarcas, firm
             img.crossOrigin = "anonymous";
             img.src = url;
             img.onload = () => {
-                // Limpiar y dibujar la imagen
                 ctx?.clearRect(0, 0, canvas.width, canvas.height);
                 ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
             };
@@ -94,17 +131,7 @@ export const SeccionFirmas = ({ estaCompleto, onGuardar, marcas, setMarcas, firm
         cargarImagenEnCanvas("Firma quien entrega", canvasRefs.entrega);
         cargarImagenEnCanvas("Firma quien recibe", canvasRefs.receptor);
         cargarImagenEnCanvas("Firma fbo", canvasRefs.operaciones);
-
     }, [firmasExistentes]);
-
-    const prepararGuardado = () => {
-        const firmasFinales = {
-            entrega: { nombre: nombres.entrega, imagen: canvasRefs.entrega.current?.toDataURL() },
-            receptor: { nombre: nombres.receptor, imagen: canvasRefs.receptor.current?.toDataURL() },
-            operaciones: { nombre: nombres.operaciones, imagen: canvasRefs.operaciones.current?.toDataURL() }
-        };
-        onGuardar(firmasFinales);
-    };
 
     useLayoutEffect(() => {
         const initializers = Object.values(canvasRefs).map(ref => {
@@ -165,13 +192,13 @@ export const SeccionFirmas = ({ estaCompleto, onGuardar, marcas, setMarcas, firm
         return () => initializers.forEach(clean => clean?.());
     }, []);
 
-    const manejarClicImagen = (e: React.MouseEvent<HTMLDivElement>) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        setMarcas([...marcas, {
-            x: ((e.clientX - rect.left) / rect.width) * 100,
-            y: ((e.clientY - rect.top) / rect.height) * 100,
-            tipo: modo
-        }]);
+    const prepararGuardado = () => {
+        const firmasFinales = {
+            entrega: { nombre: nombres.entrega, imagen: canvasRefs.entrega.current?.toDataURL() },
+            receptor: { nombre: nombres.receptor, imagen: canvasRefs.receptor.current?.toDataURL() },
+            operaciones: { nombre: nombres.operaciones, imagen: canvasRefs.operaciones.current?.toDataURL() }
+        };
+        onGuardar(firmasFinales);
     };
 
     return (
@@ -180,27 +207,41 @@ export const SeccionFirmas = ({ estaCompleto, onGuardar, marcas, setMarcas, firm
                 <div className="bg-blue-600 p-2 rounded-lg text-white"><ClipboardCheck size={24} /></div>
                 <div>
                     <h2 className="text-xl font-bold text-slate-800">Inspección Final y Firmas</h2>
-                    <p className="text-sm text-slate-500">Registre daños y firme para finalizar</p>
+                    <p className="text-sm text-slate-500">Registre daños interactuando con el modelo 3D y firme para finalizar</p>
                 </div>
             </div>
 
             <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-                <div className="flex items-center justify-between p-4 bg-slate-50/50">
+                <div className="flex items-center justify-between p-4 bg-slate-50/50 z-10 relative">
                     <div className="flex gap-2 bg-white p-1 rounded-xl border border-slate-200">
                         <button type="button" onClick={() => setModo('X')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${modo === 'X' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>FALTANTE</button>
                         <button type="button" onClick={() => setModo('O')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${modo === 'O' ? 'bg-amber-500 text-white' : 'text-slate-400'}`}>DAÑO</button>
                     </div>
-                    <button type="button" onClick={() => setMarcas(marcas.slice(0, -1))} className="text-[10px] font-bold text-slate-400 hover:text-blue-600 uppercase">Deshacer</button>
+                    <button type="button" onClick={() => setMarcas(marcas.slice(0, -1))} className="text-[10px] font-bold text-slate-400 hover:text-blue-600 uppercase bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm">
+                        Deshacer Último
+                    </button>
                 </div>
-                <div className="p-8 flex justify-center bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:20px_20px]">
-                    <div className="relative cursor-crosshair" onClick={manejarClicImagen}>
-                        <img src={camioPipa} alt="Pipa" className="h-[300px] md:h-[400px] w-auto object-contain rotate-90" />
-                        {marcas.map((m, i) => (
-                            <div key={i} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: `${m.x}%`, top: `${m.y}%` }}>
-                                {m.tipo === 'X' ? <XCircle className="text-red-500 fill-white" size={24} /> : <Circle className="text-amber-500 fill-white" size={24} />}
-                            </div>
-                        ))}
+
+                <div className="h-[400px] md:h-[500px] w-full bg-slate-100 relative">
+                    <div className="absolute top-2 left-2 z-10 text-xs text-slate-500 bg-white/80 p-2 rounded pointer-events-none">
+                        Gira con el ratón/dedo. Haz clic para agregar marca.
                     </div>
+                    <Canvas camera={{ position: [5, 2, 5], fov: 50 }}>
+                        <ambientLight intensity={0.5} />
+                        <directionalLight position={[10, 10, 10]} intensity={1} />
+                        <Environment preset="city" />
+
+                        <OrbitControls
+                            makeDefault
+                            minPolarAngle={0}
+                            maxPolarAngle={Math.PI / 2.1}
+                            enablePan={false}
+                        />
+
+                        <Suspense fallback={<Html center>Cargando modelo...</Html>}>
+                            <Visor3D marcas={marcas} setMarcas={setMarcas} modo={modo} />
+                        </Suspense>
+                    </Canvas>
                 </div>
             </div>
 

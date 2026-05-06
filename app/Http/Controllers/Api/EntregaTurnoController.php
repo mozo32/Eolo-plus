@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\EntregaTurno;
+use App\Models\OperacionDiaria;
+use App\Models\WalkAround;
+
 class EntregaTurnoController extends Controller
 {
      public function store(Request $request)
@@ -146,6 +149,25 @@ class EntregaTurnoController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+    public function OperacionDiaria(){
+        $OPD = OperacionDiaria::whereDate('fecha', now()->toDateString())->get();
+
+        $totalSalidas = $OPD->where('tipo', 'salida')->count();
+        $totalLlegadas = $OPD->where('tipo', 'llegada')->count();
+
+
+        return response()->json([
+            'salidas' => $totalSalidas,
+            'llegadas' => $totalLlegadas
+        ]);
+    }
+    public function WalkAround(){
+        $WAR = WalkAround::whereDate('fecha', now()->toDateString())->where('status', 'A')->get();
+
+        $total = $WAR->count();
+
+        return response()->json(['total' => $total]);
     }
 
 }

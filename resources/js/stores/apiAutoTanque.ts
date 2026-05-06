@@ -170,3 +170,20 @@ export async function eliminarTurno(id: number) {
         ...data,
     };
 }
+
+export async function excelAutoTanqueApi(filtros = {}) {
+    const params = new URLSearchParams(filtros).toString();
+
+    const res = await fetch(`/api/TurnoAutoTanque/Excel?${params}`, {
+        method: "GET",
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+        },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || "Error al obtener registros");
+    return data;
+}
