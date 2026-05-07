@@ -248,7 +248,7 @@ export default function EntregaTurno() {
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center justify-end gap-1">
-                                                        {!row.validacion && (
+                                                        {!row.validacion && (user?.isAdmin || user?.roles?.some(rol => rol.slug === "jefe_area")||user?.roles?.some(rol => rol.slug === "fbo")) && (
                                                             <button
                                                                 onClick={() => setValidarId(row.id)}
                                                                 className={`p-2 rounded transition-colors text-slate-400 hover:text-blue-600`}
@@ -258,12 +258,15 @@ export default function EntregaTurno() {
                                                             </button>
                                                         )}
                                                         <button onClick={() => { setDetalleId(row.id); setDetalleOpen(true); }} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"><Eye size={16} /></button>
-                                                        {user?.isAdmin && (
+                                                        {user?.isAdmin || user?.roles?.some(rol => rol.slug === "fbo") && (
 
                                                             <button onClick={() => setEditarId(row.id)} className={`p-2 rounded transition-colors text-slate-400 hover:text-blue-600`}><Edit2 size={16} /></button>
                                                         )}
-
-                                                        <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]">PDF</button>
+                                                        {(user?.isAdmin ||( user?.roles?.some(rol => rol.slug === "jefe_area")||user?.roles?.some(rol => rol.slug === "fbo"))) && (
+                                                            <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]">
+                                                                PDF
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>
