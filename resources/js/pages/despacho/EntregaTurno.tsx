@@ -36,6 +36,7 @@ export default function EntregaTurno() {
     const [rows, setRows] = useState<EntregarTurnoRow[]>([]);
     const { auth } = usePage<PageProps>().props;
     const user = auth.user;
+    console.log(user);
 
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
