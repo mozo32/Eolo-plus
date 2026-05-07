@@ -17,7 +17,7 @@ import FondoDocumentacion, {
     FondoDocumentacionState,
     FONDO_DOC_DEFAULT,
 } from "./FondoDocumentacion";
-import { guardarEntregarTurnoApi, actualizarEntregarTurnoApi } from "@/stores/apiEntregarTurno";
+import { guardarEntregarTurnoApi, actualizarEntregarTurnoApi, validarEntregarTurnoApi } from "@/stores/apiEntregarTurno";
 import CajaFuerte from "./CajaFuerte";
 
 interface SalidaFormData {
@@ -25,7 +25,7 @@ interface SalidaFormData {
     nombre: string;
     nombreQuienEntrega: string;
     nombreJefeTurnoDespacho: string;
-
+    nombreQuienRecibe: string;
     checklistComunicacion: ChecklistComunicacionState;
     equipoOficina: EquipoOficinaState;
     copiadoras: CopiadorasState;
@@ -39,9 +39,12 @@ interface GestionTurnoFormProps {
     onSaved?: () => void;
     initialData?: Partial<SalidaFormData>;
     isEdit?: boolean;
+    isValidar?: boolean;
 }
 
-type Step = 1 | 2 | 3 | 4 | 5;
+// 1. Reducimos los pasos a 4
+type Step = 1 | 2 | 3 | 4;
+
 type Role = {
     slug: string;
     nombre: string;
@@ -62,7 +65,8 @@ export type AuthUser = {
         }[];
     }[];
 };
-export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, isEdit }: GestionTurnoFormProps) {
+
+export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, isEdit, isValidar }: GestionTurnoFormProps) {
     const today = new Date().toISOString().slice(0, 10);
 
     const [step, setStep] = useState<Step>(1);
@@ -71,6 +75,7 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
         fecha: today,
         nombre: "",
         nombreQuienEntrega: "",
+        nombreQuienRecibe: "",
         nombreJefeTurnoDespacho: "",
         checklistComunicacion: { items: {}, fallas: "" },
         equipoOficina: EQUIPOS_OFICINA_DEFAULT,
@@ -101,20 +106,22 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
             1: "Comunicación",
             2: "Oficina",
             3: "Copiadoras",
-            4: "Fondo/Caja",
-            5: "Responsables",
+            4: "Fondo y Responsables", // 2. Actualizamos la etiqueta
         };
         return map[step];
     }, [step]);
     const user = auth?.user;
+
     useEffect(() => {
         if (!user) return;
 
         setForm(prev => ({
             ...prev,
             nombre: user.name,
+            nombreQuienEntrega: prev.nombreQuienEntrega || user.name.toUpperCase(),
         }));
     }, [user]);
+
     // Validación por paso (para avanzar)
     const canGoNext = () => {
         const faltantes = validarEntregaTurno({
@@ -147,9 +154,10 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
         return true;
     };
 
+    // 3. Modificamos el límite del Step a 4
     const nextStep = () => {
         if (!canGoNext()) return;
-        setStep((s) => (s < 5 ? ((s + 1) as Step) : s));
+        setStep((s) => (s < 4 ? ((s + 1) as Step) : s));
     };
 
     const prevStep = () => setStep((s) => (s > 1 ? ((s - 1) as Step) : s));
@@ -158,7 +166,7 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
         e.preventDefault();
 
         const faltantes = validarEntregaTurno({
-            step: 5,
+            step: 4,
             nombre: form.nombre,
             nombreQuienEntrega: form.nombreQuienEntrega,
             nombreJefeTurnoDespacho: form.nombreJefeTurnoDespacho,
@@ -167,21 +175,6 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
             fondoDocumentacion: form.fondoDocumentacion,
             cajaFuerte: form.estadoCajaFuerte,
         });
-
-        if (faltantes.length > 0) {
-            Swal.fire({
-                icon: "warning",
-                title: "Faltan datos por completar",
-                html: `
-            <div style="text-align:left;font-size:13px;">
-                <ul style="padding-left:18px;">
-                    ${faltantes.map(f => `<li>${f}</li>`).join("")}
-                </ul>
-            </div>
-        `,
-            });
-            return;
-        }
 
         if (faltantes.length > 0) {
             Swal.fire({
@@ -199,7 +192,10 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
             });
             return;
         }
-        if (isEdit) {
+
+        if (isValidar) {
+            await validarEntregarTurnoApi(id!, form);
+        } else if (isEdit) {
             await actualizarEntregarTurnoApi(id!, form);
         } else {
             await guardarEntregarTurnoApi(form);
@@ -207,7 +203,7 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
 
         await Swal.fire({
             icon: "success",
-            title: isEdit ? "Entrega actualizada" : "Entrega guardada",
+            title: isValidar ? "Entrega validada" : (isEdit ? "Entrega actualizada" : "Entrega guardada"),
             text: "La información se registró correctamente.",
         });
         onSaved?.();
@@ -222,7 +218,7 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
                     <div>
                         <h2 className="text-base font-semibold">Entrega de turno</h2>
                         <p className="text-xs text-gray-500">
-                            Paso {step} / 5 · {progressLabel}
+                            Paso {step} / 4 · {progressLabel}
                         </p>
                     </div>
                     <span className="rounded-full bg-gray-200 px-3 py-1 text-xs">
@@ -230,10 +226,11 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
                     </span>
                 </div>
 
+                {/* 5. Calculamos la barra sobre 4 pasos */}
                 <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
                     <div
-                        className="h-full bg-gray-900 dark:bg-gray-100"
-                        style={{ width: `${(step / 5) * 100}%` }}
+                        className="h-full bg-gray-900 dark:bg-gray-100 transition-all duration-300"
+                        style={{ width: `${(step / 4) * 100}%` }}
                     />
                 </div>
             </div>
@@ -280,7 +277,7 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
                 </section>
             )}
 
-            {/* STEP 4: Fondo + Caja */}
+            {/* STEP 4: Fondo + Caja + Responsables */}
             {step === 4 && (
                 <section className="space-y-4">
                     <div className="rounded-xl border border-gray-200 bg-slate-50/70 p-4 shadow-sm dark:border-gray-700 dark:bg-slate-900/40">
@@ -296,59 +293,78 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
                             onChange={(value) => setForm((prev) => ({ ...prev, estadoCajaFuerte: value }))}
                         />
                     </div>
-                </section>
-            )}
 
-            {/* STEP 5: Responsables */}
-            {step === 5 && (
-                <section className="rounded-xl border border-gray-200 bg-slate-50/70 p-4 shadow-sm dark:border-gray-700 dark:bg-slate-900/40">
-                    <h2 className="mb-3 text-base font-semibold text-gray-900 dark:text-gray-100">
-                        Responsables de la entrega
-                    </h2>
+                    {/* Nueva ubicación del bloque Responsables */}
+                    <div className="rounded-xl border border-gray-200 bg-slate-50/70 p-4 shadow-sm dark:border-gray-700 dark:bg-slate-900/40">
+                        <h2 className="mb-3 text-base font-semibold text-gray-900 dark:text-gray-100">
+                            Responsables de la entrega
+                        </h2>
 
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        <div className="grid gap-1">
-                            <label htmlFor="nombreQuienEntrega" className="text-sm font-medium text-gray-800 dark:text-gray-100">
-                                Nombre de quien entrega
-                            </label>
-                            <input
-                                id="nombreQuienEntrega"
-                                name="nombreQuienEntrega"
-                                type="text"
-                                value={form.nombreQuienEntrega}
-                                onChange={(e) =>
-                                    setForm((prev) => ({
-                                        ...prev,
-                                        nombreQuienEntrega: e.target.value.toUpperCase(),
-                                    }))
-                                }
-                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm
-                                outline-none ring-0 transition hover:border-gray-400 focus:border-primary focus:ring-1 focus:ring-primary
-                                dark:border-gray-700 dark:bg-gray-900 dark:text-white uppercase"
-                                placeholder="Nombre completo"
-                            />
-                        </div>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                            <div className="grid gap-1">
+                                <label htmlFor="nombreQuienEntrega" className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                                    Nombre de quien entrega
+                                </label>
+                                <input
+                                    id="nombreQuienEntrega"
+                                    name="nombreQuienEntrega"
+                                    type="text"
+                                    value={form.nombreQuienEntrega}
+                                    onChange={(e) =>
+                                        setForm((prev) => ({
+                                            ...prev,
+                                            nombreQuienEntrega: e.target.value.toUpperCase(),
+                                        }))
+                                    }
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm
+                                    outline-none ring-0 transition hover:border-gray-400 focus:border-primary focus:ring-1 focus:ring-primary
+                                    dark:border-gray-700 dark:bg-gray-900 dark:text-white uppercase"
+                                    placeholder="Nombre completo"
+                                />
+                            </div>
 
-                        <div className="grid gap-1">
-                            <label htmlFor="nombreJefeTurnoDespacho" className="text-sm font-medium text-gray-800 dark:text-gray-100">
-                                Jefe de despacho
-                            </label>
-                            <input
-                                id="nombreJefeTurnoDespacho"
-                                name="nombreJefeTurnoDespacho"
-                                type="text"
-                                value={form.nombreJefeTurnoDespacho}
-                                onChange={(e) =>
-                                    setForm((prev) => ({
-                                        ...prev,
-                                        nombreJefeTurnoDespacho: e.target.value.toUpperCase(),
-                                    }))
-                                }
-                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm
-                                outline-none ring-0 transition hover:border-gray-400 focus:border-primary focus:ring-1 focus:ring-primary
-                                dark:border-gray-700 dark:bg-gray-900 dark:text-white uppercase"
-                                placeholder="Nombre completo"
-                            />
+                            {/* <div className="grid gap-1">
+                                <label htmlFor="nombreJefeTurnoDespacho" className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                                    Jefe de Area
+                                </label>
+                                <input
+                                    id="nombreJefeTurnoDespacho"
+                                    name="nombreJefeTurnoDespacho"
+                                    type="text"
+                                    value={form.nombreJefeTurnoDespacho}
+                                    onChange={(e) =>
+                                        setForm((prev) => ({
+                                            ...prev,
+                                            nombreJefeTurnoDespacho: e.target.value.toUpperCase(),
+                                        }))
+                                    }
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm
+                                    outline-none ring-0 transition hover:border-gray-400 focus:border-primary focus:ring-1 focus:ring-primary
+                                    dark:border-gray-700 dark:bg-gray-900 dark:text-white uppercase"
+                                    placeholder="Nombre completo"
+                                />
+                            </div> */}
+                            <div className="grid gap-1">
+                                <label htmlFor="nombreQuienRecibe" className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                                    Nombre de quien recibe
+                                </label>
+                                <input
+                                    id="nombreQuienRecibe"
+                                    name="nombreQuienRecibe"
+                                    type="text"
+                                    value={form.nombreQuienRecibe}
+                                    onChange={(e) =>
+                                        setForm((prev) => ({
+                                            ...prev,
+                                            nombreQuienRecibe: e.target.value.toUpperCase(),
+                                        }))
+                                    }
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm
+                                    outline-none ring-0 transition hover:border-gray-400 focus:border-primary focus:ring-1 focus:ring-primary
+                                    dark:border-gray-700 dark:bg-gray-900 dark:text-white uppercase"
+                                    placeholder="Nombre completo"
+                                />
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -381,7 +397,8 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
                 </div>
 
                 <div className="flex gap-2">
-                    {step < 5 && (
+                    {/* Botón Siguiente si step es < 4 */}
+                    {step < 4 && (
                         <button
                             type="button"
                             onClick={nextStep}
@@ -391,12 +408,12 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
                         </button>
                     )}
 
-                    {step === 5 && (
+                    {step === 4 && (
                         <button
                             type="submit"
                             className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white"
                         >
-                            Guardar entrega de turno
+                            {isValidar ? "Validar información" : "Guardar entrega de turno"}
                         </button>
                     )}
                 </div>

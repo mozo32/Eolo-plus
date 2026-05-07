@@ -69,6 +69,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('EntregarTurno')->group(funct
     Route::get('/{entregarTurno}', [EntregaTurnoController::class, 'show']);
     Route::delete('/{entregarTurno}', [EntregaTurnoController::class, 'destroy']);
     Route::put('/{entregarTurno}', [EntregaTurnoController::class, 'update']);
+    Route::put('/validacion/{entregarTurno}', [EntregaTurnoController::class, 'validate']);
 });
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('PernoctaDia')->group(function () {

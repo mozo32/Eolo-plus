@@ -20,9 +20,14 @@ interface ImageItem {
 }
 
 const styles = StyleSheet.create({
+    headerLogo: {
+        width: "100%",
+        height: 45,
+        objectFit: "contain",
+    },
     page: { padding: 20, fontSize: 9, color: "#111827", fontFamily: "Helvetica", backgroundColor: "#ffffff" },
     headerWrap: { flexDirection: "row", borderWidth: 2, borderColor: BORDER, marginBottom: 8 },
-    headerLeft: { width: 95, backgroundColor: GREEN, color: "#ffffff", justifyContent: "center", alignItems: "center", paddingVertical: 10 },
+    headerLeft: { width: 95, color: "#ffffff", justifyContent: "center", alignItems: "center", paddingVertical: 10 },
     headerLeftText: { fontSize: 16, fontWeight: "bold" as any, letterSpacing: 4 },
     headerMid: { flex: 1, paddingVertical: 6, paddingHorizontal: 10, justifyContent: "center" },
     headerTitle: { fontSize: 11, fontWeight: "bold" as any, textTransform: "uppercase", marginBottom: 2 },
@@ -67,7 +72,19 @@ const styles = StyleSheet.create({
 
 function Watermark({ src }: { src: string }) {
     return (
-        <Image src={src} style={{ position: "absolute", top: 150, left: 50, width: 500, height: 500, opacity: 0.1, zIndex: -1 }} />
+        <Image
+            src={src}
+            fixed
+            style={{
+                position: "absolute",
+                top: 150,
+                left: 50,
+                width: 500,
+                height: 500,
+                opacity: 0.1,
+                zIndex: -1
+            }}
+        />
     );
 }
 
@@ -78,7 +95,7 @@ function AutotanquePdfDoc({ detalle, capturas3D }: { detalle: any, capturas3D: s
     const watermarkUrl = `${window.location.origin}/1c463caa-e3a1-4093-a00b-1c0da40795f6.jpg`;
     const firmas = Array.isArray(inspeccion?.firmas) ? inspeccion.firmas : [];
     const fotos = Array.isArray(inspeccion?.imagenes) ? inspeccion.imagenes : [];
-
+    const logoUrl = `${window.location.origin}/54657b8c-8428-41cc-a654-794ca81943d6.jpg`;
     const getFullUrl = (path: string) => {
         if (!path) return '';
         if (path.startsWith('http') || path.startsWith('data:image')) return path;
@@ -91,7 +108,9 @@ function AutotanquePdfDoc({ detalle, capturas3D }: { detalle: any, capturas3D: s
                 <Watermark src={watermarkUrl} />
 
                 <View style={styles.headerWrap}>
-                    <View style={styles.headerLeft}><Text style={styles.headerLeftText}>EOLO</Text></View>
+                    <View style={styles.headerLeft}>
+                        <Image src={logoUrl} style={styles.headerLogo} />
+                    </View>
                     <View style={styles.headerMid}>
                         <Text style={styles.headerTitle}>Reporte de Turno Autotanque</Text>
                         <Text style={styles.headerSub}>Folio Turno: #{turno.id || "N/A"} · Fecha: {turno.fecha || "N/A"}</Text>

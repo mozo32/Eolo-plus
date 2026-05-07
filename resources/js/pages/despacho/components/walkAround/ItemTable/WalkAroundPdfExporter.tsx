@@ -81,7 +81,11 @@ const styles = StyleSheet.create({
         fontFamily: "Helvetica",
         backgroundColor: "#ffffff",
     },
-
+    headerLogo: {
+        width: "100%",
+        height: 45,
+        objectFit: "contain",
+    },
     // Header
     headerWrap: {
         flexDirection: "row",
@@ -91,7 +95,6 @@ const styles = StyleSheet.create({
     },
     headerLeft: {
         width: 95,
-        backgroundColor: GREEN,
         color: "#ffffff",
         justifyContent: "center",
         alignItems: "center",
@@ -538,13 +541,14 @@ function WalkAroundPdfDoc({
 
     const lastPageFotos = pages[pages.length - 1]?.length ?? 0;
     const footerEnMismaPagina = lastPageFotos <= 4;
+    const logoUrl = `${window.location.origin}/54657b8c-8428-41cc-a654-794ca81943d6.jpg`;
     return (
         <Document>
             <Page size="A4" style={styles.page}>
                 <Watermark src={watermarkUrl} />
                 <View style={styles.headerWrap}>
                     <View style={styles.headerLeft}>
-                        <Text style={styles.headerLeftText}>EOLO</Text>
+                        <Image src={logoUrl} style={styles.headerLogo} />
                     </View>
                     <View style={styles.headerMid}>
                         <Text style={styles.headerTitle}>

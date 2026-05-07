@@ -12,6 +12,7 @@ class EntregaTurno extends Model
         'fecha',
         'nombre',
         'nombre_quien_entrega',
+        'nombre_quien_recibe',
         'nombre_jefe_turno_despacho',
         'checklist_comunicacion',
         'equipo_oficina',

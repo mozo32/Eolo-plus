@@ -3,7 +3,6 @@ import Swal from "sweetalert2";
 import {
     fetchEntregaTurnoDetalle,
     EntregaTurnoDetalle,
-    actualizarEntregarTurnoApi,
 } from "@/stores/apiEntregarTurno";
 import EntregaTurnoForm from "../EntregaTurnoForm";
 
@@ -11,9 +10,10 @@ type Props = {
     id: number;
     onClose: () => void;
     onSaved: () => void;
+    isValidar?: boolean; // <--- 1. Agregamos esta propiedad
 };
 
-export default function EntregarTurnoEditar({ id, onClose, onSaved }: Props) {
+export default function EntregarTurnoEditar({ id, onClose, onSaved, isValidar }: Props) {
     const [loading, setLoading] = useState(true);
     const [initialData, setInitialData] = useState<any>(null);
 
@@ -26,6 +26,7 @@ export default function EntregarTurnoEditar({ id, onClose, onSaved }: Props) {
                     fecha: d.fecha?.split("T")[0],
                     nombre: d.nombre,
                     nombreQuienEntrega: d.nombre_quien_entrega,
+                    nombreQuienRecibe: d.nombre_quien_recibe,
                     nombreJefeTurnoDespacho: d.nombre_jefe_turno_despacho,
                     checklistComunicacion: d.checklist_comunicacion,
                     equipoOficina: d.equipo_oficina,
@@ -51,6 +52,7 @@ export default function EntregarTurnoEditar({ id, onClose, onSaved }: Props) {
             id={id}
             initialData={initialData}
             isEdit
+            isValidar={isValidar}
             onClose={onClose}
             onSaved={onSaved}
         />

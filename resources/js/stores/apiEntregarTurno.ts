@@ -2,9 +2,12 @@
 export type EntregarTurnoRow = {
     id: number;
     fecha: string;
+    created_at: Date;
     nombre: string;
     nombre_jefe_turno_despacho: string;
     nombre_quien_entrega: string;
+    nombre_quien_recibe: string;
+    validacion: boolean;
 };
 export type ChecklistComunicacionItem = {
     entregado: boolean;
@@ -48,6 +51,7 @@ export type EntregaTurnoDetalle = EntregarTurnoRow & {
 
     nombre_jefe_turno_despacho: string | null;
     nombre_quien_entrega: string | null;
+    nombre_quien_recibe: string | null;
 
     checklist_comunicacion: ChecklistComunicacion | null;
     equipo_oficina: EquipoOficinaItem[] | null;
@@ -136,6 +140,25 @@ export async function actualizarEntregarTurnoApi(id: number, form: any) {
     await fetch("/sanctum/csrf-cookie", { credentials: "same-origin" });
     const xsrf = getXsrfToken();
     const res = await fetch(`/api/EntregarTurno/${id}`, {
+        method: "PUT",
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-XSRF-TOKEN': xsrf,
+        },
+        body: JSON.stringify(form),
+        credentials: "same-origin",
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.message || "No se pudo actualizar");
+    return data;
+}
+export async function validarEntregarTurnoApi(id: number, form: any) {
+
+    await fetch("/sanctum/csrf-cookie", { credentials: "same-origin" });
+    const xsrf = getXsrfToken();
+    const res = await fetch(`/api/EntregarTurno/validacion/${id}`, {
         method: "PUT",
         headers: {
             Accept: 'application/json',

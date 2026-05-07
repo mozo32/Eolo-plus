@@ -33,17 +33,15 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     headerLeft: {
-        width: 100,
-        backgroundColor: GREEN,
-        color: "#ffffff",
+        width: 140,
         justifyContent: "center",
         alignItems: "center",
-        paddingVertical: 15,
+        padding: 5,
     },
-    headerLeftText: {
-        fontSize: 18,
-        fontWeight: "bold" as any,
-        letterSpacing: 2,
+    headerLogo: {
+        width: "100%",
+        height: 45,
+        objectFit: "contain",
     },
     headerMid: {
         flex: 1,
@@ -154,8 +152,28 @@ const styles = StyleSheet.create({
     }
 });
 
+function Watermark({ src }: { src: string }) {
+    return (
+        <Image
+            src={src}
+            style={{
+                position: "absolute",
+                top: 180,
+                left: 50,
+                width: 500,
+                height: 500,
+                opacity: 0.1,
+                zIndex: -1,
+            }}
+        />
+    );
+}
+
 function RemisionPdfDoc({ data }: { data: any }) {
     const getFirmaUrl = (path: string) => `${window.location.origin}/storage/${path}`;
+    const watermarkUrl = `${window.location.origin}/1c463caa-e3a1-4093-a00b-1c0da40795f6.jpg`;
+
+    const logoUrl = `${window.location.origin}/54657b8c-8428-41cc-a654-794ca81943d6.jpg`;
 
     const firmaCliente = data.firmas?.find((f: any) => f.pivot.rol === "cliente");
     const firmaOperador = data.firmas?.find((f: any) => f.pivot.rol === "operador");
@@ -163,16 +181,17 @@ function RemisionPdfDoc({ data }: { data: any }) {
     return (
         <Document>
             <Page size="A4" style={styles.page}>
-                {/* Header */}
+                <Watermark src={watermarkUrl} />
                 <View style={styles.headerWrap}>
-                    <View style={styles.headerLeft}><Text style={styles.headerLeftText}>EOLO</Text></View>
+                    <View style={styles.headerLeft}>
+                        <Image src={logoUrl} style={styles.headerLogo} />
+                    </View>
                     <View style={styles.headerMid}>
                         <Text style={styles.headerTitle}>Remisión de Suministro</Text>
                         <Text style={styles.headerSub}>Folio: {data.folio} | Fecha: {data.fecha}</Text>
                     </View>
                 </View>
 
-                {/* Datos Generales */}
                 <Text style={styles.sectionTitle}>Información General</Text>
                 <View style={styles.grid}>
                     <View style={styles.col}><Text style={styles.label}>Cliente</Text><Text style={styles.value}>{data.cliente}</Text></View>
@@ -181,7 +200,6 @@ function RemisionPdfDoc({ data }: { data: any }) {
                     <View style={styles.col}><Text style={styles.label}>Producto</Text><Text style={styles.value}>{data.producto}</Text></View>
                 </View>
 
-                {/* Detalles del Servicio */}
                 <Text style={styles.sectionTitle}>Detalles de la Aeronave y Servicio</Text>
                 <View style={styles.grid}>
                     <View style={styles.col3}><Text style={styles.label}>Matrícula</Text><Text style={styles.value}>{data.matricula}</Text></View>
@@ -193,7 +211,6 @@ function RemisionPdfDoc({ data }: { data: any }) {
                     <View style={styles.col3}><Text style={styles.label}>Hora Final</Text><Text style={styles.value}>{data.hora_final}</Text></View>
                 </View>
 
-                {/* Lecturas y Totales */}
                 <Text style={styles.sectionTitle}>Lecturas del Contador</Text>
                 <View style={styles.grid}>
                     <View style={styles.col3}>
@@ -221,7 +238,6 @@ function RemisionPdfDoc({ data }: { data: any }) {
                     <View style={styles.col}><Text style={styles.label}>Forma de Pago</Text><Text style={styles.value}>{data.forma_pago}</Text></View>
                 </View>
 
-                {/* Firmas */}
                 <View style={styles.signatureSection}>
                     <View style={styles.signatureBox}>
                         {firmaOperador && <Image src={getFirmaUrl(firmaOperador.path)} style={styles.signatureImg} />}
@@ -234,6 +250,7 @@ function RemisionPdfDoc({ data }: { data: any }) {
                         <Text style={{ fontSize: 8 }}>{data.cliente}</Text>
                     </View>
                 </View>
+
                 <View style={styles.disclaimerBox}>
                     <View style={styles.disclaimerIcon}>
                         <Svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth={2}>
