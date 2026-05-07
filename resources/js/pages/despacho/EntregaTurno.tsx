@@ -36,7 +36,6 @@ export default function EntregaTurno() {
     const [rows, setRows] = useState<EntregarTurnoRow[]>([]);
     const { auth } = usePage<PageProps>().props;
     const user = auth.user;
-    console.log(user);
 
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
@@ -259,8 +258,7 @@ export default function EntregaTurno() {
                                                             </button>
                                                         )}
                                                         <button onClick={() => { setDetalleId(row.id); setDetalleOpen(true); }} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"><Eye size={16} /></button>
-                                                        {user?.isAdmin || user?.roles?.some(rol => rol.slug === "fbo") && (
-
+                                                        {(user?.isAdmin || user?.roles?.some(rol => rol.slug === "fbo")) && (
                                                             <button onClick={() => setEditarId(row.id)} className={`p-2 rounded transition-colors text-slate-400 hover:text-blue-600`}><Edit2 size={16} /></button>
                                                         )}
                                                         {(user?.isAdmin ||( user?.roles?.some(rol => rol.slug === "jefe_area")||user?.roles?.some(rol => rol.slug === "fbo"))) && (
