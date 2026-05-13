@@ -26,6 +26,7 @@ export const TablaRemisiones = ({
     onDeleteVenta,
     onDeleteSuma
 }: TablaProps) => {
+    console.log(remisiones);
 
     // Combinamos ambos arreglos para la vista, manteniendo su origen
     const dataUnificada = [

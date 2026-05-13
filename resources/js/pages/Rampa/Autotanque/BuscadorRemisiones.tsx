@@ -173,7 +173,7 @@ export const BuscadorRemisiones = ({ onSelect, onClose, foliosExistentes }: Busc
                                         <td className="p-3">
                                             <div className="flex flex-col">
                                                 <span className="text-xs font-bold text-slate-600">{item.cliente}</span>
-                                                <span className="text-[10px] text-slate-400">{item.total_litros?.toLocaleString()} Lts</span>
+                                                <span className="text-[10px] text-slate-400">{item.litros?.toLocaleString()} Lts</span>
                                             </div>
                                         </td>
                                         <td className="p-3 text-right">

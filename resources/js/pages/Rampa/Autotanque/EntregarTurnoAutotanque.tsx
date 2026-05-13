@@ -212,7 +212,7 @@ const EntregarTurnoAutotanque = ({ initialData, onSuccess }: { initialData?: any
 
     return (
         <div className="max-w-4xl mx-auto p-6 bg-gray-50 min-h-screen relative">
-            {showBuscador && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"><BuscadorRemisiones onSelect={(res) => { if (remisiones.some(r => r.folio === res.folio)) return Swal.fire('Error', 'Ya existe', 'warning'); setRemisiones(prev => [...prev, { id: res.id, folio: res.folio, litros: Number(res.total_litros), isCancelled: res.status === 'cancelado' || res.status === 'N' }]); setShowBuscador(false); }} onClose={() => setShowBuscador(false)} foliosExistentes={remisiones.map(r => r.folio)} /></div>}
+            {showBuscador && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"><BuscadorRemisiones onSelect={(res) => { if (remisiones.some(r => r.folio === res.folio)) return Swal.fire('Error', 'Ya existe', 'warning'); setRemisiones(prev => [...prev, { id: res.id, folio: res.folio, litros: Number(res.litros), isCancelled: res.status === 'cancelado' || res.status === 'N' }]); setShowBuscador(false); }} onClose={() => setShowBuscador(false)} foliosExistentes={remisiones.map(r => r.folio)} /></div>}
             {showSuman && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"><ModalConceptosSuman onAdd={(d) => { setEntradasASA(prev => [...prev, d]); setShowSuman(false); }} onClose={() => setShowSuman(false)} /></div>}
             {showInspeccion && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
