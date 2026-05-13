@@ -26,9 +26,7 @@ export const TablaRemisiones = ({
     onDeleteVenta,
     onDeleteSuma
 }: TablaProps) => {
-    console.log(remisiones);
 
-    // Combinamos ambos arreglos para la vista, manteniendo su origen
     const dataUnificada = [
         ...remisiones.map((r, idx) => ({ ...r, tipo: 'VENTA', originalIdx: idx })),
         ...entradasASA.map((e, idx) => ({ folio: e.remision, litros: e.litros, tipo: 'SUMA', originalIdx: idx }))

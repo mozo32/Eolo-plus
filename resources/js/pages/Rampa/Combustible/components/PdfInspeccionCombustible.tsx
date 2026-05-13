@@ -159,7 +159,6 @@ function InspeccionPdfDoc({ data }: { data: any }) {
                         // Separamos el path y reconstruimos la URL con el origin actual
                         const pathRelativo = ev.url.split('/storage/')[1];
                         const urlLimpia = `${window.location.origin}/storage/${pathRelativo}`;
-                        console.log('Prueba:', urlLimpia);
 
                         // Retornamos el View explícitamente
                         return (

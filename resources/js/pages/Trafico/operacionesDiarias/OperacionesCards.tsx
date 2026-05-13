@@ -60,10 +60,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
         setFiltros({ ...filtrosEdicion });
         setMostrarModalFecha(false);
     };
-    useEffect(() => {
-        console.log(moduloNombre);
 
-    }, [pagina, filtros]);
     const cargarPendientes = async () => {
         const identificadorConsulta = (nombreRol?.toUpperCase() === 'FBO' ? 'FBO' : moduloNombre) || '';
 

@@ -71,7 +71,6 @@ export default function NuevoTipoAeronave({ onClose }: NuevoTipoAeronaveProps) {
             }
 
             const data = await resp.json();
-            console.log("TIPO AERONAVE GUARDADA:", data);
 
             Swal.fire({
                 icon: "success",

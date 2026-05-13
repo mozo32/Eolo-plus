@@ -194,7 +194,6 @@ const TablaJefeArea: React.FC<TablaProps> = ({ onSeleccionar }) => {
                                                             try {
                                                                 const response = await axios.get(`/api/EntregaTurnoR/${reporte.id}`);
                                                                 const dataFull = response.data;
-                                                                console.log(dataFull);
 
                                                                 const blob = await pdf(<ReportePDF data={dataFull} />).toBlob();
                                                                 const url = URL.createObjectURL(blob);

@@ -101,7 +101,7 @@ export default function Remision() {
     const cosultaCombustible = async()=>{
         try {
             const res = await consultaAsa();
-           setDatosCombustible(res);
+            setDatosCombustible(res);
         } catch (error) {
              console.error(error);
         }
@@ -219,16 +219,10 @@ export default function Remision() {
                         <div className="flex gap-2">
                             {datosCombustible && (
                                 <div className="hidden lg:flex items-center gap-3 mr-4 px-4 py-1.5 bg-slate-50 border border-slate-200 rounded-lg">
-                                    <div className="flex flex-col items-center border-r border-slate-200 pr-3">
-                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">Consumido</span>
-                                        <span className="text-xs font-black text-amber-600">
-                                            {Number(datosCombustible.litros_consumidos).toLocaleString()} <small className="text-[8px]">LTS</small>
-                                        </span>
-                                    </div>
                                     <div className="flex flex-col items-center">
-                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">Restante ASA</span>
+                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">ASA</span>
                                         <span className="text-xs font-black text-indigo-600">
-                                            {Number(datosCombustible.litros_restantes).toLocaleString()} <small className="text-[8px]">LTS</small>
+                                            {Number(datosCombustible.diferenciaFinal).toLocaleString()} <small className="text-[8px]">LTS</small>
                                         </span>
                                     </div>
                                 </div>

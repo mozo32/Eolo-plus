@@ -16,6 +16,7 @@ use App\Models\SumaAutotanque;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\RemisionMail;
 use Illuminate\Http\JsonResponse;
+use App\Models\TurnoAutotanque;
 
 class RemisionController extends Controller
 {
@@ -438,32 +439,13 @@ class RemisionController extends Controller
         return response()->json($rem);
     }
 
-    public function combustibleAsa()
-    {
-        $ultimoRegistro = SumaAutotanque::select('litros', 'created_at')->latest()->first();
+    public function combustibleAsa() {
+        $ultimoRegistro = TurnoAutotanque::select('diferenciaFinal')->latest()->first();
 
-        if (!$ultimoRegistro) {
-            return response()->json(['message' => 'No hay registros en SumaAutotanque'], 404);
+        if ($ultimoRegistro) {
+            return $ultimoRegistro;
         }
 
-        $fechaReferencia = $ultimoRegistro->created_at->format('Y-m-d');
-        $horaReferencia = $ultimoRegistro->created_at->format('H:i:s');
-
-        $remisionesPosteriores = Remision::where('fecha', '>', $fechaReferencia)
-            ->orWhere(function($query) use ($fechaReferencia, $horaReferencia) {
-                $query->where('fecha', $fechaReferencia)
-                    ->where('hora_llegada', '>', $horaReferencia);
-            })
-            ->get(['total_litros']);
-
-        $sumaLitrosRemisiones = $remisionesPosteriores->sum('total_litros');
-        $litrosRestantes = $ultimoRegistro->litros - $sumaLitrosRemisiones;
-
-        return response()->json([
-            'litros_iniciales' => $ultimoRegistro->litros,
-            'litros_consumidos' => $sumaLitrosRemisiones,
-            'litros_restantes' => $litrosRestantes,
-            'fecha_corte' => $ultimoRegistro->created_at
-        ]);
+        return response()->json(['message' => 'No hay registros'], 404);
     }
 }

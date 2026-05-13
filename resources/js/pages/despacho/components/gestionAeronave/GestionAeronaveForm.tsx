@@ -87,7 +87,6 @@ export default function GestionAeronaveForm({ onClose }: GestionAeronaveFormProp
             }
 
             const data = await resp.json();
-            console.log("AERONAVE GUARDADA:", data);
 
             Swal.fire({
                 icon: "success",
