@@ -1,79 +1,90 @@
-
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
 export const ExcelRemisiones = async (datos: any[]) => {
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Remisiones');
 
-    worksheet.columns = [
-        { header: 'ID', key: 'id', width: 15 },
+    const sheetVentas = workbook.addWorksheet('Ventas ASA');
+    const sheetCompras = workbook.addWorksheet('Compras ASA');
+
+    // 1. Columnas para VENTAS (Se mantiene igual)
+    sheetVentas.columns = [
         { header: 'FOLIO', key: 'folio', width: 15 },
-        { header: 'FECHA', key: 'fecha', width: 15 },
-        { header: 'MATRÍCULA', key: 'matricula', width: 15 },
-        { header: 'EQUIPO', key: 'aeronave_tipo', width: 10 },
+        { header: 'FECHA', key: 'fecha', width: 12 },
+        { header: 'MATRÍCULA', key: 'matricula', width: 12 },
+        { header: 'SALIDA (LTS)', key: 'litros', width: 15 },
+        { header: 'ORD. VTA', key: 'vta', width: 12 },
+        { header: 'FACTURA', key: 'factura', width: 15 },
+        { header: 'PRECIO DE VENTA EOLO', key: 'precio_venta', width: 22 },
+        { header: 'IMPORTE', key: 'importe', width: 18 },
         { header: 'CLIENTE', key: 'cliente', width: 25 },
-        { header: 'TIPO CLIENTE', key: 'tipo_cliente', width: 15 },
-        { header: 'PRODUCTO', key: 'producto', width: 15 },
-        { header: 'CANTIDAD (LTS)', key: 'total_litros', width: 18 },
-        { header: 'DESTINO', key: 'destino', width: 12 },
-        { header: 'LLEGADA DE AUTOTANQUE', key: 'hora_llegada', width: 15 },
-        { header: 'INICIO DE CARGA', key: 'hora_inicial', width: 15 },
-        { header: 'FINAL DE CARGA', key: 'hora_final', width: 15 },
-        { header: 'LECTURA INICIAL', key: 'lectura_inicial', width: 18 },
-        { header: 'LECTURA FINAL', key: 'lectura_final', width: 18 },
-        { header: 'UNIDAD', key: 'unidad', width: 20 },
-        { header: 'OPERADOR', key: 'operador', width: 25 },
-        { header: 'PAGO', key: 'forma_pago', width: 15 },
+        { header: 'FORMA DE PAGO', key: 'forma_pago', width: 15 },
+        { header: 'MES DE REFERENCIA', key: 'mes', width: 18 },
+        { header: 'ESTATUS', key: 'status', width: 12 },
     ];
 
-    const headerRow = worksheet.getRow(1);
-    headerRow.eachCell((cell) => {
-        cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: '003E51' }
-        };
-        cell.font = {
-            color: { argb: 'FFFFFF' },
-            bold: true,
-            size: 10
-        };
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-    });
+    // 2. Columnas para COMPRAS (Actualizado según tu nueva consulta)
+    sheetCompras.columns = [
+        { header: 'FOLIO', key: 'folio', width: 15 },
+        { header: 'FECHA', key: 'fecha', width: 12 },
+        { header: 'LITROS', key: 'litros', width: 15 },
+        { header: 'FACTURA', key: 'factura', width: 15 },
+        { header: 'PRECIO DE COMPRA POR LT', key: 'precio_venta', width: 25 },
+        { header: 'COSTO ASA', key: 'importe', width: 20 },
+    ];
+
+    const formatHeader = (ws: ExcelJS.Worksheet) => {
+        const headerRow = ws.getRow(1);
+        headerRow.eachCell((cell) => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '003E51' } };
+            cell.font = { color: { argb: 'FFFFFF' }, bold: true };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        });
+    };
+
+    formatHeader(sheetVentas);
+    formatHeader(sheetCompras);
 
     datos.forEach((item) => {
-        const row = worksheet.addRow({
-            id:item.id,
-            folio: item.folio,
-            fecha: item.fecha,
-            matricula: item.matricula,
-            aeronave_tipo: item.aeronave_tipo,
-            cliente: item.cliente,
-            tipo_cliente: item.tipo_cliente,
-            producto: item.producto,
-            total_litros: Math.round(Number(item.total_litros || 0)),
-            destino: item.destino,
-            hora_llegada: item.hora_llegada,
-            hora_inicial: item.hora_inicial,
-            hora_final: item.hora_final,
-            lectura_inicial: Math.round(Number(item.lectura_inicial || 0)),
-            lectura_final: Math.round(Number(item.lectura_final || 0)),
-            unidad: item.unidad,
-            operador: item.operador,
-            forma_pago: item.forma_pago,
-        });
-
-        ['total_litros', 'lectura_inicial', 'lectura_final'].forEach(key => {
-            const cell = row.getCell(key);
-            cell.alignment = { horizontal: 'right' };
-            cell.numFmt = '#,##0.00';
-        });
+        if (item.tipo === 'R') {
+            sheetVentas.addRow({
+                folio: item.folio,
+                fecha: item.fecha,
+                matricula: item.matricula,
+                litros: Number(item.litros || 0),
+                vta: item.vta,
+                factura: item.factura,
+                precio_venta: Number(item.precio_venta || 0),
+                importe: Number(item.importe || 0),
+                cliente: item.cliente,
+                forma_pago: item.forma_pago,
+                mes: item.mes,
+                status: item.status === 'A' ? 'Activo' : item.status
+            });
+        } else {
+            // MAPEO PARA COMPRAS (Tipo A)
+            sheetCompras.addRow({
+                folio: item.folio,
+                fecha: item.fecha,
+                litros: Number(item.litros || 0),
+                factura: item.factura,
+                precio_venta: Number(item.precio_venta || 0),
+                importe: Number(item.importe || 0)
+            });
+        }
     });
+
+    // Formatos numéricos para Ventas
+    sheetVentas.getColumn('litros').numFmt = '#,##0.00';
+    sheetVentas.getColumn('precio_venta').numFmt = '$#,##0.0000';
+    sheetVentas.getColumn('importe').numFmt = '$#,##0.0000';
+
+    // Formatos numéricos para Compras (Actualizados con las nuevas keys)
+    sheetCompras.getColumn('litros').numFmt = '#,##0.00';
+    sheetCompras.getColumn('precio_venta').numFmt = '$#,##0.0000';
+    sheetCompras.getColumn('importe').numFmt = '$#,##0.0000';
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-
-    const fechaArchivo = new Date().toISOString().split('T')[0];
-    saveAs(blob, `Reporte_Remisiones_${fechaArchivo}.xlsx`);
+    saveAs(blob, `Reporte_ASA_${new Date().toISOString().split('T')[0]}.xlsx`);
 };

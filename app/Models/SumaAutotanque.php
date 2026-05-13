@@ -11,6 +11,7 @@ class SumaAutotanque extends Model
     protected $fillable = [
         'id_turno',
         'litros',
+        'costo',
         'folio'
     ];
 

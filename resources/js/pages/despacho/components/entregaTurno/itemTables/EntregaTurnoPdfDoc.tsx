@@ -6,7 +6,6 @@ import {
     StyleSheet,
     Image,
 } from "@react-pdf/renderer";
-import { EntregaTurnoDetalle } from "@/stores/apiEntregarTurno";
 
 const GREEN = "#003E51";
 const BORDER = "#111827";
@@ -20,8 +19,6 @@ const styles = StyleSheet.create({
         fontFamily: "Helvetica",
         color: "#111827",
     },
-
-    /* HEADER */
     header: {
         backgroundColor: GREEN,
         padding: 14,
@@ -35,7 +32,7 @@ const styles = StyleSheet.create({
     },
     headerTitle: {
         fontSize: 15,
-        fontWeight: 900 as any,
+        fontWeight: "bold" as any,
         color: "#ffffff",
         marginBottom: 2,
         letterSpacing: 1,
@@ -44,12 +41,6 @@ const styles = StyleSheet.create({
         fontSize: 9,
         color: "#dcfce7",
     },
-    headerLogo: {
-        width: 70,
-        height: 40,
-        objectFit: "contain",
-    },
-    /* CARD */
     card: {
         borderWidth: 1.5,
         borderColor: BORDER,
@@ -59,13 +50,11 @@ const styles = StyleSheet.create({
     },
     cardTitle: {
         fontSize: 9,
-        fontWeight: 900 as any,
+        fontWeight: "bold" as any,
         color: GREEN,
         marginBottom: 6,
         textTransform: "uppercase",
     },
-
-    /* GRID */
     row: {
         flexDirection: "row",
         gap: 10,
@@ -73,10 +62,9 @@ const styles = StyleSheet.create({
     col: {
         flex: 1,
     },
-
     label: {
         fontSize: 7.5,
-        fontWeight: 900 as any,
+        fontWeight: "bold" as any,
         color: GRAY,
         textTransform: "uppercase",
         marginBottom: 2,
@@ -85,8 +73,6 @@ const styles = StyleSheet.create({
         fontSize: 9.5,
         marginBottom: 6,
     },
-
-    /* TABLE */
     table: {
         borderWidth: 1,
         borderColor: BORDER,
@@ -106,7 +92,7 @@ const styles = StyleSheet.create({
         flex: 1,
         padding: 5,
         fontSize: 7.5,
-        fontWeight: 900 as any,
+        fontWeight: "bold" as any,
         textAlign: "center",
     },
     td: {
@@ -119,42 +105,42 @@ const styles = StyleSheet.create({
         textAlign: "left",
         flex: 2,
     },
-
     footer: {
         marginTop: 12,
         fontSize: 7.5,
         textAlign: "center",
         color: GRAY,
     },
+    // Estilo especial para la lista de gastos
+    gastoRow: {
+        flexDirection: "row",
+        backgroundColor: "#fff",
+        borderBottomWidth: 0.5,
+        borderColor: "#e5e7eb",
+    }
 });
 
-function Watermark({ src }: { src: string }) {
-    return (
-        <Image
-            src={src}
-            style={{
-                position: "absolute",
-                top: 100,
-                left: 50,
-                width: 500,
-                height: 500,
-                opacity: 0.30,
-            }}
-        />
-    );
-}
+const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0);
 
-export default function EntregaTurnoPdfDoc({
-    detalle,
-}: {
-    detalle: any; // Ajusta esto a tu tipo real o extiende EntregaTurnoDetalle si es necesario
-}) {
+export default function EntregaTurnoPdfDoc({ detalle }: { detalle: any }) {
     const watermarkUrl = `${window.location.origin}/storage/6e611b3e-6b18-4232-9946-2c340de5c753.jpg`;
 
     return (
         <Document>
             <Page size="A4" style={styles.page}>
-                <Watermark src={watermarkUrl} />
+                <Image
+                    src={watermarkUrl}
+                    style={{
+                        position: "absolute",
+                        top: 100,
+                        left: 50,
+                        width: 500,
+                        height: 500,
+                        opacity: 0.1, // Reducido un poco para que no estorbe la lectura
+                    }}
+                />
+
                 {/* HEADER */}
                 <View style={styles.header}>
                     <View style={styles.headerTextWrap}>
@@ -170,12 +156,12 @@ export default function EntregaTurnoPdfDoc({
                     <Text style={styles.cardTitle}>Datos generales</Text>
                     <View style={styles.row}>
                         <View style={styles.col}>
-                            <Text style={styles.label}>Nombre</Text>
-                            <Text style={styles.value}>{detalle.nombre}</Text>
-                        </View>
-                        <View style={styles.col}>
                             <Text style={styles.label}>Quién entrega</Text>
                             <Text style={styles.value}>{detalle.nombre_quien_entrega}</Text>
+                        </View>
+                        <View style={styles.col}>
+                            <Text style={styles.label}>Quién recibe</Text>
+                            <Text style={styles.value}>{detalle.nombre_quien_recibe}</Text>
                         </View>
                         <View style={styles.col}>
                             <Text style={styles.label}>Jefe de turno</Text>
@@ -184,181 +170,70 @@ export default function EntregaTurnoPdfDoc({
                     </View>
                 </View>
 
-                {/* CHECKLIST COMUNICACIÓN */}
-                <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Checklist de comunicación</Text>
-
-                    <View style={styles.table}>
-                        <View style={styles.trHeader}>
-                            <Text style={[styles.th, styles.tdLeft]}>Equipo</Text>
-                            <Text style={styles.th}>Entregado</Text>
-                            <Text style={styles.th}>Cargado</Text>
-                        </View>
-
-                        {Object.entries(detalle.checklist_comunicacion?.items || {}).map(
-                            ([nombre, item]: any) => (
-                                <View key={nombre} style={styles.tr}>
-                                    <Text style={[styles.td, styles.tdLeft]}>{nombre}</Text>
-                                    <Text style={styles.td}>{item.entregado ? "Sí" : "No"}</Text>
-                                    <Text style={styles.td}>{item.cargado}</Text>
-                                </View>
-                            )
-                        )}
-                    </View>
-
-                    {detalle.checklist_comunicacion?.fallas && (
-                        <Text style={{ marginTop: 6 }}>
-                            <Text style={{ fontWeight: 900 as any }}>Fallas:</Text>{" "}
-                            {detalle.checklist_comunicacion.fallas}
-                        </Text>
-                    )}
-                </View>
-
-                {/* EQUIPO OFICINA */}
-                <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Equipo de oficina</Text>
-
-                    <View style={styles.table}>
-                        <View style={styles.trHeader}>
-                            <Text style={[styles.th, styles.tdLeft]}>Equipo</Text>
-                            <Text style={styles.th}>Existencia</Text>
-                            <Text style={styles.th}>Entregadas</Text>
-                            <Text style={styles.th}>Recibidas</Text>
-                        </View>
-
-                        {detalle.equipo_oficina?.map((e: any, i: number) => (
-                            <View key={i} style={styles.tr}>
-                                <Text style={[styles.td, styles.tdLeft]}>{e.equipo}</Text>
-                                <Text style={styles.td}>{e.existencia}</Text>
-                                <Text style={styles.td}>{e.entregadas}</Text>
-                                <Text style={styles.td}>{e.recibidas}</Text>
-                            </View>
-                        ))}
-                    </View>
-                </View>
-
-                {/* COPIADORAS */}
-                <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Copiadoras</Text>
-                    <View style={styles.row}>
-                        <View style={styles.col}>
-                            <Text style={styles.label}>Funciona</Text>
-                            <Text style={styles.value}>{detalle.copiadoras?.funciona}</Text>
-                        </View>
-                        <View style={styles.col}>
-                            <Text style={styles.label}>Tóner</Text>
-                            <Text style={styles.value}>{detalle.copiadoras?.toner}</Text>
-                        </View>
-                        <View style={styles.col}>
-                            <Text style={styles.label}>Paquetes</Text>
-                            <Text style={styles.value}>{detalle.copiadoras?.paquetes}</Text>
-                        </View>
-                    </View>
-
-                    {detalle.copiadoras?.fallas && (
-                        <Text style={{ marginTop: 4 }}>
-                            <Text style={{ fontWeight: 900 as any }}>Fallas:</Text>{" "}
-                            {detalle.copiadoras.fallas}
-                        </Text>
-                    )}
-                </View>
-
-                {/* FONDO DOCUMENTACIÓN */}
+                {/* FONDO DE DOCUMENTACIÓN */}
                 <View style={styles.card}>
                     <Text style={styles.cardTitle}>Fondo de documentación</Text>
 
+                    {/* Resumen de Fondos */}
+                    <View style={[styles.row, { marginBottom: 10, borderBottomWidth: 1, paddingBottom: 5, borderColor: BORDER }]}>
+                        <View style={styles.col}>
+                            <Text style={styles.label}>Fondo Recibido</Text>
+                            <Text style={[styles.value, { color: GREEN, fontWeight: 'bold' }]}>
+                                {formatCurrency(detalle.fondo_documentacion?.fondoRecibido)}
+                            </Text>
+                        </View>
+                        <View style={styles.col}>
+                            <Text style={styles.label}>Fondo Entregado</Text>
+                            <Text style={[styles.value, { color: GREEN, fontWeight: 'bold' }]}>
+                                {formatCurrency(detalle.fondo_documentacion?.fondoEntregado)}
+                            </Text>
+                        </View>
+                    </View>
+
+                    {/* LISTA DE GASTOS */}
+                    <Text style={[styles.label, { marginBottom: 4 }]}>Detalle de Gastos</Text>
+                    <View style={[styles.table, { marginBottom: 10 }]}>
+                        <View style={styles.trHeader}>
+                            <Text style={[styles.th, { flex: 3, textAlign: 'left' }]}>Descripción</Text>
+                            <Text style={styles.th}>Monto</Text>
+                        </View>
+                        {detalle.fondo_documentacion?.gastos?.length > 0 ? (
+                            detalle.fondo_documentacion.gastos.map((gasto: any, idx: number) => (
+                                <View key={idx} style={styles.tr}>
+                                    <Text style={[styles.td, { flex: 3, textAlign: 'left' }]}>{gasto.descripcion}</Text>
+                                    <Text style={styles.td}>{formatCurrency(gasto.monto)}</Text>
+                                </View>
+                            ))
+                        ) : (
+                            <View style={styles.tr}><Text style={[styles.td, { width: '100%' }]}>Sin gastos registrados</Text></View>
+                        )}
+                    </View>
+
+                    {/* Otros Datos de Documentación */}
                     <View style={styles.table}>
                         <View style={styles.trHeader}>
                             <Text style={[styles.th, styles.tdLeft]}>Concepto</Text>
-                            <Text style={styles.th}>Cantidad</Text>
+                            <Text style={styles.th}>Información</Text>
                         </View>
-
                         <View style={styles.tr}>
-                            <Text style={[styles.td, styles.tdLeft]}>Fondo recibido</Text>
-                            <Text style={styles.td}>{detalle.fondo_documentacion?.fondoRecibido}</Text>
+                            <Text style={[styles.td, styles.tdLeft]}>Vales de gasolina (Cantidad)</Text>
+                            <Text style={styles.td}>{detalle.fondo_documentacion?.cantidadValesGasolina}</Text>
                         </View>
-
-                        {/* NUEVO: Fila de Gastos */}
                         <View style={styles.tr}>
-                            <Text style={[styles.td, styles.tdLeft]}>Gastos (Lista)</Text>
-                            <Text style={styles.td}>
-                                {detalle.fondo_documentacion?.gastos && detalle.fondo_documentacion.gastos.length > 0
-                                    ? detalle.fondo_documentacion.gastos.map((g: number) => `$${g}`).join(', ')
-                                    : "Ninguno"}
-                            </Text>
+                            <Text style={[styles.td, styles.tdLeft]}>Folios vales</Text>
+                            <Text style={styles.td}>{detalle.fondo_documentacion?.folioValesGasolina?.join(', ') || "N/A"}</Text>
                         </View>
-
-                        <View style={styles.tr}>
-                            <Text style={[styles.td, styles.tdLeft]}>Fondo entregado</Text>
-                            <Text style={styles.td}>{detalle.fondo_documentacion?.fondoEntregado}</Text>
-                        </View>
-
-                        <View style={styles.tr}>
-                            <Text style={[styles.td, styles.tdLeft]}>Vales de gasolina</Text>
-                            <Text style={styles.td}>
-                                {detalle.fondo_documentacion?.cantidadValesGasolina}
-                            </Text>
-                        </View>
-
-                        {/* ACTUALIZADO: Fila de Folios vales gasolina */}
-                        <View style={styles.tr}>
-                            <Text style={[styles.td, styles.tdLeft]}>Folio(s) vales gasolina</Text>
-                            <Text style={styles.td}>
-                                {detalle.fondo_documentacion?.folioValesGasolina && detalle.fondo_documentacion.folioValesGasolina.length > 0
-                                    ? detalle.fondo_documentacion.folioValesGasolina.join(', ')
-                                    : "Ninguno"}
-                            </Text>
-                        </View>
-
                         <View style={styles.tr}>
                             <Text style={[styles.td, styles.tdLeft]}>Reporte de aterrizaje</Text>
-                            <Text style={styles.td}>
-                                {detalle.fondo_documentacion?.reporteAterisaje === "si" ? "Sí" : "No"}
-                            </Text>
+                            <Text style={styles.td}>{detalle.fondo_documentacion?.reporteAterisaje === "si" ? `Sí (${detalle.fondo_documentacion.cantidadReporteAterisaje})` : "No"}</Text>
                         </View>
-
                         <View style={styles.tr}>
-                            <Text style={[styles.td, styles.tdLeft]}>Cantidad reportes aterrizaje</Text>
-                            <Text style={styles.td}>
-                                {detalle.fondo_documentacion?.cantidadReporteAterisaje}
-                            </Text>
+                            <Text style={[styles.td, styles.tdLeft]}>Operaciones (Llegada/Salida)</Text>
+                            <Text style={styles.td}>{detalle.fondo_documentacion?.totalLlegadaOperacion} / {detalle.fondo_documentacion?.totalSalidaOperacion}</Text>
                         </View>
-
-                        <View style={styles.tr}>
-                            <Text style={[styles.td, styles.tdLeft]}>Total llegada operación</Text>
-                            <Text style={styles.td}>
-                                {detalle.fondo_documentacion?.totalLlegadaOperacion}
-                            </Text>
-                        </View>
-
-                        <View style={styles.tr}>
-                            <Text style={[styles.td, styles.tdLeft]}>Total salida operación</Text>
-                            <Text style={styles.td}>
-                                {detalle.fondo_documentacion?.totalSalidaOperacion}
-                            </Text>
-                        </View>
-
-                        <View style={styles.tr}>
-                            <Text style={[styles.td, styles.tdLeft]}>Reportes enviados por correo</Text>
-                            <Text style={styles.td}>
-                                {detalle.fondo_documentacion?.reportesEnviadosCorreo ?? "N/A"}
-                            </Text>
-                        </View>
-
-                        <View style={styles.tr}>
-                            <Text style={[styles.td, styles.tdLeft]}>
-                                Operaciones coordinadas entregadas
-                            </Text>
-                            <Text style={styles.td}>
-                                {detalle.fondo_documentacion?.cantidadOperacionesCordinadasEntregadas}
-                            </Text>
-                        </View>
-
                         <View style={styles.tr}>
                             <Text style={[styles.td, styles.tdLeft]}>WalkArounds</Text>
-                            <Text style={styles.td}>
-                                {detalle.fondo_documentacion?.cuantosWalkArounds}
-                            </Text>
+                            <Text style={styles.td}>{detalle.fondo_documentacion?.cuantosWalkArounds}</Text>
                         </View>
                     </View>
                 </View>
@@ -371,11 +246,9 @@ export default function EntregaTurnoPdfDoc({
                     </Text>
                 </View>
 
-                {/* FOOTER */}
                 <Text style={styles.footer}>
                     Generado el {detalle.created_at?.split("T")[0]} · Sistema EOLO
                 </Text>
-
             </Page>
         </Document>
     );

@@ -62,11 +62,18 @@ class TurnoAutotanqueController extends Controller
                 }
 
                 SumaAutotanque::where('id_turno', $turno->id)->delete();
+                $precio = DB::connection('remota')
+                    ->table('tb_combustible')
+                    ->value('pasa');
 
+                if (!$precio) {
+                    $precio = 0;
+                }
                 foreach ($request->entradasASA as $entrada) {
                     SumaAutotanque::create([
                         'id_turno' => $turno->id,
                         'litros'   => $entrada['litros'],
+                        'costo'   => $precio,
                         'folio'    => $entrada['remision'],
                     ]);
                 }

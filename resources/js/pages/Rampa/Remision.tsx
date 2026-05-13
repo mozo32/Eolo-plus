@@ -9,7 +9,7 @@ import { Plus, Mail, Calendar, X, Edit2, Filter, ChevronDown, Download, Eye } fr
 import ModalEnviarCorreo from './Autotanque/ModalEnviarCorreo';
 import Swal from 'sweetalert2';
 import { ExcelRemisiones } from './Autotanque/ExcelRemisiones';
-import { excelRemisionesApi } from '@/stores/apiRemision';
+import { excelRemisionesApi, consultaAsa } from '@/stores/apiRemision';
 import VistaPreviaRemision from './Autotanque/VistaPreviaRemision';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Remisiones' }];
@@ -29,6 +29,7 @@ export default function Remision() {
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
     const [previewOpen, setPreviewOpen] = useState(false);
     const [datosPreview, setDatosPreview] = useState<any>(null);
+    const [datosCombustible, setDatosCombustible] = useState<any>(null);
 
     const [filtros, setFiltros] = useState({
         buscar: '',
@@ -97,7 +98,14 @@ export default function Remision() {
     };
 
     const handlePdfDone = useCallback(() => setPdfId(null), []);
-
+    const cosultaCombustible = async()=>{
+        try {
+            const res = await consultaAsa();
+           setDatosCombustible(res);
+        } catch (error) {
+             console.error(error);
+        }
+    }
     const cargarDatos = async () => {
         try {
             setLoading(true);
@@ -123,6 +131,7 @@ export default function Remision() {
 
     useEffect(() => {
         cargarDatos();
+        cosultaCombustible();
     }, [pagina, filtros]);
 
     const handleEdit = async (row: any) => {
@@ -208,6 +217,22 @@ export default function Remision() {
                         </div>
 
                         <div className="flex gap-2">
+                            {datosCombustible && (
+                                <div className="hidden lg:flex items-center gap-3 mr-4 px-4 py-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+                                    <div className="flex flex-col items-center border-r border-slate-200 pr-3">
+                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">Consumido</span>
+                                        <span className="text-xs font-black text-amber-600">
+                                            {Number(datosCombustible.litros_consumidos).toLocaleString()} <small className="text-[8px]">LTS</small>
+                                        </span>
+                                    </div>
+                                    <div className="flex flex-col items-center">
+                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">Restante ASA</span>
+                                        <span className="text-xs font-black text-indigo-600">
+                                            {Number(datosCombustible.litros_restantes).toLocaleString()} <small className="text-[8px]">LTS</small>
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
                             <div className="w-[1px] bg-slate-200 mx-1"></div>
                             <button
                                 onClick={handleExportarExcel}
@@ -302,15 +327,27 @@ export default function Remision() {
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
                                                     <span className="font-mono text-sm font-black text-indigo-600">
-                                                        {Number(row.total_litros || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} <small className="text-[9px] text-slate-400">LTS</small>
+                                                        {Number(row.litros || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} <small className="text-[9px] text-slate-400">LTS</small>
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center justify-end gap-1">
-                                                        <button onClick={() => handleEdit(row)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Edit2 size={16} /></button>
-                                                        <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors uppercase font-black text-[10px]">PDF</button>
-                                                        <button onClick={() => { setSelectedRow(row); setEmailModalOpen(true); }} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"><Mail size={16} /></button>
-                                                        <button onClick={() => handleEye(row)} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"><Eye size={16} /></button>
+                                                        {row.tipo === 'R' && (
+                                                            <>
+                                                                <button onClick={() => handleEdit(row)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
+                                                                    <Edit2 size={16} />
+                                                                </button>
+                                                                <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors uppercase font-black text-[10px]">
+                                                                    PDF
+                                                                </button>
+                                                                <button onClick={() => { setSelectedRow(row); setEmailModalOpen(true); }} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors">
+                                                                    <Mail size={16} />
+                                                                </button>
+                                                                <button onClick={() => handleEye(row)} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors">
+                                                                    <Eye size={16} />
+                                                                </button>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>
@@ -339,12 +376,12 @@ export default function Remision() {
                             <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                                 <div>
                                     <h3 className="text-lg font-black uppercase text-slate-800 tracking-tighter">{isEdit ? 'Editar Remisión' : 'Nueva Remisión'}</h3>
-                                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Formulario de Control de Combustible</p>
+                                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Formulario de Suministro de Combustible</p>
                                 </div>
                                 <button onClick={handleBack} className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors"><X size={20} /></button>
                             </div>
                             <div className="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                                <EoloForm data={detalle} isEdit={isEdit} onSuccess={() => { handleBack(); cargarDatos(); }} />
+                                <EoloForm data={detalle} isEdit={isEdit} onSuccess={() => { handleBack(); cargarDatos(); cosultaCombustible(); }} />
                             </div>
                         </div>
                     </div>
@@ -395,7 +432,7 @@ export default function Remision() {
                             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
                             onClick={() => setPreviewOpen(false)}
                         ></div>
-                        <div className="relative z-10 w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-300">
+                        <div className="relative z-10 w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-300">
                             <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                                 <div>
                                     <h3 className="text-lg font-black uppercase text-slate-800 tracking-tighter">Detalle de Remisión</h3>

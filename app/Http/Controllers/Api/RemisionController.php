@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Remision;
+use App\Models\PaymentMethod;
 use App\Models\OperacionDiaria;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -11,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Firma;
+use App\Models\SumaAutotanque;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\RemisionMail;
 use Illuminate\Http\JsonResponse;
@@ -24,15 +26,25 @@ class RemisionController extends Controller
                 'fecha'          => 'required|date',
                 'operador'       => 'required|string',
                 'cliente'        => 'required|string',
-                'formaPago'      => 'required|string',
+                'formaPago'      => 'nullable|string',
                 'matricula'      => 'required|string',
                 'horaLlegada'    => 'required|string|max:5',
                 'lecturaInicial' => 'required|numeric',
                 'lecturaFinal'   => 'required|numeric',
             ]);
+
             return DB::transaction(function () use ($request) {
                 $ultimoId = Remision::max('id') ?? 0;
                 $nuevoFolio = "EOLO-" . str_pad($ultimoId + 1, 4, '0', STR_PAD_LEFT);
+
+                $precio = DB::connection('remota')
+                    ->table('tb_combustible')
+                    ->value('p_combustible');
+
+                if (!$precio) {
+                    $precio = 0;
+                }
+
                 $remision = Remision::create([
                     'folio'           => $nuevoFolio,
                     'fecha'           => $request->fecha,
@@ -49,6 +61,7 @@ class RemisionController extends Controller
                     'lectura_inicial' => $request->lecturaInicial,
                     'lectura_final'   => $request->lecturaFinal,
                     'total_litros'    => (float)$request->lecturaFinal - (float)$request->lecturaInicial,
+                    'precio'          => $precio,
                 ]);
 
                 $this->guardarFirmaBase64($request->firmaCliente ?? '', 'cliente', $remision);
@@ -72,32 +85,144 @@ class RemisionController extends Controller
     {
         $perPage = $request->query('per_page', 20);
         $vinculado = $request->boolean('vinculado');
-        $query = Remision::where('status', 'A');
+        $start = $request->query('start');
+        $end = $request->query('end');
+        $type = $request->query('type', 'day');
+        $folio = $request->query('folio');
+        $matricula = $request->query('matricula');
+        $litros = $request->query('cantidad');
+
+        $queryRemisiones = DB::table('remisiones')
+            ->select(
+                'id', DB::raw("'R' as tipo"), 'matricula', 'folio', 'destino', 'created_at',
+                'total_litros as litros', 'fecha', 'hora_llegada', 'id_turno'
+            )
+            ->where('status', 'A');
+
+        $queryAutotanques = DB::table('sumas_autotanque')
+            ->select(
+                'id', DB::raw("'A' as tipo"), DB::raw("'ASA' as matricula"), 'folio', DB::raw("NULL as destino"),
+                'created_at', 'litros', DB::raw("DATE(created_at) as fecha"),
+                DB::raw("NULL as hora_llegada"), 'id_turno'
+            );
+
         if (!$vinculado) {
-            $query->whereNull('id_turno');
+            $queryRemisiones->whereNull('id_turno');
+            $queryAutotanques->whereNull('id_turno');
         }
+        $this->applyDateFilters($queryRemisiones, $type, $start, $end, $request, 'fecha');
+        $this->applyDateFilters($queryAutotanques, $type, $start, $end, $request, 'created_at');
 
         if ($request->filled('folio')) {
-            $query->where('folio', 'LIKE', '%' . $request->query('folio') . '%');
+            $queryRemisiones->where('folio', 'LIKE', '%' . $folio . '%');
+            $queryAutotanques->where('folio', 'LIKE', '%' . $folio . '%');
         }
 
         if ($request->filled('matricula')) {
-            $query->where('matricula', 'LIKE', '%' . $request->query('matricula') . '%');
+            $queryRemisiones->where('matricula', 'LIKE', '%' . $matricula . '%');
+            if (strtoupper($matricula) !== 'ASA' && strpos('ASA', strtoupper($matricula)) === false) {
+                $queryAutotanques->whereRaw('1 = 0');
+            }
         }
 
         if ($request->filled('cantidad')) {
-            $query->where('total_litros', '>=', $request->query('cantidad'));
+            $queryRemisiones->where('total_litros', '>=', $litros);
+            $queryAutotanques->where('litros', '>=', $litros);
         }
 
-        $type = $request->query('type', 'day');
+        $finalQuery = $queryRemisiones->unionAll($queryAutotanques);
+
+        $results = DB::table(DB::raw("({$finalQuery->toSql()}) as combined"))
+            ->mergeBindings($finalQuery)
+            ->orderBy('created_at', 'desc')
+            ->paginate($perPage);
+
+        return response()->json($results);
+    }
+
+    public function obtenerExcel(Request $request)
+    {
+        $perPage = $request->query('per_page', 20);
+        $vinculado = $request->boolean('vinculado');
         $start = $request->query('start');
         $end = $request->query('end');
+        $type = $request->query('periodo', 'day');
+        $folio = $request->query('folio');
+        $matricula = $request->query('matricula');
+        $litros = $request->query('cantidad');
 
+        $queryRemisiones = DB::table('remisiones')
+        ->select(
+            DB::raw("'R' as tipo"),
+            'folio',
+            'fecha',
+            'matricula',
+            DB::raw("'' as vta"),
+            DB::raw("'' as factura"),
+            'precio as precio_venta',
+            'total_litros as litros',
+            DB::raw("(total_litros * precio) as importe"),
+            'cliente',
+            'forma_pago',
+            DB::raw("MONTHNAME(fecha) as mes"),
+            'status',
+            'created_at',
+            'id'
+        )
+        ->where('status', 'A');
+
+        $queryAutotanques = DB::table('sumas_autotanque')
+        ->select(
+            DB::raw("'A' as tipo"),
+            'folio',
+            DB::raw("DATE(created_at) as fecha"),
+            DB::raw("'ASA' as matricula"),
+            DB::raw("'' as vta"),
+            DB::raw("'' as factura"),
+            'costo as precio_venta',
+            'litros',
+            DB::raw("(litros * costo) as importe"),
+            DB::raw("'' as cliente"),
+            DB::raw("'' as forma_pago"),
+            DB::raw("'' as mes"),
+            DB::raw("'Finalizado' as status"),
+            'created_at',
+            'id'
+        );
+
+        $this->applyDateFilters($queryRemisiones, $type, $start, $end, $request, 'fecha');
+        $this->applyDateFilters($queryAutotanques, $type, $start, $end, $request, DB::raw('DATE(created_at)'));
+
+        if ($request->filled('matricula')) {
+            $mat = strtoupper($request->query('matricula'));
+            $queryRemisiones->where('matricula', 'LIKE', '%' . $mat . '%');
+            if (strpos('ASA', $mat) === false) {
+                $queryAutotanques->whereRaw('1 = 0');
+            }
+        }
+
+        if ($request->filled('cantidad')) {
+            $queryRemisiones->where('total_litros', '>=', $litros);
+            $queryAutotanques->where('litros', '>=', $litros);
+        }
+
+        $finalQuery = $queryRemisiones->unionAll($queryAutotanques);
+
+        $results = DB::table(DB::raw("({$finalQuery->toSql()}) as combined"))
+            ->mergeBindings($finalQuery)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json($results);
+    }
+
+    private function applyDateFilters($query, $type, $start, $end, $request, $column)
+    {
         switch ($type) {
             case 'range':
             case 'rango':
                 if ($start && $end) {
-                    $query->whereBetween('fecha', [$start, $end]);
+                    $query->whereBetween($column, [$start, $end]);
                 }
                 break;
 
@@ -105,15 +230,15 @@ class RemisionController extends Controller
             case 'mes':
                 if ($start) {
                     $date = \Carbon\Carbon::parse($start);
-                    $query->whereMonth('fecha', $date->month)
-                        ->whereYear('fecha', $date->year);
+                    $query->whereMonth($column, $date->month)
+                        ->whereYear($column, $date->year);
                 }
                 break;
 
             case 'year':
             case 'año':
                 if ($start) {
-                    $query->whereYear('fecha', \Carbon\Carbon::parse($start)->year);
+                    $query->whereYear($column, \Carbon\Carbon::parse($start)->year);
                 }
                 break;
 
@@ -121,13 +246,9 @@ class RemisionController extends Controller
             case 'dia':
             default:
                 $fecha = $start ?? $request->query('date') ?? now()->format('Y-m-d');
-                $query->whereDate('fecha', $fecha);
+                $query->whereDate($column, $fecha);
                 break;
         }
-
-        $remisiones = $query->orderBy('id', 'desc')->paginate($perPage);
-
-        return response()->json($remisiones);
     }
 
     private function guardarFirmaBase64(string $value, string $rol, Remision $entrega): void
@@ -210,7 +331,7 @@ class RemisionController extends Controller
                 'fecha'          => 'required|date',
                 'operador'       => 'required|string',
                 'cliente'        => 'required|string',
-                'formaPago'      => 'required|string',
+                'formaPago'      => 'nullable|string',
                 'matricula'      => 'required|string',
                 'horaLlegada'    => 'required|string|max:5',
                 'lecturaInicial' => 'required|numeric',
@@ -310,69 +431,39 @@ class RemisionController extends Controller
             ->pluck('nombre_limpio');
         return response()->json($nombres);
     }
-    public function obtenerExcel(Request $request)
+
+    public function formaPago(){
+        $rem = PaymentMethod::select('name', 'id')->get();
+
+        return response()->json($rem);
+    }
+
+    public function combustibleAsa()
     {
-        $query = Remision::where('status', 'A');
+        $ultimoRegistro = SumaAutotanque::select('litros', 'created_at')->latest()->first();
 
-        if ($request->filled('buscar')) {
-            $query->where('folio', 'LIKE', '%' . $request->query('buscar') . '%');
-        }
-        if ($request->filled('matricula')) {
-            $query->where('matricula', 'LIKE', '%' . $request->query('matricula') . '%');
+        if (!$ultimoRegistro) {
+            return response()->json(['message' => 'No hay registros en SumaAutotanque'], 404);
         }
 
-        if ($request->filled('cantidad')) {
-            $query->where('total_litros', '>=', $request->query('cantidad'));
-        }
+        $fechaReferencia = $ultimoRegistro->created_at->format('Y-m-d');
+        $horaReferencia = $ultimoRegistro->created_at->format('H:i:s');
 
-        $type = $request->query('periodo', 'dia');
-        $start = $request->query('fechaInicio');
-        $end = $request->query('fechaFin');
+        $remisionesPosteriores = Remision::where('fecha', '>', $fechaReferencia)
+            ->orWhere(function($query) use ($fechaReferencia, $horaReferencia) {
+                $query->where('fecha', $fechaReferencia)
+                    ->where('hora_llegada', '>', $horaReferencia);
+            })
+            ->get(['total_litros']);
 
-        switch ($type) {
-            case 'range':
-            case 'rango':
-                if ($start && $end) {
-                    $query->whereBetween('fecha', [$start, $end]);
-                }
-                break;
+        $sumaLitrosRemisiones = $remisionesPosteriores->sum('total_litros');
+        $litrosRestantes = $ultimoRegistro->litros - $sumaLitrosRemisiones;
 
-            case 'month':
-            case 'mes':
-                if ($start) {
-                    $date = \Carbon\Carbon::parse($start);
-                    $query->whereMonth('fecha', $date->month)
-                        ->whereYear('fecha', $date->year);
-                }
-                break;
-
-            case 'year':
-            case 'año':
-                if ($start) {
-                    $query->whereYear('fecha', \Carbon\Carbon::parse($start)->year);
-                }
-                break;
-
-            case 'day':
-            case 'dia':
-            default:
-                $fecha = $start ?? $request->query('date') ?? now()->format('Y-m-d');
-                $query->whereDate('fecha', $fecha);
-                break;
-        }
-
-        $remisiones = $query->orderBy('id', 'desc')->get();
-
-        $remisionesConDetalle = $remisiones->map(function ($remision) {
-            $operacion = OperacionDiaria::where('matricula', $remision->matricula)
-                ->select('tipo_cliente')
-                ->latest('fecha')
-                ->first();
-
-            $remision->tipo_cliente = $operacion ? $operacion->tipo_cliente : 'N/A';
-            return $remision;
-        });
-
-        return response()->json($remisionesConDetalle);
+        return response()->json([
+            'litros_iniciales' => $ultimoRegistro->litros,
+            'litros_consumidos' => $sumaLitrosRemisiones,
+            'litros_restantes' => $litrosRestantes,
+            'fecha_corte' => $ultimoRegistro->created_at
+        ]);
     }
 }

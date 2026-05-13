@@ -44,3 +44,22 @@ export async function excelRemisionesApi(filtros = {}) {
     if (!res.ok) throw new Error(data?.message || "Error al obtener registros");
     return data;
 }
+
+export async function formaPago() {
+    const res = await fetch("/api/Remision/formaPago", {
+        method: "GET",
+        headers: { 'Accept': 'application/json' },
+        credentials: "same-origin",
+    });
+    if (!res.ok) return [];
+    return await res.json();
+}
+export async function consultaAsa(){
+    const res = await fetch('/api/Remision/combustibleAsa', {
+        method: "GET",
+        headers: { Accept: 'application/json' },
+        credentials: "same-origin",
+    });
+    if (!res.ok) return null;
+    return await res.json();
+}

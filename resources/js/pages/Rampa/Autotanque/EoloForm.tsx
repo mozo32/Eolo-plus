@@ -3,7 +3,7 @@ import { useForm, usePage } from '@inertiajs/react';
 import Swal from 'sweetalert2';
 import PressureGauge from './PressureGauge';
 import MatriculaAutocomplete from '@/pages/despacho/components/walkAround/MatriculaAutocomplete';
-import { ultimaLectura, obtenerResponsableHistoricosApi } from '@/stores/apiRemision';
+import { ultimaLectura, obtenerResponsableHistoricosApi, formaPago } from '@/stores/apiRemision';
 import { updateRemision } from '@/stores/apiAutoTanque';
 
 interface EoloFormData {
@@ -111,6 +111,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
     onSuccess?: () => void
 }) => {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
+    const [opcionesPago, setOpcionesPago] = useState<{id: number, name: string}[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
     const user = auth?.user;
@@ -186,7 +187,6 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
             { key: 'operador', label: 'Operador Responsable' },
             { key: 'fecha', label: 'Fecha de Servicio' },
             { key: 'matricula', label: 'Matrícula' },
-            { key: 'formaPago', label: 'Forma de Pago' },
             { key: 'cliente', label: 'Nombre del Cliente' },
             { key: 'aeronaveTipo', label: 'Tipo de Aeronave' },
             { key: 'destino', label: 'Destino' },
@@ -342,8 +342,19 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                 }
             };
 
+
             consultarUltimaLectura();
         }
+        const consultarTipoPago = async () => {
+            try {
+                const resultado = await formaPago();
+                setOpcionesPago(resultado || []);
+            } catch (error) {
+                console.error("Error al obtener datos:", error);
+            }
+        };
+
+        consultarTipoPago();
     }, [isEdit]);
     const formatVisual = (val: string | number) => {
         if (!val && val !== 0) return "";
@@ -410,12 +421,22 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                                 onAeronaveData={handleAeronaveData}
                                 onNuevaMatricula={() => { }}
                             />
-                            <input
-                                placeholder="Forma de Pago"
+                            <select
                                 value={data.formaPago}
-                                onChange={e => handleUppercaseChange('formaPago', e.target.value)}
-                                className="w-full border-slate-100 border-2 rounded-2xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-all uppercase"
-                            />
+                                onChange={e => setData('formaPago', e.target.value)}
+                                className={`w-full border-slate-100 border-2 rounded-2xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-all bg-white uppercase font-medium ${
+                                    data.formaPago === '' ? 'text-slate-400' : 'text-slate-700'
+                                }`}
+                            >
+                                <option value="" disabled>
+                                    Seleccione Forma de Pago
+                                </option>
+                                {opcionesPago.map((opcion) => (
+                                    <option key={opcion.id} value={opcion.name} className="text-slate-700">
+                                        {opcion.name.toUpperCase()}
+                                    </option>
+                                ))}
+                            </select>
                             <div className="relative group">
                                 <input
                                     placeholder="Nombre del Cliente"
@@ -611,7 +632,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                                 </svg>
                                 <div>
                                     <p className="mb-2">
-                                        Acepto ser el representante del cliente y aeronave descrita, por lo que me obligo a pagar a <strong className="text-slate-700 font-black">Eolo Plus S.A. de C.V.</strong> el importe total que se haya generado por este servicio.
+                                        Acepto ser el representante del cliente y aeronave descrita, por lo que me obligo a pagar a <strong className="text-slate-700 font-black">Eolo Plus </strong> el importe total que se haya generado por este servicio.
                                     </p>
                                     <p className="font-medium">
                                         Aclaraciones y quejas: <a href="mailto:sales@eolo.com.mx" className="text-blue-600 font-bold hover:text-blue-800 hover:underline transition-colors tracking-wide">sales@eolo.com.mx</a>

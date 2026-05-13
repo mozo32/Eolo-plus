@@ -163,6 +163,8 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('Remision')->group(function (
     Route::get('/Excel/', [RemisionController::class, 'obtenerExcel']);
     Route::post('/enviar-correo', [RemisionController::class, 'enviarCorreo']);
     Route::get('/ultimaLectura', [RemisionController::class, 'ultimaLectura']);
+    Route::get('/combustibleAsa', [RemisionController::class, 'combustibleAsa']);
+    Route::get('/formaPago', [RemisionController::class, 'formaPago']);
     Route::post('/remisiones', [RemisionController::class, 'store']);
     Route::get('/', [RemisionController::class, 'index']);
     Route::get('/{id}', [RemisionController::class, 'show']);
