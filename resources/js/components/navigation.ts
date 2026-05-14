@@ -45,18 +45,21 @@ export type AuthUser = {
         }[]
     }[]
 }
+export type NavItem = {
+    id: string
+    title: string
+    href?: Href
+    moduleKey?: number
+    icon?: any
+    children?: NavItem[]
+}
 
 export type NavModule = {
     module: string
     key: number
-    items: {
-        id: string
-        title: string
-        href: Href
-        moduleKey?: number
-        icon?: any
-    }[]
+    items: NavItem[]
 }
+
 
 const ROUTE_CONFIG: Record<
     string,
@@ -178,11 +181,33 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                     { id: 'rampa-personal', title: 'Asistencia de Personal', href: asistenciaPersonal(), icon: LayoutGrid },
                     { id: 'rampa-seguridad', title: 'checkList Equipo de Seguridad', href: checkListEquipo(), icon: LayoutGrid },
                     { id: 'rampa-operaciones', title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },
-                    { id: 'rampa-autotanque', title: 'Entrega Turno Autotanque', href: reporteEntregaTurno(), icon: LayoutGrid },
-                    { id: 'rampa-remision', title: 'Remisión Autotanque', href: remision(), icon: LayoutGrid },
-                    { id: 'rampa-verificacion', title: 'Verificacion Estado Autotanque', href: verificacionEstadoAutotanque(), icon: LayoutGrid },
-                    { id: 'rampa-around',title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
-                    { id: 'rampa-Combustible',title: 'Inspección Combustible', href: inspeccionCombustible(), icon: LayoutGrid },
+
+                    {
+                        id: 'rampa-combustible',
+                        title: 'Combustible',
+                        children: [
+                            {
+                                id: 'rampa-autotanque',
+                                title: 'Entrega Turno Autotanque',
+                                href: reporteEntregaTurno(),
+                                icon: LayoutGrid,
+                            },
+                            {
+                                id: 'rampa-remision',
+                                title: 'Remisión Autotanque',
+                                href: remision(),
+                                icon: LayoutGrid,
+                            },
+                            {
+                                id: 'rampa-combustible-inspeccion',
+                                title: 'Inspección Combustible',
+                                href: inspeccionCombustible(),
+                                icon: LayoutGrid,
+                            },
+                        ],
+                    },
+
+                    { id: 'rampa-around', title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
                 ],
             },
             {
