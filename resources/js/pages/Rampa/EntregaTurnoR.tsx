@@ -2,70 +2,62 @@ import { useEffect, useState } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Head, usePage } from '@inertiajs/react';
 import RampaForm from './entregaTurnoR/RampaForm';
-import { Loader2, Plus, ClipboardList } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import TablaJefeArea from './entregaTurnoR/TablaJefeArea';
-import axios from 'axios';
 
-type Role = {
-    slug: string;
-    nombre: string;
-};
-
-export type AuthUser = {
-    id: number;
-    name: string;
-    email: string;
-    isAdmin: boolean;
-    roles: Role[];
-};
+type Role = { slug: string; nombre: string; };
+export type AuthUser = { id: number; name: string; email: string; isAdmin: boolean; roles: Role[]; };
 
 export default function EntregaTurnoR() {
     const [reporteSeleccionado, setReporteSeleccionado] = useState<any>(null);
     const [mostrarNuevoForm, setMostrarNuevoForm] = useState(false);
-    const [loading, setLoading] = useState(true);
 
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
     const user = auth?.user;
 
-    const esJefeArea = user?.roles.some(rol => rol.slug === 'jefe_area');
-    const esAdmin = user?.isAdmin || user?.roles.some(rol => rol.slug === 'admin');
-
-
-    const seleccionarReporteParaFirmar = (reporte: any) => {
-        setReporteSeleccionado(reporte);
+    const cerrarModal = () => {
+        setReporteSeleccionado(null);
+        setMostrarNuevoForm(false);
     };
 
     return (
-        <AppLayout breadcrumbs={[{ title: 'Entrega Turno' }]}>
-            <div className="p-4 space-y-6">
-                {(reporteSeleccionado || mostrarNuevoForm) ? (
-                    <div className="space-y-4">
-                        <button
-                            onClick={() => {
-                                setReporteSeleccionado(null);
-                                setMostrarNuevoForm(false);
-                            }}
-                            className="text-sm font-bold text-slate-500 hover:text-blue-600 flex items-center gap-2 transition-colors"
-                        >
-                            ← Volver a la lista de pendientes
-                        </button>
-                        <RampaForm initialData={reporteSeleccionado} />
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        <div className="flex justify-end">
+        <AppLayout breadcrumbs={[{ title: 'Entrega Turno Rampa' }]}>
+            <Head title="Entrega Turno Rampa" />
+
+            <div className="p-4">
+                <TablaJefeArea
+                    onSeleccionar={(reporte) => setReporteSeleccionado(reporte)}
+                    onNuevoRegistro={() => setMostrarNuevoForm(true)}
+                />
+            </div>
+
+            {(reporteSeleccionado || mostrarNuevoForm) && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="relative z-10 w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-300 max-h-[95vh] flex flex-col">
+                        <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                            <div>
+                                <h3 className="text-lg font-black uppercase text-slate-800 tracking-tighter">
+                                    {mostrarNuevoForm ? 'Registrar Entrega de Turno Rampa' : 'Editar / Firmar Reporte de Rampa'}
+                                </h3>
+                                <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Módulo de Operaciones Aeroportuarias</p>
+                            </div>
                             <button
-                                onClick={() => setMostrarNuevoForm(true)}
-                                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-blue-200 transition-all active:scale-95"
+                                onClick={cerrarModal}
+                                className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors"
                             >
-                                <Plus size={20} />
-                                NUEVO REGISTRO
+                                <X size={20} />
                             </button>
                         </div>
-                        <TablaJefeArea onSeleccionar={seleccionarReporteParaFirmar} />
+
+                        <div className="overflow-y-auto custom-scrollbar bg-slate-50">
+                            <RampaForm
+                                initialData={reporteSeleccionado}
+                                onCancel={cerrarModal}
+                            />
+                        </div>
                     </div>
-                )}
-            </div>
+                </div>
+            )}
         </AppLayout>
     );
 }

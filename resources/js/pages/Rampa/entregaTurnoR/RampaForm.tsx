@@ -1,16 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Swal from 'sweetalert2';
-import { ChevronRight, ChevronLeft, Send, CheckCircle2, ClipboardList, Truck, Plane, Wrench  } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Send, CheckCircle2, ClipboardList, TriangleAlert, Plane, Wrench } from 'lucide-react';
 import VehiculosSection from './secciones/VehiculosSection';
 import EquiposApoyoSection from './secciones/EquiposApoyoSection';
 import GpuInspectionSection from './secciones/GpuInspectionSection';
 import RampaExtrasSection from './secciones/RampaExtrasSection';
 import RampaSignaturesSection from './secciones/RampaSignaturesSection';
-import { actualizarEntregaTurnoRApi, guardarEntregaTurnoRApi } from '@/stores/apiEntregaTurnoR';
+import { actualizarEntregaTurnoRApi, guardarEntregaTurnoRApi, buscarUsuariosRampaApi } from '@/stores/apiEntregaTurnoR';
 import { getStepErrors } from './validacionEntregaTurnoR';
 
 interface RampaFormProps {
     initialData?: any;
+    onCancel?: () => void;
 }
 interface FirmaData {
     nombre: string;
@@ -22,7 +23,12 @@ interface FirmasState {
     jefe: FirmaData;
     recibe: FirmaData;
 }
+interface SuministroAgua {
+    matricula: string;
+    cantidad: string;
+}
 interface VehiculoData {
+    opacity?: any;
     limpieza: string;
     nivel?: string;
     llantas: string;
@@ -30,25 +36,39 @@ interface VehiculoData {
     obs: string;
     luces?: string;
     estado?: 'Operativo' | 'Mantenimiento' | '';
+    kilometraje?: string;
+    suministros?: SuministroAgua[];
 }
-const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
+
+const RampaForm: React.FC<RampaFormProps> = ({ initialData, onCancel }) => {
     const [step, setStep] = useState(1);
     const [saving, setSaving] = useState(false);
     const totalSteps = 4;
 
+    // Estados para el autocompletado de encargado de turno
+    const [sugerenciasJefe, setSugerenciasJefe] = useState<any[]>([]);
+    const [showDropdownJefe, setShowDropdownJefe] = useState(false);
+    const dropdownJefeRef = useRef<HTMLDivElement>(null);
+
     const [formData, setFormData] = useState({
         encabezado: { fecha: new Date().toLocaleDateString('en-CA'), jefeTurno: "" },
-        comunicaciones: { radios: "", radioFrecuencia: "", radiosFuncionando: true }
+        comunicaciones: {
+            radiosVHF: "0",
+            vhfOperativos: "0",
+            radiosUHF: "0",
+            uhfOperativos: "0",
+            observaciones: ""
+        }
     });
 
     const [vehiculos, setVehiculos] = useState<Record<string, VehiculoData>>({
-        nissan012: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
-        nissan015: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
-        tractor005: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
+        nissan012: { limpieza: "", nivel: "0", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo", kilometraje: "" },
+        nissan015: { limpieza: "", nivel: "0", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo", kilometraje: "" },
+        tractor018: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
         lektro003: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
         lektro007: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
         aguasNegras008: { limpieza: "", llantas: "", obs: "", estado: "Operativo" },
-        aguaPotable: { limpieza: "", llantas: "", obs: "", estado: "Operativo" }
+        aguaPotable: { limpieza: "", llantas: "", obs: "", estado: "Operativo", suministros: [] }
     });
 
     const [barrasRemolque, setBarrasRemolque] = useState({
@@ -75,9 +95,40 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
         jefe: { nombre: "", firma: null },
         recibe: { nombre: "", firma: null }
     });
+
+    // Cierra el menú desplegable si se hace click en otra zona de la pantalla
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownJefeRef.current && !dropdownJefeRef.current.contains(event.target as Node)) {
+                setShowDropdownJefe(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    // Lógica de búsqueda reactiva con Debounce para el Encargado de Turno
+    useEffect(() => {
+        const query = formData.encabezado.jefeTurno;
+        if (!query.trim() || query.length < 2) {
+            setSugerenciasJefe([]);
+            return;
+        }
+
+        const delayDebounceFn = setTimeout(async () => {
+            try {
+                const data = await buscarUsuariosRampaApi(query);
+                setSugerenciasJefe(data || []);
+            } catch (error) {
+                console.error("Error al buscar encargados:", error);
+            }
+        }, 300);
+
+        return () => clearTimeout(delayDebounceFn);
+    }, [formData.encabezado.jefeTurno]);
+
     useEffect(() => {
         const tieneDatos = initialData && Object.keys(initialData).length > 0;
-
         if (!tieneDatos) {
             setStep(1);
             return;
@@ -97,47 +148,30 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
         if (initialData.aeronaves) setAeronaves(initialData.aeronaves);
         if (initialData.firmas && Array.isArray(initialData.firmas)) {
             const nuevasFirmas: FirmasState = { ...firmas };
-
             initialData.firmas.forEach((f: any) => {
                 const rol = f.pivot.rol;
                 const mapping: Record<string, { estadoKey: keyof FirmasState, dataKey: string }> = {
                     'quien_entrega': { estadoKey: 'entrega', dataKey: 'nombre_entrega' },
-                    'jefe_rampa':    { estadoKey: 'jefe',    dataKey: 'nombre_jefe_area' },
-                    'quien_recibe':  { estadoKey: 'recibe',  dataKey: 'nombre_recibe' }
+                    'jefe_rampa': { estadoKey: 'jefe', dataKey: 'nombre_jefe_area' },
+                    'quien_recibe': { estadoKey: 'recibe', dataKey: 'nombre_recibe' }
                 };
-
                 const config = mapping[rol];
-
                 if (config) {
                     const nombreReal = (initialData as any)[config.dataKey] || f.tag || "";
-
                     nuevasFirmas[config.estadoKey] = {
                         nombre: nombreReal,
                         firma: f.path ? `/storage/${f.path}` : ""
                     };
                 }
             });
-
             setFirmas(nuevasFirmas);
         }
-        if (initialData.id) {
-            setStep(1);
-        }
-
+        if (initialData.id) setStep(1);
     }, [initialData]);
 
     const handleNext = (e?: React.MouseEvent) => {
         if (e) e.preventDefault();
-        const errors = getStepErrors(
-            step,
-            formData,
-            vehiculos,
-            barrasRemolque,
-            gpus,
-            carritoGolf,
-            aeronaves,
-            firmas
-        );
+        const errors = getStepErrors(step, formData, vehiculos, barrasRemolque, gpus, carritoGolf, aeronaves, firmas);
         if (errors.length > 0) {
             Swal.fire({
                 title: 'Campos pendientes',
@@ -152,22 +186,17 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
             });
             return;
         }
-        if (step < totalSteps) {
-            setStep(prev => prev + 1);
-        }
+        if (step < totalSteps) setStep(prev => prev + 1);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const errors = getStepErrors(step, formData, vehiculos, barrasRemolque, gpus, carritoGolf, aeronaves, firmas);
-
         if (errors.length > 0) {
             handleNext();
             return;
         }
-
         const form = { formData, vehiculos, barrasRemolque, gpus, carritoGolf, aeronaves, firmas };
-
         const result = await Swal.fire({
             title: initialData ? '¿Actualizar reporte?' : '¿Confirmar envío?',
             text: "El reporte se guardará de forma permanente",
@@ -180,30 +209,21 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
 
         if (result.isConfirmed) {
             setSaving(true);
-            Swal.fire({
-                title: "Procesando...",
-                allowOutsideClick: false,
-                didOpen: () => Swal.showLoading()
-            });
-
+            Swal.fire({ title: "Procesando...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             try {
                 if (initialData?.id) {
                     await actualizarEntregaTurnoRApi(initialData.id, form);
                 } else {
                     await guardarEntregaTurnoRApi(form);
                 }
-
                 await Swal.fire({
                     icon: 'success',
                     title: '¡Guardado!',
                     text: 'El reporte de rampa ha sido registrado correctamente.',
                     confirmButtonColor: '#0f172a',
                 });
-
                 window.location.reload();
-
             } catch (error: any) {
-                console.error("Error al enviar:", error);
                 Swal.fire({
                     icon: "error",
                     title: "Error al guardar",
@@ -252,11 +272,8 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
                                     </div>
                                     <ClipboardList size={40} className="opacity-90" />
                                 </header>
-
                                 <div className="px-2 space-y-8">
-                                    <h2 className="text-blue-800 font-bold border-b-2 border-blue-100 mb-4 pb-1 ">
-                                        Datos Generales
-                                    </h2>
+                                    <h2 className="text-blue-800 font-bold border-b-2 border-blue-100 mb-4 pb-1">Datos Generales</h2>
                                     <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div className="space-y-2">
                                             <label className="text-[11px] font-bold text-slate-400 ml-2 tracking-wider">Fecha</label>
@@ -267,65 +284,125 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
                                                 onChange={e => handleUpdate(setFormData, 'encabezado', 'fecha', e.target.value)}
                                             />
                                         </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[11px] font-bold text-slate-400 ml-2 tracking-wider">Jefe de Turno</label>
+
+                                        {/* GRUPO OPTIMIZADO CON AUTOCOMPLETADO DE ENCARGADO DE TURNO */}
+                                        <div ref={dropdownJefeRef} className="space-y-2 relative">
+                                            <label className="text-[11px] font-bold text-slate-400 ml-2 tracking-wider">Encargado de Turno</label>
                                             <input
                                                 type="text"
                                                 placeholder="Nombre completo"
+                                                onFocus={() => setShowDropdownJefe(true)}
                                                 className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700 border border-slate-100 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50/50 transition-all"
                                                 value={formData.encabezado.jefeTurno}
-                                                onChange={e => handleUpdate(setFormData, 'encabezado', 'jefeTurno', e.target.value)}
+                                                onChange={e => {
+                                                    const valor = e.target.value;
+                                                    handleUpdate(setFormData, 'encabezado', 'jefeTurno', valor);
+                                                    handleUpdate(setFirmas, 'jefe', 'nombre', valor);
+                                                    setShowDropdownJefe(true);
+                                                }}
                                             />
+
+                                            {/* Dropdown flotante de usuarios */}
+                                            {showDropdownJefe && sugerenciasJefe.length > 0 && (
+                                                <ul className="absolute z-50 w-full bg-white border border-slate-100 rounded-2xl mt-1 shadow-2xl max-h-48 overflow-y-auto custom-scrollbar divide-y divide-slate-50">
+                                                    {sugerenciasJefe.map((usuario: any) => (
+                                                        <li
+                                                            key={usuario.id}
+                                                            onClick={() => {
+                                                                handleUpdate(setFormData, 'encabezado', 'jefeTurno', usuario.name);
+                                                                handleUpdate(setFirmas, 'jefe', 'nombre', usuario.name);
+                                                                setShowDropdownJefe(false);
+                                                            }}
+                                                            className="px-5 py-3 text-sm font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer transition-colors uppercase"
+                                                        >
+                                                            {usuario.name}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
                                         </div>
                                     </section>
-
                                     <section className="space-y-6 pt-4">
-                                        <h2 className="text-blue-800 font-bold border-b-2 border-blue-100 mb-4 pb-1">
-                                            Comunicaciones
-                                        </h2>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div className="space-y-2">
-                                                <label className="text-[11px] font-bold text-slate-400 ml-2 tracking-wider">Cant. Radios Interinos</label>
-                                                <input
-                                                    type="number"
-                                                    placeholder="0"
-                                                    className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 outline-none border border-slate-100 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50/50 transition-all"
-                                                    value={formData.comunicaciones.radios}
-                                                    onChange={e => handleUpdate(setFormData, 'comunicaciones', 'radios', e.target.value)}
-                                                />
+                                        <h2 className="text-blue-800 font-bold border-b-2 border-blue-100 mb-4 pb-1">Comunicaciones</h2>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
+                                                <h3 className="text-xs font-black text-blue-600 uppercase tracking-widest">Radios VHF</h3>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold text-slate-400 ml-1 uppercase">Total</label>
+                                                        <input
+                                                            type="number"
+                                                            placeholder="0"
+                                                            className="w-full p-3 bg-white rounded-xl font-bold text-slate-700 outline-none border border-slate-200 focus:border-blue-500 transition-all"
+                                                            value={formData.comunicaciones.radiosVHF}
+                                                            onChange={e => handleUpdate(setFormData, 'comunicaciones', 'radiosVHF', e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold text-green-500 ml-1 uppercase">Operativos</label>
+                                                        <input
+                                                            type="number"
+                                                            placeholder="0"
+                                                            className="w-full p-3 bg-white rounded-xl font-bold text-green-700 outline-none border border-green-200 focus:border-green-500 transition-all"
+                                                            value={formData.comunicaciones.vhfOperativos}
+                                                            onChange={e => handleUpdate(setFormData, 'comunicaciones', 'vhfOperativos', e.target.value)}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                {Number(formData.comunicaciones.radiosVHF) - Number(formData.comunicaciones.vhfOperativos) > 0 && (
+                                                    <p className="text-[10px] font-bold text-red-500 animate-pulse px-1 flex items-center gap-1">
+                                                        <TriangleAlert size={12} /> {Number(formData.comunicaciones.radiosVHF) - Number(formData.comunicaciones.vhfOperativos)} radio(s) con falla
+                                                    </p>
+                                                )}
                                             </div>
-                                            <div className="space-y-2">
-                                                <label className="text-[11px] font-bold text-slate-400 ml-2 tracking-wider">Cant. Radios Frecuencia</label>
-                                                <input
-                                                    type="number"
-                                                    placeholder="0"
-                                                    className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 outline-none border border-slate-100 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50/50 transition-all"
-                                                    value={formData.comunicaciones.radioFrecuencia}
-                                                    onChange={e => handleUpdate(setFormData, 'comunicaciones', 'radioFrecuencia', e.target.value)}
-                                                />
+                                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
+                                                <h3 className="text-xs font-black text-blue-600 uppercase tracking-widest">Radios UHF</h3>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold text-slate-400 ml-1 uppercase">Total</label>
+                                                        <input
+                                                            type="number"
+                                                            placeholder="0"
+                                                            className="w-full p-3 bg-white rounded-xl font-bold text-slate-700 outline-none border border-slate-200 focus:border-blue-500 transition-all"
+                                                            value={formData.comunicaciones.radiosUHF}
+                                                            onChange={e => handleUpdate(setFormData, 'comunicaciones', 'radiosUHF', e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold text-green-500 ml-1 uppercase">Operativos</label>
+                                                        <input
+                                                            type="number"
+                                                            placeholder="0"
+                                                            className="w-full p-3 bg-white rounded-xl font-bold text-green-700 outline-none border border-green-200 focus:border-green-500 transition-all"
+                                                            value={formData.comunicaciones.uhfOperativos}
+                                                            onChange={e => handleUpdate(setFormData, 'comunicaciones', 'uhfOperativos', e.target.value)}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                {Number(formData.comunicaciones.radiosUHF) - Number(formData.comunicaciones.uhfOperativos) > 0 && (
+                                                    <p className="text-[10px] font-bold text-red-500 animate-pulse px-1">
+                                                        <TriangleAlert /> {Number(formData.comunicaciones.radiosUHF) - Number(formData.comunicaciones.uhfOperativos)} radio(s) con falla
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleUpdate(setFormData, 'comunicaciones', 'radiosFuncionando', !formData.comunicaciones.radiosFuncionando)}
-                                            className={`w-full p-5 rounded-2xl font-black border-2 transition-all duration-300 transform active:scale-[0.98] shadow-sm ${formData.comunicaciones.radiosFuncionando
-                                                    ? 'bg-green-50 border-green-200 text-green-700 shadow-green-100'
-                                                    : 'bg-red-50 border-red-200 text-red-700 shadow-red-100'
-                                                }`}
-                                        >
-                                            ESTADO DE RADIOS: {formData.comunicaciones.radiosFuncionando ? "OPERATIVO" : "CON FALLAS"}
-                                        </button>
+                                        <div className="space-y-2">
+                                            <label className="text-[11px] font-bold text-slate-400 ml-2 tracking-wider uppercase">Observaciones</label>
+                                            <textarea
+                                                rows={2}
+                                                placeholder="Detalle fallas de radios o novedades generales..."
+                                                className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-medium text-slate-700 border border-slate-100 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50/50 transition-all"
+                                                value={formData.comunicaciones.observaciones}
+                                                onChange={e => handleUpdate(setFormData, 'comunicaciones', 'observaciones', e.target.value)}
+                                            />
+                                        </div>
                                     </section>
                                 </div>
                             </div>
                         )}
-
-                        {step === 2 &&
-                            <VehiculosSection vehiculos={vehiculos} onChange={(id, f, v) => handleUpdate(setVehiculos, id, f, v)} />
-                        }
-
+                        {step === 2 && <VehiculosSection vehiculos={vehiculos} onChange={(id, f, v) => handleUpdate(setVehiculos, id, f, v)} />}
                         {step === 3 && (
-                            <div >
+                            <div>
                                 <header className="bg-blue-900 text-white p-6 rounded-t-lg flex justify-between items-center">
                                     <div>
                                         <h1 className="text-2xl font-bold tracking-widest">CONTROL DE HERRAMIENTAS DE APOYO Y GPUS</h1>
@@ -339,7 +416,6 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
                                 </div>
                             </div>
                         )}
-
                         {step === 4 && (
                             <div className="space-y-8 animate-in slide-in-from-right duration-500">
                                 <header className="bg-blue-900 text-white p-6 rounded-t-lg flex justify-between items-center">
@@ -356,12 +432,21 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData }) => {
                             </div>
                         )}
                     </div>
-
                     <div className="bg-slate-50 p-6 flex justify-between border-t border-slate-100 rounded-b-[2.5rem]">
-                        <button type="button" onClick={() => setStep(s => s - 1)} disabled={step === 1} className={`px-6 py-3 font-bold transition-all ${step === 1 ? 'invisible' : 'text-slate-500 hover:text-slate-800'}`}>
-                            <ChevronLeft className="inline mr-1" /> Anterior
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (step === 1) {
+                                    onCancel && onCancel();
+                                } else {
+                                    setStep(s => s - 1);
+                                }
+                            }}
+                            className="px-6 py-3 font-bold text-slate-500 hover:text-slate-800 transition-all"
+                        >
+                            <ChevronLeft className="inline mr-1" />
+                            {step === 1 ? 'Cancelar' : 'Anterior'}
                         </button>
-
                         {step < totalSteps ? (
                             <button type="button" onClick={handleNext} className="px-8 py-3 rounded-2xl font-bold bg-blue-600 text-white shadow-lg shadow-blue-100 hover:bg-blue-700 hover:-translate-y-0.5 active:translate-y-0 transition-all">
                                 Siguiente <ChevronRight className="inline ml-1" />

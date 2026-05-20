@@ -15,8 +15,12 @@ export const getStepErrors = (
     switch (step) {
         case 1:
             if (!formData.encabezado.jefeTurno) errors.push("Nombre del Jefe de Turno");
-            if (!formData.comunicaciones.radios) errors.push("Cantidad de Radios");
-            if (!formData.comunicaciones.radioFrecuencia) errors.push("Frecuencia de Radio");
+            if (!formData.comunicaciones.radiosVHF || formData.comunicaciones.radiosVHF === "0") {
+                errors.push("Cantidad de Radios VHF");
+            }
+            if (!formData.comunicaciones.radiosUHF || formData.comunicaciones.radiosUHF === "0") {
+                errors.push("Frecuencia de Radio UHF");
+            }
             break;
 
         case 2:

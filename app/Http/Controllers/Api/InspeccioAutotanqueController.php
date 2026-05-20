@@ -517,4 +517,84 @@ class InspeccioAutotanqueController extends Controller
             ], 500);
         }
     }
+
+    public function showExcel(Request $request)
+    {
+        $inspeccionesCombustibles = InspeccionCombustibles::with([
+                'user:id,name',
+                'imagenes' => function ($q) {
+                    $q->select('imagens.id', 'imagens.path', 'imagens.original_name', 'imagens.mime')
+                        ->withPivot(['tag', 'orden', 'status', 'observacion', 'alerta']);
+                }
+            ])
+            ->where('status', 'A')
+
+            ->when($request->id, function ($query, $id) {
+                $query->where('id', $id);
+            })
+
+            ->when($request->inspector, function ($query, $inspector) {
+                $query->whereHas('user', function ($q) use ($inspector) {
+                    $q->where('name', 'like', '%' . $inspector . '%');
+                });
+            })
+
+            ->when($request->start && $request->end, function ($query) use ($request) {
+                $query->whereBetween('fecha', [$request->start . ' 00:00:00', $request->end . ' 23:59:59']);
+            })
+
+            ->orderBy('fecha', 'desc')
+            ->get();
+
+
+        $inspeccionesAutotanque = inspeccionAutotanque::with(['imagenes'])
+            ->where('status', 'A')
+            ->when($request->start && $request->end, function ($query) use ($request) {
+                $query->whereBetween('fecha_inspeccion', [$request->start . ' 00:00:00', $request->end . ' 23:59:59']);
+            })
+            ->orderBy('fecha_inspeccion', 'desc')
+            ->get()
+            ->map(function ($item) {
+
+                $check = $item->checklist_respuestas ?? [];
+
+                return [
+                    'id' => $item->id,
+                    'tipo' => 'AUTOTANQUE',
+                    'fecha' => $item->fecha_inspeccion,
+                    'operador' => $item->operador,
+
+                    'toma_muestra_combustible' =>
+                        $check['Toma de Muestra de Combustible'] ?? null,
+
+                    'prueba_claridad_brillantez' =>
+                        $check['Prueba de claridad y Brillantez'] ?? null,
+
+                    'presencia_solidos_agua' =>
+                        $check['Presencia de Sólidos y/o agua de forma visual'] ?? null,
+
+                    'imagenes' => $item->imagenes
+                ];
+            });
+
+
+        $inspeccionesCombustibles = $inspeccionesCombustibles->map(function ($item) {
+            return [
+                'id' => $item->id,
+                'tipo' => 'COMBUSTIBLE',
+                'fecha' => $item->fecha,
+                'usuario' => $item->user->name ?? null,
+                'imagenes' => $item->imagenes
+            ];
+        });
+
+
+        $resultado = $inspeccionesCombustibles
+            ->merge($inspeccionesAutotanque)
+            ->sortByDesc('fecha')
+            ->values();
+
+
+        return response()->json($resultado);
+    }
 }

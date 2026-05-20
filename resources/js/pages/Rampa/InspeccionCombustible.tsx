@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import AppLayout from '@/layouts/app-layout';
+import { exportarInspeccionesExcel } from './Combustible/components/excelService';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { indexCombustible, apiEliminar, fetchInspeccionId } from '@/stores/apiInspeccionCombustible';
+import { indexCombustible, apiEliminar, fetchInspeccionId, excelInspeccionCombustible } from '@/stores/apiInspeccionCombustible';
 import PdfInspeccionCombustible from './Combustible/components/PdfInspeccionCombustible';
 import Swal from 'sweetalert2';
 import {
@@ -10,7 +11,7 @@ import {
     Image as ImageIcon,
     User,
     Edit2,
-    Plus,
+    Download,
     X,
     Filter,
     ChevronDown,
@@ -38,7 +39,6 @@ export default function InspeccionCombustible() {
     const [isEdit, setIsEdit] = useState(false);
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
-
     const [filtros, setFiltros] = useState({
         buscar: '',
         inspector: '',
@@ -46,6 +46,52 @@ export default function InspeccionCombustible() {
         fechaFin: new Date().toLocaleDateString('en-CA'),
         periodo: 'dia'
     });
+    const cargarExcel = async () => {
+        try {
+            const data = await excelInspeccionCombustible({ ...filtros });
+            return Array.isArray(data) ? data : (data.data || []);
+        } catch (error) {
+            console.error("Error al obtener datos para Excel:", error);
+            throw error;
+        }
+    };
+    const handleExportarExcel = async () => {
+        Swal.fire({
+            title: 'Generando Excel',
+            text: 'Estamos recopilando todos los registros, por favor espere...',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        try {
+            const datosParaExcel = await cargarExcel();
+
+            if (datosParaExcel.length === 0) {
+                Swal.fire('Atención', 'No hay registros para exportar con los filtros seleccionados.', 'warning');
+                return;
+            }
+            console.log(datosParaExcel);
+
+            await exportarInspeccionesExcel(datosParaExcel);
+            Swal.fire({
+                icon: 'success',
+                title: '¡Descarga lista!',
+                text: 'El reporte se ha generado correctamente.',
+                timer: 2000,
+                showConfirmButton: false
+            });
+
+        } catch (error) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'Hubo un problema al generar el archivo. Intente de nuevo.'
+            });
+        }
+    };
+
 
     const [filtrosEdicion, setFiltrosEdicion] = useState({ ...filtros });
     const [pagina, setPagina] = useState(1);
@@ -166,7 +212,16 @@ export default function InspeccionCombustible() {
                                 <Filter size={14} />
                                 <span>{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                             </button>
-
+                            <div className="w-[1px] bg-slate-200 mx-1"></div>
+                            <button
+                                onClick={handleExportarExcel}
+                                disabled={loading}
+                                className="flex items-center gap-2 bg-white text-slate-600 text-[10px] font-black px-3 py-2 rounded border border-slate-200 shadow-sm hover:bg-slate-50 transition-all active:scale-95 uppercase tracking-wider disabled:opacity-50"
+                                title="Descargar Excel"
+                            >
+                                <Download size={14} className="text-green-600" />
+                                <span className="hidden md:inline">EXCEL</span>
+                            </button>
                             <button
                                 onClick={() => { setDetalle(null); setIsEdit(false); setShowForm(true); }}
                                 className="bg-blue-600 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-blue-700 transition-all active:scale-95 uppercase tracking-wider"
@@ -221,10 +276,10 @@ export default function InspeccionCombustible() {
                                                     <span className="text-sm font-black text-slate-700">{hora}</span>
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
-                                                   <div className="flex flex-col items-center">
+                                                    <div className="flex flex-col items-center">
                                                         <span className="text-xs font-black text-slate-800 uppercase tracking-tighter">{row.user?.name || '---'}</span>
                                                         <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">ID: {row.user_id}</span>
-                                                   </div>
+                                                    </div>
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
                                                     <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-600 rounded text-[9px] font-black border border-green-100 uppercase">

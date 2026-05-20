@@ -97,7 +97,7 @@ const EquiposApoyoSection: React.FC<EquiposProps> = ({ data, onChange }) => {
                         </div>
                         <div>
                             <h3 className="text-slate-800 font-black text-2xl tracking-tight leading-none">
-                                Carro Equipajero
+                                Remolque de Equipaje
                             </h3>
                             <div className="flex items-center gap-2 mt-3 bg-slate-50 w-fit px-3 py-1 rounded-full border border-slate-100">
                                 <Gauge size={14} className="text-emerald-500" />

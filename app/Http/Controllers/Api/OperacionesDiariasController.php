@@ -5,9 +5,11 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\OperacionDiaria;
+use App\Models\MovimientoCSAE;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
+use Carbon\Carbon;
 
 class OperacionesDiariasController extends Controller
 {
@@ -158,7 +160,15 @@ class OperacionesDiariasController extends Controller
     }
     public function obtenerExcel(Request $request)
     {
-        $query = OperacionDiaria::with('user');
+        $query = OperacionDiaria::query()
+            ->select(['id', 'tipo', 'matricula', 'equipo', 'fecha', 'hora', 'lugar', 'tipo_operacion', 'pax', 'equipaje', 'tipo_cliente',
+                DB::raw("
+                    DATE_FORMAT(
+                        STR_TO_DATE(CONCAT(fecha, ' ', hora), '%Y-%m-%d %H:%i:%s'),
+                        '%d/%m/%Y %h:%i:%s %p'
+                    ) as fecha_hora
+                ")
+            ]);
 
         if ($request->filled('buscar')) {
             $query->where('matricula', 'LIKE', '%' . $request->buscar . '%');
@@ -184,6 +194,7 @@ class OperacionesDiariasController extends Controller
 
         if ($request->filled('pax')) {
             $query->where(function ($q) use ($request) {
+
                 $q->where('pax', $request->pax);
 
                 if ($request->pax == 0) {
@@ -195,6 +206,7 @@ class OperacionesDiariasController extends Controller
 
         if ($request->filled('eqp')) {
             $query->where(function ($q) use ($request) {
+
                 $q->where('equipaje', $request->eqp);
 
                 if ($request->eqp == 0) {
@@ -208,9 +220,49 @@ class OperacionesDiariasController extends Controller
             $query->where('tipo_cliente', $request->cliente);
         }
 
-        $registros = $query->orderBy('fecha', 'desc')
-                        ->orderBy('hora', 'desc')
-                        ->get();
+
+        $registros = $query
+            ->orderBy('fecha', 'desc')
+            ->orderBy('hora', 'desc')
+            ->get();
+
+
+        $matriculas = $registros
+            ->pluck('matricula')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $movimientosCSAE = MovimientoCSAE::query()
+            ->whereIn('matricula', $matriculas)
+            ->whereNotNull('fecha_hora_entrada')
+            ->orderBy('fecha_hora_entrada', 'asc')
+            ->get();
+
+
+        $registros = $registros->map(function ($op) use ($movimientosCSAE) {
+
+            $fechaOperacion = Carbon::parse($op->fecha)
+                ->setTimeFromTimeString($op->hora);
+
+            $movimiento = $movimientosCSAE
+                ->where('matricula', $op->matricula)
+                ->first(function ($mov) use ($fechaOperacion) {
+
+                    return Carbon::parse($mov->fecha_hora_entrada)
+                        ->greaterThan($fechaOperacion);
+
+                });
+
+            $op->mantenimiento_csae = $movimiento ? true : false;
+
+            $op->fecha_hora_csae = $movimiento
+                ? Carbon::parse($movimiento->fecha_hora_entrada)
+                    ->format('d/m/Y h:i:s A')
+                : null;
+
+            return $op;
+        });
 
         return response()->json($registros);
     }

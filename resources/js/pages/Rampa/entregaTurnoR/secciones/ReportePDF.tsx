@@ -1,237 +1,306 @@
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
+import {
+    Document,
+    Page,
+    Text,
+    View,
+    StyleSheet,
+    Image,
+    Svg,
+    Path
+} from '@react-pdf/renderer';
 
-const COLORS = {
-    PRIMARY: '#003B49',
-    SECONDARY: '#5E8CA1',
-    ACCENT: '#A6192E',
-    TEXT: '#1A1A1B',
-    MUTED: '#64748B',
-    BORDER: '#E2E8F0',
-    HIGHLIGHT: '#F1F5F9'
-};
+// Configuración de colores institucional (Eolo Plus)
+const GREEN_INST = "#003E51";
+const BORDER = "#111111";
+const GRAY_TEXT = "#374151";
 
 const styles = StyleSheet.create({
-    page: { padding: 40, fontSize: 8, fontFamily: 'Helvetica', color: COLORS.TEXT },
-
-    // Header
-    header: { marginBottom: 20, borderBottom: `2pt solid ${COLORS.PRIMARY}`, paddingBottom: 10 },
-    topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-    logoSection: { flexDirection: 'column' },
-    mainTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.PRIMARY },
-    badge: { backgroundColor: COLORS.ACCENT, color: 'white', padding: '2 6', borderRadius: 4, fontSize: 10, fontWeight: 'bold', marginTop: 4 },
-
-    // Grid de Metadatos
-    metaGrid: { flexDirection: 'row', backgroundColor: COLORS.HIGHLIGHT, padding: 10, borderRadius: 4, marginBottom: 15 },
-    metaItem: { flex: 1 },
-    metaLabel: { fontSize: 6, color: COLORS.MUTED, textTransform: 'uppercase' },
-    metaValue: { fontSize: 9, fontWeight: 'bold', color: COLORS.PRIMARY },
-
-    // Secciones Principales
-    section: { marginBottom: 15 },
-    sectionHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderBottom: `1pt solid ${COLORS.SECONDARY}`,
-        marginBottom: 8,
-        paddingBottom: 2
+    page: {
+        paddingTop: 30,
+        paddingBottom: 60,
+        paddingHorizontal: 30,
+        fontSize: 9,
+        color: "#111827",
+        fontFamily: "Helvetica",
+        backgroundColor: "#ffffff",
     },
-    sectionTitle: { fontSize: 10, fontWeight: 'bold', color: COLORS.SECONDARY, textTransform: 'uppercase' },
-
-    // Tablas Compactas
-    table: { width: '100%' },
-    tableHeader: {
-        flexDirection: 'row',
-        backgroundColor: COLORS.PRIMARY,
+    watermark: {
+        position: "absolute",
+        top: 180,
+        left: 50,
+        width: 500,
+        height: 500,
+        opacity: 0.05,
+        zIndex: -1
+    },
+    headerWrap: {
+        flexDirection: "row",
+        borderWidth: 2,
+        borderColor: BORDER,
+        marginBottom: 12,
+    },
+    headerLeft: {
+        width: 140,
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 5,
+    },
+    headerLogo: {
+        width: "100%",
+        height: 45,
+        objectFit: "contain",
+    },
+    headerMid: {
+        flex: 1,
+        paddingVertical: 10,
+        paddingHorizontal: 15,
+        justifyContent: "center",
+    },
+    headerTitle: {
+        fontSize: 14,
+        fontWeight: "bold" as any,
+        textTransform: "uppercase",
+    },
+    headerSub: {
+        fontSize: 9,
+        color: GRAY_TEXT,
+        marginTop: 2,
+    },
+    sectionTitle: {
+        fontSize: 10,
+        fontWeight: "bold" as any,
+        backgroundColor: "#f3f4f6",
         padding: 4,
-        borderRadius: 2
+        borderWidth: 1,
+        borderColor: BORDER,
+        textTransform: "uppercase",
+        marginTop: 10,
     },
-    headerCell: { color: 'white', fontWeight: 'bold', fontSize: 7 },
-    row: {
-        flexDirection: 'row',
-        borderBottom: `0.5pt solid ${COLORS.BORDER}`,
-        paddingVertical: 4,
-        alignItems: 'center'
+    grid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        borderLeftWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: BORDER,
     },
-    cell: { paddingHorizontal: 2 },
-    bold: { fontWeight: 'bold' },
-
-    // Estados Visuales
-    statusPill: { fontSize: 6, padding: '1 3', borderRadius: 3, textAlign: 'center' },
-    statusError: { color: COLORS.ACCENT, fontWeight: 'bold' },
-
-    // Bloques de Detalles
-    detailBox: {
+    col: {
+        flex: 1,
+        borderRightWidth: 1,
+        borderTopWidth: 1,
+        borderColor: BORDER,
         padding: 6,
-        border: `1pt solid ${COLORS.BORDER}`,
-        borderRadius: 4,
-        width: '48%',
-        marginBottom: 6
     },
-    rowBetween: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 },
-
-    // Firmas
-    footer: { marginTop: 'auto', paddingTop: 20 },
-    signatureRow: { flexDirection: 'row', justifyContent: 'space-around' },
-    signBox: { width: '30%', textAlign: 'center', borderTop: '0.5pt solid #000', paddingTop: 5 },
-    signImg: { width: 80, height: 40, marginBottom: 4, alignSelf: 'center' }
+    col2: { width: "50%", borderRightWidth: 1, borderTopWidth: 1, borderColor: BORDER, padding: 6 },
+    col4: { width: "25%", borderRightWidth: 1, borderTopWidth: 1, borderColor: BORDER, padding: 6 },
+    label: {
+        fontSize: 7,
+        color: GRAY_TEXT,
+        textTransform: "uppercase",
+        marginBottom: 2,
+    },
+    value: {
+        fontSize: 10,
+        fontWeight: "bold" as any,
+    },
+    tableHeader: {
+        flexDirection: "row",
+        backgroundColor: "#f9fafb",
+        borderBottomWidth: 1,
+        borderColor: BORDER,
+    },
+    headerCell: {
+        fontSize: 7,
+        fontWeight: "bold" as any,
+        padding: 4,
+        borderRightWidth: 1,
+        borderColor: BORDER,
+        textTransform: "uppercase",
+    },
+    row: {
+        flexDirection: "row",
+        borderBottomWidth: 1,
+        borderColor: BORDER,
+    },
+    cell: {
+        fontSize: 8,
+        padding: 4,
+        borderRightWidth: 1,
+        borderColor: BORDER,
+    },
+    signatureSection: {
+        flexDirection: "row",
+        marginTop: 25,
+        justifyContent: "space-around",
+    },
+    signatureBox: {
+        width: "30%",
+        alignItems: "center",
+        borderTopWidth: 1,
+        borderColor: BORDER,
+        paddingTop: 5,
+    },
+    signatureImg: {
+        width: 100,
+        height: 50,
+        marginBottom: 5,
+    },
+    footerInfo: {
+        marginTop: 15,
+        fontSize: 7,
+        color: GRAY_TEXT,
+        textAlign: 'center'
+    }
 });
 
 const ReportePDF = ({ data }: { data: any }) => {
+    // Rutas de imágenes (usando la misma lógica que tu exporter)
+    const watermarkUrl = `${window.location.origin}/1c463caa-e3a1-4093-a00b-1c0da40795f6.jpg`;
+    const logoUrl = `${window.location.origin}/54657b8c-8428-41cc-a654-794ca81943d6.jpg`;
+    const getFirmaUrl = (path: string) => `${window.location.origin}/storage/${path}`;
+
     const vehiculos = Object.entries(data.vehiculos || {});
     const gpus = Object.entries(data.gpus || {});
     const carritos = Object.entries(data.carrito_golf || {});
 
+    // Helper para firmas
+    const getFirmaByRol = (rol: string) => data.firmas?.find((f: any) => f.pivot.rol === rol);
+
     return (
         <Document>
-            <Page style={styles.page} size="A4">
-                {/* HEADER */}
-                <View style={styles.header}>
-                    <View style={styles.topRow}>
-                        <View style={styles.logoSection}>
-                            <Text style={styles.mainTitle}>EOLO PLUS S.A.</Text>
-                            <Text style={{ fontSize: 9, color: COLORS.SECONDARY }}>Operations & Ground Handling Report</Text>
-                        </View>
-                        <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={styles.metaLabel}>Folio de Registro</Text>
-                            <Text style={styles.badge}>ID: {data.id}</Text>
-                        </View>
+            <Page size="A4" style={styles.page}>
+                {/* MARCA DE AGUA */}
+                <Image src={watermarkUrl} style={styles.watermark} />
+
+                {/* HEADER INSTITUCIONAL */}
+                <View style={styles.headerWrap}>
+                    <View style={styles.headerLeft}>
+                        <Image src={logoUrl} style={styles.headerLogo} />
+                    </View>
+                    <View style={styles.headerMid}>
+                        <Text style={styles.headerTitle}>Entrega de Turno - Rampa</Text>
+                        <Text style={styles.headerSub}>ID Registro: {data.id} | Fecha: {data.encabezado.fecha}</Text>
                     </View>
                 </View>
 
-                {/* METADATOS GENERALES */}
-                <View style={styles.metaGrid}>
-                    <View style={styles.metaItem}>
-                        <Text style={styles.metaLabel}>Jefe de Turno</Text>
-                        <Text style={styles.metaValue}>{data.encabezado.jefeTurno}</Text>
+                {/* INFORMACIÓN GENERAL */}
+                <Text style={styles.sectionTitle}>Información del Turno</Text>
+                <View style={styles.grid}>
+                    <View style={styles.col2}>
+                        <Text style={styles.label}>Jefe de Turno</Text>
+                        <Text style={styles.value}>{data.encabezado.jefeTurno}</Text>
                     </View>
-                    <View style={styles.metaItem}>
-                        <Text style={styles.metaLabel}>Fecha y Hora</Text>
-                        <Text style={styles.metaValue}>{data.encabezado.fecha}</Text>
-                    </View>
-                    <View style={styles.metaItem}>
-                        <Text style={styles.metaLabel}>Comunicaciones</Text>
-                        <Text style={styles.metaValue}>
-                            {data.comunicaciones.radios} Rad / Freq: {data.comunicaciones.radioFrecuencia}
-                        </Text>
-                        <Text style={[styles.statusPill, !data.comunicaciones.radiosFuncionando ? styles.statusError : { color: 'green' }]}>
-                            {data.comunicaciones.radiosFuncionando ? '● SISTEMA OPERATIVO' : '● FALLA EN SISTEMA'}
+                    <View style={styles.col2}>
+                        <Text style={styles.label}>Comunicaciones (Radios)</Text>
+                        <Text style={styles.value}>
+                            VHF: {data.comunicaciones.vhfOperativos}/{data.comunicaciones.radiosVHF} |
+                            UHF: {data.comunicaciones.uhfOperativos}/{data.comunicaciones.radiosUHF}
                         </Text>
                     </View>
+                    {data.comunicaciones.observaciones && (
+                        <View style={[styles.col, { width: '100%' }]}>
+                            <Text style={styles.label}>Observaciones de Comunicación</Text>
+                            <Text style={[styles.value, { fontSize: 8 }]}>{data.comunicaciones.observaciones}</Text>
+                        </View>
+                    )}
                 </View>
 
-                {/* AERONAVES Y PLATAFORMA */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Ubicación de Aeronaves</Text></View>
-                    <View style={styles.rowBetween}>
-                        {['Hangar 1', 'Hangar 2', 'Plataforma H1', 'Plataforma H2'].map((loc, i) => (
-                            <View key={loc} style={[styles.detailBox, { width: '23%' }]}>
-                                <Text style={styles.metaLabel}>{loc}</Text>
+                {/* UBICACIÓN AERONAVES */}
+                <Text style={styles.sectionTitle}>Estado de Plataforma / Aeronaves</Text>
+                <View style={styles.grid}>
+                    {Object.entries(data.aeronaves).map(([key, value]: any) => (
+                        <View key={key} style={styles.col4}>
+                            <Text style={styles.label}>{key.replace('_', ' ')}</Text>
+                            <Text style={styles.value}>{value} Unidades</Text>
+                        </View>
+                    ))}
+                </View>
 
-                                <Text style={styles.metaValue}>
-                                    {Object.values(data.aeronaves)[i]} <Text style={{ fontSize: 6 }}>Unidades</Text>
-                                </Text>
+                {/* TABLA FLOTA */}
+                <Text style={styles.sectionTitle}>Inspección de Flota y Vehículos</Text>
+                <View style={{ borderLeftWidth: 1, borderTopWidth: 1, borderColor: BORDER }}>
+                    <View style={styles.tableHeader}>
+                        <Text style={[styles.headerCell, { width: '18%' }]}>Unidad</Text>
+                        <Text style={[styles.headerCell, { width: '15%' }]}>Estado</Text>
+                        <Text style={[styles.headerCell, { width: '12%' }]}>Nivel/KM</Text>
+                        <Text style={[styles.headerCell, { width: '15%' }]}>Limpieza/Llantas</Text>
+                        <Text style={[styles.headerCell, { flex: 1, borderRightWidth: 0 }]}>Notas / Suministros</Text>
+                    </View>
+                    {vehiculos.map(([name, v]: any) => (
+                        <View key={name} style={styles.row}>
+                            <Text style={[styles.cell, { width: '18%', fontWeight: 'bold' }]}>{name.toUpperCase()}</Text>
+                            <Text style={[styles.cell, { width: '15%', color: v.estado === 'Mantenimiento' ? '#ef4444' : GREEN_INST }]}>{v.estado}</Text>
+                            <Text style={[styles.cell, { width: '12%' }]}>{v.nivel || v.kilometraje || '-'}</Text>
+                            <Text style={[styles.cell, { width: '15%' }]}>{v.limpieza || '-'}/{v.llantas || '-'}</Text>
+                            <View style={[styles.cell, { flex: 1, borderRightWidth: 0 }]}>
+                                {v.obs && <Text style={{ fontSize: 7, marginBottom: 2 }}>{v.obs}</Text>}
+                                {v.suministros?.map((s: any, idx: number) => (
+                                    <Text key={idx} style={{ fontSize: 6, color: GREEN_INST, fontWeight: 'bold' }}>
+                                        Suministro: {s.matricula} - {s.cantidad}L
+                                    </Text>
+                                ))}
                             </View>
-                        ))}
+                        </View>
+                    ))}
+                </View>
+
+                {/* EQUIPOS GSE */}
+                <Text style={styles.sectionTitle}>Equipos GSE y Apoyo</Text>
+                <View style={{ borderLeftWidth: 1, borderTopWidth: 1, borderColor: BORDER }}>
+                    <View style={styles.tableHeader}>
+                        <Text style={[styles.headerCell, { width: '25%' }]}>Equipo</Text>
+                        <Text style={[styles.headerCell, { width: '20%' }]}>Horóm/Carga</Text>
+                        <Text style={[styles.headerCell, { width: '15%' }]}>Llantas</Text>
+                        <Text style={[styles.headerCell, { flex: 1, borderRightWidth: 0 }]}>Observaciones</Text>
+                    </View>
+                    {gpus.map(([name, g]: any) => (
+                        <View key={name} style={styles.row}>
+                            <Text style={[styles.cell, { width: '25%', fontWeight: 'bold' }]}>{name.toUpperCase()}</Text>
+                            <Text style={[styles.cell, { width: '20%' }]}>{g.horometro || g.numPlantas || '-'}</Text>
+                            <Text style={[styles.cell, { width: '15%' }]}>{g.llantas}</Text>
+                            <Text style={[styles.cell, { flex: 1, borderRightWidth: 0 }]}>{g.obs || '-'}</Text>
+                        </View>
+                    ))}
+                    {carritos.map(([id, c]: any) => (
+                        <View key={id} style={styles.row}>
+                            <Text style={[styles.cell, { width: '25%', fontWeight: 'bold' }]}>Carrito Golf {id}</Text>
+                            <Text style={[styles.cell, { width: '20%' }]}>{c.carga}%</Text>
+                            <Text style={[styles.cell, { width: '15%' }]}>{c.llantas || '-'}</Text>
+                            <Text style={[styles.cell, { flex: 1, borderRightWidth: 0 }]}>{c.estado} - {c.obs || ''}</Text>
+                        </View>
+                    ))}
+                </View>
+
+                {/* FIRMAS */}
+                <View style={styles.signatureSection}>
+                    <View style={styles.signatureBox}>
+                        {getFirmaByRol('quien_entrega') && (
+                            <Image src={getFirmaUrl(getFirmaByRol('quien_entrega').path)} style={styles.signatureImg} />
+                        )}
+                        <Text style={styles.label}>Entrega Turno</Text>
+                        <Text style={{ fontSize: 8 }}>{data.nombre_entrega}</Text>
+                    </View>
+
+                    <View style={styles.signatureBox}>
+                        {getFirmaByRol('jefe_rampa') && (
+                            <Image src={getFirmaUrl(getFirmaByRol('jefe_rampa').path)} style={styles.signatureImg} />
+                        )}
+                        <Text style={styles.label}>Jefe de Rampa</Text>
+                        <Text style={{ fontSize: 8 }}>{data.nombre_jefe_area}</Text>
+                    </View>
+
+                    <View style={styles.signatureBox}>
+                        {getFirmaByRol('quien_recibe') && (
+                            <Image src={getFirmaUrl(getFirmaByRol('quien_recibe').path)} style={styles.signatureImg} />
+                        )}
+                        <Text style={styles.label}>Recibe Turno</Text>
+                        <Text style={{ fontSize: 8 }}>{data.nombre_recibe || '________________'}</Text>
                     </View>
                 </View>
 
-                {/* TABLA VEHÍCULOS (Completa) */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Inspección de Flota Vehicular</Text></View>
-                    <View style={styles.table}>
-                        <View style={styles.tableHeader}>
-                            <Text style={[styles.cell, styles.headerCell, { width: '18%' }]}>UNIDAD</Text>
-                            <Text style={[styles.cell, styles.headerCell, { width: '12%' }]}>ESTADO</Text>
-                            <Text style={[styles.cell, styles.headerCell, { width: '10%' }]}>NIVEL</Text>
-                            <Text style={[styles.cell, styles.headerCell, { width: '10%' }]}>LIMP.</Text>
-                            <Text style={[styles.cell, styles.headerCell, { width: '10%' }]}>LLANT.</Text>
-                            <Text style={[styles.cell, styles.headerCell, { width: '10%' }]}>FREN./LUC.</Text>
-                            <Text style={[styles.cell, styles.headerCell, { flex: 1 }]}>OBSERVACIONES</Text>
-                        </View>
-                        {vehiculos.map(([name, v]: any) => (
-                            <View key={name} style={styles.row}>
-                                <Text style={[styles.cell, styles.bold, { width: '18%' }]}>{name.toUpperCase()}</Text>
-                                <Text style={[styles.cell, { width: '12%' }]}>{v.estado}</Text>
-                                <Text style={[styles.cell, { width: '10%' }]}>{v.nivel || 'N/A'}</Text>
-                                <Text style={[styles.cell, { width: '10%' }]}>{v.limpieza}</Text>
-                                <Text style={[styles.cell, { width: '10%' }, v.llantas === 'Mal' ? styles.statusError : {}]}>{v.llantas}</Text>
-                                <Text style={[styles.cell, { width: '10%' }]}>{v.frenos || v.luces ? `${v.frenos}/${v.luces}` : 'OK'}</Text>
-                                <Text style={[styles.cell, { flex: 1, fontStyle: 'italic', fontSize: 7 }]}>{v.obs}</Text>
-                            </View>
-                        ))}
-                    </View>
-                </View>
-
-                {/* GSE: GPUS Y CARRITOS */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Equipos de Apoyo (GPU & Carritos)</Text></View>
-                    <View style={styles.table}>
-                        <View style={styles.tableHeader}>
-                            <Text style={[styles.cell, styles.headerCell, { width: '20%' }]}>EQUIPO</Text>
-                            <Text style={[styles.cell, styles.headerCell, { width: '15%' }]}>HORÓM/CARGA</Text>
-                            <Text style={[styles.cell, styles.headerCell, { width: '15%' }]}>ENCHUFE/LUCES</Text>
-                            <Text style={[styles.cell, styles.headerCell, { width: '10%' }]}>LLANTAS</Text>
-                            <Text style={[styles.cell, styles.headerCell, { flex: 1 }]}>NOTAS TÉCNICAS</Text>
-                        </View>
-                        {gpus.map(([name, g]: any) => (
-                            <View key={name} style={styles.row}>
-                                <Text style={[styles.cell, styles.bold, { width: '20%' }]}>{name.toUpperCase()}</Text>
-                                <Text style={[styles.cell, { width: '15%' }]}>{g.horometro || g.numPlantas}</Text>
-                                <Text style={[styles.cell, { width: '15%' }]}>{g.enchufe || 'OK'}</Text>
-                                <Text style={[styles.cell, { width: '10%' }, g.llantas === 'Mal' ? styles.statusError : {}]}>{g.llantas}</Text>
-                                <Text style={[styles.cell, { flex: 1, fontSize: 7 }]}>{g.obs}</Text>
-                            </View>
-                        ))}
-                        {carritos.map(([id, c]: any) => (
-                            <View key={id} style={styles.row}>
-                                <Text style={[styles.cell, styles.bold, { width: '20%' }]}>CARRITO GOLF {id}</Text>
-                                <Text style={[styles.cell, { width: '15%' }]}>{c.carga}%</Text>
-                                <Text style={[styles.cell, { width: '15%' }]}>{c.luces}/{c.frenos}</Text>
-                                <Text style={[styles.cell, { width: '10%' }, c.llantas === 'Mal' ? styles.statusError : {}]}>{c.llantas}</Text>
-                                <Text style={[styles.cell, { flex: 1, fontSize: 7 }]}>{c.obs}</Text>
-                            </View>
-                        ))}
-                    </View>
-                </View>
-
-                {/* BARRAS Y EQUIPOS MENORES */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Detalle de Herramental y Remolque</Text></View>
-                    <View style={styles.rowBetween}>
-                        <View style={styles.detailBox}>
-                            <Text style={styles.metaLabel}>Barras de Remolque / Towbars</Text>
-                            <Text style={styles.metaValue}>Total: {data.barras_remolque.total} | Estado: {data.barras_remolque.estado}</Text>
-                            <Text style={{ fontSize: 7, marginTop: 2 }}>Limpieza: {data.barras_remolque.limpieza} | Cabezales: {data.barras_remolque.cabezales} ({data.barras_remolque.cabezalesEstado})</Text>
-                        </View>
-                        <View style={styles.detailBox}>
-                            <Text style={styles.metaLabel}>Escaleras y Hamburguesera</Text>
-                            <Text style={styles.metaValue}>Escaleras: {data.barras_remolque.escalerasCantidad} ({data.barras_remolque.escalerasEstado})</Text>
-                            <Text style={{ fontSize: 7, marginTop: 2 }}>Hamburguesera: {data.barras_remolque.hamburgueseraLimpieza} / Llantas: {data.barras_remolque.hamburgueseraLlantas}</Text>
-                        </View>
-                    </View>
-                </View>
-
-                {/* FIRMAS Y CIERRE */}
-                <View style={styles.footer}>
-                    <View style={styles.signatureRow}>
-                        <View style={styles.signBox}>
-                            {data.firmas?.[0] && (
-                                <Image style={styles.signImg} src={`https://tudominio.com/storage/${data.firmas[0].path}`} />
-                            )}
-                            <Text style={styles.bold}>{data.nombre_entrega}</Text>
-                            <Text style={styles.metaLabel}>Entrega Turno</Text>
-                        </View>
-                        <View style={styles.signBox}>
-                            <View style={{ height: 40 }} />
-                            <Text style={styles.bold}>{data.nombre_recibe || '________________'}</Text>
-                            <Text style={styles.metaLabel}>Recibe Turno</Text>
-                        </View>
-                    </View>
-                    <Text style={{ textAlign: 'center', fontSize: 6, color: COLORS.MUTED, marginTop: 15 }}>
-                        Este es un documento oficial de EOLO PLUS. La falsificación de datos en bitácoras de rampa es una falta grave.
-                        Generado el: {new Date(data.created_at).toLocaleString()}
-                    </Text>
+                <View style={styles.footerInfo}>
+                    <Text>Este documento es propiedad de Eolo Plus S.A. de C.V. - Prohibida su reproducción total o parcial sin autorización.</Text>
+                    <Text style={{ marginTop: 2 }}>Generado el: {new Date().toLocaleString()}</Text>
                 </View>
             </Page>
         </Document>

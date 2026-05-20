@@ -67,12 +67,15 @@ export type AuthUser = {
 };
 
 export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, isEdit, isValidar }: GestionTurnoFormProps) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date();
+    const localDate = new Date(today.getTime() - today.getTimezoneOffset() * 60000)
+        .toISOString()
+        .split('T')[0];
 
     const [step, setStep] = useState<Step>(1);
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
     const [form, setForm] = useState<SalidaFormData>(() => ({
-        fecha: today,
+        fecha: localDate,
         nombre: "",
         nombreQuienEntrega: "",
         nombreQuienRecibe: "",

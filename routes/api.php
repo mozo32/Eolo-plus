@@ -99,10 +99,11 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('ChecklistEquipoSeguridad')->
 Route::middleware(['api', 'auth:sanctum'])->prefix('EntregaTurnoR')->group(function () {
     Route::post('/',[EntregaTurnoRController::class, 'store']);
     Route::get('/entrega-turno-rampa', [EntregaTurnoRController::class, 'index'])->name('entrega.rampa.index');
+    Route::get('/usuarios/buscar', [EntregaTurnoRController::class, 'buscarUsuariosRampa']);
     Route::get('/pendientes-jefe', [EntregaTurnoRController::class, 'reportesPendientesJefe']);
     Route::get('/{entregaTurnoR}', [EntregaTurnoRController::class, 'show']);
     Route::put('/{entregaTurnoR}', [EntregaTurnoRController::class, 'update']);
-
+    Route::put('/{entregaTurnoR}/firmas', [EntregaTurnoRController::class, 'updateFirmas']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('CheckListTurno')->group(function () {
     Route::get('pendiente',[ChecklistTurnoController::class, 'checkPendiente']);
@@ -186,6 +187,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('TurnoAutoTanque')->group(fun
 Route::middleware(['api', 'auth:sanctum'])->prefix('InspeccionAutoTanque')->group(function () {
     Route::post('/', [InspeccioAutotanqueController::class, 'store']);
     Route::get('/turno/{id}', [InspeccioAutotanqueController::class, 'showTurno']);
+    Route::get('/Excel/', [InspeccioAutotanqueController::class, 'showExcel']);
     Route::post('/validar-color', [InspeccioAutotanqueController::class, 'validarColor']);
     Route::post('/guardar-inspeccion', [InspeccioAutotanqueController::class, 'guardarInspeccionCompleta']);
     Route::get('/index-inspeccion', [InspeccioAutotanqueController::class, 'indexCombustibles']);

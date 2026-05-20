@@ -280,7 +280,7 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
                         />
                     </div>
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Procedencia</label>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Origen</label>
                         <input
                             type="text"
                             disabled={soloLectura}

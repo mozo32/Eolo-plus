@@ -137,17 +137,45 @@ class EntregaTurnoRController extends Controller
             },
         ])
         ->where('user_id', Auth::id());
-        if ($request->has('search')) {
+
+        if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function($q) use ($search) {
                 $q->where('id', 'like', "%{$search}%")
                 ->orWhere('encabezado->jefeTurno', 'like', "%{$search}%");
             });
         }
-        if ($request->filled('date')) {
-            $query->whereDate('encabezado->fecha', $request->date);
+
+        if ($request->filled('periodo')) {
+            $inicio = $request->fechaInicio;
+            $fin = $request->fechaFin;
+
+            switch ($request->periodo) {
+                case 'dia':
+                    $query->whereDate('encabezado->fecha', $inicio);
+                    break;
+                case 'rango':
+                case 'mes':
+                case 'año':
+                    $query->whereBetween('encabezado->fecha', [$inicio, $fin]);
+                    break;
+            }
         }
+
+        if ($request->filled('jefeTurno')) {
+            $query->where('encabezado->jefeTurno', 'like', "%{$request->jefeTurno}%");
+        }
+
+        if ($request->filled('nombreEntrega')) {
+            $query->where('nombre_entrega', 'like', "%{$request->nombreEntrega}%");
+        }
+
+        if ($request->filled('nombreRecibe')) {
+            $query->where('nombre_recibe', 'like', "%{$request->nombreRecibe}%");
+        }
+
         $entregas = $query->latest()->paginate(10);
+
         $entregas->getCollection()->transform(function ($entrega) {
             $firmasCompletasCount = $entrega->firmas->filter(function ($firma) {
                 return $firma->pivot->status === 'A' &&
@@ -165,12 +193,10 @@ class EntregaTurnoRController extends Controller
     public function show(EntregaTurnoR $entregaTurnoR)
     {
 
-        // Cargamos las relaciones sobre el objeto existente
         $entregaTurnoR->load(['firmas' => function ($q) {
             $q->withPivot(['rol', 'tag', 'orden', 'status']);
         }]);
 
-        // Retornamos el objeto (React espera un objeto o un array de un solo elemento)
         return response()->json($entregaTurnoR);
     }
     public function update(Request $request, EntregaTurnoR $entregaTurnoR)
@@ -212,6 +238,48 @@ class EntregaTurnoRController extends Controller
             ], 500);
         }
     }
+    public function updateFirmas(Request $request, EntregaTurnoR $entregaTurnoR)
+    {
+        DB::beginTransaction();
+
+        try {
+            // 1. Actualizar los nombres de los firmantes si vienen en el request
+            $entregaTurnoR->update([
+                'nombre_entrega'   => $request->firmas['entrega']['nombre'] ?? $entregaTurnoR->nombre_entrega,
+                'nombre_jefe_area' => $request->firmas['jefe']['nombre'] ?? $entregaTurnoR->nombre_jefe_area,
+                'nombre_recibe'    => $request->firmas['recibe']['nombre'] ?? $entregaTurnoR->nombre_recibe,
+            ]);
+
+            // 2. Procesar las firmas solo si son Base64 (nuevas)
+            // La función guardarFirmaBase64 ya tiene validaciones internas
+            if (isset($request->firmas['entrega']['firma'])) {
+                $this->guardarFirmaBase64($request->firmas['entrega']['firma'], 'quien_entrega', $entregaTurnoR);
+            }
+
+            if (isset($request->firmas['jefe']['firma'])) {
+                $this->guardarFirmaBase64($request->firmas['jefe']['firma'], 'jefe_rampa', $entregaTurnoR);
+            }
+
+            if (isset($request->firmas['recibe']['firma'])) {
+                $this->guardarFirmaBase64($request->firmas['recibe']['firma'], 'quien_recibe', $entregaTurnoR);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Firmas actualizadas correctamente',
+                'data'    => $entregaTurnoR->fresh('firmas'),
+            ]);
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'message' => 'Error al actualizar las firmas',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
     public function reportesPendientesJefe()
     {
         try {
@@ -230,6 +298,32 @@ class EntregaTurnoRController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Error al consultar reportes',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    public function buscarUsuariosRampa(Request $request)
+    {
+        try {
+            $search = $request->query('q');
+
+            // Si el parámetro viene vacío, retornamos un array vacío de inmediato
+            if (blank($search)) {
+                return response()->json([]);
+            }
+
+            // Realizamos la búsqueda en la tabla de usuarios
+            $usuarios = \App\Models\User::select('id', 'name')
+                ->where('name', 'like', "%{$search}%")
+                ->orderBy('name', 'asc')
+                ->take(10) // Limitamos a 10 resultados para optimizar la carga de la red
+                ->get();
+
+            return response()->json($usuarios);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error al buscar usuarios',
                 'error' => $e->getMessage()
             ], 500);
         }
