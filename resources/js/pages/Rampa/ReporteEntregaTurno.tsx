@@ -1,7 +1,7 @@
 import { BreadcrumbItem } from '@/types';
 import Swal from 'sweetalert2';
 import AppLayout from '@/layouts/app-layout';
-import { Head } from '@inertiajs/react';
+import { Head,usePage } from '@inertiajs/react';
 import EntregarTurnoAutotanque from './Autotanque/EntregarTurnoAutotanque';
 import { Download, Plus, X, Eye, Edit2, AlertCircle, ClipboardList, Filter, ChevronDown } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
@@ -12,7 +12,25 @@ import { CheckEstadoAutotanque } from './VerificacionEstadoAutotanque/CheckEstad
 import { DetalleTurnoAutotanque } from './Autotanque/DetalleTurnoAutotanque';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Reporte de Entrega de Turno' }];
+interface Role {
+    slug: string;
+    nombre: string;
+}
 
+export interface AuthUser {
+    id: number;
+    name: string;
+    email: string;
+    isAdmin: boolean;
+    roles: Role[];
+}
+
+interface PageProps {
+    auth: {
+        user: AuthUser | null;
+    };
+    [key: string]: any;
+}
 export default function ReporteEntregaTurno() {
     const [data, setData] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -25,7 +43,8 @@ export default function ReporteEntregaTurno() {
     const [turnoPendiente, setTurnoPendiente] = useState<any>(null);
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
-
+    const { auth } = usePage<PageProps>().props;
+    const user = auth?.user;
     const [filtros, setFiltros] = useState({
         id: '',
         responsable: '',
@@ -315,9 +334,13 @@ export default function ReporteEntregaTurno() {
                                                     >
                                                         <Eye size={16} />
                                                     </button>
-                                                    <button onClick={() => show(row.id, 'entrega')} className={`p-2 rounded transition-colors ${!row.finalizado ? 'text-indigo-600 hover:bg-indigo-50' : 'text-slate-400 hover:text-blue-600'}`}><Edit2 size={16} /></button>
-                                                    <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]">PDF</button>
-                                                    <button onClick={() => handleEliminar(row.id)} className="p-2 text-slate-300 hover:text-red-600 transition-colors"><X size={16} /></button>
+                                                    {(user?.isAdmin || user?.roles?.[0]?.slug === 'fbo') && (
+                                                        <>
+                                                            <button onClick={() => show(row.id, 'entrega')} className={`p-2 rounded transition-colors ${!row.finalizado ? 'text-indigo-600 hover:bg-indigo-50' : 'text-slate-400 hover:text-blue-600'}`}><Edit2 size={16} /></button>
+                                                            <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]">PDF</button>
+                                                            <button onClick={() => handleEliminar(row.id)} className="p-2 text-slate-300 hover:text-red-600 transition-colors"><X size={16} /></button>
+                                                        </>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
