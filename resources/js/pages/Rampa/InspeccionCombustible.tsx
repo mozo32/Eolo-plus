@@ -2,9 +2,10 @@ import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { exportarInspeccionesExcel } from './Combustible/components/excelService';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, usePage} from '@inertiajs/react';
 import { indexCombustible, apiEliminar, fetchInspeccionId, excelInspeccionCombustible } from '@/stores/apiInspeccionCombustible';
 import PdfInspeccionCombustible from './Combustible/components/PdfInspeccionCombustible';
+import PreviewInspeccionModal from './Combustible/components/PreviewInspeccionModal';
 import Swal from 'sweetalert2';
 import {
     Calendar,
@@ -16,7 +17,8 @@ import {
     Filter,
     ChevronDown,
     Trash2,
-    Loader2
+    Loader2,
+    Eye
 } from 'lucide-react';
 const Inspeccion = lazy(() => import('./Combustible/Inspeccion'));
 
@@ -29,11 +31,33 @@ interface InspeccionResumen {
     imagenes_count: number;
     user?: { name: string };
 }
+interface Role {
+    slug: string;
+    nombre: string;
+}
 
+export interface AuthUser {
+    id: number;
+    name: string;
+    email: string;
+    isAdmin: boolean;
+    roles: Role[];
+}
+
+interface PageProps {
+    auth: {
+        user: AuthUser | null;
+    };
+    [key: string]: any;
+}
 export default function InspeccionCombustible() {
+    const { auth } = usePage<PageProps>().props;
+    const user = auth?.user;
+
     const [loading, setLoading] = useState(true);
     const [inspecciones, setInspecciones] = useState<InspeccionResumen[]>([]);
     const [showForm, setShowForm] = useState(false);
+    const [showPreview, setShowPreview] = useState(false);
     const [pdfId, setPdfId] = useState<number | null>(null);
     const [detalle, setDetalle] = useState<any>(null);
     const [isEdit, setIsEdit] = useState(false);
@@ -46,6 +70,7 @@ export default function InspeccionCombustible() {
         fechaFin: new Date().toLocaleDateString('en-CA'),
         periodo: 'dia'
     });
+
     const cargarExcel = async () => {
         try {
             const data = await excelInspeccionCombustible({ ...filtros });
@@ -55,6 +80,7 @@ export default function InspeccionCombustible() {
             throw error;
         }
     };
+
     const handleExportarExcel = async () => {
         Swal.fire({
             title: 'Generando Excel',
@@ -91,7 +117,6 @@ export default function InspeccionCombustible() {
             });
         }
     };
-
 
     const [filtrosEdicion, setFiltrosEdicion] = useState({ ...filtros });
     const [pagina, setPagina] = useState(1);
@@ -181,6 +206,19 @@ export default function InspeccionCombustible() {
             Swal.close();
         } catch (error) {
             console.error(error);
+        }
+    };
+
+    const handlePreview = async (id: number) => {
+        try {
+            Swal.fire({ title: 'Cargando Vista Previa...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            const dat = await fetchInspeccionId(id);
+            setDetalle(dat);
+            setShowPreview(true);
+            Swal.close();
+        } catch (error) {
+            console.error(error);
+            Swal.fire('Error', 'No se pudieron recuperar las evidencias del servidor.', 'error');
         }
     };
 
@@ -288,9 +326,20 @@ export default function InspeccionCombustible() {
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex items-center justify-end gap-1">
-                                                        <button onClick={() => handleEdit(row.id)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Edit2 size={16} /></button>
-                                                        <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]">PDF</button>
-                                                        <button onClick={() => handleEliminar(row.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={16} /></button>
+                                                        <button
+                                                            onClick={() => handlePreview(row.id)}
+                                                            className="p-2 text-slate-400 hover:text-indigo-600 font-black text-[10px] flex items-center gap-1 uppercase tracking-wider"
+                                                            title="Vista Previa Rápida"
+                                                        >
+                                                            <Eye size={16} />
+                                                        </button>
+                                                        {(user?.isAdmin || user?.roles?.[0]?.slug === 'fbo') && (
+                                                            <>
+                                                                <button onClick={() => handleEdit(row.id)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Edit2 size={16} /></button>
+                                                                <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]">PDF</button>
+                                                                <button onClick={() => handleEliminar(row.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={16} /></button>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>
@@ -311,7 +360,6 @@ export default function InspeccionCombustible() {
                         </div>
                     )}
                 </div>
-
                 {showForm && (
                     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
                         <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setShowForm(false)}></div>
@@ -324,7 +372,6 @@ export default function InspeccionCombustible() {
                                 <button onClick={() => setShowForm(false)} className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors"><X size={20} /></button>
                             </div>
                             <div className="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                                {/* SUSPENSE MANEJA EL DELAY DEL CARGADO PESADO */}
                                 <Suspense fallback={
                                     <div className="flex flex-col items-center justify-center py-20 gap-4">
                                         <Loader2 className="animate-spin text-blue-600" size={40} />
@@ -337,7 +384,12 @@ export default function InspeccionCombustible() {
                         </div>
                     </div>
                 )}
-
+                <PreviewInspeccionModal
+                    isOpen={showPreview}
+                    onClose={() => setShowPreview(false)}
+                    detalle={detalle}
+                    formatFecha={formatFecha}
+                />
                 {mostrarModalFecha && (
                     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
                         <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMostrarModalFecha(false)}></div>

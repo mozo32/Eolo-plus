@@ -1,7 +1,7 @@
 import PdfExporterRemision from './Autotanque/PdfExporterRemision';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, usePage} from '@inertiajs/react';
 import EoloForm from './Autotanque/EoloForm';
 import { useState, useEffect, useCallback } from 'react';
 import { fetchRemisionesDelDia, fetchRemisionById } from '@/stores/apiAutoTanque';
@@ -13,7 +13,25 @@ import { excelRemisionesApi, consultaAsa } from '@/stores/apiRemision';
 import VistaPreviaRemision from './Autotanque/VistaPreviaRemision';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Remisiones' }];
+interface Role {
+    slug: string;
+    nombre: string;
+}
 
+export interface AuthUser {
+    id: number;
+    name: string;
+    email: string;
+    isAdmin: boolean;
+    roles: Role[];
+}
+
+interface PageProps {
+    auth: {
+        user: AuthUser | null;
+    };
+    [key: string]: any;
+}
 export default function Remision() {
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any[]>([]);
@@ -30,7 +48,8 @@ export default function Remision() {
     const [previewOpen, setPreviewOpen] = useState(false);
     const [datosPreview, setDatosPreview] = useState<any>(null);
     const [datosCombustible, setDatosCombustible] = useState<any>(null);
-
+    const { auth } = usePage<PageProps>().props;
+    const user = auth?.user;
     const [filtros, setFiltros] = useState({
         buscar: '',
         matricula: '',
@@ -299,7 +318,7 @@ export default function Remision() {
                                     ) : data.map((row, index) => {
                                         const numeroFila = (pagina - 1) * (meta?.per_page || 20) + (index + 1);
                                         return (
-                                            <tr key={row.id} className={`border-b border-slate-50 transition-colors ${row.id_turno ? 'bg-emerald-50/40 hover:bg-emerald-100/60 border-l-4 border-l-emerald-500' : 'hover:bg-slate-50/80 border-l-4 border-l-transparent'}`}>
+                                            <tr key={`${row.id}-${index}`} className={`border-b border-slate-50 transition-colors ${row.id_turno ? 'bg-emerald-50/40 hover:bg-emerald-100/60 border-l-4 border-l-emerald-500' : 'hover:bg-slate-50/80 border-l-4 border-l-transparent'}`}>
                                                 <td className="px-4 py-4 text-center font-bold text-[10px] text-slate-400">{numeroFila}</td>
                                                 <td className="px-6 py-4 text-center font-black text-[10px] text-slate-700">
                                                     <div className="flex flex-col items-center gap-1">
@@ -328,15 +347,20 @@ export default function Remision() {
                                                     <div className="flex items-center justify-end gap-1">
                                                         {row.tipo === 'R' && (
                                                             <>
-                                                                <button onClick={() => handleEdit(row)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
-                                                                    <Edit2 size={16} />
-                                                                </button>
-                                                                <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors uppercase font-black text-[10px]">
-                                                                    PDF
-                                                                </button>
-                                                                <button onClick={() => { setSelectedRow(row); setEmailModalOpen(true); }} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors">
-                                                                    <Mail size={16} />
-                                                                </button>
+                                                                {(user?.isAdmin || user?.roles?.[0]?.slug === 'fbo') && (
+                                                                    <>
+                                                                        <button onClick={() => handleEdit(row)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
+                                                                            <Edit2 size={16} />
+                                                                        </button>
+                                                                        <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors uppercase font-black text-[10px]">
+                                                                            PDF
+                                                                        </button>
+                                                                        <button onClick={() => { setSelectedRow(row); setEmailModalOpen(true); }} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors">
+                                                                            <Mail size={16} />
+                                                                        </button>
+                                                                    </>
+                                                                )}
+
                                                                 <button onClick={() => handleEye(row)} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors">
                                                                     <Eye size={16} />
                                                                 </button>

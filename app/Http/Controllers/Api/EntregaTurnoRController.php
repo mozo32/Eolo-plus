@@ -135,8 +135,7 @@ class EntregaTurnoRController extends Controller
             'firmas' => function ($q) {
                 $q->withPivot(['rol', 'tag', 'orden', 'status']);
             },
-        ])
-        ->where('user_id', Auth::id());
+        ]);
 
         if ($request->filled('search')) {
             $search = $request->search;

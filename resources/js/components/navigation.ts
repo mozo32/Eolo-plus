@@ -1,4 +1,5 @@
-import { dashboard,
+import {
+    dashboard,
     walkAround,
     entregaTurno,
     gestionarAeronaves,
@@ -149,9 +150,9 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                 module: 'Despacho',
                 key: 1,
                 items: [
-                    { id: 'despacho-around',title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
-                    { id: 'despacho-turno',title: 'Entrega Turno', href: entregaTurno(), icon: LayoutGrid },
-                    { id: 'despacho-aeronaves',title: 'Gestionar Aeronaves', href: gestionarAeronaves(), icon: LayoutGrid },
+                    { id: 'despacho-around', title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
+                    { id: 'despacho-turno', title: 'Entrega Turno', href: entregaTurno(), icon: LayoutGrid },
+                    { id: 'despacho-aeronaves', title: 'Gestionar Aeronaves', href: gestionarAeronaves(), icon: LayoutGrid },
                 ],
             },
             {
@@ -218,7 +219,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                     { id: 'trafico-medicamento', title: 'Control de Medicamento', href: controlMedicamento(), icon: LayoutGrid },
                     { id: 'trafico-operaciones', title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },
                     { id: 'trafico-comisariato', title: 'Servicio de Comisariato', href: servicioComisariato(), icon: LayoutGrid },
-                    { id: 'trafico-around',title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
+                    { id: 'trafico-around', title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
                 ],
             },
         ]
@@ -226,28 +227,57 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
 
     return (user.departamentos ?? [])
         .map((dep) => {
-            const items = dep.subdepartamentos
+            // 1. Mapeamos y filtramos con un Type Guard para asegurar que 'item' no sea null
+            const rawItems = dep.subdepartamentos
                 .map((sub) => {
-                    if (!sub.route) return null
-                    const routeKey = sub.route.split('.').pop()
-                    if (!routeKey || !ROUTE_CONFIG[routeKey]) return null
+                    if (!sub.route) return null;
+                    const routeKey = sub.route.split('.').pop();
+                    if (!routeKey || !ROUTE_CONFIG[routeKey]) return null;
 
-                    const config = ROUTE_CONFIG[routeKey]
-
+                    const config = ROUTE_CONFIG[routeKey];
                     return {
+                        id: `${dep.id}-${routeKey}`,
                         title: config.title,
                         href: config.href(),
                         icon: LayoutGrid,
-                        moduleKey: dep.id,
-                    }
+                        routeKey: routeKey
+                    };
                 })
-                .filter(Boolean) as NavModule['items']
+                // El predicado (item): item is NonNullable<typeof item> elimina el error TS18047
+                .filter((item): item is NonNullable<typeof item> => item !== null);
+
+            // 2. Definimos las rutas a agrupar
+            const combustibleRoutes = ['reporteentregaturno', 'remision', 'inspeccioncombustible'];
+
+            // Usamos NavItem[] para mantener la consistencia de tipos
+            const finalItems: NavItem[] = [];
+            const combustibleChildren: NavItem[] = [];
+
+            rawItems.forEach(item => {
+                // Aquí 'item' ya es seguro y no es null
+                if (combustibleRoutes.includes(item.routeKey)) {
+                    combustibleChildren.push(item);
+                } else {
+                    finalItems.push(item);
+                }
+            });
+
+            // 3. Agrupamos si existen hijos
+            if (combustibleChildren.length > 0) {
+                finalItems.push({
+                    id: `dep-${dep.id}-combustible`,
+                    title: 'Combustible',
+                    // Icono opcional para el grupo padre si lo deseas
+                    icon: LayoutGrid,
+                    children: combustibleChildren
+                });
+            }
 
             return {
                 module: dep.nombre,
                 key: dep.id,
-                items,
-            }
+                items: finalItems,
+            };
         })
-        .filter((m) => m.items.length > 0)
+        .filter((m) => m.items.length > 0);
 }

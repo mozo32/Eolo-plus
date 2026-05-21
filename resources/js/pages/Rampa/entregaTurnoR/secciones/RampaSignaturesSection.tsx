@@ -250,7 +250,7 @@ const SignatureBox: React.FC<SignatureBoxProps> = ({
 const RampaSignaturesSection: React.FC<RampaSignaturesProps> = ({ data, onUpdate }) => {
     const { auth } = usePage<PageProps>().props;
     const user = auth?.user;
-    const esJefeArea = user?.isAdmin || user?.roles?.some(role => role.slug === 'jefe_rampa');
+    const esJefeArea = user?.isAdmin || user?.roles?.some(role => role.slug === 'jefe_area');
 
     return (
         <div className="mt-12 space-y-8">

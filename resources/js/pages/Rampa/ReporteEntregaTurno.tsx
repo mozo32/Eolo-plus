@@ -3,12 +3,13 @@ import Swal from 'sweetalert2';
 import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
 import EntregarTurnoAutotanque from './Autotanque/EntregarTurnoAutotanque';
-import { Download, Plus, X, ChevronLeft, Edit2, AlertCircle, ClipboardList, Filter, ChevronDown } from 'lucide-react';
+import { Download, Plus, X, Eye, Edit2, AlertCircle, ClipboardList, Filter, ChevronDown } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { fetchAutotanque, eliminarTurno, showAutotanque, fetchTurnoActivo, excelAutoTanqueApi } from '@/stores/apiAutoTanque';
 import PdfExporterAutotanque from './Autotanque/PdfExporterAutotanque';
 import { exportarAutotanqueAExcel } from './Autotanque/excelService';
 import { CheckEstadoAutotanque } from './VerificacionEstadoAutotanque/CheckEstadoAutotanque';
+import { DetalleTurnoAutotanque } from './Autotanque/DetalleTurnoAutotanque';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Reporte de Entrega de Turno' }];
 
@@ -18,7 +19,7 @@ export default function ReporteEntregaTurno() {
     const [page, setPage] = useState(1);
     const [meta, setMeta] = useState<any>(null);
     const [openForm, setOpenForm] = useState(false);
-    const [tipoModal, setTipoModal] = useState<'entrega' | 'inspeccion'>('entrega');
+    const [tipoModal, setTipoModal] = useState<'entrega' | 'inspeccion' | 'preview'>('entrega');
     const [pdfId, setPdfId] = useState<number | null>(null);
     const [detalle, setDetalle] = useState<any>(null);
     const [turnoPendiente, setTurnoPendiente] = useState<any>(null);
@@ -127,7 +128,7 @@ export default function ReporteEntregaTurno() {
         }
     };
 
-    const show = async (id: number, tipo: 'entrega' | 'inspeccion') => {
+    const show = async (id: number, tipo: 'entrega' | 'inspeccion' | 'preview') => {
         try {
             const dat = await showAutotanque(id);
             setDetalle(dat);
@@ -307,6 +308,13 @@ export default function ReporteEntregaTurno() {
                                                     {!row.tiene_inspeccion && (
                                                         <button onClick={() => show(row.id, 'inspeccion')} className="p-2 text-rose-500 hover:bg-rose-50 rounded transition-colors" title="Inspección"><ClipboardList size={16} /></button>
                                                     )}
+                                                    <button
+                                                        onClick={() => show(row.id, 'preview')}
+                                                        className="p-2 text-slate-400 hover:text-indigo-600 rounded transition-colors"
+                                                        title="Vista Previa"
+                                                    >
+                                                        <Eye size={16} />
+                                                    </button>
                                                     <button onClick={() => show(row.id, 'entrega')} className={`p-2 rounded transition-colors ${!row.finalizado ? 'text-indigo-600 hover:bg-indigo-50' : 'text-slate-400 hover:text-blue-600'}`}><Edit2 size={16} /></button>
                                                     <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]">PDF</button>
                                                     <button onClick={() => handleEliminar(row.id)} className="p-2 text-slate-300 hover:text-red-600 transition-colors"><X size={16} /></button>
@@ -337,7 +345,9 @@ export default function ReporteEntregaTurno() {
                             <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                                 <div>
                                     <h3 className="text-lg font-black uppercase text-slate-800 tracking-tighter">
-                                        {tipoModal === 'inspeccion' ? 'Verificación de Estado' : (detalle ? 'Finalizar Turno' : 'Nuevo Reporte')}
+                                        {tipoModal === 'inspeccion' ? 'Verificación de Estado' :
+                                        tipoModal === 'preview' ? `Resumen de Turno #${detalle?.turno?.id || ''}` :
+                                        (detalle ? 'Finalizar Turno' : 'Nuevo Reporte')}
                                     </h3>
                                     <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">
                                         {tipoModal === 'inspeccion' ? 'Inspección de combustible' : 'Entrega de turno autotanque'}
@@ -348,6 +358,8 @@ export default function ReporteEntregaTurno() {
                             <div className="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
                                 {tipoModal === 'inspeccion' ? (
                                     <CheckEstadoAutotanque data={detalle} onSuccess={() => { handleBack(); cargarDatos(); }} />
+                                ) : tipoModal === 'preview' ? (
+                                    <DetalleTurnoAutotanque data={detalle} />
                                 ) : (
                                     <EntregarTurnoAutotanque initialData={detalle} onSuccess={() => { handleBack(); cargarDatos(); }} />
                                 )}
