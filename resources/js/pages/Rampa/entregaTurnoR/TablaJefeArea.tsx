@@ -67,6 +67,20 @@ const TablaJefeArea: React.FC<TablaProps> = ({ onSeleccionar, onNuevoRegistro })
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
     const [reporteParaDetalle, setReporteParaDetalle] = useState<any>(null);
+    const [turnoAbiertoId, setTurnoAbiertoId] = useState<number | null>(null);
+
+    const verificarEstadoTurno = async () => {
+        try {
+            const response = await axios.get('/api/EntregaTurnoR/verificar-ultimo');
+            if (response.data.turno_abierto) {
+                setTurnoAbiertoId(response.data.reporte_id);
+            } else {
+                setTurnoAbiertoId(null);
+            }
+        } catch (error) {
+            console.error("Error al verificar el último turno:", error);
+        }
+    };
 
     const handleVerDetalle = async (id: number) => {
         Swal.fire({
@@ -142,6 +156,7 @@ const TablaJefeArea: React.FC<TablaProps> = ({ onSeleccionar, onNuevoRegistro })
 
     useEffect(() => {
         fetchReportesPendientes();
+        verificarEstadoTurno();
     }, [currentPage, searchTerm, filtros]);
 
     useEffect(() => {
@@ -201,7 +216,6 @@ const TablaJefeArea: React.FC<TablaProps> = ({ onSeleccionar, onNuevoRegistro })
 
     const obtenerEstadoFirma = (reporte: ReportePendiente, rolBuscado: string, nombreFallback: string | null) => {
         const tieneFirma = reporte.firmas?.some(f => f.pivot.rol === rolBuscado);
-
         return {
             firmado: tieneFirma,
             nombre: tieneFirma ? nombreFallback : 'Pendiente'
@@ -229,13 +243,24 @@ const TablaJefeArea: React.FC<TablaProps> = ({ onSeleccionar, onNuevoRegistro })
                         <span>{filtersOpen ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                     </button>
 
-                    <button
-                        onClick={onNuevoRegistro}
-                        className="text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-white bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100 flex items-center gap-2"
-                    >
-                        <Plus size={14} />
-                        NUEVO REGISTRO
-                    </button>
+                    {turnoAbiertoId ? (
+                        <button
+                            onClick={() => fetchReportesShow(turnoAbiertoId)}
+                            className="text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-slate-900 bg-amber-400 hover:bg-amber-500 shadow-amber-100 flex items-center gap-2 border border-amber-500 animate-pulse"
+                            title="Existe un turno previo sin cerrar"
+                        >
+                            <Edit3 size={14} />
+                            CONTINUAR / CERRAR TURNO
+                        </button>
+                    ) : (
+                        <button
+                            onClick={onNuevoRegistro}
+                            className="text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-white bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100 flex items-center gap-2"
+                        >
+                            <Plus size={14} />
+                            NUEVO REGISTRO
+                        </button>
+                    )}
                 </div>
             </div>
 

@@ -327,4 +327,36 @@ class EntregaTurnoRController extends Controller
             ], 500);
         }
     }
+    public function verificarUltimoTurno()
+    {
+        try {
+            $ultimoReporte = EntregaTurnoR::latest()->first();
+
+            if (!$ultimoReporte) {
+                return response()->json([
+                    'turno_abierto' => false,
+                    'reporte_id' => null
+                ]);
+            }
+            $tieneFirmaRecibe = DB::table('firmables')
+                ->where('firmable_type', EntregaTurnoR::class)
+                ->where('firmable_id', $ultimoReporte->id)
+                ->where('rol', 'quien_recibe')
+                ->where('status', 'A')
+                ->exists();
+
+            $estaCerrado = !empty($ultimoReporte->nombre_recibe) && $tieneFirmaRecibe;
+
+            return response()->json([
+                'turno_abierto' => !$estaCerrado,
+                'reporte_id' => !$estaCerrado ? $ultimoReporte->id : null
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error al verificar el último turno',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

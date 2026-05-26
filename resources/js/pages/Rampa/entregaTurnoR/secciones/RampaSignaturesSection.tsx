@@ -252,6 +252,7 @@ const RampaSignaturesSection: React.FC<RampaSignaturesProps> = ({ data, onUpdate
     const user = auth?.user;
     const esJefeArea = user?.isAdmin || user?.roles?.some(role => role.slug === 'jefe_area');
 
+
     return (
         <div className="mt-12 space-y-8">
             <h2 className="text-blue-800 font-bold border-b-2 border-blue-100 mb-4 pb-1">

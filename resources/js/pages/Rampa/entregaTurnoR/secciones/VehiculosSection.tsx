@@ -141,7 +141,9 @@ const VehiculosSection: React.FC<Props> = ({ vehiculos, onChange }) => {
                                 <div className="flex justify-between items-center gap-2 mb-6">
                                     <div className="flex-1 min-w-0">
                                         <span className={`text-[9px] font-bold tracking-widest px-2 py-0.5 rounded-md ${isMantenimiento ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>Unidad</span>
-                                        <h3 className={`text-xl md:text-2xl font-black mt-0.5 truncate ${isMantenimiento ? 'text-gray-400' : 'text-gray-800'}`}>{id.toUpperCase()}</h3>
+                                        <h3 className={`text-xl md:text-2xl font-black mt-0.5 truncate ${isMantenimiento ? 'text-gray-400' : 'text-gray-800'}`}>
+                                            {id.toUpperCase().replace(/([A-ZÁÉÍÓÚÑ]+)([0-9]+)/g, '$1 $2')}
+                                        </h3>
                                     </div>
                                     <div className="flex shrink-0 bg-gray-100 p-1 rounded-xl border border-gray-200 shadow-inner">
                                         <button type='button' onClick={() => onChange(id, 'estado', 'Operativo')} className={`p-1.5 md:p-2 rounded-lg transition-all ${!isMantenimiento ? 'bg-white text-green-600 shadow-sm' : 'text-gray-400 opacity-50'}`}><CheckCircle2 size={18} /></button>

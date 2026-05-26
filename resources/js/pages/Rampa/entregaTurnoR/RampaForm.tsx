@@ -128,6 +128,7 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData, onCancel }) => {
     }, [formData.encabezado.jefeTurno]);
 
     useEffect(() => {
+
         const tieneDatos = initialData && Object.keys(initialData).length > 0;
         if (!tieneDatos) {
             setStep(1);
@@ -147,23 +148,32 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData, onCancel }) => {
         if (initialData.carrito_golf) setCarritoGolf(initialData.carrito_golf);
         if (initialData.aeronaves) setAeronaves(initialData.aeronaves);
         if (initialData.firmas && Array.isArray(initialData.firmas)) {
-            const nuevasFirmas: FirmasState = { ...firmas };
-            initialData.firmas.forEach((f: any) => {
-                const rol = f.pivot.rol;
-                const mapping: Record<string, { estadoKey: keyof FirmasState, dataKey: string }> = {
-                    'quien_entrega': { estadoKey: 'entrega', dataKey: 'nombre_entrega' },
-                    'jefe_rampa': { estadoKey: 'jefe', dataKey: 'nombre_jefe_area' },
-                    'quien_recibe': { estadoKey: 'recibe', dataKey: 'nombre_recibe' }
-                };
-                const config = mapping[rol];
-                if (config) {
-                    const nombreReal = (initialData as any)[config.dataKey] || f.tag || "";
-                    nuevasFirmas[config.estadoKey] = {
-                        nombre: nombreReal,
-                        firma: f.path ? `/storage/${f.path}` : ""
+            const nuevasFirmas: FirmasState = {
+                entrega: { nombre: initialData.nombre_entrega || "", firma: null },
+                jefe: { nombre: initialData.nombre_jefe_area || "", firma: null },
+                recibe: { nombre: initialData.nombre_recibe || "", firma: null }
+            };
+            if (initialData.firmas && Array.isArray(initialData.firmas)) {
+                initialData.firmas.forEach((f: any) => {
+                    const rol = f.pivot.rol;
+                    const mapping: Record<string, { estadoKey: keyof FirmasState, dataKey: string }> = {
+                        'quien_entrega': { estadoKey: 'entrega', dataKey: 'nombre_entrega' },
+                        'jefe_rampa': { estadoKey: 'jefe', dataKey: 'nombre_jefe_area' },
+                        'quien_recibe': { estadoKey: 'recibe', dataKey: 'nombre_recibe' }
                     };
-                }
-            });
+
+                    const config = mapping[rol];
+                    if (config) {
+                        const nombreReal = (initialData as any)[config.dataKey] || f.tag || "";
+                        nuevasFirmas[config.estadoKey] = {
+                            nombre: nombreReal,
+                            // Si f.path existe le pone la ruta, de lo contrario conserva el null
+                            firma: f.path ? `/storage/${f.path}` : null
+                        };
+                    }
+                });
+            }
+
             setFirmas(nuevasFirmas);
         }
         if (initialData.id) setStep(1);
