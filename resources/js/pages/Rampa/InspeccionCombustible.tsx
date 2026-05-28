@@ -98,7 +98,6 @@ export default function InspeccionCombustible() {
                 Swal.fire('Atención', 'No hay registros para exportar con los filtros seleccionados.', 'warning');
                 return;
             }
-            console.log(datosParaExcel);
 
             await exportarInspeccionesExcel(datosParaExcel);
             Swal.fire({
