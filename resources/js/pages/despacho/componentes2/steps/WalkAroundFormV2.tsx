@@ -258,7 +258,6 @@ const WalkAroundFormV2 = ({ id, onCancel }: Props) => {
                         </div>
                         <div className="flex-1 bg-slate-100">
                             <MapaDanios3D
-                                key={infoData.aeronave}
                                 value={inspeccion.puntos3D || []}
                                 onChange={(puntos) => setInspeccion((prev: any) => ({ ...prev, puntos3D: puntos }))}
                                 modelSrc={infoData.aeronave === 'Avión' ? '/models/Avion.obj' : '/models/18706 Fighter Helicopter_v1.obj'}

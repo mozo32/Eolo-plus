@@ -248,6 +248,7 @@ export default function WalkAroundFirmaModal({ id, open, onClose, onSaved }: Pro
                                 checklistAvion: initialData.checklistAvion,
                                 checklistHelicoptero: initialData.checklistHelicoptero,
                                 marcaDanos: initialData.marcaDanos,
+                                numero_estaticas: initialData.numeroEstatica,
                                 fotos: detalle.imagenes,
                             }}
                         />

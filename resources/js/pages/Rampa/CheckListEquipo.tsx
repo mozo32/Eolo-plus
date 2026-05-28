@@ -1,49 +1,67 @@
 import Swal from 'sweetalert2';
 import AppLayout from '@/layouts/app-layout';
-import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import CheckListEquipoForm from './checkListEquipo/CheckListEquipoForm';
-import UniversalTable from '../UniversalTable';
 import { useState, useEffect, useCallback } from 'react';
 import { fetchCheckListEquipo, fetchCheckUser, eliminar } from '@/stores/apiCheckListEquipoSeguridad';
-import { ChevronLeft, Plus, Edit2, Search, Calendar, X } from "lucide-react";
+import { Plus, Edit2, Filter, ChevronDown, Calendar, X } from "lucide-react";
 import PdfExporter from './checkListEquipo/components/PdfExporter';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'CheckList Equipo' }];
 
 export default function CheckListEquipo() {
     const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState("");
-    const [filterDate, setFilterDate] = useState("");
-    const [page, setPage] = useState(1);
-    const [meta, setMeta] = useState<any>(null);
     const [data, setData] = useState<any[]>([]);
     const [openForm, setOpenForm] = useState(false);
     const [isEdit, setIsEdit] = useState(false);
     const [detalle, setDetalle] = useState<any>(null);
     const [pdfId, setPdfId] = useState<number | null>(null);
+    const [pagina, setPagina] = useState(1);
+    const [meta, setMeta] = useState<any>(null);
+    const [mostrarFiltros, setMostrarFiltros] = useState(false);
+    const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
 
-    const formatFecha = (fecha: string) => {
-        const [y, m, d] = fecha.split("T")[0].split("-");
-        return new Date(Number(y), Number(m) - 1, Number(d))
-            .toLocaleDateString("es-MX", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric",
-            });
+    const [filtros, setFiltros] = useState({
+        buscar: '',
+        fechaInicio: new Date().toLocaleDateString('en-CA'),
+        fechaFin: new Date().toLocaleDateString('en-CA'),
+        periodo: 'dia'
+    });
+
+    const [filtrosEdicion, setFiltrosEdicion] = useState({ ...filtros });
+
+    useEffect(() => {
+        if (mostrarModalFecha) setFiltrosEdicion({ ...filtros });
+    }, [mostrarModalFecha, filtros]);
+
+    const aplicarFiltroFecha = () => {
+        setFiltros({ ...filtrosEdicion });
+        setMostrarModalFecha(false);
+        setPagina(1);
+    };
+
+    const limpiarFiltros = () => {
+        setFiltros({
+            buscar: '',
+            fechaInicio: new Date().toLocaleDateString('en-CA'),
+            fechaFin: new Date().toLocaleDateString('en-CA'),
+            periodo: 'dia'
+        });
     };
 
     const cargarDatos = async () => {
         try {
             setLoading(true);
             const res = await fetchCheckListEquipo({
-                page,
-                search,
-                date: filterDate,
-                per_page: 10,
+                page: pagina,
+                search: filtros.buscar,
+                date: filtros.periodo === 'dia' ? filtros.fechaInicio : '',
+                start_date: filtros.periodo !== 'dia' ? filtros.fechaInicio : '',
+                end_date: filtros.periodo !== 'dia' ? filtros.fechaFin : '',
+                per_page: 20,
             });
-            setData(res.data);
+            setData(res.data || []);
             setMeta(res);
         } catch (error) {
             console.error(error);
@@ -52,14 +70,23 @@ export default function CheckListEquipo() {
         }
     };
 
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            cargarDatos();
+        }, 300);
+        return () => clearTimeout(timeoutId);
+    }, [pagina, filtros]);
+
     const show = async (id: number) => {
         try {
+            Swal.fire({ title: 'Cargando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             const dat = await fetchCheckUser(id);
             setDetalle(dat);
             setIsEdit(true);
             setOpenForm(true);
+            Swal.close();
         } catch (error) {
-            console.error(error);
+            Swal.fire({ icon: 'warning', title: 'Error', text: 'No se pudo cargar el registro.' });
         }
     };
 
@@ -103,203 +130,216 @@ export default function CheckListEquipo() {
         }
     };
 
-    const columns = [
-        {
-            header: "ID",
-            render: (row: any) => <span className="font-bold text-slate-600">#{row.id}</span>
-        },
-        {
-            header: "Fecha de Registro",
-            render: (row: any) => (
-                <div className="flex flex-col">
-                    <span className="text-sm font-medium text-slate-700">{formatFecha(row.created_at)}</span>
-                    <span className="text-[10px] text-slate-400 uppercase font-bold">Auditoría Mensual</span>
-                </div>
-            ),
-        },
-        {
-            header: "Responsable",
-            render: (row: any) => (
-                <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">
-                        {row.nombre?.charAt(0) || 'U'}
-                    </div>
-                    <span className="text-sm font-semibold text-slate-700">{row.nombre}</span>
-                </div>
-            ),
-        },
-        {
-            header: "Acciones",
-            align: 'right' as const,
-            render: (row: any) => (
-                <div className="flex items-center justify-end gap-2">
-                    <button
-                        className="p-2.5 text-slate-400 hover:text-white hover:bg-indigo-600 rounded-xl transition-all shadow-sm"
-                        onClick={() => show(row.id)}
-                    >
-                        <Edit2 size={18} />
-                    </button>
-                    <button
-                        type="button"
-                        className="p-2.5 text-slate-400 hover:text-white hover:bg-amber-600 rounded-xl transition-all shadow-sm"
-                        title="Exportar PDF"
-                        onClick={() => setPdfId(row.id)}
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-                            fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                            <path d="M7 10l5 5 5-5" />
-                            <path d="M12 15V3" />
-                        </svg>
-                    </button>
-                    <button
-                        type="button"
-                        className="p-2.5 text-slate-400 hover:text-white hover:bg-red-600 rounded-xl transition-all shadow-sm"
-                        title="Eliminar"
-                        onClick={() => handleEliminar(row.id)}
-                    >
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="20"
-                            height="20"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                        >
-                            <path d="M3 3l18 18" />
-                            <path d="M4 7h3m4 0h9" />
-                            <path d="M10 11l0 6" />
-                            <path d="M14 14l0 3" />
-                            <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l.077 -.923" />
-                            <path d="M18.384 14.373l.616 -7.373" />
-                            <path d="M9 5v-1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
-                        </svg>
-                    </button>
-                </div>
-            ),
-        },
-    ];
-
-    useEffect(() => {
-        const timeoutId = setTimeout(() => {
-            cargarDatos();
-        }, 300);
-        return () => clearTimeout(timeoutId);
-    }, [page, search, filterDate]);
-
-    const handlePdfDone = useCallback(() => {
-        setPdfId(null);
-    }, []);
+    const handlePdfDone = useCallback(() => setPdfId(null), []);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="CheckList Equipo" />
-            <div className="p-6">
-                {!openForm ? (
-                    <div className="space-y-6 animate-in fade-in duration-500">
-                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                            <div>
-                                <h2 className="text-3xl font-black tracking-tight text-slate-900">Registros de Seguridad</h2>
-                            </div>
+            <div className="p-6 bg-[#f3f4f6] min-h-screen relative">
+                <div className="space-y-4 animate-in fade-in duration-500">
 
-                            <div className="flex flex-wrap items-center gap-3">
-                                <div className="relative flex items-center">
-                                    <Calendar className="absolute left-3 text-slate-400" size={18} />
-                                    <input
-                                        type="date"
-                                        value={filterDate}
-                                        onChange={(e) => {
-                                            setPage(1);
-                                            setFilterDate(e.target.value);
-                                        }}
-                                        className="pl-10 pr-10 py-2.5 rounded-2xl border border-slate-200 bg-white text-sm outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 transition-all text-slate-600"
-                                    />
-                                    {filterDate && (
-                                        <button
-                                            onClick={() => setFilterDate("")}
-                                            className="absolute right-3 text-slate-400 hover:text-red-500"
-                                        >
-                                            <X size={16} />
-                                        </button>
-                                    )}
-                                </div>
-
-                                <div className="relative group">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
-                                    <input
-                                        type="text"
-                                        placeholder="Buscar por nombre..."
-                                        value={search}
-                                        onChange={(e) => {
-                                            setPage(1);
-                                            setSearch(e.target.value);
-                                        }}
-                                        className="pl-10 pr-4 py-2.5 w-64 rounded-2xl border border-slate-200 bg-white text-sm outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 transition-all"
-                                    />
-                                </div>
-
-                                <button
-                                    onClick={() => setOpenForm(true)}
-                                    className="flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white transition-all hover:bg-indigo-700 shadow-lg shadow-indigo-100 active:scale-95"
-                                >
-                                    <Plus size={18} strokeWidth={3} />
-                                    <span>Nuevo Registro</span>
-                                </button>
-                            </div>
+                    {/* Encabezado Principal */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                        <div>
+                            <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Registros de Seguridad</h2>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Checklist Equipo</p>
                         </div>
 
-                        <UniversalTable
-                            columns={columns}
-                            data={data}
-                            loading={loading}
-                            pagination={{
-                                current_page: meta?.current_page || 1,
-                                last_page: meta?.last_page || 1,
-                                total: meta?.total || 0
-                            }}
-                            onPageChange={(p) => setPage(p)}
-                            emptyMessage="No se encontraron registros con los filtros aplicados"
-                            loadingMessage="Cargando auditorías..."
-                        />
-                    </div>
-                ) : (
-                    <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
-                        <div className="flex items-center gap-4">
+                        <div className="flex gap-2">
                             <button
-                                onClick={handleBack}
-                                className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white p-3 text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-all shadow-sm"
+                                onClick={() => setMostrarFiltros(!mostrarFiltros)}
+                                className={`flex items-center gap-2 text-[10px] font-black px-4 py-2 rounded border transition-all ${mostrarFiltros ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                             >
-                                <ChevronLeft size={20} strokeWidth={3} />
+                                <Filter size={14} />
+                                <span>{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                             </button>
-                            <div>
-                                <h2 className="text-2xl font-black text-slate-900">
-                                    {isEdit ? 'Editar Auditoría' : 'Nuevo Registro de Equipo'}
-                                </h2>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Formulario de inspección</p>
+                            <button
+                                onClick={() => { setIsEdit(false); setDetalle(null); setOpenForm(true); }}
+                                className="bg-indigo-600 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-indigo-700 transition-all active:scale-95 uppercase tracking-wider"
+                            >
+                                + NUEVO REGISTRO
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Tabla de Registros */}
+                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[800px]">
+                                <thead>
+                                    <tr className="bg-white border-b border-slate-100">
+                                        <th className="px-4 py-4 text-[9px] font-black uppercase text-slate-400 text-center w-10">#</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center">Fecha / Hora</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center">Responsable</th>
+                                        <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-right">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {/* Fila de Filtros Integrada */}
+                                    <tr className={`bg-slate-50 border-b border-slate-200 overflow-hidden transition-all duration-300 ${mostrarFiltros ? 'opacity-100' : 'hidden'}`}>
+                                        <td className="px-2 py-2">
+                                            <div className="flex items-center gap-1 justify-center">
+                                                <button onClick={limpiarFiltros} className="text-slate-400 hover:text-red-500"><X size={14} /></button>
+                                            </div>
+                                        </td>
+                                        <td className="px-2 py-2">
+                                            <button onClick={() => setMostrarModalFecha(true)} className="w-full flex items-center justify-between text-[10px] border border-slate-200 p-1.5 rounded bg-white hover:border-blue-400 transition-colors shadow-sm">
+                                                <div className="flex items-center gap-1 overflow-hidden">
+                                                    <Calendar size={12} className="text-blue-500 shrink-0" />
+                                                    <span className="truncate font-bold text-slate-600 uppercase">
+                                                        {filtros.periodo === 'dia' ? filtros.fechaInicio : filtros.periodo === 'rango' ? `${filtros.fechaInicio} / ${filtros.fechaFin}` : filtros.periodo.toUpperCase()}
+                                                    </span>
+                                                </div>
+                                                <ChevronDown size={12} className="text-slate-400" />
+                                            </button>
+                                        </td>
+                                        <td className="px-2 py-2">
+                                            <div className="flex items-center gap-1 justify-center">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Buscar responsable..."
+                                                    className="w-full max-w-[240px] text-[10px] border border-slate-200 p-1 rounded bg-white outline-none focus:border-blue-400"
+                                                    value={filtros.buscar}
+                                                    onChange={(e) => setFiltros({ ...filtros, buscar: e.target.value })}
+                                                />
+                                            </div>
+                                        </td>
+                                        <td className="px-2 py-2"></td>
+                                    </tr>
+
+                                    {/* Contenido de la Tabla */}
+                                    {loading ? (
+                                        <tr><td colSpan={4} className="px-6 py-20 text-center text-[10px] font-black text-slate-400 uppercase">Cargando datos...</td></tr>
+                                    ) : data.length === 0 ? (
+                                        <tr><td colSpan={4} className="px-6 py-20 text-center text-[10px] font-black text-slate-400 uppercase">No se encontraron registros con los filtros aplicados</td></tr>
+                                    ) : data.map((row, index) => {
+                                        const numeroFila = (pagina - 1) * (meta?.per_page || 20) + (index + 1);
+                                        return (
+                                            <tr key={`${row.id}-${index}`} className="border-b border-slate-50 transition-colors hover:bg-slate-50/80 border-l-4 border-l-transparent">
+                                                <td className="px-4 py-4 text-center font-bold text-[10px] text-slate-400">{numeroFila}</td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="text-[10px] font-bold text-slate-400 block">
+                                                        {row.created_at ? new Date(row.created_at).toLocaleDateString('es-MX', {day: '2-digit', month: '2-digit', year: 'numeric'}) : 'N/A'}
+                                                    </span>
+                                                    <span className="text-sm font-black text-slate-700">
+                                                        {row.created_at ? new Date(row.created_at).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false}) : '00:00'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <div className="flex items-center gap-2 justify-center">
+                                                        <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[9px] font-black text-slate-500 uppercase">
+                                                            {row.nombre?.charAt(0) || 'U'}
+                                                        </div>
+                                                        <span className="text-sm font-black text-slate-800 uppercase tracking-tighter">{row.nombre || 'N/A'}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <button onClick={() => show(row.id)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
+                                                            <Edit2 size={16} />
+                                                        </button>
+                                                        <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors uppercase font-black text-[10px]">
+                                                            PDF
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleEliminar(row.id)}
+                                                            className="p-2 text-slate-400 hover:text-red-600 transition-colors"
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                                                <path d="M3 3l18 18" /><path d="M4 7h3m4 0h9" /><path d="M10 11l0 6" /><path d="M14 14l0 3" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l.077 -.923" /><path d="M18.384 14.373l.616 -7.373" /><path d="M9 5v-1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* Paginación Manual Estilizada */}
+                    {meta && meta.last_page > 1 && (
+                        <div className="flex items-center justify-between bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                            <span className="text-[10px] font-black text-slate-500 uppercase">PÁGINA {meta.current_page} DE {meta.last_page}</span>
+                            <div className="flex gap-1">
+                                <button disabled={pagina === 1} onClick={() => setPagina(pagina - 1)} className="px-3 py-1 border border-slate-200 rounded text-[10px] font-black hover:bg-slate-50 disabled:opacity-50">ANTERIOR</button>
+                                <button disabled={pagina === meta.last_page} onClick={() => setPagina(pagina + 1)} className="px-3 py-1 border border-slate-200 rounded text-[10px] font-black hover:bg-slate-50 disabled:opacity-50">SIGUIENTE</button>
                             </div>
                         </div>
+                    )}
+                </div>
 
-                        <div className="mx-auto max-w-5xl">
-                            <CheckListEquipoForm
-                                isEdit={isEdit}
-                                data={detalle?.data}
-                                open={openForm}
-                                onSuccess={() => {
-                                    handleBack();
-                                    cargarDatos();
-                                }}
-                            />
+                {/* Modal Flotante del Formulario */}
+                {openForm && (
+                    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={handleBack}></div>
+                        <div className="relative z-10 w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+                            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-lg font-black uppercase text-slate-800 tracking-tighter">{isEdit ? 'Editar Auditoría' : 'Nuevo Registro de Equipo'}</h3>
+                                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Formulario de Inspección</p>
+                                </div>
+                                <button onClick={handleBack} className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors"><X size={20} /></button>
+                            </div>
+                            <div className="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
+                                <CheckListEquipoForm
+                                    isEdit={isEdit}
+                                    data={detalle?.data}
+                                    onSuccess={() => {
+                                        handleBack();
+                                        cargarDatos();
+                                    }}
+                                />
+                            </div>
                         </div>
                     </div>
                 )}
+
+                {/* Modal de Configuración de Rango de Fechas */}
+                {mostrarModalFecha && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMostrarModalFecha(false)}></div>
+                        <div className="relative z-10 bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden">
+                            <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
+                                <h3 className="text-sm font-black uppercase text-slate-700">Período</h3>
+                                <button onClick={() => setMostrarModalFecha(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+                            </div>
+                            <div className="p-4 space-y-4">
+                                <div className="flex bg-slate-100 p-1 rounded-lg">
+                                    {['dia', 'rango', 'mes', 'año'].map((modo) => (
+                                        <button key={modo} onClick={() => setFiltrosEdicion({ ...filtrosEdicion, periodo: modo })} className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all uppercase ${filtrosEdicion.periodo === modo ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>{modo}</button>
+                                    ))}
+                                </div>
+                                <div className="space-y-3">
+                                    {filtrosEdicion.periodo === 'dia' && (
+                                        <input type="date" className="w-full border border-slate-200 p-2 rounded-lg text-sm" value={filtrosEdicion.fechaInicio} onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: e.target.value, fechaFin: e.target.value })} />
+                                    )}
+                                    {filtrosEdicion.periodo === 'rango' && (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <input type="date" className="w-full border border-slate-200 p-2 rounded-lg text-sm" value={filtrosEdicion.fechaInicio} onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: e.target.value })} />
+                                            <input type="date" className="w-full border border-slate-200 p-2 rounded-lg text-sm" value={filtrosEdicion.fechaFin} onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaFin: e.target.value })} />
+                                        </div>
+                                    )}
+                                    {filtrosEdicion.periodo === 'mes' && (
+                                        <input type="month" className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => {
+                                            const [y, m] = e.target.value.split('-');
+                                            setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${y}-${m}-01`, fechaFin: `${y}-${m}-31` });
+                                        }} />
+                                    )}
+                                    {filtrosEdicion.periodo === 'año' && (
+                                        <input type="number" min="2020" max="2030" placeholder="Año" className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${e.target.value}-01-01`, fechaFin: `${e.target.value}-12-31` })} />
+                                    )}
+                                </div>
+                                <button onClick={aplicarFiltroFecha} className="w-full bg-slate-800 text-white py-3 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">Aplicar Filtro</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <PdfExporter id={pdfId} onDone={handlePdfDone} />
             </div>
-            <PdfExporter
-                id={pdfId}
-                onDone={handlePdfDone}
-            />
         </AppLayout>
     );
 }

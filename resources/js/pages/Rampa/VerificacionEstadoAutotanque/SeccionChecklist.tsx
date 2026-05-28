@@ -3,6 +3,8 @@ import { Camera, X, RefreshCw, Circle } from 'lucide-react';
 
 interface Props {
     secciones: any[];
+    itemsCombustible: string[];
+    totalDrenes: number;
     respuestas: Record<string, string>;
     onToggle: (item: string, valor: 'Ok' | 'No') => void;
     fotos: File[];
@@ -11,14 +13,26 @@ interface Props {
     setPreviews: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
-export const SeccionChecklist = ({ secciones, respuestas, onToggle, fotos, setFotos, previews, setPreviews }: Props) => {
+export const SeccionChecklist = ({
+    secciones,
+    itemsCombustible,
+    totalDrenes,
+    respuestas,
+    onToggle,
+    fotos,
+    setFotos,
+    previews,
+    setPreviews
+}: Props) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [stream, setStream] = useState<MediaStream | null>(null);
     const [camaraActiva, setCamaraActiva] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // 1. Efecto para asignar el stream al elemento video en cuanto este se renderice
+    // Estado para controlar qué dren se está revisando actualmente
+    const [drenActivo, setDrenActivo] = useState(1);
+
     useEffect(() => {
         if (camaraActiva && stream && videoRef.current) {
             videoRef.current.srcObject = stream;
@@ -30,11 +44,7 @@ export const SeccionChecklist = ({ secciones, respuestas, onToggle, fotos, setFo
         setError(null);
         try {
             const mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: 'environment',
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                },
+                video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
                 audio: false
             });
             setStream(mediaStream);
@@ -57,18 +67,13 @@ export const SeccionChecklist = ({ secciones, respuestas, onToggle, fotos, setFo
         if (videoRef.current && canvasRef.current) {
             const video = videoRef.current;
             const canvas = canvasRef.current;
-
-            // Usamos las dimensiones reales del video capturado
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-
             const context = canvas.getContext('2d');
             if (context) {
                 context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
                 const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
                 setPreviews(prev => [...prev, dataUrl]);
-
                 canvas.toBlob((blob) => {
                     if (blob) {
                         const file = new File([blob], `evidencia_${Date.now()}.jpg`, { type: 'image/jpeg' });
@@ -81,11 +86,9 @@ export const SeccionChecklist = ({ secciones, respuestas, onToggle, fotos, setFo
 
     const eliminarFoto = (index: number) => {
         const previewAEliminar = previews[index];
-
         if (previewAEliminar.startsWith('data:') || previewAEliminar.startsWith('blob:')) {
             setFotos(prev => prev.filter((_, i) => i !== index));
         }
-
         setPreviews(prev => prev.filter((_, i) => i !== index));
     };
 
@@ -95,8 +98,14 @@ export const SeccionChecklist = ({ secciones, respuestas, onToggle, fotos, setFo
         };
     }, [stream]);
 
+    // Función auxiliar para verificar si un dren específico ya tiene sus 3 respuestas completadas
+    const esDrenCompleto = (numDren: number) => {
+        return itemsCombustible.every(item => respuestas[`${item} - Dren ${numDren}`]);
+    };
+
     return (
         <div className="space-y-6 animate-in fade-in duration-300">
+            {/* 1. SECCIONES ESTÁNDAR DEL VEHÍCULO */}
             {secciones.map((seccion, sIdx) => (
                 <div key={sIdx} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                     <h2 className="bg-gray-50 px-4 py-2 text-blue-800 font-bold text-xs uppercase border-b">{seccion.titulo}</h2>
@@ -114,6 +123,71 @@ export const SeccionChecklist = ({ secciones, respuestas, onToggle, fotos, setFo
                 </div>
             ))}
 
+            {/* 2. NUEVA SECCIÓN: PRUEBAS DE CALIDAD CON TABS PARA 6 DRENES */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <h2 className="bg-gray-50 px-4 py-2 text-blue-800 font-bold text-xs uppercase border-b">
+                    Pruebas de Calidad de Combustible
+                </h2>
+
+                {/* Navegación de Sub-Tabs para los Drenes */}
+                <div className="flex border-b overflow-x-auto bg-slate-50/50 p-2 gap-1 custom-scrollbar">
+                    {Array.from({ length: totalDrenes }, (_, i) => i + 1).map((num) => {
+                        const activo = drenActivo === num;
+                        const completo = esDrenCompleto(num);
+                        return (
+                            <button
+                                key={num}
+                                type="button"
+                                onClick={() => setDrenActivo(num)}
+                                className={`flex-1 min-w-[75px] py-2 px-1 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 border ${
+                                    activo
+                                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                                        : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'
+                                }`}
+                            >
+                                {completo && (
+                                    <span className={`w-1.5 h-1.5 rounded-full ${activo ? 'bg-white' : 'bg-green-500'}`} />
+                                )}
+                                DREN {num}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {/* Items del Dren Seleccionado */}
+                <div className="divide-y divide-gray-50 bg-white">
+                    {itemsCombustible.map((item: string, idx: number) => {
+                        // Generamos un identificador único por dren (Ej: "Bomba - Dren 1")
+                        const llaveUnica = `${item} - Dren ${drenActivo}`;
+                        return (
+                            <div key={idx} className="flex items-center justify-between p-4">
+                                <div className="flex flex-col">
+                                    <span className="text-sm text-gray-600 font-medium">{item}</span>
+                                    <span className="text-[10px] text-blue-500 font-bold uppercase tracking-wider">Evaluando Dren {drenActivo}</span>
+                                </div>
+                                <div className="flex bg-gray-100 rounded-lg p-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => onToggle(llaveUnica, 'Ok')}
+                                        className={`px-4 py-1.5 rounded-md text-xs font-black transition-all ${respuestas[llaveUnica] === 'Ok' ? 'bg-green-500 text-white' : 'text-gray-400'}`}
+                                    >
+                                        OK
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => onToggle(llaveUnica, 'No')}
+                                        className={`px-4 py-1.5 rounded-md text-xs font-black transition-all ${respuestas[llaveUnica] === 'No' ? 'bg-red-500 text-white' : 'text-gray-400'}`}
+                                    >
+                                        NO
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* 3. CÁMARA DE INSPECCIÓN */}
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="p-4 border-b flex justify-between items-center bg-slate-50">
                     <div className="flex items-center gap-2">
@@ -137,15 +211,13 @@ export const SeccionChecklist = ({ secciones, respuestas, onToggle, fotos, setFo
                         </button>
                     ) : (
                         <div className="relative rounded-2xl overflow-hidden bg-black aspect-[3/4] shadow-2xl">
-                            {/* IMPORTANTE: muted, playsInline y autoPlay son vitales para móviles */}
                             <video
                                 ref={videoRef}
                                 autoPlay
                                 playsInline
                                 muted
-                                className="w-full h-full object-cover scale-x-[-1]" // scale-x-[-1] es opcional, lo voltea tipo espejo
+                                className="w-full h-full object-cover scale-x-[-1]"
                             />
-
                             <div className="absolute bottom-6 left-0 right-0 flex justify-center items-center">
                                 <button
                                     type="button"

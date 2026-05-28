@@ -14,6 +14,7 @@ type Props = {
         checklistAvion?: Record<string, any>;
         checklistHelicoptero?: Record<string, any>;
         marcaDanos?: any[];
+        numero_estaticas: number;
         fotos?: { url: string }[];
     };
 };
@@ -81,6 +82,7 @@ function ChecklistReadonly({ data }: { data?: Record<string, any> }) {
 }
 
 export default function WalkAroundResumen({ data }: Props) {
+
     return (
         <div className="space-y-6">
 
@@ -95,6 +97,9 @@ export default function WalkAroundResumen({ data }: Props) {
                         </p>
                         <p className="text-xs text-gray-500">
                             Equipo: <b>{data.tipoAeronave}</b>
+                        </p>
+                        <p className="text-xs text-gray-500">
+                            N° Estáticas: <b>{data.numero_estaticas}</b>
                         </p>
                     </div>
 

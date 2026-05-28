@@ -143,10 +143,9 @@ class RemisionController extends Controller
 
     public function obtenerExcel(Request $request)
     {
-        $perPage = $request->query('per_page', 20);
         $vinculado = $request->boolean('vinculado');
-        $start = $request->query('start');
-        $end = $request->query('end');
+        $start = $request->query('fechaInicio');
+        $end = $request->query('fechaFin');
         $type = $request->query('periodo', 'day');
         $folio = $request->query('folio');
         $matricula = $request->query('matricula');

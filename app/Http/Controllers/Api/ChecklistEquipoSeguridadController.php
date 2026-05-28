@@ -79,16 +79,24 @@ class ChecklistEquipoSeguridadController extends Controller
     public function index(Request $request)
     {
         $query = ChecklistEquipoSeguridad::query();
+
         $query->where('status', 'A');
+
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where('nombre', 'like', "%{$search}%");
         }
+
         if ($request->filled('date')) {
             $query->whereDate('created_at', $request->date);
         }
+        elseif ($request->filled('start_date') && $request->filled('end_date')) {
+            $startDate = Carbon::parse($request->start_date)->startOfDay();
+            $endDate = Carbon::parse($request->end_date)->endOfDay();
 
-        $perPage = $request->get('per_page', 10);
+            $query->whereBetween('created_at', [$startDate, $endDate]);
+        }
+        $perPage = $request->get('per_page', 20);
 
         return response()->json(
             $query->orderBy('created_at', 'desc')

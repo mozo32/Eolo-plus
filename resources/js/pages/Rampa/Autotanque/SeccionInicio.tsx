@@ -11,6 +11,18 @@ interface SeccionInicioProps {
     onUpdate: (key: string, val: any) => void;
 }
 
+
+const formatNumberWithCommas = (value: number | null | undefined): string => {
+    if (value === null || value === undefined) return '';
+    return new Intl.NumberFormat('en-US').format(value);
+};
+
+const parseCommasToNumber = (value: string): number | null => {
+    const cleanValue = value.replace(/[^0-9]/g, '');
+    if (cleanValue === '') return null;
+    return Number(cleanValue);
+};
+
 export const SeccionInicio = ({
     nombre,
     fecha,
@@ -26,6 +38,7 @@ export const SeccionInicio = ({
             onUpdate('litrosIni', TABLA_CALIBRACION[cm]);
         }
     };
+
     const handleTimeInput = (val: string) => {
         const digits = val.replace(/\D/g, '');
         let formatted = digits;
@@ -75,7 +88,6 @@ export const SeccionInicio = ({
 
                         <div className="h-6 w-[1px] bg-slate-200"></div>
 
-                        {/* HORA (ESCRIBIBLE) */}
                         <div className="flex items-center gap-2 flex-1 px-2">
                             <Clock size={16} className="text-blue-500" />
                             <input
@@ -109,11 +121,13 @@ export const SeccionInicio = ({
                             />
                             <span className="absolute right-0 bottom-1 text-[10px] text-gray-400 font-bold">CM</span>
                         </div>
+
                         <div className="flex-1 relative">
                             <input
-                                type="number"
-                                value={litrosIni || ''}
-                                readOnly // Lo hacemos de solo lectura para que dependa de los CM
+                                type="text"
+                                inputMode="numeric"
+                                value={formatNumberWithCommas(litrosIni)}
+                                readOnly
                                 className="w-full border-b-2 border-gray-100 bg-gray-50 text-blue-600 outline-none py-1 font-mono text-lg pr-8 cursor-not-allowed"
                                 placeholder="Litros"
                             />
@@ -125,9 +139,13 @@ export const SeccionInicio = ({
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase">Lectura Totalizador Inicio de Turno</label>
                     <input
-                        type="number"
-                        value={totalizadorIni ?? ''}
-                        onChange={(e) => onUpdate('totalizadorIni', Number(e.target.value))}
+                        type="text"
+                        inputMode="numeric"
+                        value={formatNumberWithCommas(totalizadorIni)}
+                        onChange={(e) => {
+                            const numericValue = parseCommasToNumber(e.target.value);
+                            onUpdate('totalizadorIni', numericValue);
+                        }}
                         className="w-full border-b-2 border-gray-200 focus:border-blue-500 outline-none py-1 font-mono text-lg"
                     />
                 </div>

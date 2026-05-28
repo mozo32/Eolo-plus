@@ -27,12 +27,15 @@ const SECCIONES_CHECK = [
     {
         titulo: "Seguridad",
         items: ["Banderines", "Carrete y Cable de tierra", "Interruptor maestro", "Extintores", "Rombo de seguridad", "Alarma de reversa"]
-    },
-    {
-        titulo: "Pruebas de Calidad de Combustible",
-        items: ["Toma de Muestra de Combustible", "Prueba de claridad y Brillantez", "Presencia de Sólidos y/o agua de forma visual"]
     }
 ];
+const TOTAL_DRENES = 6;
+
+const ITEMS_COMBUSTIBLE = [
+    "Toma de Muestra de Combustible",
+    "Prueba de claridad y Brillantez",
+    "Presencia de Sólidos y/o agua de forma visual"
+]
 
 type Role = { slug: string; nombre: string; };
 export type AuthUser = {
@@ -49,6 +52,7 @@ export type AuthUser = {
 };
 
 export const CheckEstadoAutotanque = ({ data: dataProp, onSuccess }: CheckEstadoProps) => {
+
     const turnoId = dataProp?.data?.turno?.id || dataProp?.id;
 
     const [cargando, setCargando] = useState(false);
@@ -62,7 +66,7 @@ export const CheckEstadoAutotanque = ({ data: dataProp, onSuccess }: CheckEstado
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
     const user = auth?.user;
 
-    const totalItems = SECCIONES_CHECK.reduce((acc, s) => acc + s.items.length, 0);
+    const totalItems = SECCIONES_CHECK.reduce((acc, s) => acc + s.items.length, 0) + (ITEMS_COMBUSTIBLE.length * TOTAL_DRENES);
     const checklistCompleto = Object.keys(respuestas).length === totalItems;
     const vehiculoCompleto = datosVehiculo.km.length > 0;
     const todoListo = checklistCompleto && vehiculoCompleto;
@@ -185,6 +189,8 @@ export const CheckEstadoAutotanque = ({ data: dataProp, onSuccess }: CheckEstado
                     {tabActiva === 'checklist' && (
                         <SeccionChecklist
                             secciones={SECCIONES_CHECK}
+                            itemsCombustible={ITEMS_COMBUSTIBLE}
+                            totalDrenes={TOTAL_DRENES}
                             respuestas={respuestas}
                             onToggle={(item, val) => setRespuestas({ ...respuestas, [item]: val })}
                             fotos={fotos}

@@ -64,6 +64,8 @@ export async function fetchCheckListEquipo(params: {
     page?: number;
     search?: string;
     date?: string;
+    start_date?: string;
+    end_date?: string;
     per_page?: number;
 }) {
     const qs = new URLSearchParams(params as any).toString();

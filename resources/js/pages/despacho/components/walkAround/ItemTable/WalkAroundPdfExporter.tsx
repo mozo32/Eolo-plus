@@ -542,6 +542,7 @@ function WalkAroundPdfDoc({
     const lastPageFotos = pages[pages.length - 1]?.length ?? 0;
     const footerEnMismaPagina = lastPageFotos <= 4;
     const logoUrl = `${window.location.origin}/54657b8c-8428-41cc-a654-794ca81943d6.jpg`;
+
     return (
         <Document>
             <Page size="A4" style={styles.page}>
@@ -555,7 +556,7 @@ function WalkAroundPdfDoc({
                             Reporte de Inspección de Aeronave
                         </Text>
                         <Text style={styles.headerSub}>
-                            WalkAround #{detalle.id} · Elabora {detalle.elabora ?? "-"}
+                            WalkAround #{detalle.id} · Elabora {detalle.elabora ?? "-"} · N° Estáticas {detalle.numero_estaticas}
                         </Text>
                     </View>
                 </View>

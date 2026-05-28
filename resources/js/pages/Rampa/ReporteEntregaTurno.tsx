@@ -1,7 +1,7 @@
 import { BreadcrumbItem } from '@/types';
 import Swal from 'sweetalert2';
 import AppLayout from '@/layouts/app-layout';
-import { Head,usePage } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import EntregarTurnoAutotanque from './Autotanque/EntregarTurnoAutotanque';
 import { Download, Plus, X, Eye, Edit2, AlertCircle, ClipboardList, Filter, ChevronDown } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
@@ -31,6 +31,7 @@ interface PageProps {
     };
     [key: string]: any;
 }
+
 export default function ReporteEntregaTurno() {
     const [data, setData] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -81,9 +82,21 @@ export default function ReporteEntregaTurno() {
         }
     };
 
+    const verificarTurnoActivo = async () => {
+        try {
+            const res = await fetchTurnoActivo();
+            if (res?.active) setTurnoPendiente(res.data);
+            else setTurnoPendiente(null);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     const handleBack = () => {
         setOpenForm(false);
         setDetalle(null);
+        verificarTurnoActivo();
+        cargarDatos();
     };
 
     const limpiarFiltros = () => {
@@ -105,14 +118,6 @@ export default function ReporteEntregaTurno() {
         cargarDatos();
         verificarTurnoActivo();
     }, [page, filtros]);
-
-    const verificarTurnoActivo = async () => {
-        try {
-            const res = await fetchTurnoActivo();
-            if (res?.active) setTurnoPendiente(res.data);
-            else setTurnoPendiente(null);
-        } catch (error) { console.error(error); }
-    };
 
     const handleAccionReporte = () => {
         setTipoModal('entrega');
@@ -140,6 +145,7 @@ export default function ReporteEntregaTurno() {
                 if (res.ok) {
                     Swal.fire({ title: '¡Eliminado!', icon: 'success', timer: 1500, showConfirmButton: false });
                     cargarDatos();
+                    verificarTurnoActivo();
                 }
             } catch (error) {
                 Swal.fire('Error', 'No se pudo eliminar', 'error');
@@ -155,16 +161,17 @@ export default function ReporteEntregaTurno() {
             setOpenForm(true);
         } catch (error) { console.error(error); }
     };
+
     const cargarExcel = async () => {
         try {
             const data = await excelAutoTanqueApi({ ...filtros });
-
             return Array.isArray(data) ? data : (data.data || []);
         } catch (error) {
             console.error("Error al obtener datos para Excel:", error);
             throw error;
         }
     };
+
     const handleExportarExcel = async () => {
         Swal.fire({
             title: 'Generando Excel',
@@ -201,6 +208,7 @@ export default function ReporteEntregaTurno() {
             });
         }
     };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Reporte de Entrega de Turno" />

@@ -1,14 +1,20 @@
 import React from 'react';
 import { TABLA_CALIBRACION } from './tablaCalibracion';
 import { Clock, Calendar } from 'lucide-react';
+
 interface SeccionCierreProps {
-    nombreCierre: string; // Nombre de quien recibe
+    nombreCierre: string;
     fechaCierre: string;
     cmCierre: number | null;
     litrosCierre: number | null;
     totalizadorCierre: number | null;
     onUpdate: (key: string, val: any) => void;
 }
+
+const formatNumberWithCommas = (value: number | null | undefined): string => {
+    if (value === null || value === undefined) return '';
+    return new Intl.NumberFormat('en-US').format(value);
+};
 
 export const SeccionCierre = ({
     nombreCierre,
@@ -35,6 +41,7 @@ export const SeccionCierre = ({
 
         onUpdate('fechaCierre', `${datePart}T${finalTime.slice(0, 5)}`);
     };
+
     const handleCmChange = (cm: number) => {
         onUpdate('cmCierre', cm);
         if (TABLA_CALIBRACION[cm] !== undefined) {
@@ -52,8 +59,6 @@ export const SeccionCierre = ({
                     Cronología de Cierre
                 </label>
                 <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-100 group focus-within:border-blue-300 transition-all shadow-sm">
-
-                    {/* Fecha */}
                     <div className="flex items-center gap-2 flex-1 px-2">
                         <Calendar size={16} className="text-blue-500" />
                         <input
@@ -69,7 +74,6 @@ export const SeccionCierre = ({
 
                     <div className="h-6 w-[1px] bg-slate-200"></div>
 
-                    {/* Hora Escribible */}
                     <div className="flex items-center gap-2 flex-1 px-2">
                         <Clock size={16} className="text-blue-500" />
                         <input
@@ -85,7 +89,6 @@ export const SeccionCierre = ({
             </div>
             <br />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Fila 1: Identificación de Cierre */}
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase">Nombre recibe</label>
                     <input
@@ -96,14 +99,14 @@ export const SeccionCierre = ({
                         placeholder="Nombre de quien recibe"
                     />
                 </div>
-                {/* Fila 3: Totalizador */}
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase">
                         Lectura Totalizador Final (Auto)
                     </label>
                     <input
-                        type="number"
-                        value={totalizadorCierre || ''}
+                        type="text"
+                        inputMode="numeric"
+                        value={formatNumberWithCommas(totalizadorCierre)}
                         readOnly
                         className="w-full border-b-2 border-gray-100 bg-gray-50 text-blue-700 outline-none py-1 font-mono text-lg cursor-not-allowed"
                         placeholder="Calculado..."
@@ -111,34 +114,34 @@ export const SeccionCierre = ({
                     <p className="text-[10px] text-gray-400 mt-1">* Suma de Inicio + Ventas</p>
                 </div>
             </div>
-            {/* Fila 2: Toma Física de Cierre */}
-                <div className="md:col-span-1">
-                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                        Toma Física Final
-                    </label>
-                    <div className="flex gap-4">
-                        <div className="flex-1 relative">
-                            <input
-                                type="number"
-                                value={cmCierre || ''}
-                                onChange={(e) => handleCmChange(Number(e.target.value))}
-                                className="w-full border-b-2 border-gray-200 focus:border-blue-500 outline-none py-1 font-mono text-lg pr-8"
-                                placeholder="CM"
-                            />
-                            <span className="absolute right-0 bottom-1 text-[10px] text-gray-400 font-bold">CM</span>
-                        </div>
-                        <div className="flex-1 relative">
-                            <input
-                                type="number"
-                                value={litrosCierre || ''}
-                                readOnly
-                                className="w-full border-b-2 border-gray-100 bg-gray-50 text-blue-600 outline-none py-1 font-mono text-lg pr-8 cursor-not-allowed"
-                                placeholder="Litros"
-                            />
-                            <span className="absolute right-0 bottom-1 text-[10px] text-blue-400 font-bold">LTS</span>
-                        </div>
+            <div className="md:col-span-1">
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                    Toma Física Final
+                </label>
+                <div className="flex gap-4">
+                    <div className="flex-1 relative">
+                        <input
+                            type="number"
+                            value={cmCierre || ''}
+                            onChange={(e) => handleCmChange(Number(e.target.value))}
+                            className="w-full border-b-2 border-gray-200 focus:border-blue-500 outline-none py-1 font-mono text-lg pr-8"
+                            placeholder="CM"
+                        />
+                        <span className="absolute right-0 bottom-1 text-[10px] text-gray-400 font-bold">CM</span>
+                    </div>
+                    <div className="flex-1 relative">
+                        <input
+                            type="text"
+                            inputMode="numeric"
+                            value={formatNumberWithCommas(litrosCierre)}
+                            readOnly
+                            className="w-full border-b-2 border-gray-100 bg-gray-50 text-blue-600 outline-none py-1 font-mono text-lg pr-8 cursor-not-allowed"
+                            placeholder="Litros"
+                        />
+                        <span className="absolute right-0 bottom-1 text-[10px] text-blue-400 font-bold">LTS</span>
                     </div>
                 </div>
+            </div>
         </section>
     );
 };

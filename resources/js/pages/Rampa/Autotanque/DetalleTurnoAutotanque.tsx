@@ -18,16 +18,11 @@ export interface Marca3D {
     tipo: 'X' | 'O';
 }
 
-// Subcomponente Visor3D adaptado para Lectura de Daños Históricos
 const Visor3DReadonly = ({ marcas }: { marcas: Marca3D[] }) => {
     const { scene } = useGLTF('/models/result.glb');
-
     return (
         <group>
-            <primitive
-                object={scene}
-                scale={2.5}
-            />
+            <primitive object={scene} scale={2.5} />
             {marcas.map((m, i) => (
                 <Html key={i} position={[m.x, m.y, m.z]} center>
                     <div className="pointer-events-none transform -translate-y-1/2 select-none">
@@ -46,36 +41,32 @@ const Visor3DReadonly = ({ marcas }: { marcas: Marca3D[] }) => {
 export const DetalleTurnoAutotanque = ({ data }: Props) => {
     const [activeTab, setActiveTab] = useState<'balance' | 'checklist' | 'final'>('balance');
 
-    // Detección segura del origen de datos
-    const source = data?.turno ? data : (data?.data?.turno ? data.data : data);
+    // NUEVO: Estado para alternar la vista entre los 6 drenes en la pestaña de Checklist
+    const [drenActivo, setDrenActivo] = useState<number>(1);
 
+    const source = data?.turno ? data : (data?.data?.turno ? data.data : data);
     const turno = source?.turno || null;
     const remision = source?.remision || [];
     const sumaAutotanque = source?.sumaAutotanque || [];
     const inspeccion = turno?.inspeccion || source?.inspeccion;
 
-    // Función auxiliar para formatear números de forma segura
     const formatNumber = (val: any) => {
         const num = Number(val);
         return isNaN(num) ? '0' : num.toLocaleString('en-US');
     };
 
-    // Función para transformar "YYYY-MM-DD HH:MM:SS" a "DD/MM/YYYY HH:MM"
     const formatChronology = (dateStr: string) => {
         if (!dateStr) return '---';
         try {
             const [datePart, timePart] = dateStr.trim().split(' ');
             if (!datePart) return dateStr;
-
             const [year, month, day] = datePart.split('-');
             const formattedDate = `${day}/${month}/${year}`;
-
             let formattedTime = '';
             if (timePart) {
                 const timeSegments = timePart.split(':');
                 formattedTime = ` ${timeSegments[0]}:${timeSegments[1]}`;
             }
-
             return `${formattedDate}${formattedTime}`;
         } catch (error) {
             return dateStr;
@@ -107,7 +98,6 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
         );
     }
 
-    // Clasificación explícita de grupos de respuestas para el paso de Checklist
     const gruposChecklist = {
         vehiculoGeneral: [
             "Faros delanteros y Luces Traseras", "Luces intermitentes",
@@ -122,7 +112,8 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
             "Extintores", "Rombo de seguridad", "Alarma de reversa"
         ],
         calidadCombustible: [
-            "Toma de Muestra de Combustible", "Prueba de claridad y Brillantez",
+            "Toma de Muestra de Combustible",
+            "Prueba de claridad y Brillantez",
             "Presencia de Sólidos y/o agua de forma visual"
         ]
     };
@@ -132,7 +123,6 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
 
     return (
         <div className="space-y-6 p-1">
-            {/* --- NAVEGACIÓN POR PASOS / STEPS --- */}
             <div className="flex border border-slate-200 bg-slate-50/70 p-1 rounded-xl">
                 <button
                     onClick={() => setActiveTab('balance')}
@@ -157,7 +147,6 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                 </button>
             </div>
 
-            {/* --- PASO 1: BALANCE, MOVIMIENTOS Y CIERRES (SIN TOCAR) --- */}
             {activeTab === 'balance' && (
                 <div className="space-y-8">
                     <section>
@@ -249,7 +238,6 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                 </div>
             )}
 
-            {/* --- PASO 2: CHECKLIST E INDICADORES POR GRUPOS --- */}
             {activeTab === 'checklist' && (
                 <div className="space-y-6">
                     <section>
@@ -298,15 +286,49 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                                 </div>
                             </div>
 
-                            <div className="bg-slate-50/60 p-4 rounded-xl border border-slate-100">
-                                <h5 className="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-wider">Pruebas de Calidad de Combustible</h5>
-                                <div className="space-y-1.5">
-                                    {gruposChecklist.calidadCombustible.map(item => (
-                                        <div key={item} className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 text-[10px]">
-                                            <span className="font-bold text-slate-600">{item}</span>
-                                            <span className={`font-black uppercase px-2 py-0.5 rounded ${respuestas[item] === 'Ok' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>{respuestas[item] || '---'}</span>
-                                        </div>
-                                    ))}
+                            {/* MODIFICADO: Pruebas de Calidad de Combustible integrando Sub-Tabs de Lectura */}
+                            <div className="bg-slate-50/60 p-4 rounded-xl border border-slate-100 flex flex-col justify-between">
+                                <div>
+                                    <h5 className="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-wider">
+                                        Pruebas de Calidad de Combustible
+                                    </h5>
+
+                                    {/* Sub-navegador de Drenes (1 al 6) */}
+                                    <div className="flex border border-slate-200 bg-white p-1 rounded-lg gap-0.5 mb-4 overflow-x-auto">
+                                        {[1, 2, 3, 4, 5, 6].map((num) => (
+                                            <button
+                                                key={num}
+                                                type="button"
+                                                onClick={() => setDrenActivo(num)}
+                                                className={`flex-1 min-w-[50px] py-1 text-[9px] font-black uppercase rounded transition-all ${
+                                                    drenActivo === num
+                                                        ? 'bg-indigo-600 text-white shadow-sm'
+                                                        : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                DR {num}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        {gruposChecklist.calidadCombustible.map(item => {
+                                            const llaveCompuesta = `${item} - Dren ${drenActivo}`;
+                                            const valorRespuesta = respuestas[llaveCompuesta];
+
+                                            return (
+                                                <div key={item} className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 text-[10px]">
+                                                    <div className="flex flex-col max-w-[70%]">
+                                                        <span className="font-bold text-slate-600 truncate">{item}</span>
+                                                        <span className="text-[8px] text-indigo-500 font-bold tracking-tight">Drenaje número {drenActivo}</span>
+                                                    </div>
+                                                    <span className={`font-black uppercase px-2 py-0.5 rounded ${valorRespuesta === 'Ok' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                        {valorRespuesta || '---'}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -314,7 +336,6 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                         <p className="text-center text-xs text-slate-400 italic py-4">No hay datos de inspección registrados.</p>
                     )}
 
-                    {/* Evidencias fotográficas incorporadas en la inspección */}
                     {inspeccion?.imagenes?.length > 0 && (
                         <section className="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4">
                             <div className="flex items-center gap-2 mb-3">
@@ -334,7 +355,6 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                 </div>
             )}
 
-            {/* --- PASO 3: VISOR R3F CANVAS (REUSE) Y FIRMAS --- */}
             {activeTab === 'final' && (
                 <div className="space-y-6">
                     <section>
@@ -344,19 +364,16 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                                 Vista de lectura · Arrastre para rotar el tanque
                             </div>
 
-                            {/* Reutilización del Motor Gráfico Canvas de Three.js */}
                             <Canvas camera={{ position: [5, 2, 5], fov: 45 }}>
                                 <ambientLight intensity={0.6} />
                                 <directionalLight position={[10, 10, 10]} intensity={1.2} />
                                 <Environment preset="city" />
-
                                 <OrbitControls
                                     makeDefault
                                     minPolarAngle={0}
                                     maxPolarAngle={Math.PI / 2.1}
                                     enablePan={false}
                                 />
-
                                 <Suspense fallback={<Html center><span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Cargando Estructura Autotanque...</span></Html>}>
                                     <Visor3DReadonly marcas={marcasHistoricas} />
                                 </Suspense>
@@ -369,7 +386,6 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                         </div>
                     </section>
 
-                    {/* Mapeo de Firmas Electrónicas */}
                     <section>
                         <SectionHeader title="Firmas de Conformidad" icon={PenTool} />
                         {inspeccion?.firmas?.length > 0 ? (

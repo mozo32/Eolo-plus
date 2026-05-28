@@ -1,8 +1,13 @@
-import React, { useState, useRef, useLayoutEffect, useEffect, Suspense } from 'react';
+import React, { useState, useRef, useLayoutEffect, useEffect, Suspense, useMemo } from 'react';
 import { Trash2, ClipboardCheck, PenTool, XCircle, Circle, Save } from 'lucide-react';
 import { usePage } from '@inertiajs/react';
 import { Canvas } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Environment, Html } from '@react-three/drei';
+
+/* ==========================================================================
+   PRECARGA DEL MODELO GLB (Caché Global)
+   ========================================================================== */
+useGLTF.preload('/models/result.glb');
 
 export interface Marca3D {
     x: number;
@@ -34,38 +39,54 @@ interface Props {
     firmasExistentes?: Record<string, string>;
 }
 
-const Visor3D = ({ marcas, setMarcas, modo }: { marcas: Marca3D[], setMarcas: any, modo: 'X' | 'O' }) => {
+/* ==========================================================================
+   COMPONENTE: Visor3D (Optimizado)
+   ========================================================================== */
+const Visor3D = React.memo(({ marcas, setMarcas, modo }: { marcas: Marca3D[], setMarcas: any, modo: 'X' | 'O' }) => {
     const { scene } = useGLTF('/models/result.glb');
+
+    // OPTIMIZACIÓN 1: Clonar la escena para evitar sobreescribir referencias en la caché global de Drei
+    const clonedScene = useMemo(() => scene.clone(), [scene]);
 
     const manejarClicModelo = (e: any) => {
         e.stopPropagation();
         const puntoClic = e.point;
-        setMarcas([...marcas, { x: puntoClic.x, y: puntoClic.y, z: puntoClic.z, tipo: modo }]);
+        setMarcas((prev: Marca3D[]) => [...prev, { x: puntoClic.x, y: puntoClic.y, z: puntoClic.z, tipo: modo }]);
     };
+
+    // OPTIMIZACIÓN 2: Memorizar los elementos HTML proyectados para evitar lag en el renderizado por hilos del DOM
+    const marcasProyectadas = useMemo(() => {
+        return marcas.map((m, i) => (
+            <Html key={i} position={[m.x, m.y, m.z]} center distanceFactor={15}>
+                <div className="pointer-events-none transform -translate-y-1/2 will-change-transform">
+                    {m.tipo === 'X'
+                        ? <XCircle className="text-red-500 fill-white drop-shadow-md" size={24} />
+                        : <Circle className="text-amber-500 fill-white drop-shadow-md" size={24} />}
+                </div>
+            </Html>
+        ));
+    }, [marcas]);
 
     return (
         <group>
             <primitive
-                object={scene}
+                object={clonedScene}
                 scale={2.5}
                 onClick={manejarClicModelo}
-                onPointerOver={() => (document.body.style.cursor = 'crosshair')}
-                onPointerOut={() => (document.body.style.cursor = 'auto')}
+                onPointerOver={() => { document.body.style.cursor = 'crosshair'; }}
+                onPointerOut={() => { document.body.style.cursor = 'auto'; }}
             />
-            {marcas.map((m, i) => (
-                <Html key={i} position={[m.x, m.y, m.z]} center>
-                    <div className="pointer-events-none transform -translate-y-1/2">
-                        {m.tipo === 'X'
-                            ? <XCircle className="text-red-500 fill-white" size={24} />
-                            : <Circle className="text-amber-500 fill-white" size={24} />}
-                    </div>
-                </Html>
-            ))}
+            {marcasProyectadas}
         </group>
     );
-};
+});
 
-const CardFirma = ({ titulo, id, nombre, setNombres, canvasRef }: any) => {
+Visor3D.displayName = 'Visor3D';
+
+/* ==========================================================================
+   COMPONENTE: CardFirma
+   ========================================================================== */
+const CardFirma = React.memo(({ titulo, id, nombre, setNombres, canvasRef }: any) => {
     const limpiarCanvas = () => {
         const canvas = canvasRef.current;
         if (canvas) {
@@ -95,8 +116,13 @@ const CardFirma = ({ titulo, id, nombre, setNombres, canvasRef }: any) => {
             </div>
         </div>
     );
-};
+});
 
+CardFirma.displayName = 'CardFirma';
+
+/* ==========================================================================
+   COMPONENTE PRINCIPAL: SeccionFirmas
+   ========================================================================== */
 export const SeccionFirmas = ({ estaCompleto, onGuardar, marcas, setMarcas, firmasExistentes }: Props) => {
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
     const user = auth?.user;
@@ -201,6 +227,10 @@ export const SeccionFirmas = ({ estaCompleto, onGuardar, marcas, setMarcas, firm
         onGuardar(firmasFinales);
     };
 
+    const deshacerUltimo = () => {
+        setMarcas((prev) => prev.slice(0, -1));
+    };
+
     return (
         <div className="max-w-5xl mx-auto space-y-8 pb-12 p-4">
             <div className="flex items-center gap-4">
@@ -217,7 +247,7 @@ export const SeccionFirmas = ({ estaCompleto, onGuardar, marcas, setMarcas, firm
                         <button type="button" onClick={() => setModo('X')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${modo === 'X' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>FALTANTE</button>
                         <button type="button" onClick={() => setModo('O')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${modo === 'O' ? 'bg-amber-500 text-white' : 'text-slate-400'}`}>DAÑO</button>
                     </div>
-                    <button type="button" onClick={() => setMarcas(marcas.slice(0, -1))} className="text-[10px] font-bold text-slate-400 hover:text-blue-600 uppercase bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm">
+                    <button type="button" onClick={deshacerUltimo} className="text-[10px] font-bold text-slate-400 hover:text-blue-600 uppercase bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm">
                         Deshacer Último
                     </button>
                 </div>
@@ -226,7 +256,10 @@ export const SeccionFirmas = ({ estaCompleto, onGuardar, marcas, setMarcas, firm
                     <div className="absolute top-2 left-2 z-10 text-xs text-slate-500 bg-white/80 p-2 rounded pointer-events-none">
                         Gira con el ratón/dedo. Haz clic para agregar marca.
                     </div>
-                    <Canvas camera={{ position: [5, 2, 5], fov: 50 }}>
+                    <Canvas
+                        camera={{ position: [5, 2, 5], fov: 50 }}
+                        gl={{ powerPreference: "high-performance", antialias: true }}
+                    >
                         <ambientLight intensity={0.5} />
                         <directionalLight position={[10, 10, 10]} intensity={1} />
                         <Environment preset="city" />

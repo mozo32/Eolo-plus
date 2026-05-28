@@ -1,4 +1,3 @@
-//resources\js\pages\despacho\components\walkAround\MapaDanios3D.tsx
 import React, {
     useState,
     useRef,
@@ -15,7 +14,6 @@ import * as THREE from "three";
 /* =======================
    Tipos
 ======================= */
-
 export interface PuntoDanio {
     x: number;
     y: number;
@@ -39,9 +37,16 @@ export type MapaDanios3DRef = {
 };
 
 /* =======================
+   Precarga de Modelos (¡AQUÍ ESTÁ EL TRUCO!)
+   Esto llena la caché global de R3F inmediatamente al importar el archivo.
+======================= */
+useLoader.preload(OBJLoader, '/models/Avion.obj');
+useLoader.preload(OBJLoader, '/models/18706 Fighter Helicopter_v1.obj');
+
+
+/* =======================
    AutoFit Camera (PDF)
 ======================= */
-
 function AutoFitCameraToPoints({ points }: { points: PuntoDanio[] }) {
     const { camera } = useThree();
     const fitted = useRef(false);
@@ -79,14 +84,23 @@ function AutoFitCameraToPoints({ points }: { points: PuntoDanio[] }) {
 /* =======================
    AutoFit Camera Normal
 ======================= */
-
 function AutoFitCamera({
     objectRef,
+    modelSrc, // Añadido para resetear el ajuste cuando cambie el modelo
 }: {
     objectRef: React.MutableRefObject<THREE.Object3D | null>;
+    modelSrc: string;
 }) {
     const { camera } = useThree();
+
+    // Resetear el flag cada vez que el modelo cambie de URL
+    const lastSrc = useRef(modelSrc);
     const fitted = useRef(false);
+
+    if (lastSrc.current !== modelSrc) {
+        lastSrc.current = modelSrc;
+        fitted.current = false;
+    }
 
     useEffect(() => {
         if (!objectRef.current || fitted.current) return;
@@ -109,7 +123,7 @@ function AutoFitCamera({
         cam.lookAt(center);
 
         fitted.current = true;
-    }, [objectRef, camera]);
+    }, [objectRef, camera, modelSrc]);
 
     return null;
 }
@@ -117,7 +131,6 @@ function AutoFitCamera({
 /* =======================
    Modelo 3D
 ======================= */
-
 function AvionModel({
     modelSrc,
     points,
@@ -129,13 +142,15 @@ function AvionModel({
     onClick?: (point: THREE.Vector3) => void;
     modelRef: React.MutableRefObject<THREE.Object3D | null>;
 }) {
+    // Al estar precargado, esto resolverá instantáneamente desde la caché
     const object = useLoader(OBJLoader, modelSrc);
 
     useEffect(() => {
         modelRef.current = object;
     }, [object, modelRef]);
 
-    useMemo(() => {
+    // Modificado useMemo por useEffect para asegurar que el recentrado ocurra correctamente al cambiar de modelo
+    useEffect(() => {
         object.position.set(0, 0, 0);
         object.scale.set(1, 1, 1);
 
@@ -181,7 +196,6 @@ function AvionModel({
 /* =======================
    Componente principal
 ======================= */
-
 const MapaDanios3D = forwardRef<MapaDanios3DRef, MapaDanios3DProps>(
     function MapaDanios3D(
         {
@@ -193,9 +207,7 @@ const MapaDanios3D = forwardRef<MapaDanios3DRef, MapaDanios3DProps>(
         },
         ref
     ) {
-        useEffect(() => {
-            useLoader.preload(OBJLoader, modelSrc);
-        }, [modelSrc]);
+        // SE ELIMINÓ EL useEffect con useLoader.preload que estaba aquí adentro
 
         const [tool, setTool] = useState<ToolMode>("view");
         const modelRef = useRef<THREE.Object3D | null>(null);
@@ -206,10 +218,9 @@ const MapaDanios3D = forwardRef<MapaDanios3DRef, MapaDanios3DProps>(
         useImperativeHandle(ref, () => ({
             capture() {
                 if (!glRef.current || !sceneRef.current || !cameraRef.current) {
-                return null;
+                    return null;
                 }
                 glRef.current.render(sceneRef.current, cameraRef.current);
-
                 return glRef.current.domElement.toDataURL("image/png");
             },
         }));
@@ -300,18 +311,20 @@ const MapaDanios3D = forwardRef<MapaDanios3DRef, MapaDanios3DProps>(
                         <ambientLight intensity={0.6} />
                         <directionalLight position={[5, 5, 5]} />
 
-                        <AvionModel
-                            modelSrc={modelSrc}
-                            modelRef={modelRef}
-                            points={value}
-                            onClick={(p) => {
-                                if (tool === "mark") addPoint(p);
-                                if (tool === "erase") removeNearestPoint(p);
-                            }}
-                        />
+                        <React.Suspense fallback={null}>
+                            <AvionModel
+                                modelSrc={modelSrc}
+                                modelRef={modelRef}
+                                points={value}
+                                onClick={(p) => {
+                                    if (tool === "mark") addPoint(p);
+                                    if (tool === "erase") removeNearestPoint(p);
+                                }}
+                            />
+                        </React.Suspense>
 
                         {!pdfMode && (
-                            <AutoFitCamera objectRef={modelRef} />
+                            <AutoFitCamera objectRef={modelRef} modelSrc={modelSrc} />
                         )}
 
                         {pdfMode && (
