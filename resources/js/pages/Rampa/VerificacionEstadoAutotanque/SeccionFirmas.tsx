@@ -57,7 +57,7 @@ const Visor3D = React.memo(({ marcas, setMarcas, modo }: { marcas: Marca3D[], se
     // OPTIMIZACIÓN 2: Memorizar los elementos HTML proyectados para evitar lag en el renderizado por hilos del DOM
     const marcasProyectadas = useMemo(() => {
         return marcas.map((m, i) => (
-            <Html key={i} position={[m.x, m.y, m.z]} center distanceFactor={15}>
+            <Html key={i} position={[m.x, m.y, m.z]} center>
                 <div className="pointer-events-none transform -translate-y-1/2 will-change-transform">
                     {m.tipo === 'X'
                         ? <XCircle className="text-red-500 fill-white drop-shadow-md" size={24} />
