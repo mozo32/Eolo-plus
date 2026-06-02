@@ -727,4 +727,46 @@ class WalkAroundController extends Controller
             return response()->json(['error' => 'Error interno del servidor'], 500);
         }
     }
+
+    public function pendientesFirmar(Request $request)
+    {
+        $rol = $request->query('rol');
+        $query = Walkaround::query();
+
+        switch ($rol) {
+            case 'admin':
+            case 'fbo':
+                $query->where(function($q) {
+                    $q->whereDoesntHave('firmas', function($f) {
+                        $f->where('rol', 'jefe_area');
+                    })
+                    ->orWhereDoesntHave('firmas', function($f) {
+                        $f->where('rol', 'fbo');
+                    })
+                    ->orWhereDoesntHave('firmas', function($f) {
+                        $f->where('rol', 'responsable');
+                    });
+                });
+                break;
+
+            case 'empleado':
+                $query->whereDoesntHave('firmas', function($f) {
+                    $f->where('rol', 'responsable');
+                });
+                break;
+
+            case 'jefe_area':
+                $query->whereDoesntHave('firmas', function($f) {
+                    $f->where('rol', 'jefe_area');
+                });
+                break;
+
+            default:
+                return response()->json([]);
+        }
+
+        $pendientes = $query->get();
+
+        return response()->json($pendientes);
+    }
 }

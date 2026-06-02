@@ -120,3 +120,15 @@ export async function eliminar(id: number) {
         ...data,
     };
 }
+
+
+export const fetchUsuariosSinChecklist = async () => {
+    const res = await fetch('/api/ChecklistEquipoSeguridad/pendientes', {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        }
+    });
+    return res.json();
+};

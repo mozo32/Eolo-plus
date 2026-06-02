@@ -58,7 +58,7 @@ class ChecklistEquipoSeguridadController extends Controller
     {
         $now = Carbon::now();
 
-        $checklist = ChecklistEquipoSeguridad::where('id', $userId)
+        $checklist = ChecklistEquipoSeguridad::where('id', (int)$userId)
             ->latest()
             ->first();
 
@@ -159,5 +159,30 @@ class ChecklistEquipoSeguridadController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    public function usuariosSinChecklist()
+    {
+        $now = Carbon::now();
+        $usuariosPendientes = \App\Models\User::whereDoesntHave('checklists', function ($query) use ($now) {
+            $query->where('status', 'A')
+                ->whereYear('created_at', $now->year)
+                ->whereMonth('created_at', $now->month);
+        })
+        ->whereHas('departamentos', function ($query) {
+            $query->where('nombre', 'Rampa');
+        })
+        ->whereHas('roles', function ($query) {
+            $query->whereIn('slug', ['empleado', 'jefe_area']);
+        })
+        ->select('id', 'name', 'email')
+        ->orderBy('name', 'asc')
+        ->get();
+
+        return response()->json([
+            'ok' => true,
+            'count' => $usuariosPendientes->count(),
+            'data' => $usuariosPendientes
+        ]);
     }
 }

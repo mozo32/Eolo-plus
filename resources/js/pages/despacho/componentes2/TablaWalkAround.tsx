@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { fetchWalkarounds, deleteWalkaround } from '@/stores/apiWalkaround';
+import axios from 'axios';
 import WalkAroundFirmaModal from '../components/walkAround/ItemTable/WalkAroundFirmaModal';
+import WalkAroundPendientesPanel from '../components/walkAround/ItemTable/WalkAroundPendientesPanel';
 import WalkAroundFormV2 from './steps/WalkAroundFormV2';
 import WalkAroundPdfExporter from '../components/walkAround/ItemTable/WalkAroundPdfExporter';
 import AppLayout from '@/layouts/app-layout';
@@ -11,12 +13,44 @@ import {
     Search, Loader2, Plane, ChevronLeft,
     ChevronRight, ArrowUpRight,
     ArrowDownLeft, Plus, X, Filter, Edit2,
-    Calendar, MapPin, Trash2, ChevronDown
+    Calendar, MapPin, Trash2, ChevronDown, Bell
 } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Walkaround' }];
 
+type Role = {
+    slug: string;
+    nombre: string;
+};
+
+export type AuthUser = {
+    id: number;
+    name: string;
+    email: string;
+    isAdmin: boolean;
+    roles: Role[];
+};
+
+type PageProps = {
+    auth: {
+        user: AuthUser | null;
+    };
+};
+
 const TablaWalkAround = () => {
+    const { auth } = usePage<PageProps>().props;
+    const user = auth.user;
+
+    const roleLabels: Record<string, string> = {
+        admin: "Administrador",
+        empleado: "Empleado",
+        jefe_area: "Jefe de Área",
+        fbo: "FBO",
+    };
+
+    const roleName = user?.roles.map((r) => roleLabels[r.slug] ?? r.nombre).join(", ") ?? "Sin Rol";
+    console.log(roleName);
+
     const [pdfId, setPdfId] = useState<number | null>(null);
     const [showForm, setShowForm] = useState(false);
     const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -26,12 +60,14 @@ const TablaWalkAround = () => {
     const [firmId, setFirmId] = useState<number | null>(null);
     const [firmOpen, setFirmOpen] = useState(false);
 
-    const { auth } = usePage<{ auth: { user: any } }>().props;
+    const [pendientes, setPendientes] = useState<any[]>([]);
+    const [mostrarPanelPendientes, setMostrarPanelPendientes] = useState(false);
+
     const [pagina, setPagina] = useState(1);
     const [meta, setMeta] = useState<any>(null);
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
 
-    const nombreRol = auth.user.roles?.[0]?.slug;
+    const nombreRol = user?.roles?.[0]?.slug;
     const esAdminOFbo = nombreRol === 'admin' || nombreRol === 'fbo';
     const esJefe = nombreRol === 'jefe_area';
     const esEmpleado = nombreRol === 'empleado';
@@ -50,6 +86,25 @@ const TablaWalkAround = () => {
     useEffect(() => {
         if (mostrarModalFecha) setFiltrosEdicion({ ...filtros });
     }, [mostrarModalFecha, filtros]);
+
+    const loadPendientes = useCallback(async () => {
+        if (!nombreRol) return;
+
+        try {
+            const response = await axios.get('/api/walkarounds/pendientes-firmar', {
+                params: {
+                    rol: nombreRol
+                }
+            });
+            setPendientes(response.data);
+
+            if (response.data.length === 0) {
+                setMostrarPanelPendientes(false);
+            }
+        } catch (error) {
+            console.error("Error cargando pendientes de firma:", error);
+        }
+    }, [nombreRol]);
 
     const loadData = useCallback(async (page = 1) => {
         setLoading(true);
@@ -74,6 +129,10 @@ const TablaWalkAround = () => {
             setLoading(false);
         }
     }, [filtros]);
+
+    useEffect(() => {
+        loadPendientes();
+    }, [loadPendientes]);
 
     useEffect(() => {
         const timeout = setTimeout(() => {
@@ -121,20 +180,37 @@ const TablaWalkAround = () => {
             await deleteWalkaround(id);
             Swal.fire({ icon: "success", title: "Eliminado", timer: 1500, showConfirmButton: false });
             loadData(pagina);
+            loadPendientes();
         } catch (error) {
             Swal.fire("Error", "No se pudo eliminar el registro", "error");
         }
     };
 
+    const handleAbrirFirmaPendiente = (id: number) => {
+        setFirmId(id);
+        setFirmOpen(true);
+    };
+
     return (
         <>
-            <div className="p-6 bg-[#f3f4f6] min-h-screen relative text-sm">
+            <div className="p-6 bg-[#f3f4f6] min-h-screen relative text-sm overflow-x-hidden">
                 <div className="space-y-4 animate-in fade-in duration-500">
 
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-lg shadow-sm border border-slate-200">
-                        <div>
-                            <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Walkaround</h2>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Inspección de Aeronaves</p>
+                        <div className="flex items-center gap-3">
+                            <div>
+                                <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Walkaround</h2>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Inspección de Aeronaves</p>
+                            </div>
+                            {pendientes.length > 0 && (
+                                <button
+                                    onClick={() => setMostrarPanelPendientes(true)}
+                                    className="flex items-center gap-1.5 bg-amber-500 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-sm hover:bg-amber-600 transition-all animate-bounce"
+                                >
+                                    <Bell size={12} className="animate-pulse" />
+                                    <span>PENDIENTES ({pendientes.length})</span>
+                                </button>
+                            )}
                         </div>
 
                         <div className="flex gap-2">
@@ -257,7 +333,7 @@ const TablaWalkAround = () => {
                                                             <button onClick={() => handleEdit(item.id)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Edit2 size={16} /></button>
                                                         )}
                                                         {(esAdminOFbo || esJefe || esEmpleado) && (
-                                                            <button onClick={() => { setFirmId(item.id); setFirmOpen(true); }} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors" title="Firmar">
+                                                            <button onClick={() => handleAbrirFirmaPendiente(item.id)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors" title="Firmar">
                                                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 17c3.333 -3.333 5 -6 5 -8c0 -3 -1 -3 -2 -3s-2.032 1.085 -2 3c.034 2.048 1.658 4.877 2.5 6c1.5 2 2.5 2.5 3.5 1l2 -3c.333 2.667 1.333 4 3 4c.53 0 2.639 -2 3 -2c.517 0 1.517 .667 3 2" /></svg>
                                                             </button>
                                                         )}
@@ -287,10 +363,11 @@ const TablaWalkAround = () => {
                         </div>
                     )}
                 </div>
+
                 {showForm && (
                     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-                        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={handleBack}></div>
-                        <div className="relative z-10 w-full max-w-6xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+                        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={handleBack}></div>
+                        <div className="relative z-10 w-full max-w-6xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-300">
                             <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                                 <div>
                                     <h3 className="text-lg font-black uppercase text-slate-800 tracking-tighter">{selectedId ? 'Editar Walkaround' : 'Nuevo Walkaround'}</h3>
@@ -298,12 +375,13 @@ const TablaWalkAround = () => {
                                 </div>
                                 <button onClick={handleBack} className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors"><X size={20} /></button>
                             </div>
-                            <div className="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
+                            <div className="p-6 max-h-[85vh] overflow-y-auto">
                                 <WalkAroundFormV2 id={selectedId} onCancel={handleBack} />
                             </div>
                         </div>
                     </div>
                 )}
+
                 {mostrarModalFecha && (
                     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
                         <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMostrarModalFecha(false)}></div>
@@ -343,13 +421,26 @@ const TablaWalkAround = () => {
                         </div>
                     </div>
                 )}
+
+                <WalkAroundPendientesPanel
+                    open={mostrarPanelPendientes}
+                    onClose={() => setMostrarPanelPendientes(false)}
+                    pendientes={pendientes}
+                    onFirmar={handleAbrirFirmaPendiente}
+                />
             </div>
 
             <WalkAroundPdfExporter id={pdfId} onDone={() => setPdfId(null)} />
+
             <WalkAroundFirmaModal
                 open={firmOpen}
                 id={firmId}
-                onClose={() => { setFirmOpen(false); setFirmId(null); loadData(pagina); }}
+                onClose={() => {
+                    setFirmOpen(false);
+                    setFirmId(null);
+                    loadData(pagina);
+                    loadPendientes();
+                }}
             />
         </>
     );

@@ -31,10 +31,7 @@ export default function WalkAroundFirma({ initialData, onClose, onSaved }: Props
     const esJefe = nombreRol === 'jefe_area';
 
     const handleSave = async () => {
-        if (!form.firmaResponsableBase64) {
-            Swal.fire("Falta firma", "El responsable debe firmar", "warning");
-            return;
-        }
+
 
         try {
             setSaving(true);

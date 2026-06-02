@@ -5,8 +5,10 @@ import { Head } from '@inertiajs/react';
 import CheckListEquipoForm from './checkListEquipo/CheckListEquipoForm';
 import { useState, useEffect, useCallback } from 'react';
 import { fetchCheckListEquipo, fetchCheckUser, eliminar } from '@/stores/apiCheckListEquipoSeguridad';
-import { Plus, Edit2, Filter, ChevronDown, Calendar, X } from "lucide-react";
+import { Plus, Edit2, Filter, ChevronDown, Calendar, X, AlertCircle, Eye } from "lucide-react";
 import PdfExporter from './checkListEquipo/components/PdfExporter';
+import PendientesDrawer from './checkListEquipo/PendientesDrawer';
+import PreviewModal from './checkListEquipo/components/PreviewModal';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'CheckList Equipo' }];
 
@@ -14,6 +16,7 @@ export default function CheckListEquipo() {
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any[]>([]);
     const [openForm, setOpenForm] = useState(false);
+    const [openPendientesDrawer, setOpenPendientesDrawer] = useState(false);
     const [isEdit, setIsEdit] = useState(false);
     const [detalle, setDetalle] = useState<any>(null);
     const [pdfId, setPdfId] = useState<number | null>(null);
@@ -21,6 +24,10 @@ export default function CheckListEquipo() {
     const [meta, setMeta] = useState<any>(null);
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
+
+    // Estados para la Vista Previa
+    const [openPreview, setOpenPreview] = useState(false);
+    const [previewData, setPreviewData] = useState<any>(null);
 
     const [filtros, setFiltros] = useState({
         buscar: '',
@@ -34,6 +41,20 @@ export default function CheckListEquipo() {
     useEffect(() => {
         if (mostrarModalFecha) setFiltrosEdicion({ ...filtros });
     }, [mostrarModalFecha, filtros]);
+
+    const handleNuevoDesdePendiente = (usuario: any) => {
+        setOpenPendientesDrawer(false);
+        setIsEdit(false);
+        setDetalle({
+            data: {
+                user_id: usuario.id,
+                nombre: usuario.name || usuario.nombre,
+                checklist: {},
+                observaciones: ""
+            }
+        });
+        setOpenForm(true);
+    };
 
     const aplicarFiltroFecha = () => {
         setFiltros({ ...filtrosEdicion });
@@ -90,6 +111,18 @@ export default function CheckListEquipo() {
         }
     };
 
+    const handlePreview = async (id: number) => {
+        try {
+            Swal.fire({ title: 'Cargando Vista Previa...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            const res = await fetchCheckUser(id);
+            setPreviewData(res.data || res);
+            setOpenPreview(true);
+            Swal.close();
+        } catch (error) {
+            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo generar la vista previa.' });
+        }
+    };
+
     const handleBack = () => {
         setOpenForm(false);
         setIsEdit(false);
@@ -135,7 +168,7 @@ export default function CheckListEquipo() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="CheckList Equipo" />
-            <div className="p-6 bg-[#f3f4f6] min-h-screen relative">
+            <div className="p-6 bg-[#f3f4f6] min-h-screen relative overflow-x-hidden">
                 <div className="space-y-4 animate-in fade-in duration-500">
 
                     {/* Encabezado Principal */}
@@ -153,11 +186,13 @@ export default function CheckListEquipo() {
                                 <Filter size={14} />
                                 <span>{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                             </button>
+
                             <button
-                                onClick={() => { setIsEdit(false); setDetalle(null); setOpenForm(true); }}
-                                className="bg-indigo-600 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-indigo-700 transition-all active:scale-95 uppercase tracking-wider"
+                                onClick={() => setOpenPendientesDrawer(true)}
+                                className="bg-amber-500 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-amber-600 transition-all active:scale-95 uppercase tracking-wider flex items-center gap-2"
                             >
-                                + NUEVO REGISTRO
+                                <AlertCircle size={14} />
+                                <span>Pendientes</span>
                             </button>
                         </div>
                     </div>
@@ -175,7 +210,6 @@ export default function CheckListEquipo() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {/* Fila de Filtros Integrada */}
                                     <tr className={`bg-slate-50 border-b border-slate-200 overflow-hidden transition-all duration-300 ${mostrarFiltros ? 'opacity-100' : 'hidden'}`}>
                                         <td className="px-2 py-2">
                                             <div className="flex items-center gap-1 justify-center">
@@ -207,7 +241,6 @@ export default function CheckListEquipo() {
                                         <td className="px-2 py-2"></td>
                                     </tr>
 
-                                    {/* Contenido de la Tabla */}
                                     {loading ? (
                                         <tr><td colSpan={4} className="px-6 py-20 text-center text-[10px] font-black text-slate-400 uppercase">Cargando datos...</td></tr>
                                     ) : data.length === 0 ? (
@@ -219,10 +252,10 @@ export default function CheckListEquipo() {
                                                 <td className="px-4 py-4 text-center font-bold text-[10px] text-slate-400">{numeroFila}</td>
                                                 <td className="px-6 py-4 text-center">
                                                     <span className="text-[10px] font-bold text-slate-400 block">
-                                                        {row.created_at ? new Date(row.created_at).toLocaleDateString('es-MX', {day: '2-digit', month: '2-digit', year: 'numeric'}) : 'N/A'}
+                                                        {row.created_at ? new Date(row.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A'}
                                                     </span>
                                                     <span className="text-sm font-black text-slate-700">
-                                                        {row.created_at ? new Date(row.created_at).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false}) : '00:00'}
+                                                        {row.created_at ? new Date(row.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }) : '00:00'}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
@@ -235,16 +268,16 @@ export default function CheckListEquipo() {
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center justify-end gap-1">
-                                                        <button onClick={() => show(row.id)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
+                                                        <button onClick={() => handlePreview(row.id)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors" title="Vista Previa">
+                                                            <Eye size={16} />
+                                                        </button>
+                                                        <button onClick={() => show(row.id)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Editar">
                                                             <Edit2 size={16} />
                                                         </button>
-                                                        <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors uppercase font-black text-[10px]">
+                                                        <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors uppercase font-black text-[10px]" title="Descargar PDF">
                                                             PDF
                                                         </button>
-                                                        <button
-                                                            onClick={() => handleEliminar(row.id)}
-                                                            className="p-2 text-slate-400 hover:text-red-600 transition-colors"
-                                                        >
+                                                        <button onClick={() => handleEliminar(row.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors" title="Eliminar">
                                                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                                                                 <path d="M3 3l18 18" /><path d="M4 7h3m4 0h9" /><path d="M10 11l0 6" /><path d="M14 14l0 3" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l.077 -.923" /><path d="M18.384 14.373l.616 -7.373" /><path d="M9 5v-1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
                                                             </svg>
@@ -259,7 +292,7 @@ export default function CheckListEquipo() {
                         </div>
                     </div>
 
-                    {/* Paginación Manual Estilizada */}
+                    {/* Paginación */}
                     {meta && meta.last_page > 1 && (
                         <div className="flex items-center justify-between bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
                             <span className="text-[10px] font-black text-slate-500 uppercase">PÁGINA {meta.current_page} DE {meta.last_page}</span>
@@ -270,6 +303,12 @@ export default function CheckListEquipo() {
                         </div>
                     )}
                 </div>
+
+                <PendientesDrawer
+                    isOpen={openPendientesDrawer}
+                    onClose={() => setOpenPendientesDrawer(false)}
+                    onSelectUser={handleNuevoDesdePendiente}
+                />
 
                 {/* Modal Flotante del Formulario */}
                 {openForm && (
@@ -290,12 +329,20 @@ export default function CheckListEquipo() {
                                     onSuccess={() => {
                                         handleBack();
                                         cargarDatos();
+                                        setOpenPendientesDrawer(false);
                                     }}
                                 />
                             </div>
                         </div>
                     </div>
                 )}
+
+                {/* --- AQUÍ REEMPLAZAMOS EL CÓDIGO VIEJO LLAMANDO AL NUEVO COMPONENTE EXTRAÍDO --- */}
+                <PreviewModal
+                    isOpen={openPreview}
+                    onClose={() => setOpenPreview(false)}
+                    previewData={previewData}
+                />
 
                 {/* Modal de Configuración de Rango de Fechas */}
                 {mostrarModalFecha && (

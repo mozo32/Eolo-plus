@@ -232,17 +232,17 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
                             </button>
                         )}
                         {mostrarModal && (
-                        <MatriculasPendientes
-                            listado={pendientes}
-                            onClose={() => setMostrarModal(false)}
-                            nombreRol={nombreRol}
-                            moduloNombre={moduloNombre}
-                            onActualizar={() => {
-                                cargarPendientes();
-                                cargarDatos();
-                            }}
-                        />
-                    )}
+                            <MatriculasPendientes
+                                listado={pendientes}
+                                onClose={() => setMostrarModal(false)}
+                                nombreRol={nombreRol}
+                                moduloNombre={moduloNombre}
+                                onActualizar={() => {
+                                    cargarPendientes();
+                                    cargarDatos();
+                                }}
+                            />
+                        )}
                     </div>
                 </div>
 

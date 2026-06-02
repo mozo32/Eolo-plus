@@ -3,185 +3,228 @@ import { fetchCheckUser } from "@/stores/apiCheckListEquipoSeguridad";
 import { useEffect } from "react";
 import Swal from "sweetalert2";
 
+// Configuración de colores institucional (Eolo Plus)
+const GREEN_INST = "#003E51";
+const BORDER = "#111111";
+const GRAY_TEXT = "#374151";
+
 const styles = StyleSheet.create({
     page: {
-        padding: 0,
-        fontSize: 10,
-        fontFamily: 'Helvetica',
-        backgroundColor: '#FFFFFF'
-    },
-    documentOuterFrame: {
-        borderWidth: 8,
-        borderStyle: 'solid',
-        borderColor: '#FFFFFF',
-        height: '100%',
-        padding: 25,
-    },
-
-    watermark: {
-        position: 'absolute',
-        top: '30%',
-        left: '10%',
-        width: '80%',
-        opacity: 0.08,
-        zIndex: -1,
-    },
-
-    contentWrapper: {
-        flexDirection: 'column',
-    },
-
-    headerFrame: {
-        flexDirection: 'row',
-        marginBottom: 25,
-        borderWidth: 1,
-        borderStyle: 'solid',
-        borderColor: '#E5E7EB',
-        borderRadius: 4,
-        overflow: 'hidden'
-    },
-
-    headerLeftPanel: {
-        flex: 1,
-        backgroundColor: '#073B4C',
-        padding: 20,
-        justifyContent: 'center'
-    },
-
-    title: {
-        color: '#FFFFFF',
-        fontSize: 18,
-        fontWeight: 'bold',
-        textTransform: 'uppercase',
-        marginBottom: 4
-    },
-
-    headerInfoText: {
-        color: '#FFFFFF',
+        paddingTop: 30,
+        paddingBottom: 60,
+        paddingHorizontal: 30,
         fontSize: 9,
-        opacity: 0.8
+        color: "#111827",
+        fontFamily: "Helvetica",
+        backgroundColor: "#ffffff",
     },
-
-    headerRightPanel: {
-        width: 130,
-        backgroundColor: '#FFFFFF',
-        padding: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderLeftWidth: 1,
-        borderLeftColor: '#E5E7EB',
-        borderLeftStyle: 'solid',
+    watermark: {
+        position: "absolute",
+        top: 180,
+        left: 50,
+        width: 500,
+        height: 500,
+        opacity: 0.04,
+        zIndex: -1
     },
-
-    logo: {
-        width: 60,
-        height: 'auto'
+    headerWrap: {
+        flexDirection: "row",
+        borderWidth: 2,
+        borderColor: BORDER,
+        marginBottom: 12,
     },
-
-    table: { marginTop: 10, borderRadius: 8, overflow: 'hidden' },
-    tableHeader: {
-        flexDirection: 'row',
-        backgroundColor: '#1E293B',
+    headerLeft: {
+        width: 140,
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 5,
+    },
+    headerLogo: {
+        width: "100%",
+        height: 45,
+        objectFit: "contain",
+    },
+    headerMid: {
+        flex: 1,
         paddingVertical: 10,
-        paddingHorizontal: 12
+        paddingHorizontal: 15,
+        justifyContent: "center",
     },
-    tableHeaderText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 9, textTransform: 'uppercase' },
-    tableRow: {
-        flexDirection: 'row',
+    headerTitle: {
+        fontSize: 14,
+        fontWeight: "bold",
+        textTransform: "uppercase",
+    },
+    headerSub: {
+        fontSize: 9,
+        color: GRAY_TEXT,
+        marginTop: 2,
+    },
+    sectionTitle: {
+        fontSize: 10,
+        fontWeight: "bold",
+        backgroundColor: "#f3f4f6",
+        padding: 4,
+        borderWidth: 1,
+        borderColor: BORDER,
+        textTransform: "uppercase",
+        marginTop: 10,
+    },
+    grid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        borderLeftWidth: 1,
         borderBottomWidth: 1,
-        borderBottomColor: '#E5E7EB',
-        borderBottomStyle: 'solid',
-        backgroundColor: 'transparent',
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        alignItems: 'center'
+        borderColor: BORDER,
     },
-    rowAlternate: { backgroundColor: 'rgba(249, 250, 251, 0.5)' },
-    col1: { flex: 3 },
-    col2: { flex: 1, textAlign: 'right' },
-
-    badge: {
-        paddingVertical: 2,
-        paddingHorizontal: 6,
-        borderRadius: 4,
+    col2: {
+        width: "50%",
+        borderRightWidth: 1,
+        borderTopWidth: 1,
+        borderColor: BORDER,
+        padding: 6
+    },
+    label: {
+        fontSize: 7,
+        color: GRAY_TEXT,
+        textTransform: "uppercase",
+        marginBottom: 2,
+    },
+    value: {
+        fontSize: 10,
+        fontWeight: "bold",
+    },
+    tableHeader: {
+        flexDirection: "row",
+        backgroundColor: "#f9fafb",
+        borderBottomWidth: 1,
+        borderColor: BORDER,
+    },
+    headerCell: {
+        fontSize: 7,
+        fontWeight: "bold",
+        padding: 5,
+        borderRightWidth: 1,
+        borderColor: BORDER,
+        textTransform: "uppercase",
+    },
+    row: {
+        flexDirection: "row",
+        borderBottomWidth: 1,
+        borderColor: BORDER,
+    },
+    cell: {
         fontSize: 8,
-        textAlign: 'center',
-        width: 70
+        padding: 5,
+        borderRightWidth: 1,
+        borderColor: BORDER,
     },
-    badgeOk: { backgroundColor: '#D1FAE5', color: '#065F46' },
-    badgeNo: { backgroundColor: '#FEE2E2', color: '#991B1B' },
-
-    footer: {
+    badgeOk: {
+        color: '#065F46',
+        fontWeight: 'bold',
+    },
+    badgeNo: {
+        color: '#991B1B',
+        fontWeight: 'bold',
+    },
+    observacionesContainer: {
+        left: 0,
+        right: 0,
+        borderLeftWidth: 1,
+        borderRightWidth: 1,
+        borderTopWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: BORDER,
+        padding: 8,
+        minHeight: 60
+    },
+    footerInfo: {
         position: 'absolute',
         bottom: 30,
         left: 30,
         right: 30,
-        textAlign: 'center',
-        borderTopWidth: 1,
-        borderTopColor: '#E5E7EB',
-        borderTopStyle: 'solid',
-        paddingTop: 10,
-        fontSize: 8,
-        color: '#6B7280'
+        fontSize: 7,
+        color: GRAY_TEXT,
+        textAlign: 'center'
     }
 });
 
 const ElegantPdfDocument = ({ data }: { data: any }) => {
-    const mesArr = Object.keys(data.checklist || {});
-    const mes = mesArr.length > 0 ? mesArr[0] : 'N/A';
-    const items = mes !== 'N/A' ? Object.entries(data.checklist[mes]) : [];
-
     const watermarkUrl = `${window.location.origin}/1c463caa-e3a1-4093-a00b-1c0da40795f6.jpg`;
-    const logoUrl = `${window.location.origin}/Gemini_Generated_Image_y7xk1dy7xk1dy7xk.png`;
+    const logoUrl = `${window.location.origin}/54657b8c-8428-41cc-a654-794ca81943d6.jpg`;
+
+    const mesArr = Object.keys(data.checklist || {});
+    const mesActual = mesArr.length > 0 ? mesArr[0] : 'N/A';
+    const items = mesActual !== 'N/A' ? Object.entries(data.checklist[mesActual]) : [];
 
     return (
         <Document>
             <Page size="A4" style={styles.page}>
-                <View style={styles.documentOuterFrame}>
-                    <Image src={watermarkUrl} style={styles.watermark} />
+                {/* MARCA DE AGUA */}
+                <Image src={watermarkUrl} style={styles.watermark} />
 
-                    <View style={styles.contentWrapper}>
-                        <View style={styles.headerFrame}>
-                            <View style={styles.headerLeftPanel}>
-                                <Text style={styles.title}>ENTREGA DE TURNO</Text>
-                                <Text style={styles.headerInfoText}>Folio #{data.id} · Fecha {new Date(data.created_at).toLocaleDateString()}</Text>
-                                <Text style={styles.headerInfoText}>Responsable: {data.nombre}</Text>
-                            </View>
+                {/* HEADER INSTITUCIONAL */}
+                <View style={styles.headerWrap}>
+                    <View style={styles.headerLeft}>
+                        <Image src={logoUrl} style={styles.headerLogo} />
+                    </View>
+                    <View style={styles.headerMid}>
+                        <Text style={styles.headerTitle}>Control de Activos EPP - Rampa</Text>
+                        <Text style={styles.headerSub}>ID Registro: {data.id} | Periodo Auditado: {mesActual.toUpperCase()} 2026</Text>
+                    </View>
+                </View>
 
-                            <View style={styles.headerRightPanel}>
-                                <Image src={logoUrl} style={styles.logo} />
-                            </View>
-                        </View>
+                {/* INFORMACIÓN DEL TURNO */}
+                <Text style={styles.sectionTitle}>Información del Trabajador</Text>
+                <View style={styles.grid}>
+                    <View style={styles.col2}>
+                        <Text style={styles.label}>Empleado</Text>
+                        <Text style={[styles.value, { textTransform: 'uppercase' }]}>{data.nombre}</Text>
+                    </View>
+                    <View style={styles.col2}>
+                        <Text style={styles.label}>Fecha de Inspección</Text>
+                        <Text style={styles.value}>
+                            {data.created_at ? new Date(data.created_at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}
+                        </Text>
+                    </View>
+                </View>
 
-                        <View style={styles.table}>
-                            <View style={styles.tableHeader}>
-                                <Text style={[styles.tableHeaderText, styles.col1]}>Insumo de Seguridad</Text>
-                                <Text style={[styles.tableHeaderText, styles.col2]}>Verificación</Text>
-                            </View>
-
-                            {items.map(([key, value]: [string, any], index: number) => (
-                                <View key={key} style={[styles.tableRow, index % 2 === 1 ? styles.rowAlternate : {}]}>
-                                    <Text style={styles.col1}>{key}</Text>
-                                    <View style={styles.col2}>
-                                        <Text style={[styles.badge, value ? styles.badgeOk : styles.badgeNo]}>
-                                            {value ? 'VERIFICADO' : 'PENDIENTE'}
-                                        </Text>
-                                    </View>
-                                </View>
-                            ))}
-                        </View>
-
-                        <View style={{ marginTop: 25, marginLeft: 10 }}>
-                            <Text style={{ fontWeight: 'bold', color: '#073B4C', marginBottom: 4 }}>Observaciones Generales:</Text>
-                            <Text style={{ color: '#4B5563', lineHeight: 1.4, fontSize: 9 }}>
-                                {data.observaciones || "No se reportaron anomalías durante la inspección de seguridad."}
-                            </Text>
-                        </View>
+                {/* TABLA RESTRUCTURADA DE EQUIPOS */}
+                <Text style={styles.sectionTitle}>Listado e Inspección de Seguridad</Text>
+                <View style={{ borderLeftWidth: 1, borderTopWidth: 1, borderColor: BORDER }}>
+                    <View style={styles.tableHeader}>
+                        <Text style={[styles.headerCell, { width: '40%' }]}>Insumo de Seguridad</Text>
+                        <Text style={[styles.headerCell, { width: '25%' }]}>Estatus Asignación</Text>
+                        <Text style={[styles.headerCell, { flex: 1, borderRightWidth: 0 }]}>Condición / Desgaste</Text>
                     </View>
 
-                    <Text style={styles.footer}>
-                        EOLO Plus - Registro Oficial de Seguridad Industrial (Generado Digitalmente)
+                    {items.map(([key, item]: [string, any]) => (
+                        <View key={key} style={styles.row}>
+                            <Text style={[styles.cell, { width: '40%', fontWeight: 'bold', textTransform: 'uppercase' }]}>
+                                {key}
+                            </Text>
+                            <Text style={[styles.cell, { width: '25%' }, item.tiene ? styles.badgeOk : styles.badgeNo]}>
+                                {item.tiene ? '✓ PORTA EQUIPO' : '✗ NO ENTREGO / NO PORTA'}
+                            </Text>
+                            <Text style={[styles.cell, { flex: 1, borderRightWidth: 0, color: item.estado === 'Mal Estado' ? '#ef4444' : '#111827', fontWeight: item.estado === 'Mal Estado' ? 'bold' : 'normal' }]}>
+                                {item.tiene ? (item.estado || 'Buen Estado') : '—'}
+                            </Text>
+                        </View>
+                    ))}
+                </View>
+
+                {/* SECCIÓN DE OBSERVACIONES */}
+                <Text style={styles.sectionTitle}>Hallazgos Especiales y Observaciones</Text>
+                <View style={styles.observacionesContainer} wrap={false}>
+                    <Text style={{ fontSize: 9, color: '#374151', lineHeight: 1.4 }}>
+                        {data.observaciones || "No se reportaron anomalías ni faltantes de equipo de protección personal durante esta auditoría mensual."}
                     </Text>
+                </View>
+
+                {/* PIE DE PÁGINA */}
+                <View style={styles.footerInfo}>
+                    <Text>Este documento es propiedad de Eolo Plus S.A. de C.V. - Registro Oficial de Seguridad Industrial Generado Digitalmente.</Text>
+                    <Text style={{ marginTop: 2 }}>Copia Autenticada de Sistema Oficial | Fecha de Impresión: {new Date().toLocaleString()}</Text>
                 </View>
             </Page>
         </Document>
@@ -204,7 +247,7 @@ export default function PdfExporter({ id, onDone }: Props) {
                 const link = document.createElement('a');
 
                 link.href = url;
-                link.download = `Checklist_Turno_${data.id}.pdf`;
+                link.download = `Checklist_EPP_${data.nombre.replace(/\s+/g, '_')}_${data.id}.pdf`;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -213,7 +256,7 @@ export default function PdfExporter({ id, onDone }: Props) {
                 onDone();
             } catch (e: any) {
                 console.error("Error al generar PDF:", e);
-                Swal.fire("Error", "No se pudo procesar el reporte", "error");
+                Swal.fire("Error", "No se pudo procesar el reporte de activos", "error");
                 onDone();
             }
         };

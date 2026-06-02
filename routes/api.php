@@ -39,6 +39,7 @@ Route::middleware(['auth:sanctum'])->get(
     '/usuarios/buscar',[UsuarioController::class, 'buscar']
 );
 Route::prefix('walkarounds')->group(function () {
+    Route::get('/pendientes-firmar', [WalkAroundController::class, 'pendientesFirmar']);
     Route::get('/basurero', [WalkAroundController::class, 'basurero']);
     Route::get('/bitacora', [WalkAroundController::class, 'bitacora']);
     Route::get('/departamentos', [WalkAroundController::class, 'departamentos']);
@@ -91,6 +92,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('EstacionamientoSubTerraneo')
 Route::middleware(['api', 'auth:sanctum'])->prefix('ChecklistEquipoSeguridad')->group(function () {
     Route::post('/',[ChecklistEquipoSeguridadController::class, 'store']);
     Route::get('/',[ChecklistEquipoSeguridadController::class, 'index']);
+    Route::get('/pendientes', [ChecklistEquipoSeguridadController::class, 'usuariosSinChecklist']);
     Route::get('/{ChecklistEquipoSeguridad}', [ChecklistEquipoSeguridadController::class, 'show']);
     Route::put('/{ChecklistEquipoSeguridad}', [ChecklistEquipoSeguridadController::class, 'update']);
     Route::get('/eliminar/{id}', [ChecklistEquipoSeguridadController::class, 'eliminar']);

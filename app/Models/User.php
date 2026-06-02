@@ -86,4 +86,9 @@ class User extends Authenticatable
     {
         return $this->roles()->whereIn('slug', $roles)->exists();
     }
+
+    public function checklists()
+    {
+        return $this->hasMany(ChecklistEquipoSeguridad::class, 'user_id');
+    }
 }
