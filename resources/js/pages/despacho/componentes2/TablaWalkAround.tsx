@@ -189,6 +189,7 @@ const TablaWalkAround = () => {
     const handleAbrirFirmaPendiente = (id: number) => {
         setFirmId(id);
         setFirmOpen(true);
+        setMostrarPanelPendientes(false);
     };
 
     return (

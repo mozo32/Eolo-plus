@@ -531,25 +531,34 @@ class WalkAroundController extends Controller
             $this->guardarFirmaBase64($firmaData, $rol, $walkAround);
         }
     }
+
     public function updateFirma(Request $request, WalkAround $walkAround)
     {
         DB::beginTransaction();
 
         try {
+            // Quita o comenta el dd para probar:
+            // dd($request);
 
+            // ===== 1. ACTUALIZAR NOMBRES EN LA TABLA WALKAROUNDS =====
+            $walkAround->update([
+                'responsable' => $request->responsable,
+                'jefe_area'   => $request->jefeArea,
+                'fbo'         => $request->fbo,
+            ]);
 
-            // ===== FIRMAS =====
+            // ===== 2. PROCESAR Y GUARDAR LAS FIRMAS (BLOB/ARCHIVOS) =====
             $this->guardarFirmaBase64($request->firmaJefeAreaBase64 ?? '', 'jefe_area', $walkAround);
             $this->guardarFirmaBase64($request->firmaFboBase64 ?? '', 'fbo', $walkAround);
             $this->guardarFirmaBase64($request->firmaResponsableBase64 ?? '', 'responsable', $walkAround);
 
-            // ===== BITÁCORA =====
+            // ===== 3. BITÁCORA =====
             Bitacora::log(
                 'WalkAround',
                 'ACTUALIZAR',
                 "Se firmo WalkAround ID {$walkAround->id} | Matrícula: {$walkAround->matricula}",
                 auth()->id(),
-                $request->elabora
+                $request->elabora ?? auth()->user()->name
             );
 
             DB::commit();

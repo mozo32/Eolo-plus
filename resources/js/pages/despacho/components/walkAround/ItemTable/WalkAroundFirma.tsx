@@ -20,6 +20,57 @@ type Props = {
 
 type RolFirma = "responsable" | "jefe" | "fbo";
 
+// 1. EXTRAYENDO EL COMPONENTE FUERA DEL PADRE
+const FirmaCard = ({
+    label,
+    rol,
+    nombre,
+    firma,
+    onNombreChange,
+    onOpenFirma,
+}: {
+    label: string;
+    rol: RolFirma;
+    nombre: string;
+    firma?: string;
+    onNombreChange: (v: string) => void;
+    onOpenFirma: (rol: RolFirma) => void;
+}) => (
+    <div className="rounded-xl border p-4 space-y-3">
+        <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold">{label}</h3>
+            <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold
+                    ${firma ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}
+            >
+                {firma ? "Firmado" : "Pendiente"}
+            </span>
+        </div>
+        <input
+            value={nombre}
+            onChange={(e) => onNombreChange(e.target.value)}
+            className="w-full rounded-lg border px-3 py-2 text-sm"
+            placeholder={`Nombre ${label}`}
+        />
+        {firma && (
+            <img
+                src={firma}
+                className="h-16 w-full rounded-md border bg-white object-contain p-1"
+                alt={`Firma ${label}`}
+            />
+        )}
+        <div className="flex justify-end">
+            <button
+                type="button"
+                onClick={() => onOpenFirma(rol)}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+            >
+                {firma ? "Reemplazar firma" : "Firmar"}
+            </button>
+        </div>
+    </div>
+);
+
 export default function WalkAroundFirma({ initialData, onClose, onSaved }: Props) {
     const [form, setForm] = useState(initialData);
     const [openFirma, setOpenFirma] = useState<RolFirma | null>(null);
@@ -31,8 +82,6 @@ export default function WalkAroundFirma({ initialData, onClose, onSaved }: Props
     const esJefe = nombreRol === 'jefe_area';
 
     const handleSave = async () => {
-
-
         try {
             setSaving(true);
             await updateFirmaWalkaroundApi(form.id, form);
@@ -47,53 +96,6 @@ export default function WalkAroundFirma({ initialData, onClose, onSaved }: Props
         }
     };
 
-    const FirmaCard = ({
-        label,
-        rol,
-        nombre,
-        firma,
-        onNombreChange,
-    }: {
-        label: string;
-        rol: RolFirma;
-        nombre: string;
-        firma?: string;
-        onNombreChange: (v: string) => void;
-    }) => (
-        <div className="rounded-xl border p-4 space-y-3">
-            <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">{label}</h3>
-                <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold
-                        ${firma ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}
-                >
-                    {firma ? "Firmado" : "Pendiente"}
-                </span>
-            </div>
-            <input
-                value={nombre}
-                onChange={(e) => onNombreChange(e.target.value)}
-                className="w-full rounded-lg border px-3 py-2 text-sm"
-                placeholder={`Nombre ${label}`}
-            />
-            {firma && (
-                <img
-                    src={firma}
-                    className="h-16 w-full rounded-md border bg-white object-contain p-1"
-                />
-            )}
-            <div className="flex justify-end">
-                <button
-                    type="button"
-                    onClick={() => setOpenFirma(rol)}
-                    className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-                >
-                    {firma ? "Reemplazar firma" : "Firmar"}
-                </button>
-            </div>
-        </div>
-    );
-
     return (
         <div className="space-y-6">
             <h2 className="text-lg font-semibold">Firmas del WalkAround</h2>
@@ -104,6 +106,7 @@ export default function WalkAroundFirma({ initialData, onClose, onSaved }: Props
                     nombre={form.responsable}
                     firma={form.firmaResponsableBase64}
                     onNombreChange={(v) => setForm((p) => ({ ...p, responsable: v }))}
+                    onOpenFirma={setOpenFirma}
                 />
 
                 {(esAdminOFbo || esJefe) && (
@@ -113,6 +116,7 @@ export default function WalkAroundFirma({ initialData, onClose, onSaved }: Props
                         nombre={form.jefeArea}
                         firma={form.firmaJefeAreaBase64}
                         onNombreChange={(v) => setForm((p) => ({ ...p, jefeArea: v }))}
+                        onOpenFirma={setOpenFirma}
                     />
                 )}
 
@@ -123,6 +127,7 @@ export default function WalkAroundFirma({ initialData, onClose, onSaved }: Props
                         nombre={form.fbo}
                         firma={form.firmaFboBase64}
                         onNombreChange={(v) => setForm((p) => ({ ...p, fbo: v }))}
+                        onOpenFirma={setOpenFirma}
                     />
                 )}
             </div>
