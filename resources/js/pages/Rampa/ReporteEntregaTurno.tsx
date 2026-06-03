@@ -243,9 +243,11 @@ export default function ReporteEntregaTurno() {
                                 <Filter size={14} />
                                 <span>{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                             </button>
-                            <button onClick={handleAccionReporte} className={`text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-white ${turnoPendiente ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-100' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'}`}>
-                                {turnoPendiente ? 'CONTINUAR / CERRAR TURNO' : '+ NUEVO REPORTE'}
-                            </button>
+                            {user?.roles?.[0]?.slug !== 'admin2' && (
+                                <button onClick={handleAccionReporte} className={`text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-white ${turnoPendiente ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-100' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'}`}>
+                                    {turnoPendiente ? 'CONTINUAR / CERRAR TURNO' : '+ NUEVO REPORTE'}
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -332,7 +334,7 @@ export default function ReporteEntregaTurno() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center justify-end gap-1">
-                                                    {!row.tiene_inspeccion && (
+                                                    {user?.roles?.[0]?.slug === 'admin2' || (!row.tiene_inspeccion) && (
                                                         <button onClick={() => show(row.id, 'inspeccion')} className="p-2 text-rose-500 hover:bg-rose-50 rounded transition-colors" title="Inspección"><ClipboardList size={16} /></button>
                                                     )}
                                                     <button
@@ -342,11 +344,18 @@ export default function ReporteEntregaTurno() {
                                                     >
                                                         <Eye size={16} />
                                                     </button>
-                                                    <button onClick={() => show(row.id, 'entrega')} className={`p-2 rounded transition-colors ${!row.finalizado ? 'text-indigo-600 hover:bg-indigo-50' : 'text-slate-400 hover:text-blue-600'}`}><Edit2 size={16} /></button>
+                                                    { user?.roles?.[0]?.slug !== 'admin2' && (
+                                                        <button onClick={() => show(row.id, 'entrega')} className={`p-2 rounded transition-colors ${!row.finalizado ? 'text-indigo-600 hover:bg-indigo-50' : 'text-slate-400 hover:text-blue-600'}`}><Edit2 size={16} /></button>
+                                                    )}
                                                     {(user?.isAdmin || user?.roles?.[0]?.slug === 'fbo') && (
                                                         <>
                                                             <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]">PDF</button>
                                                             <button onClick={() => handleEliminar(row.id)} className="p-2 text-slate-300 hover:text-red-600 transition-colors"><X size={16} /></button>
+                                                        </>
+                                                    )}
+                                                    {(user?.roles?.[0]?.slug === 'admin2') && (
+                                                        <>
+                                                            <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]">PDF</button>
                                                         </>
                                                     )}
                                                 </div>

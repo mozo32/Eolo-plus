@@ -242,25 +242,27 @@ const TablaJefeArea: React.FC<TablaProps> = ({ onSeleccionar, onNuevoRegistro })
                         <Filter size={14} />
                         <span>{filtersOpen ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                     </button>
-
-                    {turnoAbiertoId ? (
-                        <button
-                            onClick={() => fetchReportesShow(turnoAbiertoId)}
-                            className="text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-slate-900 bg-amber-400 hover:bg-amber-500 shadow-amber-100 flex items-center gap-2 border border-amber-500 animate-pulse"
-                            title="Existe un turno previo sin cerrar"
-                        >
-                            <Edit3 size={14} />
-                            CONTINUAR / CERRAR TURNO
-                        </button>
-                    ) : (
-                        <button
-                            onClick={onNuevoRegistro}
-                            className="text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-white bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100 flex items-center gap-2"
-                        >
-                            <Plus size={14} />
-                            NUEVO REGISTRO
-                        </button>
+                    {user !== 'admin2' && (
+                        turnoAbiertoId ? (
+                            <button
+                                onClick={() => fetchReportesShow(turnoAbiertoId)}
+                                className="text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-slate-900 bg-amber-400 hover:bg-amber-500 shadow-amber-100 flex items-center gap-2 border border-amber-500 animate-pulse"
+                                title="Existe un turno previo sin cerrar"
+                            >
+                                <Edit3 size={14} />
+                                CONTINUAR / CERRAR TURNO
+                            </button>
+                        ) : (
+                            <button
+                                onClick={onNuevoRegistro}
+                                className="text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-white bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100 flex items-center gap-2"
+                            >
+                                <Plus size={14} />
+                                NUEVO REGISTRO
+                            </button>
+                        )
                     )}
+
                 </div>
             </div>
 
@@ -395,7 +397,7 @@ const TablaJefeArea: React.FC<TablaProps> = ({ onSeleccionar, onNuevoRegistro })
                                                 >
                                                     <Eye size={16} />
                                                 </button>
-                                                {(reporte.firmas?.length ?? 0) < 3 && (
+                                                {((reporte.firmas?.length ?? 0) < 3 && user !== 'admin2') && (
                                                     <button
                                                         onClick={() => handleAbrirFirmas(reporte.id)}
                                                         className="p-2 text-slate-400 hover:text-indigo-600 transition-colors flex items-center gap-1 animate-in zoom-in"
@@ -407,7 +409,7 @@ const TablaJefeArea: React.FC<TablaProps> = ({ onSeleccionar, onNuevoRegistro })
                                                         </span>
                                                     </button>
                                                 )}
-                                                {puedeEditar && (
+                                                {(puedeEditar || user === 'admin2') && (
                                                     <button
                                                         onClick={() => handleGenerarPDF(reporte.id)}
                                                         className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px] flex items-center gap-1 transition-colors"

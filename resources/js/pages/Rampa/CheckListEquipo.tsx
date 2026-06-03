@@ -1,7 +1,7 @@
 import Swal from 'sweetalert2';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import CheckListEquipoForm from './checkListEquipo/CheckListEquipoForm';
 import { useState, useEffect, useCallback } from 'react';
 import { fetchCheckListEquipo, fetchCheckUser, eliminar } from '@/stores/apiCheckListEquipoSeguridad';
@@ -11,7 +11,25 @@ import PendientesDrawer from './checkListEquipo/PendientesDrawer';
 import PreviewModal from './checkListEquipo/components/PreviewModal';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'CheckList Equipo' }];
+interface Role {
+    slug: string;
+    nombre: string;
+}
 
+export interface AuthUser {
+    id: number;
+    name: string;
+    email: string;
+    isAdmin: boolean;
+    roles: Role[];
+}
+
+interface PageProps {
+    auth: {
+        user: AuthUser | null;
+    };
+    [key: string]: any;
+}
 export default function CheckListEquipo() {
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any[]>([]);
@@ -28,7 +46,8 @@ export default function CheckListEquipo() {
     // Estados para la Vista Previa
     const [openPreview, setOpenPreview] = useState(false);
     const [previewData, setPreviewData] = useState<any>(null);
-
+    const { auth } = usePage<PageProps>().props;
+    const user = auth?.user?.roles[0]?.slug;
     const [filtros, setFiltros] = useState({
         buscar: '',
         fechaInicio: new Date().toLocaleDateString('en-CA'),
@@ -186,14 +205,15 @@ export default function CheckListEquipo() {
                                 <Filter size={14} />
                                 <span>{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                             </button>
-
-                            <button
-                                onClick={() => setOpenPendientesDrawer(true)}
-                                className="bg-amber-500 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-amber-600 transition-all active:scale-95 uppercase tracking-wider flex items-center gap-2"
-                            >
-                                <AlertCircle size={14} />
-                                <span>Pendientes</span>
-                            </button>
+                            {user !== 'admin2' && (
+                                <button
+                                    onClick={() => setOpenPendientesDrawer(true)}
+                                    className="bg-amber-500 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-amber-600 transition-all active:scale-95 uppercase tracking-wider flex items-center gap-2"
+                                >
+                                    <AlertCircle size={14} />
+                                    <span>Pendientes</span>
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -271,17 +291,23 @@ export default function CheckListEquipo() {
                                                         <button onClick={() => handlePreview(row.id)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors" title="Vista Previa">
                                                             <Eye size={16} />
                                                         </button>
-                                                        <button onClick={() => show(row.id)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Editar">
-                                                            <Edit2 size={16} />
-                                                        </button>
-                                                        <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors uppercase font-black text-[10px]" title="Descargar PDF">
-                                                            PDF
-                                                        </button>
-                                                        <button onClick={() => handleEliminar(row.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors" title="Eliminar">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                                                                <path d="M3 3l18 18" /><path d="M4 7h3m4 0h9" /><path d="M10 11l0 6" /><path d="M14 14l0 3" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l.077 -.923" /><path d="M18.384 14.373l.616 -7.373" /><path d="M9 5v-1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
-                                                            </svg>
-                                                        </button>
+                                                        {(user === 'admin' || user === 'fbo') && (
+                                                            <button onClick={() => show(row.id)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Editar">
+                                                                <Edit2 size={16} />
+                                                            </button>
+                                                        )}
+                                                        {(user === 'admin' || user === 'fbo' || user === 'admin2') && (
+                                                            <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors uppercase font-black text-[10px]" title="Descargar PDF">
+                                                                PDF
+                                                            </button>
+                                                        )}
+                                                        {(user === 'admin' || user === 'fbo') && (
+                                                            <button onClick={() => handleEliminar(row.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors" title="Eliminar">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                                                    <path d="M3 3l18 18" /><path d="M4 7h3m4 0h9" /><path d="M10 11l0 6" /><path d="M14 14l0 3" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l.077 -.923" /><path d="M18.384 14.373l.616 -7.373" /><path d="M9 5v-1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
+                                                                </svg>
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>

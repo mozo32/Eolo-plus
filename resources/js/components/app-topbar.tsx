@@ -15,7 +15,28 @@ export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[]
 
     const NAV_MODULES = useMemo(() => {
         const modules = getNavModules(auth.user);
-        return [...modules].sort((a, b) => a.module.localeCompare(b.module));
+        const modulesOrdenados = modules.map((mod) => {
+            const itemsOrdenados = [...mod.items].sort((a, b) =>
+                a.title.localeCompare(b.title)
+            ).map((item) => {
+                if (item.children && item.children.length > 0) {
+                    return {
+                        ...item,
+                        children: [...item.children].sort((a, b) =>
+                            a.title.localeCompare(b.title)
+                        )
+                    };
+                }
+                return item;
+            });
+
+            return {
+                ...mod,
+                items: itemsOrdenados
+            };
+        });
+
+        return [...modulesOrdenados].sort((a, b) => a.module.localeCompare(b.module));
     }, [auth.user]);
 
     const getSafeHref = (href: any): string => {

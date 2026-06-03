@@ -250,21 +250,26 @@ export default function InspeccionCombustible() {
                                 <span>{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                             </button>
                             <div className="w-[1px] bg-slate-200 mx-1"></div>
-                            <button
-                                onClick={handleExportarExcel}
-                                disabled={loading}
-                                className="flex items-center gap-2 bg-white text-slate-600 text-[10px] font-black px-3 py-2 rounded border border-slate-200 shadow-sm hover:bg-slate-50 transition-all active:scale-95 uppercase tracking-wider disabled:opacity-50"
-                                title="Descargar Excel"
-                            >
-                                <Download size={14} className="text-green-600" />
-                                <span className="hidden md:inline">EXCEL</span>
-                            </button>
-                            <button
-                                onClick={() => { setDetalle(null); setIsEdit(false); setShowForm(true); }}
-                                className="bg-blue-600 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-blue-700 transition-all active:scale-95 uppercase tracking-wider"
-                            >
-                                + NUEVA INSPECCIÓN
-                            </button>
+                            {(user?.roles?.[0]?.slug === 'admin2' || user?.roles?.[0]?.slug === 'fbo' || user?.roles?.[0]?.slug === 'admin') && (
+                                <button
+                                    onClick={handleExportarExcel}
+                                    disabled={loading}
+                                    className="flex items-center gap-2 bg-white text-slate-600 text-[10px] font-black px-3 py-2 rounded border border-slate-200 shadow-sm hover:bg-slate-50 transition-all active:scale-95 uppercase tracking-wider disabled:opacity-50"
+                                    title="Descargar Excel"
+                                >
+                                    <Download size={14} className="text-green-600" />
+                                    <span className="hidden md:inline">EXCEL</span>
+                                </button>
+                            )}
+                            {user?.roles?.[0]?.slug !== 'admin2' && (
+                                <button
+                                    onClick={() => { setDetalle(null); setIsEdit(false); setShowForm(true); }}
+                                    className="bg-blue-600 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-blue-700 transition-all active:scale-95 uppercase tracking-wider"
+                                >
+                                    + NUEVA INSPECCIÓN
+                                </button>
+                            )}
+
                         </div>
                     </div>
 
@@ -338,6 +343,9 @@ export default function InspeccionCombustible() {
                                                                 <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]">PDF</button>
                                                                 <button onClick={() => handleEliminar(row.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={16} /></button>
                                                             </>
+                                                        )}
+                                                        {user?.roles?.[0]?.slug === 'admin2'  && (
+                                                            <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]">PDF</button>
                                                         )}
                                                     </div>
                                                 </td>

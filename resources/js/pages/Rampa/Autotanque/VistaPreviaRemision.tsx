@@ -25,7 +25,9 @@ export default function VistaPreviaRemision({ data }: Props) {
                 </div>
                 <div className="text-right">
                     <p className="text-[10px] font-bold text-slate-400 uppercase">Fecha</p>
-                    <p className="text-sm font-black text-slate-900">{data.fecha}</p>
+                    <p className="text-sm font-black text-slate-900">
+                        {data.fecha ? data.fecha.split('-').reverse().join('/') : ''}
+                    </p>
                 </div>
             </div>
 

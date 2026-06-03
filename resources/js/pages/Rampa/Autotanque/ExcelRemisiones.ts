@@ -7,10 +7,9 @@ export const ExcelRemisiones = async (datos: any[]) => {
     const sheetVentas = workbook.addWorksheet('Ventas ASA');
     const sheetCompras = workbook.addWorksheet('Compras ASA');
 
-    // 1. Columnas para VENTAS (Se mantiene igual)
     sheetVentas.columns = [
         { header: 'FOLIO', key: 'folio', width: 15 },
-        { header: 'FECHA', key: 'fecha', width: 12 },
+        { header: 'FECHA', key: 'fecha', width: 15 },
         { header: 'MATRÍCULA', key: 'matricula', width: 12 },
         { header: 'SALIDA (LTS)', key: 'litros', width: 15 },
         { header: 'ORD. VTA', key: 'vta', width: 12 },
@@ -23,10 +22,9 @@ export const ExcelRemisiones = async (datos: any[]) => {
         { header: 'ESTATUS', key: 'status', width: 12 },
     ];
 
-    // 2. Columnas para COMPRAS (Actualizado según tu nueva consulta)
     sheetCompras.columns = [
         { header: 'FOLIO', key: 'folio', width: 15 },
-        { header: 'FECHA', key: 'fecha', width: 12 },
+        { header: 'FECHA', key: 'fecha', width: 15 },
         { header: 'LITROS', key: 'litros', width: 15 },
         { header: 'FACTURA', key: 'factura', width: 15 },
         { header: 'PRECIO DE COMPRA POR LT', key: 'precio_venta', width: 25 },
@@ -45,11 +43,17 @@ export const ExcelRemisiones = async (datos: any[]) => {
     formatHeader(sheetVentas);
     formatHeader(sheetCompras);
 
+    const formatearAObjetoFecha = (stringFecha: string) => {
+        if (!stringFecha) return null;
+        const [anio, mes, dia] = stringFecha.split('-').map(Number);
+        return new Date(anio, mes - 1, dia);
+    };
+
     datos.forEach((item) => {
         if (item.tipo === 'R') {
             sheetVentas.addRow({
                 folio: item.folio,
-                fecha: item.fecha,
+                fecha: formatearAObjetoFecha(item.fecha),
                 matricula: item.matricula,
                 litros: Number(item.litros || 0),
                 vta: item.vta,
@@ -62,10 +66,9 @@ export const ExcelRemisiones = async (datos: any[]) => {
                 status: item.status === 'A' ? 'Activo' : item.status
             });
         } else {
-            // MAPEO PARA COMPRAS (Tipo A)
             sheetCompras.addRow({
                 folio: item.folio,
-                fecha: item.fecha,
+                fecha: formatearAObjetoFecha(item.fecha),
                 litros: Number(item.litros || 0),
                 factura: item.factura,
                 precio_venta: Number(item.precio_venta || 0),
@@ -74,15 +77,16 @@ export const ExcelRemisiones = async (datos: any[]) => {
         }
     });
 
-    // Formatos numéricos para Ventas
+    sheetVentas.getColumn('fecha').numFmt = 'dd/mm/yyyy';
     sheetVentas.getColumn('litros').numFmt = '#,##0.00';
     sheetVentas.getColumn('precio_venta').numFmt = '$#,##0.0000';
     sheetVentas.getColumn('importe').numFmt = '$#,##0.0000';
-
-    // Formatos numéricos para Compras (Actualizados con las nuevas keys)
+    sheetVentas.getColumn('fecha').alignment = { horizontal: 'center' };
+    sheetCompras.getColumn('fecha').numFmt = 'dd/mm/yyyy';
     sheetCompras.getColumn('litros').numFmt = '#,##0.00';
     sheetCompras.getColumn('precio_venta').numFmt = '$#,##0.0000';
     sheetCompras.getColumn('importe').numFmt = '$#,##0.0000';
+    sheetCompras.getColumn('fecha').alignment = { horizontal: 'center' };
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });

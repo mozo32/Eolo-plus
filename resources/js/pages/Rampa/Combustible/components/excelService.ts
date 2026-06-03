@@ -19,7 +19,7 @@ const estiloTitulo = (cell: ExcelJS.Cell) => {
 
 const estiloHeader = (cell: ExcelJS.Cell) => {
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F5597' } };
     cell.border = {
         top: { style: 'thin' },
@@ -73,7 +73,6 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
     });
 
     Object.keys(groupedC).forEach(mes => {
-
         const groupRow = wsC.addRow([`MES: ${mes}`]);
         groupRow.eachCell(cell => {
             cell.font = { bold: true, color: { argb: 'FF1F4E79' } };
@@ -82,7 +81,6 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
 
         groupedC[mes].forEach(item => {
             item.imagenes?.forEach((img: any) => {
-
                 const row = wsC.addRow([
                     item.id,
                     mes,
@@ -90,7 +88,6 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
                     img.pivot?.tag || '',
                     img.pivot?.observacion || ''
                 ]);
-
                 row.eachCell(estiloFila);
             });
         });
@@ -105,26 +102,32 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
     ];
 
     /* =========================
-       AUTOTANQUE
+       AUTOTANQUE (ACTUALIZADO CON 6 DRENES)
     ========================= */
     const wsA = workbook.addWorksheet('Autotanque');
 
-    wsA.mergeCells('A1:F1');
+    // Ahora la tabla mide 21 columnas en total (3 fijas iniciales + 18 de drenes)
+    // De la columna A hasta la columna U
+    wsA.mergeCells('A1:U1');
     const titleA = wsA.getCell('A1');
     titleA.value = 'REPORTE DE INSPECCIONES AUTOTANQUE';
     estiloTitulo(titleA);
 
-    wsA.mergeCells('A2:F2');
+    wsA.mergeCells('A2:U2');
     wsA.getCell('A2').value = `Generado: ${new Date().toLocaleString()}`;
 
-    const headersA = [
-        'ID',
-        'MES',
-        'FECHA',
-        'TOMA MUESTRA',
-        'CLARIDAD',
-        'SÓLIDOS / AGUA'
-    ];
+    // Construcción dinámica de encabezados
+    const headersA = ['ID', 'MES', 'FECHA'];
+
+    for (let i = 1; i <= 6; i++) {
+        headersA.push(`TOMA MUESTRA DREN ${i}`);
+    }
+    for (let i = 1; i <= 6; i++) {
+        headersA.push(`CLARIDAD DREN ${i}`);
+    }
+    for (let i = 1; i <= 6; i++) {
+        headersA.push(`SÓLIDOS/AGUA DREN ${i}`);
+    }
 
     const headerRowA = wsA.addRow(headersA);
     headerRowA.eachCell(estiloHeader);
@@ -138,7 +141,6 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
     });
 
     Object.keys(groupedA).forEach(mes => {
-
         const groupRow = wsA.addRow([`MES: ${mes}`]);
         groupRow.eachCell(cell => {
             cell.font = { bold: true, color: { argb: 'FF1F4E79' } };
@@ -146,29 +148,47 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
         });
 
         groupedA[mes].forEach(item => {
-
-            const row = wsA.addRow([
+            // Construcción del array de datos para la fila actual
+            const filaDatos = [
                 item.id,
                 mes,
-                item.fecha,
-                item.toma_muestra_combustible,
-                item.prueba_claridad_brillantez,
-                item.presencia_solidos_agua
-            ]);
+                item.fecha
+            ];
 
+            // Inyectamos las respuestas respetando los nombres mapeados en tu backend
+            for (let i = 1; i <= 6; i++) {
+                filaDatos.push(item[`toma_muestra_combustible_dren_${i}`] || '');
+            }
+            for (let i = 1; i <= 6; i++) {
+                filaDatos.push(item[`prueba_claridad_brillantez_dren_${i}`] || '');
+            }
+            for (let i = 1; i <= 6; i++) {
+                filaDatos.push(item[`presencia_solidos_agua_dren_${i}`] || '');
+            }
+
+            const row = wsA.addRow(filaDatos);
             row.eachCell(estiloFila);
         });
     });
 
-    wsA.columns = [
-        { width: 10 },
-        { width: 15 },
-        { width: 25 },
-        { width: 25 },
-        { width: 25 },
-        { width: 25 }
+    // Definición de anchos de columnas dinámico
+    // Las 3 primeras columnas son más anchas para el ID, Mes y Fecha, las de los drenes son más delgadas
+    const columnWidths = [
+        { width: 10 }, // ID
+        { width: 15 }, // MES
+        { width: 25 }, // FECHA
     ];
 
+    // Añadimos un ancho estándar de 18 a las siguientes 18 columnas de los drenes
+    for (let i = 0; i < 18; i++) {
+        columnWidths.push({ width: 18 });
+    }
+
+    wsA.columns = columnWidths;
+
+    /* =========================
+       DESCARGA DEL ARCHIVO
+    ========================= */
     const buffer = await workbook.xlsx.writeBuffer();
 
     const blob = new Blob([buffer], {

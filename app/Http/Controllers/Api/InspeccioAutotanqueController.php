@@ -557,24 +557,26 @@ class InspeccioAutotanqueController extends Controller
             ->map(function ($item) {
 
                 $check = $item->checklist_respuestas ?? [];
-
-                return [
+                $resultado = [
                     'id' => $item->id,
                     'tipo' => 'AUTOTANQUE',
                     'fecha' => $item->fecha_inspeccion,
                     'operador' => $item->operador,
-
-                    'toma_muestra_combustible' =>
-                        $check['Toma de Muestra de Combustible'] ?? null,
-
-                    'prueba_claridad_brillantez' =>
-                        $check['Prueba de claridad y Brillantez'] ?? null,
-
-                    'presencia_solidos_agua' =>
-                        $check['Presencia de Sólidos y/o agua de forma visual'] ?? null,
-
-                    'imagenes' => $item->imagenes
                 ];
+
+                for ($i = 1; $i <= 6; $i++) {
+                    $resultado["toma_muestra_combustible_dren_{$i}"] =
+                        $check["Toma de Muestra de Combustible - Dren {$i}"] ?? null;
+
+                    $resultado["prueba_claridad_brillantez_dren_{$i}"] =
+                        $check["Prueba de claridad y Brillantez - Dren {$i}"] ?? null;
+
+                    $resultado["presencia_solidos_agua_dren_{$i}"] =
+                        $check["Presencia de Sólidos y/o agua de forma visual - Dren {$i}"] ?? null;
+                }
+                $resultado['imagenes'] = $item->imagenes;
+
+                return $resultado;
             });
 
 

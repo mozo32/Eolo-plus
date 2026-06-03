@@ -19,11 +19,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('walkAround', function () {
         return Inertia::render('despacho/WalkAround');
-    })->name('walkAround')->middleware('subdep:walkAround');
+    })->name('walkAround');
 
     Route::get('entregaTurno', function () {
         return Inertia::render('despacho/EntregaTurno');
-    })->name('entregaTurno')->middleware('subdep:entregaTurno');
+    })->name('entregaTurno');
 
     Route::get('gestionarAeronaves', function () {
         return Inertia::render('despacho/GestionAeronaves');

@@ -139,14 +139,16 @@ export default function EntregaTurno() {
                                 <Filter size={14} />
                                 <span>{filtersOpen ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                             </button>
+                            {!user?.roles?.some(rol => rol.slug === "admin2") && (
+                                <button
+                                    onClick={() => setIsModalOpen(true)}
+                                    className="text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-white bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100 flex items-center gap-2"
+                                >
+                                    <Plus size={14} />
+                                    NUEVO REGISTRO
+                                </button>
+                            )}
 
-                            <button
-                                onClick={() => setIsModalOpen(true)}
-                                className="text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-white bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100 flex items-center gap-2"
-                            >
-                                <Plus size={14} />
-                                NUEVO REGISTRO
-                            </button>
                         </div>
                     </div>
                     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -261,7 +263,7 @@ export default function EntregaTurno() {
                                                         {(user?.isAdmin || user?.roles?.some(rol => rol.slug === "fbo")) && (
                                                             <button onClick={() => setEditarId(row.id)} className={`p-2 rounded transition-colors text-slate-400 hover:text-blue-600`}><Edit2 size={16} /></button>
                                                         )}
-                                                        {(user?.isAdmin ||( user?.roles?.some(rol => rol.slug === "jefe_area")||user?.roles?.some(rol => rol.slug === "fbo"))) && (
+                                                        {(user?.isAdmin ||( user?.roles?.some(rol => rol.slug === "jefe_area")||user?.roles?.some(rol => rol.slug === "fbo")||user?.roles?.some(rol => rol.slug === "admin2"))) && (
                                                             <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]">
                                                                 PDF
                                                             </button>

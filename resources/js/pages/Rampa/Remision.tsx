@@ -1,7 +1,7 @@
 import PdfExporterRemision from './Autotanque/PdfExporterRemision';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, usePage} from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import EoloForm from './Autotanque/EoloForm';
 import { useState, useEffect, useCallback } from 'react';
 import { fetchRemisionesDelDia, fetchRemisionById } from '@/stores/apiAutoTanque';
@@ -117,12 +117,12 @@ export default function Remision() {
     };
 
     const handlePdfDone = useCallback(() => setPdfId(null), []);
-    const cosultaCombustible = async()=>{
+    const cosultaCombustible = async () => {
         try {
             const res = await consultaAsa();
             setDatosCombustible(res);
         } catch (error) {
-             console.error(error);
+            console.error(error);
         }
     }
     const cargarDatos = async () => {
@@ -241,21 +241,24 @@ export default function Remision() {
                                     <div className="flex flex-col items-center">
                                         <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">ASA</span>
                                         <span className="text-xs font-black text-indigo-600">
-                                            {Number(datosCombustible.diferenciaFinal).toLocaleString()} <small className="text-[8px]">LTS</small>
+                                            {/* Forzamos el formato de México para que use la coma de miles en PC y Tablet */}
+                                            {Number(datosCombustible.diferenciaFinal).toLocaleString('es-MX')} <small className="text-[8px]">LTS</small>
                                         </span>
                                     </div>
                                 </div>
                             )}
                             <div className="w-[1px] bg-slate-200 mx-1"></div>
-                            <button
-                                onClick={handleExportarExcel}
-                                disabled={loading}
-                                className="flex items-center gap-2 bg-white text-slate-600 text-[10px] font-black px-3 py-2 rounded border border-slate-200 shadow-sm hover:bg-slate-50 transition-all active:scale-95 uppercase tracking-wider disabled:opacity-50"
-                                title="Descargar Excel"
-                            >
-                                <Download size={14} className="text-green-600" />
-                                <span className="hidden md:inline">EXCEL</span>
-                            </button>
+                            {(user?.roles?.[0]?.slug === 'admin2' || user?.roles?.[0]?.slug === 'fbo' || user?.roles?.[0]?.slug === 'admin') && (
+                                <button
+                                    onClick={handleExportarExcel}
+                                    disabled={loading}
+                                    className="flex items-center gap-2 bg-white text-slate-600 text-[10px] font-black px-3 py-2 rounded border border-slate-200 shadow-sm hover:bg-slate-50 transition-all active:scale-95 uppercase tracking-wider disabled:opacity-50"
+                                    title="Descargar Excel"
+                                >
+                                    <Download size={14} className="text-green-600" />
+                                    <span className="hidden md:inline">EXCEL</span>
+                                </button>
+                            )}
                             <button
                                 onClick={() => setMostrarFiltros(!mostrarFiltros)}
                                 className={`flex items-center gap-2 text-[10px] font-black px-4 py-2 rounded border transition-all ${mostrarFiltros ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
@@ -263,12 +266,15 @@ export default function Remision() {
                                 <Filter size={14} />
                                 <span>{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                             </button>
-                            <button
-                                onClick={() => { setIsEdit(false); setDetalle(null); setOpenForm(true); }}
-                                className="bg-indigo-600 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-indigo-700 transition-all active:scale-95 uppercase tracking-wider"
-                            >
-                                + NUEVA REMISIÓN
-                            </button>
+                            {user?.roles?.[0]?.slug !== 'admin2' && (
+                                <button
+                                    onClick={() => { setIsEdit(false); setDetalle(null); setOpenForm(true); }}
+                                    className="bg-indigo-600 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-indigo-700 transition-all active:scale-95 uppercase tracking-wider"
+                                >
+                                    + NUEVA REMISIÓN
+                                </button>
+                            )}
+
                         </div>
                     </div>
 
@@ -360,7 +366,11 @@ export default function Remision() {
                                                                         </button>
                                                                     </>
                                                                 )}
-
+                                                                {user?.roles?.[0]?.slug === 'admin2' && (
+                                                                    <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors uppercase font-black text-[10px]">
+                                                                        PDF
+                                                                    </button>
+                                                                )}
                                                                 <button onClick={() => handleEye(row)} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors">
                                                                     <Eye size={16} />
                                                                 </button>

@@ -1,7 +1,7 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
-import { useMemo, useEffect } from 'react';
+import { useMemo } from 'react';
 import OperacionesCards from './operacionesDiarias/OperacionesCards';
 import { getNavModules } from '@/components/navigation';
 
@@ -13,23 +13,31 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function OperacionesDiarias() {
     const { auth } = usePage<{ auth: { user: any } }>().props;
+
+    // 1. Extraemos la URL actual aquí arriba (Uso correcto del Hook)
+    const pageUrl = usePage().url;
+
     const nombreRol = auth.user.roles?.[0]?.nombre;
+
     const activeModule = useMemo(() => {
         const modules = getNavModules(auth.user);
         const savedModuleKey = localStorage.getItem('activeModule');
-
 
         if (savedModuleKey) {
             const found = modules.find(m => String(m.key) === savedModuleKey);
             if (found) return found;
         }
+
         return modules.find(m =>
-            m.items.some(item => {
-                const href = typeof item.href === 'string' ? item.href : item.href.url;
-                return usePage().url === href;
+            m.items?.some(item => {
+                if (!item || !item.href) return false;
+
+                const href = typeof item.href === 'string' ? item.href : item.href?.url;
+
+                return pageUrl === href;
             })
         );
-    }, [auth.user]);
+    }, [auth.user, pageUrl]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>

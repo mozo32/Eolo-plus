@@ -254,7 +254,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
                         <Filter size={14} />
                         <span className="hidden xs:inline">{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                     </button>
-                    {(nombreRol === 'FBO' || nombreRol === 'Administrador') && (
+                    {(nombreRol === 'FBO' || nombreRol === 'Administrador' || nombreRol === 'Administrativo') && (
                         <>
                             <div className="w-[1px] bg-slate-200 mx-1"></div>
                             <button
