@@ -18,7 +18,8 @@ class AeronaveController extends Controller
             $aeronave = Aeronave::where('matricula', $matricula)->first();
 
             $ultimoWalk = WalkAround::where('matricula', $matricula)
-                ->latest('id')
+                ->orderByDesc('fecha')
+                ->orderByDesc('hora')
                 ->first();
 
             $infoMatricula = DB::connection('remota')
@@ -71,12 +72,15 @@ class AeronaveController extends Controller
                 ->select('wa.matricula', 'wa.movimiento')
                 ->whereIn('wa.matricula', $matriculas)
                 ->where('wa.status', 'A')
-                ->whereRaw('wa.id = (
-                    select max(id)
-                    from walk_arounds
-                    where walk_arounds.matricula = wa.matricula
-                    and walk_arounds.status = "A"
-                )')
+                ->where('wa.id', function($sub) {
+                    $sub->select('id')
+                        ->from('walk_arounds')
+                        ->whereColumn('matricula', 'wa.matricula')
+                        ->where('status', 'A')
+                        ->orderByDesc('fecha')
+                        ->orderByDesc('hora')
+                        ->limit(1);
+                })
                 ->get()
                 ->keyBy('matricula');
 
