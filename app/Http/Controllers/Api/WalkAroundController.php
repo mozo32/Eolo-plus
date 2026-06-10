@@ -58,7 +58,7 @@ class WalkAroundController extends Controller
             $query->whereBetween('fecha', [$request->fecha_inicio, $request->fecha_fin]);
         }
 
-        $query->orderByDesc('created_at')
+        $query->orderByDesc('fecha')
           ->orderByDesc('hora');
 
         return response()->json($query->paginate($request->get('per_page', 20)));
@@ -299,7 +299,7 @@ class WalkAroundController extends Controller
     public function store(Request $request)
     {
         $ultimoRegistro = WalkAround::where('matricula', $request->metadata['matricula'])
-            ->orderByDesc('created_at')
+            ->orderByDesc('fecha')
             ->orderByDesc('hora')
             ->first();
 
