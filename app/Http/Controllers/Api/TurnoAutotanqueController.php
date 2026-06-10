@@ -313,7 +313,6 @@ class TurnoAutotanqueController extends Controller
         $diferencia  = $request->query('diferencia');
         $start       = $request->query('fechaInicio');
         $end         = $request->query('fechaFin');
-        $perPage     = $request->query('per_page', 15);
 
         $query = TurnoAutotanque::query()
             ->with('inspeccion:id,turno_autotanque_id')
@@ -345,9 +344,11 @@ class TurnoAutotanqueController extends Controller
             $q->where('diferenciaFinal', 'like', "%{$diferencia}%");
         });
 
-        $turnos = $query->orderBy('id', 'desc')->paginate($perPage);
+        // MODIFICACIÓN 1: Ordenar del más antiguo al más reciente (asc)
+        // MODIFICACIÓN 2: Usamos ->get() en lugar de ->paginate() para exportar todo lo filtrado
+        $turnos = $query->orderBy('fecha', 'asc')->get();
 
-        $turnos->getCollection()->transform(function ($turno) {
+        $turnos->transform(function ($turno) {
             $turno->tiene_inspeccion = $turno->inspeccion !== null;
             unset($turno->inspeccion);
             $turno->finalizado = !empty($turno->nombreCierre) &&
@@ -358,18 +359,18 @@ class TurnoAutotanqueController extends Controller
 
             return $turno;
         });
+
+        // Filtros sobre la colección de manera limpia
         if ($estado !== null && $estado !== '') {
-            $filtered = $turnos->getCollection()->filter(function ($item) use ($estado) {
+            $turnos = $turnos->filter(function ($item) use ($estado) {
                 return $item->finalizado == $estado;
-            });
-            $turnos->setCollection($filtered->values());
+            })->values();
         }
 
         if ($inspeccion !== null && $inspeccion !== '') {
-            $filtered = $turnos->getCollection()->filter(function ($item) use ($inspeccion) {
+            $turnos = $turnos->filter(function ($item) use ($inspeccion) {
                 return $item->tiene_inspeccion == $inspeccion;
-            });
-            $turnos->setCollection($filtered->values());
+            })->values();
         }
 
         return response()->json($turnos);

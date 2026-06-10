@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\RegistroVisitantesController;
 use App\Http\Controllers\Api\RemisionController;
 use App\Http\Controllers\Api\TurnoAutotanqueController;
 use App\Http\Controllers\Api\InspeccioAutotanqueController;
+use App\Http\Controllers\Api\NotaOperacionalController;
 
 Route::post('/despacho', [DespachoController::class, 'store']);
 Route::get('/aeronaves/autocomplete', [AeronaveController::class, 'autocomplete']);
@@ -110,6 +111,10 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('EntregaTurnoR')->group(funct
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('CheckListTurno')->group(function () {
     Route::get('pendiente',[ChecklistTurnoController::class, 'checkPendiente']);
+    Route::post('notas/', [ChecklistTurnoController::class, 'storenota']);
+    Route::get('indexNotas/',[ChecklistTurnoController::class, 'indexnota']);
+    Route::put('aprobar/{id}', [ChecklistTurnoController::class, 'aprobarTurno']);
+    Route::put('validarnota/{notaOperacional}', [ChecklistTurnoController::class, 'validarnota']);
     Route::get('/',[ChecklistTurnoController::class, 'index']);
     Route::post('/', [ChecklistTurnoController::class, 'store']);
     Route::get('eliminar/{id}', [ChecklistTurnoController::class, 'eliminar']);
@@ -198,3 +203,5 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('InspeccionAutoTanque')->grou
     Route::post('/aprender-color', [InspeccioAutotanqueController::class, 'aprenderColorManual']);
     Route::get('/eliminar/{id}', [InspeccioAutotanqueController::class, 'eliminar']);
 });
+
+

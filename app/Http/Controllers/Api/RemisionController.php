@@ -205,12 +205,11 @@ class RemisionController extends Controller
             $queryRemisiones->where('total_litros', '>=', $litros);
             $queryAutotanques->where('litros', '>=', $litros);
         }
-
         $finalQuery = $queryRemisiones->unionAll($queryAutotanques);
-
         $results = DB::table(DB::raw("({$finalQuery->toSql()}) as combined"))
             ->mergeBindings($finalQuery)
-            ->orderBy('created_at', 'desc')
+            ->orderBy('fecha', 'asc')
+            ->orderBy('created_at', 'asc')
             ->get();
 
         return response()->json($results);

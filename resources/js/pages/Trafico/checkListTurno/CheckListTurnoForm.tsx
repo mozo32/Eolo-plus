@@ -5,7 +5,7 @@ import HotTrasComiCoor from "./sections/HotTrasComiCoor";
 import EntregaTurnoCon from "./sections/EntregaTurnoCon";
 import { validarPaso } from "./Validacion";
 import FirmaCanvas from "@/pages/FirmaCanvas";
-import { guardarCheckListTurnoApi, actualizarCheckListTurnoApi, buscarUsuariosApi } from "@/stores/apiCheckListTurno";
+import { guardarCheckListTurnoApi, actualizarCheckListTurnoApi, buscarUsuariosApi, validarCheckListTurnoApi } from "@/stores/apiCheckListTurno";
 import Swal from "sweetalert2";
 import { Package, CheckCircle2 } from "lucide-react";
 
@@ -24,6 +24,7 @@ const getInitialForm = (data?: any) => ({
     recibeTurnoCon: data?.recibe_turno_con ?? {},
     observaciones_recibe: data?.observaciones_recibe ?? "",
     revisionSalas: data?.revision_salas ?? {},
+    observaciones_salas: data?.observaciones_salas ?? "",
     HotTrasComiCoor: data?.hot_tras_comi_coor ?? [],
     revision_base_operaciones: data?.revision_base_operaciones ?? false,
     envia_resumen_semanal: data?.envia_resumen_semanal ?? false,
@@ -35,7 +36,7 @@ const getInitialForm = (data?: any) => ({
     firma: data?.firmas?.[0]?.url ?? "",
 });
 
-export default function CheckListTurnoForm({ isEdit, data, onSuccess }: { isEdit: boolean; data?: any; open: boolean; onSuccess?: () => void }) {
+export default function CheckListTurnoForm({ isEdit, isValidationMode = false, data, onSuccess }: { isEdit: boolean; isValidationMode?: boolean; data?: any; open: boolean; onSuccess?: () => void }) {
     const [step, setStep] = useState(1);
     const totalSteps = 5;
     const [buscando, setBuscando] = useState(false);
@@ -44,9 +45,9 @@ export default function CheckListTurnoForm({ isEdit, data, onSuccess }: { isEdit
     const [form, setForm] = useState(() => getInitialForm(data));
 
     useEffect(() => {
-        setForm(getInitialForm(isEdit ? data : undefined));
+        setForm(getInitialForm(isEdit || isValidationMode ? data : undefined));
         setStep(1);
-    }, [data, isEdit]);
+    }, [data, isEdit, isValidationMode]);
 
     const updateField = (path: string, value: any) => {
         setForm((prev: any) => {
@@ -73,10 +74,23 @@ export default function CheckListTurnoForm({ isEdit, data, onSuccess }: { isEdit
         if (!validarPaso(form, step)) return;
 
         try {
-            Swal.fire({ title: "Guardando...", didOpen: () => Swal.showLoading() });
-            if (isEdit && data?.id) await actualizarCheckListTurnoApi(data.id, form);
-            else await guardarCheckListTurnoApi(form);
-            Swal.fire({ icon: "success", title: "Completado con éxito" });
+            Swal.fire({ title: "Procesando...", didOpen: () => Swal.showLoading() });
+
+            if (isValidationMode && data?.id) {
+                // CASO 1: Petición exclusiva para aprobar/validar
+                // Reemplaza por tu llamada axios/fetch correspondiente a: PUT /api/checklist-turnos/aprobar/{id}
+                await validarCheckListTurnoApi(data.id, form);
+                Swal.fire({ icon: "success", title: "Turno Validado Exitosamente" });
+
+            } else if (isEdit && data?.id) {
+                // CASO 2: Edición normal
+                await actualizarCheckListTurnoApi(data.id, form);
+                Swal.fire({ icon: "success", title: "Completado con éxito" });
+            } else {
+                // CASO 3: Registro Nuevo
+                await guardarCheckListTurnoApi(form);
+                Swal.fire({ icon: "success", title: "Completado con éxito" });
+            }
             onSuccess?.();
         } catch (error: any) {
             Swal.fire({ icon: "error", title: "Error", text: error?.message || "Error al procesar" });
@@ -198,9 +212,15 @@ export default function CheckListTurnoForm({ isEdit, data, onSuccess }: { isEdit
                             <button
                                 key="btn-submit"
                                 type="submit"
-                                className={`rounded-md px-10 py-2.5 text-xs font-black uppercase tracking-widest text-white shadow-lg transition-all ${isEdit ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"}`}
+                                className={`rounded-md px-10 py-2.5 text-xs font-black uppercase tracking-widest text-white shadow-lg transition-all ${isValidationMode
+                                        ? "bg-purple-600 hover:bg-purple-700 shadow-purple-100" // Estilo único para validar
+                                        : isEdit
+                                            ? "bg-blue-600 hover:bg-blue-700"
+                                            : "bg-green-600 hover:bg-green-700"
+                                    }`}
                             >
-                                {isEdit ? "Actualizar Registro" : "Finalizar Entrega"}
+                                {/* CAMBIO DE TEXTO DINÁMICO */}
+                                {isValidationMode ? "Validar Registro" : isEdit ? "Actualizar Registro" : "Finalizar Entrega"}
                             </button>
                         )}
                     </footer>

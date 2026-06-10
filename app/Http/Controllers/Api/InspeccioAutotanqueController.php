@@ -520,6 +520,12 @@ class InspeccioAutotanqueController extends Controller
 
     public function showExcel(Request $request)
     {
+        // Capturamos los parámetros reales que vienen del request
+        $start = $request->query('fechaInicio');
+        $end   = $request->query('fechaFin');
+        $id    = $request->query('id'); // o 'buscar' si mapeas el ID ahí
+        $inspector = $request->query('inspector');
+
         $inspeccionesCombustibles = InspeccionCombustibles::with([
                 'user:id,name',
                 'imagenes' => function ($q) {
@@ -528,39 +534,42 @@ class InspeccioAutotanqueController extends Controller
                 }
             ])
             ->where('status', 'A')
-
-            ->when($request->id, function ($query, $id) {
+            ->when($id, function ($query, $id) {
                 $query->where('id', $id);
             })
-
-            ->when($request->inspector, function ($query, $inspector) {
+            ->when($inspector, function ($query, $inspector) {
                 $query->whereHas('user', function ($q) use ($inspector) {
                     $q->where('name', 'like', '%' . $inspector . '%');
                 });
             })
-
-            ->when($request->start && $request->end, function ($query) use ($request) {
-                $query->whereBetween('fecha', [$request->start . ' 00:00:00', $request->end . ' 23:59:59']);
+            // CORREGIDO: Usar las variables mapeadas con los parámetros reales
+            ->when($start && $end, function ($query) use ($start, $end) {
+                $query->whereBetween('fecha', [$start . ' 00:00:00', $end . ' 23:59:59']);
             })
-
-            ->orderBy('fecha', 'desc')
+            ->orderBy('fecha', 'asc') // Ordenado ascendente desde la query
             ->get();
 
 
-        $inspeccionesAutotanque = inspeccionAutotanque::with(['imagenes'])
+        $inspeccionesAutotanque = InspeccionAutotanque::with(['imagenes'])
             ->where('status', 'A')
-            ->when($request->start && $request->end, function ($query) use ($request) {
-                $query->whereBetween('fecha_inspeccion', [$request->start . ' 00:00:00', $request->end . ' 23:59:59']);
+            // CORREGIDO: Usar las variables mapeadas con los parámetros reales
+            ->when($start && $end, function ($query) use ($start, $end) {
+                $query->whereBetween('fecha_inspeccion', [$start . ' 00:00:00', $end . ' 23:59:59']);
             })
-            ->orderBy('fecha_inspeccion', 'desc')
+            ->orderBy('fecha_inspeccion', 'asc') // Ordenado ascendente desde la query
             ->get()
             ->map(function ($item) {
 
                 $check = $item->checklist_respuestas ?? [];
+
+                $soloFecha = explode(' ', $item->fecha_inspeccion)[0];
+                $soloHora = explode(' ', $item->created_at)[1] ?? '00:00:00';
+                $fechaConHoraReal = $soloFecha . ' ' . $soloHora;
+
                 $resultado = [
                     'id' => $item->id,
                     'tipo' => 'AUTOTANQUE',
-                    'fecha' => $item->fecha_inspeccion,
+                    'fecha' => $fechaConHoraReal,
                     'operador' => $item->operador,
                 ];
 
@@ -591,9 +600,10 @@ class InspeccioAutotanqueController extends Controller
         });
 
 
+        // MODIFICACIÓN: Unificar colecciones y ordenar de más antiguo a más reciente de forma estricta (sortBy)
         $resultado = $inspeccionesCombustibles
             ->merge($inspeccionesAutotanque)
-            ->sortByDesc('fecha')
+            ->sortBy('fecha') // Cambiado de sortByDesc a sortBy para mantener consistencia cronológica
             ->values();
 
 

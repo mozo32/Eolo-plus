@@ -14,6 +14,7 @@ class ChecklistTurno extends Model
         'recibe_turno_con',
         'observaciones_recibe',
         'revision_salas',
+        'observaciones_salas',
         'hot_tras_comi_coor',
         'revision_base_operaciones',
         'envia_informe_diario',
@@ -22,6 +23,7 @@ class ChecklistTurno extends Model
         'observaciones_entrega',
         'cantidad_pasajeros',
         'cantidad_operaciones',
+        'validado_por_user_id',
         'status',
         'firma',
     ];

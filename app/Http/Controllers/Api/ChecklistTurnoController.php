@@ -8,6 +8,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Models\NotaOperacional;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Auth;
 
 class ChecklistTurnoController extends Controller
 {
@@ -22,6 +25,7 @@ class ChecklistTurnoController extends Controller
                 'recibeTurnoCon' => 'nullable|array',
                 'observaciones_recibe' => 'nullable|string',
                 'revisionSalas' => 'nullable|array',
+                'observaciones_salas' => 'nullable|string',
                 'HotTrasComiCoor' => 'nullable|array',
                 'revision_base_operaciones' => 'nullable|boolean',
                 'envia_informe_diario' => 'nullable|boolean',
@@ -38,6 +42,7 @@ class ChecklistTurnoController extends Controller
                 'recibe_turno_con' => $validated['recibeTurnoCon'] ?? [],
                 'observaciones_recibe' => $validated['observaciones_recibe'] ?? null,
                 'revision_salas' => $validated['revisionSalas'] ?? [],
+                'observaciones_salas' => $validated['observaciones_salas'] ?? null,
                 'hot_tras_comi_coor' => $validated['HotTrasComiCoor'] ?? [],
                 'revision_base_operaciones' => $validated['revision_base_operaciones'] ?? false,
                 'envia_informe_diario' => $validated['envia_informe_diario'] ?? false,
@@ -207,6 +212,7 @@ class ChecklistTurnoController extends Controller
                 'recibeTurnoCon' => 'nullable|array',
                 'observaciones_recibe' => 'nullable|string',
                 'revisionSalas' => 'nullable|array',
+                'observaciones_salas' => 'nullable|string',
                 'HotTrasComiCoor' => 'nullable|array',
                 'revision_base_operaciones' => 'nullable|boolean',
                 'envia_informe_diario' => 'nullable|boolean',
@@ -223,6 +229,7 @@ class ChecklistTurnoController extends Controller
                 'recibe_turno_con' => $validated['recibeTurnoCon'],
                 'observaciones_recibe' => $validated['observaciones_recibe'] ?? null,
                 'revision_salas' => $validated['revisionSalas'],
+                'observaciones_salas' => $validated['observaciones_salas'] ?? null,
                 'hot_tras_comi_coor' => $validated['HotTrasComiCoor'] ?? [],
                 'revision_base_operaciones' => $validated['revision_base_operaciones'],
                 'envia_informe_diario' => $validated['envia_informe_diario'],
@@ -302,5 +309,172 @@ class ChecklistTurnoController extends Controller
         }
 
         return response()->json($pendiente);
+    }
+    public function storenota(Request $request): JsonResponse
+    {
+        $request->validate([
+            'descripcion' => 'required|string|min:3',
+        ]);
+
+
+        try {
+
+            $nota = NotaOperacional::create([
+                // Corregido: Se cambia 'uppercase()' por soporte nativo multibyte de PHP para evitar errores
+                'descripcion'          => mb_strtoupper($request->descripcion, 'UTF-8'),
+                'departamento_id'      =>  7,
+                'subdepartamento_id'   => 16,
+                'creado_por_user_id'   => Auth::id(),
+                'validado_por_user_id' => null,
+            ]);
+
+            return response()->json([
+                'ok' => true,
+                'message' => 'Nota registrada con éxito.',
+                'data' => $nota
+            ], 201);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Error interno al procesar el guardado de la nota.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function indexnota(): JsonResponse
+    {
+        try {
+            $notas = NotaOperacional::with(['departamento:id,nombre', 'subdepartamento:id,nombre'])
+                ->whereNull('validado_por_user_id')
+                ->where('departamento_id', 7)
+                ->where('subdepartamento_id', 16)
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return response()->json([
+                'ok' => true,
+                'data' => $notas
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Error al obtener el listado de notas pendientes.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function validarnota(NotaOperacional $notaOperacional): JsonResponse
+    {
+        try {
+            if ($notaOperacional->validado_por_user_id !== null) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'Esta nota ya ha sido validada anteriormente.'
+                ], 422);
+            }
+
+            $notaOperacional->validado_por_user_id = Auth::id();
+            $notaOperacional->save();
+            $notaOperacional->load(['departamento:id,nombre', 'subdepartamento:id,nombre']);
+
+            return response()->json([
+                'ok' => true,
+                'message' => 'Nota validada con éxito.',
+                'data' => $notaOperacional
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Error interno al procesar la validación de la nota.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    public function aprobarTurno(Request $request, $id)
+    {
+        DB::beginTransaction();
+
+        try {
+            // 1. Buscamos el registro real de la base de datos usando el ID
+            $checklistTurno = ChecklistTurno::findOrFail($id);
+
+            // 2. Comprobamos la validación DIRECTAMENTE en el modelo encontrado
+            if ($checklistTurno->validado_por_user_id !== null) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'Este checklist de turno ya fue validado anteriormente.'
+                ], 422);
+            }
+
+            // 3. Ejecutamos la validación (esto devuelve un ARRAY en $validated)
+            $validated = $request->validate([
+                'nombreEmpleado' => 'required|string|max:255',
+                'fecha' => 'required|date',
+                'recibeTurnoCon' => 'nullable|array',
+                'observaciones_recibe' => 'nullable|string',
+                'revisionSalas' => 'nullable|array',
+                'observaciones_salas' => 'nullable|string',
+                'HotTrasComiCoor' => 'nullable|array',
+                'revision_base_operaciones' => 'nullable|boolean',
+                'envia_informe_diario' => 'nullable|boolean',
+                'envia_resumen_semanal' => 'nullable|boolean',
+                'entregaTurnoCon' => 'nullable|array',
+                'observaciones_entrega' => 'nullable|string',
+                'cantidad_pasajeros' => 'nullable|integer|min:0',
+                'cantidad_operaciones' => 'nullable|integer|min:0',
+            ]);
+
+            // 4. Actualizamos usando la nomenclatura de corchetes obligatoria para arrays de PHP
+            $checklistTurno->update([
+                'nombre_empleado'           => $validated['nombreEmpleado'],
+                'fecha'                     => $validated['fecha'],
+                'recibe_turno_con'          => $validated['recibeTurnoCon'],
+                'observaciones_recibe'      => $validated['observaciones_recibe'] ?? null,
+                'revision_salas'            => $validated['revisionSalas'],
+                'observaciones_salas'       => $validated['observaciones_salas'] ?? null,
+                'hot_tras_comi_coor'        => $validated['HotTrasComiCoor'] ?? [],
+                'revision_base_operaciones' => $validated['revision_base_operaciones'] ?? false,
+                'envia_informe_diario'      => $validated['envia_informe_diario'] ?? false,
+                'envia_resumen_semanal'     => $validated['envia_resumen_semanal'] ?? false,
+                'entrega_turno_con'         => $validated['entregaTurnoCon'],
+                'observaciones_entrega'     => $validated['observaciones_entrega'] ?? null,
+                'cantidad_pasajeros'        => (int) ($validated['cantidad_pasajeros'] ?? 0),
+                'cantidad_operaciones'      => (int) ($validated['cantidad_operaciones'] ?? 0),
+                'validado_por_user_id'      => Auth::id(), // Registra al supervisor firmado
+            ]);
+
+            // Guardado de la firma
+            if (str_contains($request->firma ?? '', 'base64,')) {
+                $this->guardarFirmaBase64(
+                    $request->firma,
+                    'firma_validacion',
+                    $checklistTurno
+                );
+            }
+
+            DB::commit();
+
+            $checklistTurno->load('firmas');
+
+            return response()->json([
+                'ok' => true,
+                'message' => 'Checklist validado correctamente',
+                'data' => $checklistTurno,
+            ]);
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'Error al actualizar y validar el checklist',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 }

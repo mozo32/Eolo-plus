@@ -1,3 +1,5 @@
+import { useState, useEffect } from "react";
+
 const SALAS = [
     { id: "aula_1", label: "Aula 1" },
     { id: "aula_2", label: "Aula 2" },
@@ -102,6 +104,20 @@ export default function RevisionSalas({ form, updateField }: Props) {
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            {/* SECCIÓN NUEVA: Observaciones específicas de Inspección de Salas */}
+            <div className="space-y-2">
+                <label className="block text-xs font-extrabold uppercase tracking-widest text-slate-600">
+                    Observaciones / Novedades en Salas
+                </label>
+                <textarea
+                    rows={3}
+                    className="w-full rounded-xl border-2 border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none focus:border-[#00677F] transition-all placeholder:text-slate-400 placeholder:font-normal"
+                    placeholder="Escribe aquí si encontraste alguna anomalía, objetos olvidados o falta de insumos de cafetería en las salas..."
+                    value={form.observaciones_salas ?? ""}
+                    onChange={(e) => updateField("observaciones_salas", e.target.value)}
+                />
             </div>
 
             {/* Pie de sección informativo */}

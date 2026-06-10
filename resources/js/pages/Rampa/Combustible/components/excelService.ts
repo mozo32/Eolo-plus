@@ -7,8 +7,22 @@ const MESES = [
 ];
 
 const obtenerMes = (fecha: string) => {
-    const d = new Date(fecha);
-    return MESES[d.getMonth()];
+    const d = parsearFechaSegura(fecha);
+    return d ? MESES[d.getMonth()] : '';
+};
+
+// Nueva función para evitar que JavaScript altere o desfase la fecha/hora
+const parsearFechaSegura = (fechaStr: string): Date | null => {
+    if (!fechaStr) return null;
+    // Espera formato "YYYY-MM-DD HH:mm:ss"
+    const partes = fechaStr.split(' ');
+    if (partes.length !== 2) return new Date(fechaStr); // Fallback por si acaso
+
+    const [anio, mes, dia] = partes[0].split('-').map(Number);
+    const [hora, min, seg] = partes[1].split(':').map(Number);
+
+    // los meses en JavaScript van de 0 a 11
+    return new Date(anio, mes - 1, dia, hora, min, seg);
 };
 
 const estiloTitulo = (cell: ExcelJS.Cell) => {
@@ -22,10 +36,8 @@ const estiloHeader = (cell: ExcelJS.Cell) => {
     cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F5597' } };
     cell.border = {
-        top: { style: 'thin' },
-        left: { style: 'thin' },
-        bottom: { style: 'thin' },
-        right: { style: 'thin' }
+        top: { style: 'thin' }, left: { style: 'thin' },
+        bottom: { style: 'thin' }, right: { style: 'thin' }
     };
 };
 
@@ -37,6 +49,13 @@ const estiloFila = (cell: ExcelJS.Cell) => {
         bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
         right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
     };
+};
+
+// MODIFICADO: Formato de fecha corregido a 24 Horas (hh:mm:ss sin AM/PM)
+const aplicarFormatoFecha = (cell: ExcelJS.Cell) => {
+    if (cell.value instanceof Date) {
+        cell.numFmt = 'dd/mm/yyyy hh:mm:ss';
+    }
 };
 
 export const exportarInspeccionesExcel = async (registros: any[]) => {
@@ -61,11 +80,9 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
 
     const headersC = ['ID', 'MES', 'FECHA', 'PRUEBA REALIZADA', 'RESULTADO'];
     const headerRowC = wsC.addRow(headersC);
-
     headerRowC.eachCell(estiloHeader);
 
     const groupedC: Record<string, any[]> = {};
-
     combustible.forEach(item => {
         const mes = obtenerMes(item.fecha);
         if (!groupedC[mes]) groupedC[mes] = [];
@@ -84,56 +101,38 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
                 const row = wsC.addRow([
                     item.id,
                     mes,
-                    item.fecha,
+                    parsearFechaSegura(item.fecha) || '', // Objeto Date sin desfaces locales
                     img.pivot?.tag || '',
                     img.pivot?.observacion || ''
                 ]);
                 row.eachCell(estiloFila);
+                aplicarFormatoFecha(row.getCell(3));
             });
         });
     });
 
     wsC.columns = [
-        { width: 10 },
-        { width: 15 },
-        { width: 25 },
-        { width: 30 },
-        { width: 30 }
+        { width: 10 }, { width: 15 }, { width: 25 }, { width: 30 }, { width: 30 }
     ];
 
     /* =========================
-       AUTOTANQUE (ACTUALIZADO CON 6 DRENES)
+       AUTOTANQUE (DISEÑO VERTICAL)
     ========================= */
     const wsA = workbook.addWorksheet('Autotanque');
 
-    // Ahora la tabla mide 21 columnas en total (3 fijas iniciales + 18 de drenes)
-    // De la columna A hasta la columna U
-    wsA.mergeCells('A1:U1');
+    wsA.mergeCells('A1:G1');
     const titleA = wsA.getCell('A1');
     titleA.value = 'REPORTE DE INSPECCIONES AUTOTANQUE';
     estiloTitulo(titleA);
 
-    wsA.mergeCells('A2:U2');
+    wsA.mergeCells('A2:G2');
     wsA.getCell('A2').value = `Generado: ${new Date().toLocaleString()}`;
 
-    // Construcción dinámica de encabezados
-    const headersA = ['ID', 'MES', 'FECHA'];
-
-    for (let i = 1; i <= 6; i++) {
-        headersA.push(`TOMA MUESTRA DREN ${i}`);
-    }
-    for (let i = 1; i <= 6; i++) {
-        headersA.push(`CLARIDAD DREN ${i}`);
-    }
-    for (let i = 1; i <= 6; i++) {
-        headersA.push(`SÓLIDOS/AGUA DREN ${i}`);
-    }
-
+    const headersA = ['ID', 'MES', 'FECHA', 'N° DREN', 'TOMA MUESTRA', 'CLARIDAD', 'SÓLIDOS/AGUA'];
     const headerRowA = wsA.addRow(headersA);
     headerRowA.eachCell(estiloHeader);
 
     const groupedA: Record<string, any[]> = {};
-
     autotanque.forEach(item => {
         const mes = obtenerMes(item.fecha);
         if (!groupedA[mes]) groupedA[mes] = [];
@@ -148,49 +147,38 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
         });
 
         groupedA[mes].forEach(item => {
-            // Construcción del array de datos para la fila actual
-            const filaDatos = [
-                item.id,
-                mes,
-                item.fecha
-            ];
+            const fechaObjeto = parsearFechaSegura(item.fecha) || '';
 
-            // Inyectamos las respuestas respetando los nombres mapeados en tu backend
             for (let i = 1; i <= 6; i++) {
-                filaDatos.push(item[`toma_muestra_combustible_dren_${i}`] || '');
-            }
-            for (let i = 1; i <= 6; i++) {
-                filaDatos.push(item[`prueba_claridad_brillantez_dren_${i}`] || '');
-            }
-            for (let i = 1; i <= 6; i++) {
-                filaDatos.push(item[`presencia_solidos_agua_dren_${i}`] || '');
-            }
+                const tomaMuestra = item[`toma_muestra_combustible_dren_${i}`];
+                const claridad = item[`prueba_claridad_brillantez_dren_${i}`];
+                const solidosAgua = item[`presencia_solidos_agua_dren_${i}`];
 
-            const row = wsA.addRow(filaDatos);
-            row.eachCell(estiloFila);
+                const filaDren = [
+                    item.id,
+                    mes,
+                    fechaObjeto,
+                    `Dren ${i}`,
+                    tomaMuestra || '',
+                    claridad || '',
+                    solidosAgua || ''
+                ];
+
+                const row = wsA.addRow(filaDren);
+                row.eachCell(estiloFila);
+                aplicarFormatoFecha(row.getCell(3));
+            }
         });
     });
 
-    // Definición de anchos de columnas dinámico
-    // Las 3 primeras columnas son más anchas para el ID, Mes y Fecha, las de los drenes son más delgadas
-    const columnWidths = [
-        { width: 10 }, // ID
-        { width: 15 }, // MES
-        { width: 25 }, // FECHA
+    wsA.columns = [
+        { width: 10 }, { width: 15 }, { width: 25 }, { width: 15 }, { width: 20 }, { width: 20 }, { width: 20 }
     ];
-
-    // Añadimos un ancho estándar de 18 a las siguientes 18 columnas de los drenes
-    for (let i = 0; i < 18; i++) {
-        columnWidths.push({ width: 18 });
-    }
-
-    wsA.columns = columnWidths;
 
     /* =========================
        DESCARGA DEL ARCHIVO
     ========================= */
     const buffer = await workbook.xlsx.writeBuffer();
-
     const blob = new Blob([buffer], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     });
