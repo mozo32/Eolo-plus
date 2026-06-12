@@ -14,7 +14,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 export default function OperacionesDiarias() {
     const { auth } = usePage<{ auth: { user: any } }>().props;
 
-    // 1. Extraemos la URL actual aquí arriba (Uso correcto del Hook)
     const pageUrl = usePage().url;
 
     const nombreRol = auth.user.roles?.[0]?.nombre;
@@ -23,20 +22,29 @@ export default function OperacionesDiarias() {
         const modules = getNavModules(auth.user);
         const savedModuleKey = localStorage.getItem('activeModule');
 
+        const matchingModules = modules.filter(m =>
+            m.items?.some(item => {
+                if (!item || !item.href) return false;
+                const href = typeof item.href === 'string' ? item.href : item.href?.url;
+                return href && pageUrl.includes(href);
+            })
+        );
+
+        if (matchingModules.length > 0) {
+            const perfectMatch = matchingModules.find(m => String(m.key) === String(savedModuleKey));
+
+            if (perfectMatch) {
+                return perfectMatch;
+            }
+            return matchingModules[0];
+        }
+
         if (savedModuleKey) {
-            const found = modules.find(m => String(m.key) === savedModuleKey);
+            const found = modules.find(m => String(m.key) === String(savedModuleKey));
             if (found) return found;
         }
 
-        return modules.find(m =>
-            m.items?.some(item => {
-                if (!item || !item.href) return false;
-
-                const href = typeof item.href === 'string' ? item.href : item.href?.url;
-
-                return pageUrl === href;
-            })
-        );
+        return modules[0];
     }, [auth.user, pageUrl]);
 
     return (

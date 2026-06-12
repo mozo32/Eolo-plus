@@ -109,6 +109,11 @@ export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[]
                                                             ) : (
                                                                 <Link
                                                                     href={getSafeHref(sub.href)}
+                                                                    onClick={() => {
+                                                                        // Guardamos la key del módulo al que pertenece este link antes de navegar
+                                                                        localStorage.setItem('activeModule', String(mod.key));
+                                                                        setMobileOpen(false); // Por si acaso está en móvil
+                                                                    }}
                                                                     className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
                                                                 >
                                                                     <div className="flex h-7 w-7 items-center justify-center rounded-md border bg-background shadow-sm">
