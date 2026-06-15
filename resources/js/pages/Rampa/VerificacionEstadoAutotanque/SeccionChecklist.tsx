@@ -13,6 +13,16 @@ interface Props {
     setPreviews: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
+// Diccionario con los nombres específicos de cada dren
+const NOMBRES_DRENES: Record<number, string> = {
+    1: "Delantero del tanque",
+    2: "Strainer",
+    3: "Succión auxiliar",
+    4: "Trasero del tanque",
+    5: "Entrada a elementos filtrantes",
+    6: "Salida de elementos filtrantes"
+};
+
 export const SeccionChecklist = ({
     secciones,
     itemsCombustible,
@@ -98,9 +108,9 @@ export const SeccionChecklist = ({
         };
     }, [stream]);
 
-    // Función auxiliar para verificar si un dren específico ya tiene sus 3 respuestas completadas
     const esDrenCompleto = (numDren: number) => {
-        return itemsCombustible.every(item => respuestas[`${item} - Dren ${numDren}`]);
+        const nombreDren = NOMBRES_DRENES[numDren] || `${numDren}`;
+        return itemsCombustible.every(item => respuestas[`${item} - Dren ${nombreDren.toLowerCase()}`]);
     };
 
     return (
@@ -123,32 +133,39 @@ export const SeccionChecklist = ({
                 </div>
             ))}
 
-            {/* 2. NUEVA SECCIÓN: PRUEBAS DE CALIDAD CON TABS PARA 6 DRENES */}
+            {/* 2. NUEVA SECCIÓN: PRUEBAS DE CALIDAD CON TABS PARA LOS DRENES */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <h2 className="bg-gray-50 px-4 py-2 text-blue-800 font-bold text-xs uppercase border-b">
                     Pruebas de Calidad de Combustible
                 </h2>
 
                 {/* Navegación de Sub-Tabs para los Drenes */}
-                <div className="flex border-b overflow-x-auto bg-slate-50/50 p-2 gap-1 custom-scrollbar">
+                <div className="flex border-b overflow-x-auto bg-slate-50/50 p-2 gap-1.5 custom-scrollbar">
                     {Array.from({ length: totalDrenes }, (_, i) => i + 1).map((num) => {
                         const activo = drenActivo === num;
                         const completo = esDrenCompleto(num);
+                        const nombreDren = NOMBRES_DRENES[num] || `Dren ${num}`;
+
                         return (
                             <button
                                 key={num}
                                 type="button"
                                 onClick={() => setDrenActivo(num)}
-                                className={`flex-1 min-w-[75px] py-2 px-1 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 border ${
+                                className={`flex-1 min-w-[110px] py-2 px-2 rounded-lg transition-all flex flex-col items-center justify-center gap-1 border ${
                                     activo
                                         ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
                                         : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'
                                 }`}
                             >
-                                {completo && (
-                                    <span className={`w-1.5 h-1.5 rounded-full ${activo ? 'bg-white' : 'bg-green-500'}`} />
-                                )}
-                                DREN {num}
+                                <div className="flex items-center gap-1 text-[11px] font-bold">
+                                    {completo && (
+                                        <span className={`w-1.5 h-1.5 rounded-full ${activo ? 'bg-white' : 'bg-green-500'}`} />
+                                    )}
+                                    DREN {num}
+                                </div>
+                                <span className={`text-[9px] text-center leading-tight truncate w-full ${activo ? 'text-blue-100' : 'text-slate-400'}`}>
+                                    {nombreDren}
+                                </span>
                             </button>
                         );
                     })}
@@ -157,13 +174,15 @@ export const SeccionChecklist = ({
                 {/* Items del Dren Seleccionado */}
                 <div className="divide-y divide-gray-50 bg-white">
                     {itemsCombustible.map((item: string, idx: number) => {
-                        // Generamos un identificador único por dren (Ej: "Bomba - Dren 1")
-                        const llaveUnica = `${item} - Dren ${drenActivo}`;
+                        const nombreDrenActual = NOMBRES_DRENES[drenActivo] || `${drenActivo}`;
+                        const llaveUnica = `${item} - Dren ${nombreDrenActual.toLowerCase()}`;
                         return (
                             <div key={idx} className="flex items-center justify-between p-4">
                                 <div className="flex flex-col">
                                     <span className="text-sm text-gray-600 font-medium">{item}</span>
-                                    <span className="text-[10px] text-blue-500 font-bold uppercase tracking-wider">Evaluando Dren {drenActivo}</span>
+                                    <span className="text-[10px] text-blue-500 font-bold uppercase tracking-wider">
+                                        Evaluando Dren {drenActivo}: {nombreDrenActual}
+                                    </span>
                                 </div>
                                 <div className="flex bg-gray-100 rounded-lg p-1">
                                     <button

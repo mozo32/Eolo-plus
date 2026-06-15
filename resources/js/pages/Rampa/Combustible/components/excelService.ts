@@ -6,12 +6,22 @@ const MESES = [
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
 
+// Diccionario con los nombres específicos de cada dren
+const NOMBRES_DRENES: Record<number, string> = {
+    1: "Delantero del tanque",
+    2: "Strainer",
+    3: "Succión auxiliar",
+    4: "Trasero del tanque",
+    5: "Entrada a elementos filtrantes",
+    6: "Salida de elementos filtrantes"
+};
+
 const obtenerMes = (fecha: string) => {
     const d = parsearFechaSegura(fecha);
     return d ? MESES[d.getMonth()] : '';
 };
 
-// Nueva función para evitar que JavaScript altere o desfase la fecha/hora
+// Función para evitar que JavaScript altere o desfase la fecha/hora
 const parsearFechaSegura = (fechaStr: string): Date | null => {
     if (!fechaStr) return null;
     // Espera formato "YYYY-MM-DD HH:mm:ss"
@@ -42,7 +52,7 @@ const estiloHeader = (cell: ExcelJS.Cell) => {
 };
 
 const estiloFila = (cell: ExcelJS.Cell) => {
-    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
     cell.border = {
         top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
         left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
@@ -51,7 +61,7 @@ const estiloFila = (cell: ExcelJS.Cell) => {
     };
 };
 
-// MODIFICADO: Formato de fecha corregido a 24 Horas (hh:mm:ss sin AM/PM)
+// Formato de fecha corregido a 24 Horas (hh:mm:ss sin AM/PM)
 const aplicarFormatoFecha = (cell: ExcelJS.Cell) => {
     if (cell.value instanceof Date) {
         cell.numFmt = 'dd/mm/yyyy hh:mm:ss';
@@ -128,7 +138,8 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
     wsA.mergeCells('A2:G2');
     wsA.getCell('A2').value = `Generado: ${new Date().toLocaleString()}`;
 
-    const headersA = ['ID', 'MES', 'FECHA', 'N° DREN', 'TOMA MUESTRA', 'CLARIDAD', 'SÓLIDOS/AGUA'];
+    // Cambiamos "N° DREN" por "NOMBRE DEL DREN"
+    const headersA = ['ID', 'MES', 'FECHA', 'NOMBRE DEL DREN', 'TOMA MUESTRA', 'CLARIDAD', 'SÓLIDOS/AGUA'];
     const headerRowA = wsA.addRow(headersA);
     headerRowA.eachCell(estiloHeader);
 
@@ -154,11 +165,14 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
                 const claridad = item[`prueba_claridad_brillantez_dren_${i}`];
                 const solidosAgua = item[`presencia_solidos_agua_dren_${i}`];
 
+                // Obtenemos el nombre descriptivo. Ej: "Dren 1: Delantero del tanque"
+                const nombreDren = NOMBRES_DRENES[i] ? `Dren ${i}: ${NOMBRES_DRENES[i]}` : `Dren ${i}`;
+
                 const filaDren = [
                     item.id,
                     mes,
                     fechaObjeto,
-                    `Dren ${i}`,
+                    nombreDren, // Se inserta el nombre descriptivo aquí
                     tomaMuestra || '',
                     claridad || '',
                     solidosAgua || ''
@@ -171,8 +185,9 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
         });
     });
 
+    // Se ajustó el ancho de la columna del dren (de 15 a 30) para que quepa el nuevo nombre
     wsA.columns = [
-        { width: 10 }, { width: 15 }, { width: 25 }, { width: 15 }, { width: 20 }, { width: 20 }, { width: 20 }
+        { width: 10 }, { width: 15 }, { width: 25 }, { width: 30 }, { width: 20 }, { width: 20 }, { width: 20 }
     ];
 
     /* =========================

@@ -38,10 +38,18 @@ const Visor3DReadonly = ({ marcas }: { marcas: Marca3D[] }) => {
     );
 };
 
+// 1. AÑADIMOS EL DICCIONARIO DE NOMBRES
+const NOMBRES_DRENES: Record<number, string> = {
+    1: "Delantero del tanque",
+    2: "Strainer",
+    3: "Succión auxiliar",
+    4: "Trasero del tanque",
+    5: "Entrada a elementos filtrantes",
+    6: "Salida de elementos filtrantes"
+};
+
 export const DetalleTurnoAutotanque = ({ data }: Props) => {
     const [activeTab, setActiveTab] = useState<'balance' | 'checklist' | 'final'>('balance');
-
-    // NUEVO: Estado para alternar la vista entre los 6 drenes en la pestaña de Checklist
     const [drenActivo, setDrenActivo] = useState<number>(1);
 
     const source = data?.turno ? data : (data?.data?.turno ? data.data : data);
@@ -286,15 +294,13 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                                 </div>
                             </div>
 
-                            {/* MODIFICADO: Pruebas de Calidad de Combustible integrando Sub-Tabs de Lectura */}
                             <div className="bg-slate-50/60 p-4 rounded-xl border border-slate-100 flex flex-col justify-between">
                                 <div>
                                     <h5 className="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-wider">
                                         Pruebas de Calidad de Combustible
                                     </h5>
 
-                                    {/* Sub-navegador de Drenes (1 al 6) */}
-                                    <div className="flex border border-slate-200 bg-white p-1 rounded-lg gap-0.5 mb-4 overflow-x-auto">
+                                    <div className="flex border border-slate-200 bg-white p-1 rounded-lg gap-0.5 mb-4 overflow-x-auto custom-scrollbar">
                                         {[1, 2, 3, 4, 5, 6].map((num) => (
                                             <button
                                                 key={num}
@@ -313,16 +319,26 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
 
                                     <div className="space-y-1.5">
                                         {gruposChecklist.calidadCombustible.map(item => {
-                                            const llaveCompuesta = `${item} - Dren ${drenActivo}`;
-                                            const valorRespuesta = respuestas[llaveCompuesta];
+                                            // 2. EXTRAEMOS EL NOMBRE ACTUAL Y CREAMOS LA LLAVE NUEVA
+                                            const nombreDrenActual = NOMBRES_DRENES[drenActivo] || `${drenActivo}`;
+                                            const llaveCompuesta = `${item} - Dren ${nombreDrenActual.toLowerCase()}`;
+
+                                            // 3. LÓGICA DE FALLBACK (Priorizamos nombre nuevo, si no, intentamos con el número)
+                                            let valorRespuesta = respuestas[llaveCompuesta];
+                                            if (!valorRespuesta && respuestas[`${item} - Dren ${drenActivo}`]) {
+                                                valorRespuesta = respuestas[`${item} - Dren ${drenActivo}`];
+                                            }
 
                                             return (
                                                 <div key={item} className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 text-[10px]">
                                                     <div className="flex flex-col max-w-[70%]">
                                                         <span className="font-bold text-slate-600 truncate">{item}</span>
-                                                        <span className="text-[8px] text-indigo-500 font-bold tracking-tight">Drenaje número {drenActivo}</span>
+                                                        <span className="text-[8px] text-indigo-500 font-bold tracking-tight">
+                                                            {/* 4. MOSTRAMOS EL NOMBRE EN EL SUBTÍTULO */}
+                                                            Evaluando Dren {drenActivo}: {nombreDrenActual}
+                                                        </span>
                                                     </div>
-                                                    <span className={`font-black uppercase px-2 py-0.5 rounded ${valorRespuesta === 'Ok' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                    <span className={`font-black uppercase px-2 py-0.5 rounded ${valorRespuesta === 'Ok' ? 'bg-emerald-50 text-emerald-600' : (valorRespuesta === 'No' ? 'bg-rose-50 text-rose-600' : 'bg-slate-100 text-slate-400')}`}>
                                                         {valorRespuesta || '---'}
                                                     </span>
                                                 </div>
