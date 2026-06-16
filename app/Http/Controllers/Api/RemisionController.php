@@ -400,12 +400,12 @@ class RemisionController extends Controller
 
         config([
             'mail.default' => 'smtp',
-            'mail.mailers.smtp.host' => 'smtp.gmail.com',
+            'mail.mailers.smtp.host' => 'smtp-mail.outlook.com',
             'mail.mailers.smtp.port' => 587,
             'mail.mailers.smtp.encryption' => 'tls',
-            'mail.mailers.smtp.username' => 'mozorodriguez32@gmail.com',
-            'mail.mailers.smtp.password' => 'truaoxrvmrxxsxnn',
-            'mail.from.address' => 'mozorodriguez32@gmail.com',
+            'mail.mailers.smtp.username' => 'facturacion@eolo.com.mx',
+            'mail.mailers.smtp.password' => 'F4ctur4c1on@',
+            'mail.from.address' => 'facturacion@eolo.com.mx',
             'mail.from.name' => 'Eolo Plus',
         ]);
 
