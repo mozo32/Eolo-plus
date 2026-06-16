@@ -1,23 +1,22 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { showAutotanque } from "@/stores/apiAutoTanque";
 import Swal from "sweetalert2";
 import { Document, Page, Text, View, StyleSheet, pdf, Image } from "@react-pdf/renderer";
-import { Canvas, useThree } from '@react-three/fiber';
-import { useGLTF } from '@react-three/drei';
-import * as THREE from 'three';
+import { Canvas, useLoader, useThree } from "@react-three/fiber";
+import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
+import * as THREE from "three";
 
 const GREEN = "#003E51";
 const BORDER = "#111111";
 const GRAY_TEXT = "#374151";
 
-interface ImageItem {
-    id: number;
-    path: string;
-    pivot?: {
-        tag?: string;
-        observacion?: string;
-    };
-}
+const MODELO_DIR = "/models/Meshy_AI_Jet_A1_Aviation_Fuel__0615234341_texture_obj/";
+const MODELO_OBJ = `${MODELO_DIR}Meshy_AI_Jet_A1_Aviation_Fuel__0615234341_texture.obj`;
+const MODELO_MTL = `${MODELO_DIR}Meshy_AI_Jet_A1_Aviation_Fuel__0615234341_texture.mtl`;
+
+useLoader.preload(MTLLoader, MODELO_MTL);
+useLoader.preload(OBJLoader, MODELO_OBJ);
 
 const styles = StyleSheet.create({
     headerLogo: {
@@ -25,49 +24,253 @@ const styles = StyleSheet.create({
         height: 45,
         objectFit: "contain",
     },
-    page: { padding: 20, fontSize: 9, color: "#111827", fontFamily: "Helvetica", backgroundColor: "#ffffff" },
-    headerWrap: { flexDirection: "row", borderWidth: 2, borderColor: BORDER, marginBottom: 8 },
-    headerLeft: { width: 95, color: "#ffffff", justifyContent: "center", alignItems: "center", paddingVertical: 10 },
-    headerLeftText: { fontSize: 16, fontWeight: "bold" as any, letterSpacing: 4 },
-    headerMid: { flex: 1, paddingVertical: 6, paddingHorizontal: 10, justifyContent: "center" },
-    headerTitle: { fontSize: 11, fontWeight: "bold" as any, textTransform: "uppercase", marginBottom: 2 },
-    headerSub: { fontSize: 8, color: GRAY_TEXT },
-    fieldsWrap: { borderWidth: 2, borderColor: BORDER, marginBottom: 8 },
-    fieldsRow: { flexDirection: "row", borderBottomWidth: 1, borderColor: BORDER },
-    fieldCell: { flex: 1, borderRightWidth: 1, borderColor: BORDER, paddingVertical: 4, paddingHorizontal: 6 },
-    fieldCellLast: { borderRightWidth: 0 },
-    label: { fontSize: 7, fontWeight: "bold" as any, textTransform: "uppercase", color: "#111", marginBottom: 1 },
-    value: { fontSize: 9, fontWeight: "bold" as any, textTransform: "uppercase" },
-    boxTitle: { fontSize: 9, fontWeight: "bold" as any, textTransform: "uppercase", color: GREEN, marginBottom: 4, marginTop: 8 },
-    inspeccionBox: { borderWidth: 2, borderColor: BORDER, padding: 8, marginBottom: 8 },
-    checklistGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 5, borderTopWidth: 1, borderColor: "#eee", paddingTop: 5 },
-    checkItem: { width: "33%", fontSize: 7, marginBottom: 3 },
-    damageContainer: { width: '100%', marginTop: 10, alignSelf: 'center', borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc', padding: 10 },
-
-    leyendaContainer: { flexDirection: 'row', justifyContent: 'center', gap: 30, marginBottom: 12, padding: 6, backgroundColor: '#ffffff', borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0' },
-    leyendaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    dotRojo: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#ef4444' },
-    dotAmarillo: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#f59e0b' },
-    leyendaText: { fontSize: 8, fontWeight: 'bold' as any, textTransform: 'uppercase' },
-
-    capturasGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
-    capturaImg: { width: 250, height: 180, borderWidth: 1, borderColor: '#cbd5e1', objectFit: 'cover' },
-
-    tableWrap: { borderWidth: 2, borderColor: BORDER },
-    tableHeader: { flexDirection: "row", backgroundColor: "#e5e7eb", borderBottomWidth: 1, borderColor: BORDER },
-    th: { paddingVertical: 4, fontSize: 7.5, fontWeight: "bold" as any, textTransform: "uppercase", borderRightWidth: 1, borderColor: BORDER, textAlign: "center" },
-    tr: { flexDirection: "row", borderBottomWidth: 1, borderColor: BORDER },
-    td: { paddingVertical: 4, fontSize: 8, borderRightWidth: 1, borderColor: BORDER, textAlign: "center" },
-    balanceBox: { marginTop: 10, flexDirection: "row", justifyContent: "flex-end", gap: 10 },
-    balanceCard: { borderWidth: 2, borderColor: BORDER, padding: 6, minWidth: 100, alignItems: "center" },
-    evidenciasTitle: { fontSize: 9, fontWeight: "bold" as any, textTransform: "uppercase", color: GREEN, marginTop: 15, marginBottom: 5 },
-    evidenciasGrid: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
-    evidenciaImage: { width: 130, height: 100, borderWidth: 1, borderColor: BORDER, objectFit: 'cover' },
-    firmasSection: { flexDirection: "row", justifyContent: "space-around", marginTop: 30, paddingBottom: 20 },
-    firmaBox: { alignItems: "center", width: 150 },
-    firmaImage: { width: 120, height: 60, marginBottom: 5 },
-    firmaLine: { width: "100%", borderTopWidth: 1, borderColor: BORDER, marginTop: 2 },
-    firmaLabel: { fontSize: 7, fontWeight: "bold" as any, textTransform: "uppercase", marginTop: 4, textAlign: 'center' }
+    page: {
+        padding: 20,
+        fontSize: 9,
+        color: "#111827",
+        fontFamily: "Helvetica",
+        backgroundColor: "#ffffff",
+    },
+    headerWrap: {
+        flexDirection: "row",
+        borderWidth: 2,
+        borderColor: BORDER,
+        marginBottom: 8,
+    },
+    headerLeft: {
+        width: 95,
+        color: "#ffffff",
+        justifyContent: "center",
+        alignItems: "center",
+        paddingVertical: 10,
+    },
+    headerLeftText: {
+        fontSize: 16,
+        fontWeight: "bold" as any,
+        letterSpacing: 4,
+    },
+    headerMid: {
+        flex: 1,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        justifyContent: "center",
+    },
+    headerTitle: {
+        fontSize: 11,
+        fontWeight: "bold" as any,
+        textTransform: "uppercase",
+        marginBottom: 2,
+    },
+    headerSub: {
+        fontSize: 8,
+        color: GRAY_TEXT,
+    },
+    fieldsWrap: {
+        borderWidth: 2,
+        borderColor: BORDER,
+        marginBottom: 8,
+    },
+    fieldsRow: {
+        flexDirection: "row",
+        borderBottomWidth: 1,
+        borderColor: BORDER,
+    },
+    fieldCell: {
+        flex: 1,
+        borderRightWidth: 1,
+        borderColor: BORDER,
+        paddingVertical: 4,
+        paddingHorizontal: 6,
+    },
+    fieldCellLast: {
+        borderRightWidth: 0,
+    },
+    label: {
+        fontSize: 7,
+        fontWeight: "bold" as any,
+        textTransform: "uppercase",
+        color: "#111",
+        marginBottom: 1,
+    },
+    value: {
+        fontSize: 9,
+        fontWeight: "bold" as any,
+        textTransform: "uppercase",
+    },
+    boxTitle: {
+        fontSize: 9,
+        fontWeight: "bold" as any,
+        textTransform: "uppercase",
+        color: GREEN,
+        marginBottom: 4,
+        marginTop: 8,
+    },
+    inspeccionBox: {
+        borderWidth: 2,
+        borderColor: BORDER,
+        padding: 8,
+        marginBottom: 8,
+    },
+    checklistGrid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        marginTop: 5,
+        borderTopWidth: 1,
+        borderColor: "#eee",
+        paddingTop: 5,
+    },
+    checkItem: {
+        width: "33%",
+        fontSize: 7,
+        marginBottom: 3,
+    },
+    damageContainer: {
+        width: "100%",
+        marginTop: 10,
+        alignSelf: "center",
+        borderWidth: 1,
+        borderColor: "#e5e7eb",
+        backgroundColor: "#f8fafc",
+        padding: 10,
+    },
+    leyendaContainer: {
+        flexDirection: "row",
+        justifyContent: "center",
+        gap: 30,
+        marginBottom: 12,
+        padding: 6,
+        backgroundColor: "#ffffff",
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: "#e2e8f0",
+    },
+    leyendaItem: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+    },
+    dotRojo: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        backgroundColor: "#ef4444",
+    },
+    dotAmarillo: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        backgroundColor: "#f59e0b",
+    },
+    leyendaText: {
+        fontSize: 8,
+        fontWeight: "bold" as any,
+        textTransform: "uppercase",
+    },
+    capturasGrid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 10,
+        justifyContent: "center",
+    },
+    capturaImg: {
+        width: 250,
+        height: 180,
+        borderWidth: 1,
+        borderColor: "#cbd5e1",
+        objectFit: "cover",
+    },
+    tableWrap: {
+        borderWidth: 2,
+        borderColor: BORDER,
+    },
+    tableHeader: {
+        flexDirection: "row",
+        backgroundColor: "#e5e7eb",
+        borderBottomWidth: 1,
+        borderColor: BORDER,
+    },
+    th: {
+        paddingVertical: 4,
+        fontSize: 7.5,
+        fontWeight: "bold" as any,
+        textTransform: "uppercase",
+        borderRightWidth: 1,
+        borderColor: BORDER,
+        textAlign: "center",
+    },
+    tr: {
+        flexDirection: "row",
+        borderBottomWidth: 1,
+        borderColor: BORDER,
+    },
+    td: {
+        paddingVertical: 4,
+        fontSize: 8,
+        borderRightWidth: 1,
+        borderColor: BORDER,
+        textAlign: "center",
+    },
+    balanceBox: {
+        marginTop: 10,
+        flexDirection: "row",
+        justifyContent: "flex-end",
+        gap: 10,
+    },
+    balanceCard: {
+        borderWidth: 2,
+        borderColor: BORDER,
+        padding: 6,
+        minWidth: 100,
+        alignItems: "center",
+    },
+    evidenciasTitle: {
+        fontSize: 9,
+        fontWeight: "bold" as any,
+        textTransform: "uppercase",
+        color: GREEN,
+        marginTop: 15,
+        marginBottom: 5,
+    },
+    evidenciasGrid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 5,
+    },
+    evidenciaImage: {
+        width: 130,
+        height: 100,
+        borderWidth: 1,
+        borderColor: BORDER,
+        objectFit: "cover",
+    },
+    firmasSection: {
+        flexDirection: "row",
+        justifyContent: "space-around",
+        marginTop: 30,
+        paddingBottom: 20,
+    },
+    firmaBox: {
+        alignItems: "center",
+        width: 150,
+    },
+    firmaImage: {
+        width: 120,
+        height: 60,
+        marginBottom: 5,
+    },
+    firmaLine: {
+        width: "100%",
+        borderTopWidth: 1,
+        borderColor: BORDER,
+        marginTop: 2,
+    },
+    firmaLabel: {
+        fontSize: 7,
+        fontWeight: "bold" as any,
+        textTransform: "uppercase",
+        marginTop: 4,
+        textAlign: "center",
+    },
 });
 
 function Watermark({ src }: { src: string }) {
@@ -82,13 +285,19 @@ function Watermark({ src }: { src: string }) {
                 width: 500,
                 height: 500,
                 opacity: 0.1,
-                zIndex: -1
+                zIndex: -1,
             }}
         />
     );
 }
 
-function AutotanquePdfDoc({ detalle, capturas3D }: { detalle: any, capturas3D: string[] }) {
+function AutotanquePdfDoc({
+    detalle,
+    capturas3D,
+}: {
+    detalle: any;
+    capturas3D: string[];
+}) {
     const turno = detalle?.data?.turno || {};
     const inspeccion = detalle?.data?.inspeccion || turno?.inspeccion;
     const remisiones = Array.isArray(detalle?.data?.remision) ? detalle.data.remision : [];
@@ -96,10 +305,11 @@ function AutotanquePdfDoc({ detalle, capturas3D }: { detalle: any, capturas3D: s
     const firmas = Array.isArray(inspeccion?.firmas) ? inspeccion.firmas : [];
     const fotos = Array.isArray(inspeccion?.imagenes) ? inspeccion.imagenes : [];
     const logoUrl = `${window.location.origin}/54657b8c-8428-41cc-a654-794ca81943d6.jpg`;
+
     const getFullUrl = (path: string) => {
-        if (!path) return '';
-        if (path.startsWith('http') || path.startsWith('data:image')) return path;
-        return `${window.location.origin}/storage/${path.replace('public/', '')}`;
+        if (!path) return "";
+        if (path.startsWith("http") || path.startsWith("data:image")) return path;
+        return `${window.location.origin}/storage/${path.replace("public/", "")}`;
     };
 
     return (
@@ -111,37 +321,83 @@ function AutotanquePdfDoc({ detalle, capturas3D }: { detalle: any, capturas3D: s
                     <View style={styles.headerLeft}>
                         <Image src={logoUrl} style={styles.headerLogo} />
                     </View>
+
                     <View style={styles.headerMid}>
                         <Text style={styles.headerTitle}>Reporte de Turno Autotanque</Text>
-                        <Text style={styles.headerSub}>Folio Turno: #{turno.id || "N/A"} · Fecha: {turno.fecha || "N/A"}</Text>
+                        <Text style={styles.headerSub}>
+                            Folio Turno: #{turno.id || "N/A"} · Fecha: {turno.fecha || "N/A"}
+                        </Text>
                     </View>
                 </View>
 
                 <View style={styles.fieldsWrap}>
                     <View style={styles.fieldsRow}>
-                        <View style={styles.fieldCell}><Text style={styles.label}>Responsable Apertura</Text><Text style={styles.value}>{turno.nombre || "-"}</Text></View>
-                        <View style={styles.fieldCell}><Text style={styles.label}>Litros Iniciales</Text><Text style={styles.value}>{Number(turno.litrosIni || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L</Text></View>
+                        <View style={styles.fieldCell}>
+                            <Text style={styles.label}>Responsable Apertura</Text>
+                            <Text style={styles.value}>{turno.nombre || "-"}</Text>
+                        </View>
+
+                        <View style={styles.fieldCell}>
+                            <Text style={styles.label}>Litros Iniciales</Text>
+                            <Text style={styles.value}>
+                                {Number(turno.litrosIni || 0).toLocaleString("en-US", {
+                                    maximumFractionDigits: 0,
+                                })}{" "}
+                                L
+                            </Text>
+                        </View>
                     </View>
+
                     <View style={[styles.fieldsRow, { borderBottomWidth: 0 }]}>
-                        <View style={styles.fieldCell}><Text style={styles.label}>Responsable Cierre</Text><Text style={styles.value}>{turno.nombreCierre || "-"}</Text></View>
-                        <View style={styles.fieldCell}><Text style={styles.label}>Litros Finales</Text><Text style={styles.value}>{Number(turno.litrosCierre || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L</Text></View>
+                        <View style={styles.fieldCell}>
+                            <Text style={styles.label}>Responsable Cierre</Text>
+                            <Text style={styles.value}>{turno.nombreCierre || "-"}</Text>
+                        </View>
+
+                        <View style={styles.fieldCell}>
+                            <Text style={styles.label}>Litros Finales</Text>
+                            <Text style={styles.value}>
+                                {Number(turno.litrosCierre || 0).toLocaleString("en-US", {
+                                    maximumFractionDigits: 0,
+                                })}{" "}
+                                L
+                            </Text>
+                        </View>
                     </View>
                 </View>
 
                 {inspeccion && (
                     <>
                         <Text style={styles.boxTitle}>Inspección de Unidad (Checklist)</Text>
+
                         <View style={styles.inspeccionBox}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                            <View
+                                style={{
+                                    flexDirection: "row",
+                                    justifyContent: "space-between",
+                                    marginBottom: 4,
+                                }}
+                            >
                                 <Text style={styles.label}>Operador: {inspeccion.operador}</Text>
                                 <Text style={styles.label}>KM: {inspeccion.kilometraje}</Text>
-                                <Text style={styles.label}>Combustible: {inspeccion.porcentaje_combustible}%</Text>
+                                <Text style={styles.label}>
+                                    Combustible: {inspeccion.porcentaje_combustible}%
+                                </Text>
                             </View>
 
                             <View style={styles.checklistGrid}>
                                 {Object.entries(inspeccion.checklist_respuestas || {}).map(([key, val], i) => (
                                     <View key={i} style={styles.checkItem}>
-                                        <Text>• {key}: <Text style={{ color: val === 'Ok' ? '#065f46' : '#991b1b' }}>{val as string}</Text></Text>
+                                        <Text>
+                                            • {key}:{" "}
+                                            <Text
+                                                style={{
+                                                    color: val === "Ok" ? "#065f46" : "#991b1b",
+                                                }}
+                                            >
+                                                {val as string}
+                                            </Text>
+                                        </Text>
                                     </View>
                                 ))}
                             </View>
@@ -154,11 +410,13 @@ function AutotanquePdfDoc({ detalle, capturas3D }: { detalle: any, capturas3D: s
                                                 <View style={styles.dotRojo} />
                                                 <Text style={styles.leyendaText}>Faltante</Text>
                                             </View>
+
                                             <View style={styles.leyendaItem}>
                                                 <View style={styles.dotAmarillo} />
                                                 <Text style={styles.leyendaText}>Daño</Text>
                                             </View>
                                         </View>
+
                                         <View style={styles.capturasGrid}>
                                             {capturas3D.map((src, idx) => (
                                                 <Image key={idx} src={src} style={styles.capturaImg} />
@@ -166,8 +424,17 @@ function AutotanquePdfDoc({ detalle, capturas3D }: { detalle: any, capturas3D: s
                                         </View>
                                     </>
                                 ) : (
-                                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 20 }}>
-                                        <Text style={{ color: '#9ca3af' }}>No se adjuntó captura del modelo 3D de los daños.</Text>
+                                    <View
+                                        style={{
+                                            flex: 1,
+                                            justifyContent: "center",
+                                            alignItems: "center",
+                                            paddingVertical: 20,
+                                        }}
+                                    >
+                                        <Text style={{ color: "#9ca3af" }}>
+                                            No se adjuntó captura del modelo 3D de los daños.
+                                        </Text>
                                     </View>
                                 )}
                             </View>
@@ -176,6 +443,7 @@ function AutotanquePdfDoc({ detalle, capturas3D }: { detalle: any, capturas3D: s
                 )}
 
                 <Text style={styles.boxTitle}>Remisiones de Combustible</Text>
+
                 <View style={styles.tableWrap}>
                     <View style={styles.tableHeader}>
                         <Text style={[styles.th, { width: "15%" }]}>Folio</Text>
@@ -183,29 +451,88 @@ function AutotanquePdfDoc({ detalle, capturas3D }: { detalle: any, capturas3D: s
                         <Text style={[styles.th, { width: "25%" }]}>Matrícula</Text>
                         <Text style={[styles.th, { width: "20%", borderRightWidth: 0 }]}>Total Lts</Text>
                     </View>
-                    {remisiones.length > 0 ? remisiones.map((r: any, idx: number) => (
-                        <View key={idx} style={styles.tr}>
-                            <Text style={[styles.td, { width: "15%" }]}>{r.folio}</Text>
-                            <Text style={[styles.td, { width: "40%", textAlign: "left", paddingLeft: 4 }]}>{r.cliente}</Text>
-                            <Text style={[styles.td, { width: "25%" }]}>{r.matricula}</Text>
-                            <Text style={[styles.td, { width: "20%", borderRightWidth: 0, fontWeight: "bold" as any }]}>{r.total_litros}</Text>
+
+                    {remisiones.length > 0 ? (
+                        remisiones.map((r: any, idx: number) => (
+                            <View key={idx} style={styles.tr}>
+                                <Text style={[styles.td, { width: "15%" }]}>{r.folio}</Text>
+                                <Text
+                                    style={[
+                                        styles.td,
+                                        {
+                                            width: "40%",
+                                            textAlign: "left",
+                                            paddingLeft: 4,
+                                        },
+                                    ]}
+                                >
+                                    {r.cliente}
+                                </Text>
+                                <Text style={[styles.td, { width: "25%" }]}>{r.matricula}</Text>
+                                <Text
+                                    style={[
+                                        styles.td,
+                                        {
+                                            width: "20%",
+                                            borderRightWidth: 0,
+                                            fontWeight: "bold" as any,
+                                        },
+                                    ]}
+                                >
+                                    {r.total_litros}
+                                </Text>
+                            </View>
+                        ))
+                    ) : (
+                        <View style={styles.tr}>
+                            <Text
+                                style={[
+                                    styles.td,
+                                    {
+                                        width: "100%",
+                                        borderRightWidth: 0,
+                                    },
+                                ]}
+                            >
+                                No hay remisiones registradas
+                            </Text>
                         </View>
-                    )) : (
-                        <View style={styles.tr}><Text style={[styles.td, { width: "100%", borderRightWidth: 0 }]}>No hay remisiones registradas</Text></View>
                     )}
                 </View>
 
                 <View style={styles.balanceBox}>
-                    <View style={styles.balanceCard}><Text style={styles.label}>Total Vendido</Text><Text style={[styles.value, { color: GREEN }]}>{Number(turno.totalVendidos || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L</Text></View>
-                    <View style={styles.balanceCard}><Text style={styles.label}>Diferencia Final</Text><Text style={[styles.value, { color: "#dc2626" }]}>{Number(turno.diferenciaFinal || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} L</Text></View>
+                    <View style={styles.balanceCard}>
+                        <Text style={styles.label}>Total Vendido</Text>
+                        <Text style={[styles.value, { color: GREEN }]}>
+                            {Number(turno.totalVendidos || 0).toLocaleString("en-US", {
+                                maximumFractionDigits: 0,
+                            })}{" "}
+                            L
+                        </Text>
+                    </View>
+
+                    <View style={styles.balanceCard}>
+                        <Text style={styles.label}>Diferencia Final</Text>
+                        <Text style={[styles.value, { color: "#dc2626" }]}>
+                            {Number(turno.diferenciaFinal || 0).toLocaleString("en-US", {
+                                maximumFractionDigits: 0,
+                            })}{" "}
+                            L
+                        </Text>
+                    </View>
                 </View>
 
                 {fotos.length > 0 && (
                     <View>
                         <Text style={styles.evidenciasTitle}>Evidencias Fotográficas</Text>
+
                         <View style={styles.evidenciasGrid}>
                             {fotos.map((foto: any, idx: number) => (
-                                <Image key={idx} src={getFullUrl(foto.path)} style={styles.evidenciaImage} />
+                                <Image
+                                    key={idx}
+                                    src={getFullUrl(foto.path)}
+                                    style={styles.evidenciaImage}
+                                />
                             ))}
                         </View>
                     </View>
@@ -217,7 +544,9 @@ function AutotanquePdfDoc({ detalle, capturas3D }: { detalle: any, capturas3D: s
                             <View key={idx} style={styles.firmaBox}>
                                 <Image src={getFullUrl(firma.path)} style={styles.firmaImage} />
                                 <View style={styles.firmaLine} />
-                                <Text style={styles.firmaLabel}>{firma.pivot?.tag || "Firma Autorizada"}</Text>
+                                <Text style={styles.firmaLabel}>
+                                    {firma.pivot?.tag || "Firma Autorizada"}
+                                </Text>
                             </View>
                         ))}
                     </View>
@@ -227,87 +556,254 @@ function AutotanquePdfDoc({ detalle, capturas3D }: { detalle: any, capturas3D: s
     );
 }
 
-const CaptureScene = ({ danos, onComplete }: { danos: any[], onComplete: (photos: string[]) => void }) => {
+const CaptureScene = ({
+    danos,
+    onComplete,
+}: {
+    danos: any[];
+    onComplete: (photos: string[]) => void;
+}) => {
     const { gl, camera, scene } = useThree();
-    const { scene: gltfScene } = useGLTF('/models/result.glb');
+
+    const materials = useLoader(MTLLoader, MODELO_MTL, (loader) => {
+        loader.setPath(MODELO_DIR);
+        loader.setResourcePath(MODELO_DIR);
+    });
+
+    const loadedObject = useLoader(OBJLoader, MODELO_OBJ, (loader) => {
+        materials.preload();
+        loader.setMaterials(materials);
+    });
+
     const meshesRef = useRef<(THREE.Mesh | null)[]>([]);
 
+    const object = useMemo(() => {
+        const clone = loadedObject.clone(true);
+
+        clone.position.set(0, 0, 0);
+        clone.rotation.set(0, 0, 0);
+        clone.scale.set(1, 1, 1);
+
+        clone.traverse((child: any) => {
+            if (child.isMesh) {
+                child.geometry.computeVertexNormals();
+                child.geometry.computeBoundingSphere();
+
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach((mat: any) => {
+                            mat.side = THREE.DoubleSide;
+                            mat.needsUpdate = true;
+                        });
+                    } else {
+                        child.material.side = THREE.DoubleSide;
+                        child.material.needsUpdate = true;
+                    }
+                } else {
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: "#777777",
+                        roughness: 0.7,
+                        metalness: 0.05,
+                        side: THREE.DoubleSide,
+                    });
+                }
+
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
+
+        const box = new THREE.Box3().setFromObject(clone);
+        const center = box.getCenter(new THREE.Vector3());
+
+        clone.position.sub(center);
+
+        return clone;
+    }, [loadedObject]);
+
     useEffect(() => {
+        let cancelado = false;
+
         const capture = async () => {
             const photos: string[] = [];
-            await new Promise(r => setTimeout(r, 800));
+
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+
+            if (!danos.length) {
+                onComplete([]);
+                return;
+            }
 
             for (let i = 0; i < danos.length; i++) {
-                meshesRef.current.forEach((m) => { if (m) m.visible = false; });
+                if (cancelado) return;
 
-                if (meshesRef.current[i]) meshesRef.current[i]!.visible = true;
+                meshesRef.current.forEach((mesh) => {
+                    if (mesh) mesh.visible = false;
+                });
+
+                if (meshesRef.current[i]) {
+                    meshesRef.current[i]!.visible = true;
+                }
 
                 const d = danos[i];
-                const target = new THREE.Vector3(d.x, d.y, d.z);
+                const target = new THREE.Vector3(Number(d.x), Number(d.y), Number(d.z));
+
+                object.localToWorld(target);
 
                 const dir = target.clone().normalize();
-                if (dir.lengthSq() === 0) dir.set(0, 0, 1);
 
-                // ZOOM EXTREMO: La multiplicamos por 1.2 en lugar de 3.5, y bajamos el offset vertical a 0.2
-                camera.position.copy(target.clone().add(dir.multiplyScalar(1.2)).add(new THREE.Vector3(0, 0.2, 0)));
+                if (dir.lengthSq() === 0) {
+                    dir.set(0, 0, 1);
+                }
+
+                camera.position.copy(
+                    target
+                        .clone()
+                        .add(dir.multiplyScalar(1.4))
+                        .add(new THREE.Vector3(0, 0.25, 0))
+                );
+
                 camera.lookAt(target);
 
                 gl.render(scene, camera);
-                await new Promise(r => setTimeout(r, 150));
-                photos.push(gl.domElement.toDataURL('image/png'));
+
+                await new Promise((resolve) => setTimeout(resolve, 180));
+
+                photos.push(gl.domElement.toDataURL("image/png"));
             }
-            onComplete(photos);
+
+            if (!cancelado) {
+                onComplete(photos);
+            }
         };
+
         capture();
-    }, [danos, camera, gl, scene, onComplete]);
+
+        return () => {
+            cancelado = true;
+        };
+    }, [danos, camera, gl, scene, onComplete, object]);
 
     return (
         <group>
-            <color attach="background" args={['#f8fafc']} />
-            <ambientLight intensity={0.7} />
-            <directionalLight position={[10, 10, 10]} intensity={1.5} />
-            <directionalLight position={[-10, 5, -10]} intensity={0.5} />
+            <color attach="background" args={["#f8fafc"]} />
 
-            <primitive object={gltfScene} scale={2.5} />
+            <ambientLight intensity={0.65} />
+            <directionalLight position={[10, 10, 10]} intensity={1.8} />
+            <directionalLight position={[-10, 5, -10]} intensity={0.8} />
+            <hemisphereLight intensity={0.7} groundColor="#e5e7eb" />
 
-            {danos.map((d, i) => (
-                <mesh key={i} position={[d.x, d.y, d.z]} ref={el => meshesRef.current[i] = el}>
-                    <sphereGeometry args={[0.15, 32, 32]} />
-                    <meshStandardMaterial
-                        color={d.tipo === 'X' ? "#ef4444" : "#f59e0b"}
-                        emissive={d.tipo === 'X' ? "#ef4444" : "#f59e0b"}
-                        emissiveIntensity={0.4}
-                    />
-                </mesh>
-            ))}
+            <primitive object={object}>
+                {danos.map((d, i) => (
+                    <mesh
+                        key={i}
+                        position={[Number(d.x), Number(d.y), Number(d.z)]}
+                        ref={(el) => {
+                            meshesRef.current[i] = el;
+                        }}
+                    >
+                        <sphereGeometry args={[0.03, 12, 12]} />
+                        <meshStandardMaterial
+                            color={d.tipo === "X" ? "#ef4444" : "#f59e0b"}
+                            emissive={d.tipo === "X" ? "#ef4444" : "#f59e0b"}
+                            emissiveIntensity={0.4}
+                        />
+                    </mesh>
+                ))}
+            </primitive>
         </group>
     );
 };
 
-const ModelCapturer = ({ danos, onComplete }: { danos: any[], onComplete: (photos: string[]) => void }) => {
+const ModelCapturer = ({
+    danos,
+    onComplete,
+}: {
+    danos: any[];
+    onComplete: (photos: string[]) => void;
+}) => {
     return (
-        <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '1024px', height: '768px' }}>
-            {/* FOV en 40 (en lugar del default 75) para evitar distorsión "ojo de pez" al estar muy cerca */}
-            <Canvas gl={{ preserveDrawingBuffer: true }} camera={{ fov: 40 }}>
+        <div
+            style={{
+                position: "absolute",
+                left: "-9999px",
+                top: "-9999px",
+                width: "1024px",
+                height: "768px",
+            }}
+        >
+            <Canvas
+                gl={{
+                    preserveDrawingBuffer: true,
+                    antialias: true,
+                    powerPreference: "high-performance",
+                }}
+                camera={{ fov: 40 }}
+            >
                 <CaptureScene danos={danos} onComplete={onComplete} />
             </Canvas>
         </div>
     );
 };
 
-export default function PdfExporterAutotanque({ id, onDone }: { id: number | null; onDone: () => void }) {
+export default function PdfExporterAutotanque({
+    id,
+    onDone,
+}: {
+    id: number | null;
+    onDone: () => void;
+}) {
     const [needsCapture, setNeedsCapture] = useState(false);
     const [dataToRender, setDataToRender] = useState<any>(null);
 
+    const generatePdf = async (detalle: any, fotos3D: string[]) => {
+        try {
+            const blob = await pdf(
+                <AutotanquePdfDoc detalle={detalle} capturas3D={fotos3D} />
+            ).toBlob();
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+
+            a.href = url;
+            a.download = `Reporte_Autotanque_${detalle.data.turno.id}.pdf`;
+            a.click();
+
+            URL.revokeObjectURL(url);
+
+            Swal.fire({
+                icon: "success",
+                title: "PDF Generado",
+                timer: 1500,
+                showConfirmButton: false,
+            });
+        } catch (error) {
+            Swal.fire("Error", "No se pudo generar el PDF", "error");
+        } finally {
+            onDone();
+        }
+    };
+
     useEffect(() => {
         if (!id) return;
+
         const fetchData = async () => {
-            Swal.fire({ title: "Generando Reporte", text: "Procesando capturas 3D...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            Swal.fire({
+                title: "Generando Reporte",
+                text: "Procesando capturas 3D...",
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading(),
+            });
+
             try {
                 const response = await showAutotanque(id);
-                if (!response?.data) throw new Error("Sin datos");
+
+                if (!response?.data) {
+                    throw new Error("Sin datos");
+                }
 
                 setDataToRender(response);
+
                 if (response.data.inspeccion?.danos_grafico?.length > 0) {
                     setNeedsCapture(true);
                 } else {
@@ -318,25 +814,9 @@ export default function PdfExporterAutotanque({ id, onDone }: { id: number | nul
                 onDone();
             }
         };
+
         fetchData();
     }, [id]);
-
-    const generatePdf = async (detalle: any, fotos3D: string[]) => {
-        try {
-            const blob = await pdf(<AutotanquePdfDoc detalle={detalle} capturas3D={fotos3D} />).toBlob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `Reporte_Autotanque_${detalle.data.turno.id}.pdf`;
-            a.click();
-            URL.revokeObjectURL(url);
-            Swal.fire({ icon: "success", title: "PDF Generado", timer: 1500, showConfirmButton: false });
-        } catch (error) {
-            Swal.fire("Error", "No se pudo generar el PDF", "error");
-        } finally {
-            onDone();
-        }
-    };
 
     if (needsCapture && dataToRender) {
         return (
