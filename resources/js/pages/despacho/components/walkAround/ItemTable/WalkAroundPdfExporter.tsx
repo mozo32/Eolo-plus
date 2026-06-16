@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
         backgroundColor: "#ffffff",
     },
     headerLogo: {
-        width: "100%",
+        width: 95,
         height: 45,
         objectFit: "contain",
     },
@@ -94,11 +94,13 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     headerLeft: {
-        width: 95,
+        width: 120,
         color: "#ffffff",
         justifyContent: "center",
-        alignItems: "center",
+        alignItems: "flex-start",
         paddingVertical: 10,
+        paddingLeft: 14,
+        paddingRight: 8,
     },
     headerLeftText: {
         fontSize: 16,
@@ -447,11 +449,12 @@ function Watermark({ src }: { src: string }) {
             src={src}
             style={{
                 position: "absolute",
-                top: 100,
+                top: 180,
                 left: 50,
                 width: 500,
                 height: 500,
-                opacity: 0.20,
+                opacity: 0.05,
+                zIndex: -1
             }}
         />
     );
@@ -556,7 +559,7 @@ function WalkAroundPdfDoc({
                             Reporte de Inspección de Aeronave
                         </Text>
                         <Text style={styles.headerSub}>
-                            WalkAround #{detalle.id} · Elabora {detalle.elabora ?? "-"} · N° Estáticas {detalle.numero_estaticas}
+                            WalkAround #{detalle.id} · Elabora: {detalle.elabora ?? "-"} · N° Estáticas {detalle.numero_estaticas}
                         </Text>
                     </View>
                 </View>

@@ -124,7 +124,7 @@ export default function WalkAroundResumen({ data }: Props) {
 
                 <div className="grid gap-3 text-sm md:grid-cols-3">
                     <div><b>Fecha:</b> {formatFecha(data.fecha)}</div>
-                    <div><b>Hora:</b> {data.hora || "—"}</div>
+                    <div><b>Hora:</b> {data.hora ? data.hora.slice(0, 5) : "—"}</div>
                     <div><b>Tipo:</b> {data.tipo}</div>
                     <div><b>Tipo de aeronave:</b> {data.tipoAeronave}</div>
                     <div><b>Destino:</b> {data.destino || "—"}</div>

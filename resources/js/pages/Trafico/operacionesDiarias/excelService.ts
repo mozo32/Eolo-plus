@@ -32,7 +32,27 @@ export const exportarOperacionesAExcel = async (
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Reporte de Operaciones');
 
-    worksheet.mergeCells('A1:L1');
+    const headers = [
+        'ID',
+        'TIPO',
+        'MATRÍCULA',
+        'EQUIPO',
+        'FECHA-HORA',
+        'ORIGEN/DESTINO',
+        'TIPO DE OPERACIÓN',
+        'PAX',
+        'EQP',
+        'TIPO DE CLIENTE',
+        'MANTENIMIENTO CSAE',
+        'FECHA-HORA CSAE'
+    ];
+
+    const totalColumns = 25; // A:Y
+    const leftStartCol = 1;  // A
+    const rightStartCol = 14; // N
+    const spacerCol = 13; // M
+
+    worksheet.mergeCells(1, 1, 1, totalColumns);
     const mainTitle = worksheet.getCell('A1');
     mainTitle.value = 'REPORTE DETALLADO DE OPERACIONES DIARIAS';
     mainTitle.font = {
@@ -55,7 +75,7 @@ export const exportarOperacionesAExcel = async (
         hour12: false
     });
 
-    worksheet.mergeCells('A2:L2');
+    worksheet.mergeCells(2, 1, 2, totalColumns);
     const fechaCell = worksheet.getCell('A2');
     fechaCell.value = `Fecha Reporte: ${fechaGeneracion}`;
     fechaCell.font = {
@@ -68,64 +88,8 @@ export const exportarOperacionesAExcel = async (
     };
     worksheet.getRow(2).height = 20;
 
-    worksheet.mergeCells('A3:L3');
-    worksheet.getRow(3).height = 20;
-
-    worksheet.mergeCells('K4:L4');
-    const csaeGroupCell = worksheet.getCell('K4');
-    csaeGroupCell.value = 'CSAE';
-    csaeGroupCell.font = {
-        bold: true,
-        color: { argb: 'FF5B3F8C' },
-        size: 11
-    };
-    csaeGroupCell.alignment = {
-        horizontal: 'center',
-        vertical: 'middle'
-    };
-    csaeGroupCell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFE9E5F3' }
-    };
-    csaeGroupCell.border = {
-        top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-        left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-        bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-        right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
-    };
-
-    const startRow = 5;
-    const headers = [
-        'ID', 'TIPO', 'MATRÍCULA', 'EQUIPO', 'FECHA-HORA', 'ORIGEN/DESTINO',
-        'TIPO DE OPERACIÓN', 'PAX', 'EQP', 'TIPO DE CLIENTE', 'MANTENIMIENTO CSAE', 'FECHA-HORA CSAE'
-    ];
-
-    const headerRow = worksheet.getRow(startRow);
-    headerRow.values = headers;
-    headerRow.height = 30;
-
-    headerRow.eachCell((cell) => {
-        if (Number(cell.col) >= 11 && Number(cell.col) <= 12) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE9E5F3' } };
-            cell.font = { color: { argb: 'FF5B3F8C' }, bold: true, size: 11 };
-        } else {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF003E51' } };
-            cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 11 };
-        }
-        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        cell.border = {
-            top: { style: 'thin', color: { argb: 'FF00556F' } },
-            left: { style: 'thin', color: { argb: 'FF00556F' } },
-            bottom: { style: 'thin', color: { argb: 'FF00556F' } },
-            right: { style: 'thin', color: { argb: 'FF00556F' } }
-        };
-    });
-
-    const columnWidths = [8, 15, 18, 18, 28, 25, 25, 10, 10, 22, 20, 28];
-    columnWidths.forEach((width, index) => {
-        worksheet.getColumn(index + 1).width = width;
-    });
+    worksheet.mergeCells(3, 1, 3, totalColumns);
+    worksheet.getRow(3).height = 12;
 
     const baseBorder: Partial<ExcelJS.Borders> = {
         top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
@@ -134,68 +98,248 @@ export const exportarOperacionesAExcel = async (
         right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
     };
 
+    const headerBorder: Partial<ExcelJS.Borders> = {
+        top: { style: 'thin', color: { argb: 'FF00556F' } },
+        left: { style: 'thin', color: { argb: 'FF00556F' } },
+        bottom: { style: 'thin', color: { argb: 'FF00556F' } },
+        right: { style: 'thin', color: { argb: 'FF00556F' } }
+    };
+
     const baseAlignment: Partial<ExcelJS.Alignment> = {
         vertical: 'middle',
         horizontal: 'center',
         wrapText: true
     };
 
-    const whiteFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
-    const purpleFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F0FA' } };
-    const greenFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2FCE7' } };
-    const redFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+    const whiteFill: ExcelJS.Fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFFFFF' }
+    };
 
-    const greenFont = { color: { argb: 'FF166534' }, bold: true };
-    const redFont = { color: { argb: 'FF991B1B' }, bold: true };
+    const purpleFill: ExcelJS.Fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF3F0FA' }
+    };
 
-    const rowsData = registros.map((op) => {
+    const greenFill: ExcelJS.Fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF2FCE7' }
+    };
+
+    const redFill: ExcelJS.Fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFEE2E2' }
+    };
+
+    const greenFont = {
+        color: { argb: 'FF166534' },
+        bold: true
+    };
+
+    const redFont = {
+        color: { argb: 'FF991B1B' },
+        bold: true
+    };
+
+    const tableTitleFill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0F2FE' }
+    } as ExcelJS.Fill;
+
+    const tableTitleFont = {
+        bold: true,
+        size: 13,
+        color: { argb: 'FF003E51' }
+    };
+
+    const csaeFill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE9E5F3' }
+    } as ExcelJS.Fill;
+
+    const csaeFont = {
+        bold: true,
+        color: { argb: 'FF5B3F8C' },
+        size: 11
+    };
+
+    const columnWidths = [8, 15, 18, 18, 28, 25, 25, 10, 10, 22, 20, 28];
+
+    const aplicarAnchos = (startCol: number) => {
+        columnWidths.forEach((width, index) => {
+            worksheet.getColumn(startCol + index).width = width;
+        });
+    };
+
+    aplicarAnchos(leftStartCol);
+    aplicarAnchos(rightStartCol);
+    worksheet.getColumn(spacerCol).width = 4;
+
+    const prepararTabla = (
+        titulo: string,
+        startCol: number,
+        tipo: 'llegada' | 'salida'
+    ) => {
+        const endCol = startCol + headers.length - 1;
+        const titleRow = 4;
+        const csaeRow = 5;
+        const headerRowNumber = 6;
+
+        worksheet.mergeCells(titleRow, startCol, titleRow, endCol);
+        const titleCell = worksheet.getCell(titleRow, startCol);
+        titleCell.value = titulo;
+        titleCell.font = tableTitleFont;
+        titleCell.fill = tableTitleFill;
+        titleCell.alignment = {
+            horizontal: 'center',
+            vertical: 'middle'
+        };
+        titleCell.border = baseBorder;
+        worksheet.getRow(titleRow).height = 24;
+
+        worksheet.mergeCells(csaeRow, startCol + 10, csaeRow, startCol + 11);
+        const csaeGroupCell = worksheet.getCell(csaeRow, startCol + 10);
+        csaeGroupCell.value = 'CSAE';
+        csaeGroupCell.font = csaeFont;
+        csaeGroupCell.alignment = {
+            horizontal: 'center',
+            vertical: 'middle'
+        };
+        csaeGroupCell.fill = csaeFill;
+        csaeGroupCell.border = baseBorder;
+
+        const headerRow = worksheet.getRow(headerRowNumber);
+
+        headers.forEach((header, index) => {
+            const cell = headerRow.getCell(startCol + index);
+            cell.value = header;
+
+            if (index >= 10) {
+                cell.fill = csaeFill;
+                cell.font = csaeFont;
+            } else {
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: tipo === 'llegada'
+                        ? { argb: 'FF166534' }
+                        : { argb: 'FF991B1B' }
+                };
+                cell.font = {
+                    color: { argb: 'FFFFFFFF' },
+                    bold: true,
+                    size: 11
+                };
+            }
+
+            cell.alignment = {
+                vertical: 'middle',
+                horizontal: 'center',
+                wrapText: true
+            };
+
+            cell.border = headerBorder;
+        });
+
+        headerRow.height = 32;
+    };
+
+    prepararTabla('LLEGADAS', leftStartCol, 'llegada');
+    prepararTabla('SALIDAS', rightStartCol, 'salida');
+
+    const mapRegistro = (op: any) => {
         const fechaHoraObj = parseStringToDate(op.fecha_hora);
         const fechaHoraCsaeObj = parseStringToDate(op.fecha_hora_csae);
 
-        return {
-            esLlegada: op.tipo?.toLowerCase() === 'llegada',
-            values: [
-                op.id,
-                op.tipo?.toUpperCase() || '',
-                op.matricula || '',
-                op.equipo || '',
-                fechaHoraObj || op.fecha_hora || '',
-                op.lugar || '',
-                op.tipo_operacion || '',
-                op.pax || 0,
-                op.equipaje || 0,
-                op.tipo_cliente || '',
-                op.mantenimiento_csae ? 'SI' : 'NO',
-                fechaHoraCsaeObj || op.fecha_hora_csae || ''
-            ]
-        };
-    });
+        return [
+            op.id,
+            op.tipo?.toUpperCase() || '',
+            op.matricula || '',
+            op.equipo || '',
+            fechaHoraObj || op.fecha_hora || '',
+            op.lugar || '',
+            op.tipo_operacion || '',
+            op.pax || 0,
+            op.equipaje || 0,
+            op.tipo_cliente || '',
+            op.mantenimiento_csae ? 'SI' : 'NO',
+            fechaHoraCsaeObj || op.fecha_hora_csae || ''
+        ];
+    };
 
-    rowsData.forEach((rowDataDef) => {
-        const row = worksheet.addRow(rowDataDef.values);
+    const llegadas = registros
+        .filter((op) => op.tipo?.toLowerCase() === 'llegada')
+        .map(mapRegistro);
 
-        for (let colNumber = 1; colNumber <= 12; colNumber++) {
+    const salidas = registros
+        .filter((op) => op.tipo?.toLowerCase() === 'salida')
+        .map(mapRegistro);
+
+    const pintarFilaTabla = (
+        row: ExcelJS.Row,
+        startCol: number,
+        values: any[] | null,
+        tipo: 'llegada' | 'salida'
+    ) => {
+        for (let i = 0; i < headers.length; i++) {
+            const colNumber = startCol + i;
             const cell = row.getCell(colNumber);
 
+            cell.value = values ? values[i] : '';
             cell.border = baseBorder;
             cell.alignment = baseAlignment;
 
-            if (colNumber === 5 || colNumber === 12) {
-                if (cell.value instanceof Date) {
-                    cell.numFmt = 'dd/mm/yyyy hh:mm:ss AM/PM';
-                }
+            if ((i === 4 || i === 11) && cell.value instanceof Date) {
+                cell.numFmt = 'dd/mm/yyyy hh:mm';
             }
 
-            if (colNumber === 11 || colNumber === 12) {
+            if (i >= 10) {
                 cell.fill = purpleFill;
-            } else if (colNumber === 2) {
-                cell.fill = rowDataDef.esLlegada ? greenFill : redFill;
-                cell.font = rowDataDef.esLlegada ? greenFont : redFont;
+            } else if (i === 1) {
+                cell.fill = tipo === 'llegada' ? greenFill : redFill;
+                cell.font = tipo === 'llegada' ? greenFont : redFont;
             } else {
                 cell.fill = whiteFill;
             }
         }
-    });
+    };
+
+    const startDataRow = 7;
+    const maxRows = Math.max(llegadas.length, salidas.length);
+
+    for (let i = 0; i < maxRows; i++) {
+        const row = worksheet.getRow(startDataRow + i);
+        row.height = 22;
+
+        pintarFilaTabla(row, leftStartCol, llegadas[i] || null, 'llegada');
+        pintarFilaTabla(row, rightStartCol, salidas[i] || null, 'salida');
+
+        row.commit();
+    }
+
+    worksheet.views = [
+        {
+            state: 'frozen',
+            ySplit: 6
+        }
+    ];
+
+    worksheet.autoFilter = {
+        from: {
+            row: 6,
+            column: 1
+        },
+        to: {
+            row: 6,
+            column: 12
+        }
+    };
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {

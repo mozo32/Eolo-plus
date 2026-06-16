@@ -3,7 +3,7 @@ import { Link, usePage } from '@inertiajs/react';
 import { ChevronDown, ChevronRight, Menu, X } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavUser } from '@/components/nav-user';
-import { getNavModules, type AuthUser, type NavModule } from './navigation';
+import { getNavModules, type AuthUser } from './navigation';
 import { type BreadcrumbItem } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -15,28 +15,32 @@ export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[]
 
     const NAV_MODULES = useMemo(() => {
         const modules = getNavModules(auth.user);
+
         const modulesOrdenados = modules.map((mod) => {
-            const itemsOrdenados = [...mod.items].sort((a, b) =>
-                a.title.localeCompare(b.title)
-            ).map((item) => {
-                if (item.children && item.children.length > 0) {
-                    return {
-                        ...item,
-                        children: [...item.children].sort((a, b) =>
-                            a.title.localeCompare(b.title)
-                        )
-                    };
-                }
-                return item;
-            });
+            const itemsOrdenados = [...mod.items]
+                .sort((a, b) => a.title.localeCompare(b.title))
+                .map((item) => {
+                    if (item.children && item.children.length > 0) {
+                        return {
+                            ...item,
+                            children: [...item.children].sort((a, b) =>
+                                a.title.localeCompare(b.title)
+                            ),
+                        };
+                    }
+
+                    return item;
+                });
 
             return {
                 ...mod,
-                items: itemsOrdenados
+                items: itemsOrdenados,
             };
         });
 
-        return [...modulesOrdenados].sort((a, b) => a.module.localeCompare(b.module));
+        return [...modulesOrdenados].sort((a, b) =>
+            a.module.localeCompare(b.module)
+        );
     }, [auth.user]);
 
     const getSafeHref = (href: any): string => {
@@ -57,7 +61,7 @@ export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[]
                         <AppLogo />
                     </Link>
 
-                    <nav className="hidden lg:flex items-center gap-1">
+                    <nav className="hidden items-center gap-1 lg:flex">
                         {NAV_MODULES.map((mod) => (
                             <div
                                 key={mod.key}
@@ -65,81 +69,109 @@ export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[]
                                 onMouseEnter={() => setActiveDropdown(mod.key)}
                                 onMouseLeave={handleMainMouseLeave}
                             >
-                                <button className={cn(
-                                    "flex items-center gap-1 px-4 py-2 text-sm font-medium transition-colors rounded-md hover:bg-accent hover:text-accent-foreground",
-                                    activeDropdown === mod.key && "bg-accent text-accent-foreground"
-                                )}>
+                                <button
+                                    className={cn(
+                                        'flex items-center gap-1 rounded-md px-4 py-2 text-sm font-medium text-[#003E51] transition-colors hover:bg-[#003E51] hover:text-white',
+                                        activeDropdown === mod.key && 'bg-[#003E51] text-white'
+                                    )}
+                                >
                                     {mod.module}
-                                    <ChevronDown className={cn(
-                                        "h-4 w-4 opacity-50 transition-transform duration-200",
-                                        activeDropdown === mod.key && "rotate-180"
-                                    )} />
+                                    <ChevronDown
+                                        className={cn(
+                                            'h-4 w-4 opacity-70 transition-transform duration-200',
+                                            activeDropdown === mod.key && 'rotate-180'
+                                        )}
+                                    />
                                 </button>
 
                                 {activeDropdown === mod.key && (
                                     <div
-                                        className="absolute left-0 top-full pt-2 w-64 animate-in fade-in zoom-in-95 duration-200"
+                                        className="absolute left-0 top-full w-64 animate-in fade-in zoom-in-95 pt-2 duration-200"
                                         onMouseLeave={() => setActiveSubDropdown(null)}
                                     >
-                                        <div className="rounded-xl border bg-popover p-1.5 shadow-2xl ring-1 ring-black/5">
+                                        <div className="rounded-xl border bg-white p-1.5 shadow-2xl ring-1 ring-black/5">
                                             <div className="grid gap-0.5">
                                                 {mod.items.map((sub) => {
-                                                    const hasChildren = sub.children && sub.children.length > 0;
+                                                    const hasChildren =
+                                                        sub.children && sub.children.length > 0;
+
                                                     return (
                                                         <div
                                                             key={sub.id}
                                                             className="relative"
-                                                            onMouseEnter={() => hasChildren && setActiveSubDropdown(sub.id)}
+                                                            onMouseEnter={() =>
+                                                                hasChildren && setActiveSubDropdown(sub.id)
+                                                            }
                                                         >
                                                             {hasChildren ? (
                                                                 <button
                                                                     className={cn(
-                                                                        "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent",
-                                                                        activeSubDropdown === sub.id && "bg-accent text-accent-foreground"
+                                                                        'group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-[#003E51] transition-colors hover:bg-[#003E51] hover:text-white',
+                                                                        activeSubDropdown === sub.id &&
+                                                                            'bg-[#003E51] text-white'
                                                                     )}
                                                                 >
                                                                     <div className="flex items-center gap-3">
-                                                                        <div className="flex h-7 w-7 items-center justify-center rounded-md border bg-background shadow-sm">
-                                                                            {sub.icon ? <sub.icon className="h-3.5 w-3.5" /> : '•'}
+                                                                        <div className="flex h-7 w-7 items-center justify-center rounded-md border bg-white text-[#003E51] shadow-sm transition-colors group-hover:border-white/30 group-hover:bg-white/15 group-hover:text-white">
+                                                                            {sub.icon ? (
+                                                                                <sub.icon className="h-3.5 w-3.5" />
+                                                                            ) : (
+                                                                                '•'
+                                                                            )}
                                                                         </div>
-                                                                        {sub.title}
+                                                                        <span>{sub.title}</span>
                                                                     </div>
-                                                                    <ChevronRight className="h-4 w-4 opacity-50" />
+
+                                                                    <ChevronRight className="h-4 w-4 opacity-70" />
                                                                 </button>
                                                             ) : (
                                                                 <Link
                                                                     href={getSafeHref(sub.href)}
                                                                     onClick={() => {
-                                                                        // Guardamos la key del módulo al que pertenece este link antes de navegar
-                                                                        localStorage.setItem('activeModule', String(mod.key));
-                                                                        setMobileOpen(false); // Por si acaso está en móvil
+                                                                        localStorage.setItem(
+                                                                            'activeModule',
+                                                                            String(mod.key)
+                                                                        );
+                                                                        setMobileOpen(false);
                                                                     }}
-                                                                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                                                                    className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-[#003E51] transition-colors hover:bg-[#003E51] hover:text-white"
                                                                 >
-                                                                    <div className="flex h-7 w-7 items-center justify-center rounded-md border bg-background shadow-sm">
-                                                                        {sub.icon ? <sub.icon className="h-3.5 w-3.5" /> : '•'}
+                                                                    <div className="flex h-7 w-7 items-center justify-center rounded-md border bg-white text-[#003E51] shadow-sm transition-colors group-hover:border-white/30 group-hover:bg-white/15 group-hover:text-white">
+                                                                        {sub.icon ? (
+                                                                            <sub.icon className="h-3.5 w-3.5" />
+                                                                        ) : (
+                                                                            '•'
+                                                                        )}
                                                                     </div>
-                                                                    {sub.title}
+                                                                    <span>{sub.title}</span>
                                                                 </Link>
                                                             )}
 
                                                             {hasChildren && activeSubDropdown === sub.id && (
                                                                 <div className="absolute left-[calc(100%+0.5rem)] top-0 w-60 animate-in fade-in slide-in-from-left-2 duration-200">
-                                                                    <div className="rounded-xl border bg-popover p-1.5 shadow-2xl ring-1 ring-black/5">
-                                                                        <div className="mb-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 border-b">
+                                                                    <div className="rounded-xl border bg-white p-1.5 shadow-2xl ring-1 ring-black/5">
+                                                                        <div className="mb-2 border-b px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
                                                                             {sub.title}
                                                                         </div>
+
                                                                         {sub.children?.map((child) => (
                                                                             <Link
                                                                                 key={child.id}
                                                                                 href={getSafeHref(child.href)}
-                                                                                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-primary"
+                                                                                onClick={() => {
+                                                                                    localStorage.setItem(
+                                                                                        'activeModule',
+                                                                                        String(mod.key)
+                                                                                    );
+                                                                                    setMobileOpen(false);
+                                                                                }}
+                                                                                className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-[#003E51] transition-colors hover:bg-[#003E51] hover:text-white"
                                                                             >
                                                                                 <span className="relative flex h-2 w-2">
-                                                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/30 opacity-75"></span>
-                                                                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary/60"></span>
+                                                                                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#003E51]/30 opacity-75 group-hover:bg-white/40"></span>
+                                                                                    <span className="relative inline-flex h-2 w-2 rounded-full bg-[#003E51]/60 group-hover:bg-white"></span>
                                                                                 </span>
-                                                                                {child.title}
+                                                                                <span>{child.title}</span>
                                                                             </Link>
                                                                         ))}
                                                                     </div>
@@ -161,23 +193,29 @@ export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[]
                     <div className="hidden sm:block">
                         <NavUser />
                     </div>
+
                     <button
                         onClick={() => setMobileOpen(!mobileOpen)}
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-md border lg:hidden hover:bg-accent focus:outline-none"
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-md border text-[#003E51] hover:bg-[#003E51] hover:text-white focus:outline-none lg:hidden"
                     >
-                        {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                        {mobileOpen ? (
+                            <X className="h-5 w-5" />
+                        ) : (
+                            <Menu className="h-5 w-5" />
+                        )}
                     </button>
                 </div>
             </div>
 
             {breadcrumbs.length > 0 && (
-                <div className="flex h-10 items-center border-t bg-muted/30 px-4 sm:px-8 overflow-x-auto">
-                    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground whitespace-nowrap">
+                <div className="flex h-10 items-center overflow-x-auto border-t bg-muted/30 px-4 sm:px-8">
+                    <div className="flex items-center gap-2 whitespace-nowrap text-xs font-medium text-muted-foreground">
                         {breadcrumbs.map((b, idx) => (
                             <div key={b.title} className="flex items-center gap-2">
                                 {idx > 0 && <span className="opacity-40">/</span>}
+
                                 {b.href ? (
-                                    <Link href={b.href} className="transition-colors hover:text-primary">
+                                    <Link href={b.href} className="transition-colors hover:text-[#003E51]">
                                         {b.title}
                                     </Link>
                                 ) : (
@@ -190,29 +228,31 @@ export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[]
             )}
 
             {mobileOpen && (
-                <div className="fixed inset-0 top-16 z-50 grid h-[calc(100vh-4rem)] auto-rows-max overflow-y-auto p-6 pb-32 lg:hidden bg-background border-t">
+                <div className="fixed inset-0 top-16 z-50 grid h-[calc(100vh-4rem)] auto-rows-max overflow-y-auto border-t bg-background p-6 pb-32 lg:hidden">
                     <div className="relative z-20 grid gap-8">
                         {NAV_MODULES.map((mod) => (
                             <div key={mod.key} className="flex flex-col gap-3">
-                                <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70 px-2">
+                                <h4 className="px-2 text-xs font-bold uppercase tracking-widest text-muted-foreground/70">
                                     {mod.module}
                                 </h4>
+
                                 <div className="grid gap-1">
                                     {mod.items.map((sub) => (
                                         <div key={sub.id} className="group flex flex-col">
                                             {sub.children ? (
                                                 <details className="w-full">
-                                                    <summary className="flex cursor-pointer items-center justify-between rounded-xl border bg-card p-4 text-sm font-bold shadow-sm list-none">
+                                                    <summary className="flex cursor-pointer list-none items-center justify-between rounded-xl border bg-card p-4 text-sm font-bold text-[#003E51] shadow-sm transition-colors hover:bg-[#003E51] hover:text-white">
                                                         {sub.title}
-                                                        <ChevronDown className="h-4 w-4 opacity-50 transition-transform group-open:rotate-180" />
+                                                        <ChevronDown className="h-4 w-4 opacity-70 transition-transform group-open:rotate-180" />
                                                     </summary>
-                                                    <div className="mt-1 flex flex-col gap-1 ml-4 border-l-2 border-primary/20 pl-4 py-2">
+
+                                                    <div className="ml-4 mt-1 flex flex-col gap-1 border-l-2 border-[#003E51]/20 py-2 pl-4">
                                                         {sub.children.map((child) => (
                                                             <Link
                                                                 key={child.id}
                                                                 href={getSafeHref(child.href)}
                                                                 onClick={() => setMobileOpen(false)}
-                                                                className="p-3 text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
+                                                                className="rounded-lg p-3 text-sm font-medium text-[#003E51] transition-colors hover:bg-[#003E51] hover:text-white"
                                                             >
                                                                 {child.title}
                                                             </Link>
@@ -223,7 +263,7 @@ export function AppTopbar({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItem[]
                                                 <Link
                                                     href={getSafeHref(sub.href)}
                                                     onClick={() => setMobileOpen(false)}
-                                                    className="flex items-center gap-3 rounded-xl border bg-card p-4 text-sm font-bold shadow-sm hover:bg-accent transition-all"
+                                                    className="flex items-center gap-3 rounded-xl border bg-card p-4 text-sm font-bold text-[#003E51] shadow-sm transition-colors hover:bg-[#003E51] hover:text-white"
                                                 >
                                                     {sub.title}
                                                 </Link>

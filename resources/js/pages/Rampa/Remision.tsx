@@ -266,9 +266,13 @@ export default function Remision() {
                                 <Filter size={14} />
                                 <span>{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                             </button>
-                            {user?.roles?.[0]?.slug !== 'admin2' && (
+                            {(user?.roles?.[0]?.slug !== 'admin2' && user?.roles?.[0]?.slug !== 'fac') && (
                                 <button
-                                    onClick={() => { setIsEdit(false); setDetalle(null); setOpenForm(true); }}
+                                    onClick={() => {
+                                        setIsEdit(false);
+                                        setDetalle(null);
+                                        setOpenForm(true);
+                                    }}
                                     className="bg-indigo-600 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-indigo-700 transition-all active:scale-95 uppercase tracking-wider"
                                 >
                                     + NUEVA REMISIÓN
@@ -358,6 +362,16 @@ export default function Remision() {
                                                                         <button onClick={() => handleEdit(row)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
                                                                             <Edit2 size={16} />
                                                                         </button>
+                                                                        <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors uppercase font-black text-[10px]">
+                                                                            PDF
+                                                                        </button>
+                                                                        <button onClick={() => { setSelectedRow(row); setEmailModalOpen(true); }} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors">
+                                                                            <Mail size={16} />
+                                                                        </button>
+                                                                    </>
+                                                                )}
+                                                                {user?.roles?.[0]?.slug === 'fac' && (
+                                                                    <>
                                                                         <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors uppercase font-black text-[10px]">
                                                                             PDF
                                                                         </button>

@@ -165,7 +165,7 @@ class OperacionesDiariasController extends Controller
                 DB::raw("
                     DATE_FORMAT(
                         STR_TO_DATE(CONCAT(fecha, ' ', hora), '%Y-%m-%d %H:%i:%s'),
-                        '%d/%m/%Y %h:%i:%s %p'
+                        '%d/%m/%Y %H:%i:%s'
                     ) as fecha_hora
                 ")
             ]);
@@ -222,8 +222,8 @@ class OperacionesDiariasController extends Controller
 
 
         $registros = $query
-            ->orderBy('fecha', 'desc')
-            ->orderBy('hora', 'desc')
+            ->orderBy('fecha', 'asc')
+            ->orderBy('hora', 'asc')
             ->get();
 
 
@@ -258,7 +258,7 @@ class OperacionesDiariasController extends Controller
 
             $op->fecha_hora_csae = $movimiento
                 ? Carbon::parse($movimiento->fecha_hora_entrada)
-                    ->format('d/m/Y h:i:s A')
+                    ->format('d/m/Y H:i:s')
                 : null;
 
             return $op;

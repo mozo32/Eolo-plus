@@ -206,6 +206,17 @@ export default function WalkAroundFirmaModal({ id, open, onClose, onSaved }: Pro
 
     if (!open || id == null) return null;
 
+    const formatearFecha = (fecha?: string | null) => {
+        if (!fecha) return "";
+
+        const date = new Date(fecha);
+
+        return date.toLocaleDateString("es-MX", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+        });
+    };
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
             <div className="relative w-full max-w-7xl max-h-[95vh] overflow-y-auto rounded-xl bg-white p-6 shadow-2xl dark:bg-slate-900">
@@ -215,7 +226,7 @@ export default function WalkAroundFirmaModal({ id, open, onClose, onSaved }: Pro
                             Firmar WalkAround #{id}
                         </h2>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {detalle?.fecha ?? ""} · {detalle?.matricula ?? ""}
+                            {formatearFecha(detalle?.fecha)} · {detalle?.matricula ?? ""} · {detalle?.elabora ?? ""}
                         </p>
                     </div>
 
