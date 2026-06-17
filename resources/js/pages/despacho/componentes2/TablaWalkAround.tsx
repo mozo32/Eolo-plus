@@ -68,6 +68,8 @@ const TablaWalkAround = () => {
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
 
     const nombreRol = user?.roles?.[0]?.slug;
+    const idUser = user?.id;
+
     const esAdminOFbo = nombreRol === 'admin' || nombreRol === 'fbo';
     const esJefe = nombreRol === 'jefe_area';
     const esEmpleado = nombreRol === 'empleado';
@@ -232,14 +234,17 @@ const TablaWalkAround = () => {
                                     + NUEVO REGISTRO
                                 </button>
                             )}
-                            <button
-                                type="button"
-                                onClick={() => setMostrarBitacora(true)}
-                                className="flex items-center gap-2 bg-slate-800 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-slate-700 transition-all active:scale-95 uppercase tracking-wider"
-                            >
-                                <History size={14} />
-                                BITÁCORA
-                            </button>
+                            {[1, 44, 42].includes(Number(idUser)) && (
+                                <button
+                                    type="button"
+                                    onClick={() => setMostrarBitacora(true)}
+                                    className="flex items-center gap-2 bg-slate-800 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-slate-700 transition-all active:scale-95 uppercase tracking-wider"
+                                >
+                                    <History size={14} />
+                                    BITÁCORA
+                                </button>
+                            )}
+
                         </div>
                     </div>
 
