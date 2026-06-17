@@ -5,6 +5,7 @@ import WalkAroundFirmaModal from '../components/walkAround/ItemTable/WalkAroundF
 import WalkAroundPendientesPanel from '../components/walkAround/ItemTable/WalkAroundPendientesPanel';
 import WalkAroundFormV2 from './steps/WalkAroundFormV2';
 import WalkAroundPdfExporter from '../components/walkAround/ItemTable/WalkAroundPdfExporter';
+import BitacoraModal from '@/pages/BitacoraModal';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
@@ -13,7 +14,7 @@ import {
     Search, Loader2, Plane, ChevronLeft,
     ChevronRight, ArrowUpRight,
     ArrowDownLeft, Plus, X, Filter, Edit2,
-    Calendar, MapPin, Trash2, ChevronDown, Bell
+    Calendar, MapPin, Trash2, ChevronDown, Bell, History
 } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Walkaround' }];
@@ -49,7 +50,6 @@ const TablaWalkAround = () => {
     };
 
     const roleName = user?.roles.map((r) => roleLabels[r.slug] ?? r.nombre).join(", ") ?? "Sin Rol";
-    console.log(roleName);
 
     const [pdfId, setPdfId] = useState<number | null>(null);
     const [showForm, setShowForm] = useState(false);
@@ -59,7 +59,7 @@ const TablaWalkAround = () => {
     const [loading, setLoading] = useState(true);
     const [firmId, setFirmId] = useState<number | null>(null);
     const [firmOpen, setFirmOpen] = useState(false);
-
+    const [mostrarBitacora, setMostrarBitacora] = useState(false);
     const [pendientes, setPendientes] = useState<any[]>([]);
     const [mostrarPanelPendientes, setMostrarPanelPendientes] = useState(false);
 
@@ -232,6 +232,14 @@ const TablaWalkAround = () => {
                                     + NUEVO REGISTRO
                                 </button>
                             )}
+                            <button
+                                type="button"
+                                onClick={() => setMostrarBitacora(true)}
+                                className="flex items-center gap-2 bg-slate-800 text-white text-[10px] font-black px-4 py-2 rounded shadow-md hover:bg-slate-700 transition-all active:scale-95 uppercase tracking-wider"
+                            >
+                                <History size={14} />
+                                BITÁCORA
+                            </button>
                         </div>
                     </div>
 
@@ -453,6 +461,12 @@ const TablaWalkAround = () => {
                     loadData(pagina);
                     loadPendientes();
                 }}
+            />
+            <BitacoraModal
+                open={mostrarBitacora}
+                onClose={() => setMostrarBitacora(false)}
+                modulo="WALKAROUND"
+                titulo="Bitácora WalkAround"
             />
         </>
     );

@@ -17,6 +17,7 @@ export default function OperacionesDiarias() {
     const pageUrl = usePage().url;
 
     const nombreRol = auth.user.roles?.[0]?.nombre;
+    const idUser = auth.user.id;
 
     const activeModule = useMemo(() => {
         const modules = getNavModules(auth.user);
@@ -54,6 +55,7 @@ export default function OperacionesDiarias() {
                 key={activeModule?.key}
                 moduloNombre={activeModule?.module}
                 nombreRol={nombreRol}
+                idUser = {idUser}
             />
         </AppLayout>
     );

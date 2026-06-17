@@ -5,15 +5,7 @@ import { walkAround } from "@/routes";
 import { type BreadcrumbItem } from "@/types";
 import { Head } from "@inertiajs/react";
 import Swal from "sweetalert2";
-import WalkAroundPdfExporter from "./components/walkAround/ItemTable/WalkAroundPdfExporter";
-import WalkAroundForm from "./components/walkAround/WalkAroundForm";
-import WalkAroundDetalleModal from "./components/walkAround/ItemTable/WalkAroundDetalleModal";
-import WalkAroundEditarModal from "./components/walkAround/ItemTable/WalkAroundEditarModal";
-import WalkAroundBitacora from "./components/walkAround/ItemTable/WalkAroundBitacora";
 import { fetchWalkarounds, WalkAroundRow } from "@/stores/apiWalkaround";
-import WalkAroundBasurero from "./components/walkAround/ItemTable/WalkAroundBasurero";
-import WalkAroundFirmaModal from "./components/walkAround/ItemTable/WalkAroundFirmaModal";
-import WalkAroundFormV2 from "./componentes2/steps/WalkAroundFormV2";
 import TablaWalkAround from "./componentes2/TablaWalkAround";
 type LaravelLink = {
     url: string | null;

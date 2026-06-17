@@ -2,18 +2,20 @@ import { DetalleOperacion } from './DetalleOperacion';
 import React, { useState, useEffect } from 'react';
 import { FormLlegada } from './FormLlegada';
 import { FormSalida } from './FormSalida';
-import { Filter, Calendar, ArrowDownLeft, ArrowUpRight, X, ChevronDown, Info, Download } from 'lucide-react';
+import { Filter, Calendar, ArrowDownLeft, ArrowUpRight, X, ChevronDown, Info, Download, History} from 'lucide-react';
 import { obtenerOperacionesDiariasApi, excelOperacionesDiariasApi, obtenerPendientesApi } from '@/stores/apiOperacionesDiarias';
 import { exportarOperacionesAExcel } from './excelService';
 import Swal from 'sweetalert2';
 import MatriculasPendientes from './MatriculasPendientes';
+import BitacoraModal from '@/pages/BitacoraModal';
 
 interface OperacionesCardsProps {
     moduloNombre?: string;
     nombreRol?: string;
+    idUser?: number;
 }
 
-const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) => {
+const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsProps) => {
     const [registros, setRegistros] = useState<any[]>([]);
     const [datosExcel, setDatosExcel] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -24,6 +26,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
     const [mostrarLeyenda, setMostrarLeyenda] = useState(false);
+    const [mostrarBitacora, setMostrarBitacora] = useState(false);
     const [pendientes, setPendientes] = useState<any[]>([]);
     const [mostrarModal, setMostrarModal] = useState(false);
     const COLORES_DEPARTAMENTOS: Record<string, string> = {
@@ -254,7 +257,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
                         <Filter size={14} />
                         <span className="hidden xs:inline">{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                     </button>
-                    {(nombreRol === 'FBO' || nombreRol === 'Administrador' || nombreRol === 'Administrativo') && (
+                    {(nombreRol === 'FBO' || nombreRol === 'Administrador' || nombreRol === 'Administrativo' || nombreRol === 'Facturacion') && (
                         <>
                             <div className="w-[1px] bg-slate-200 mx-1"></div>
                             <button
@@ -269,6 +272,21 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
                         </>
                     )}
                     <div className="w-[1px] bg-slate-200 mx-1"></div>
+                    {[1, 44, 42].includes(Number(idUser)) && (
+                        <button
+                            type="button"
+                            onClick={() => setMostrarBitacora(true)}
+                            className="flex items-center gap-2 rounded border border-slate-200 bg-slate-800 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white shadow-sm transition-all hover:bg-slate-700 active:scale-95"
+                            title="Ver bitácora de Operaciones Diarias"
+                        >
+                            <History size={14} />
+
+                            <span className="hidden md:inline">
+                                BITÁCORA
+                            </span>
+                        </button>
+                    )}
+
                     <button onClick={() => setCreando('llegada')} className="bg-emerald-600 text-white text-[10px] font-black px-3 py-2 rounded shadow-md hover:bg-emerald-700 transition-all active:scale-95 uppercase tracking-wider">
                         + <span className="hidden sm:inline">LLEGADA</span>
                     </button>
@@ -543,7 +561,15 @@ const OperacionesCards = ({ moduloNombre, nombreRol }: OperacionesCardsProps) =>
                     </div>
                 </div>
             )}
+            <BitacoraModal
+                open={mostrarBitacora}
+                onClose={() => setMostrarBitacora(false)}
+                modulo="OPERACIONES_DIARIAS"
+                titulo="Bitácora de Operaciones Diarias"
+                subtitulo="Historial de llegadas, salidas y modificaciones"
+            />
         </div>
+
     );
 };
 

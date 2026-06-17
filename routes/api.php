@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\BitacoraController;
 use App\Http\Controllers\Api\DespachoController;
 use App\Http\Controllers\Api\AeronaveController;
 use App\Http\Controllers\Api\TipoAeronaveController;
@@ -39,6 +40,22 @@ Route::post('/nuevo-tipo-aeronaves', [TipoAeronaveController::class, 'newTipoAer
 Route::middleware(['auth:sanctum'])->get(
     '/usuarios/buscar',[UsuarioController::class, 'buscar']
 );
+
+Route::middleware('auth:sanctum')
+    ->prefix('bitacoras')
+    ->name('bitacoras.')
+    ->group(function () {
+        Route::get('/', [BitacoraController::class, 'index'])
+            ->name('index');
+
+        Route::get('/filtros', [BitacoraController::class, 'filtros'])
+            ->name('filtros');
+
+        Route::get('/{bitacora}', [BitacoraController::class, 'show'])
+            ->whereNumber('bitacora')
+            ->name('show');
+    });
+
 Route::prefix('walkarounds')->group(function () {
     Route::get('/pendientes-firmar', [WalkAroundController::class, 'pendientesFirmar']);
     Route::get('/basurero', [WalkAroundController::class, 'basurero']);

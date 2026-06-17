@@ -204,11 +204,9 @@ class WalkAroundController extends Controller
             });
             // ===== BITÁCORA =====
             Bitacora::log(
-                'WalkAround',
-                'Eliminar',
-                "Se elimino WalkAround ID {$walkAround->id} | Matrícula: {$walkAround->matricula}",
-                auth()->id(),
-                auth()->id(),
+                'WALKAROUND',
+                Bitacora::ACCION_ELIMINAR,
+                "Se eliminó el WalkAround #{$walkAround->id} de la matrícula {$walkAround->matricula}."
             );
             DB::commit();
 
@@ -258,14 +256,7 @@ class WalkAroundController extends Controller
                 $firma->update(['status' => 'A']);
             });
 
-            // ===== BITÁCORA =====
-            Bitacora::log(
-                'WalkAround',
-                'Activar',
-                "Se activo el WalkAround ID {$walkAround->id} | Matrícula: {$walkAround->matricula}",
-                auth()->id(),
-                auth()->id(),
-            );
+
             DB::commit();
 
             return response()->json([
@@ -414,8 +405,11 @@ class WalkAroundController extends Controller
             $this->guardarFirmaBase64($request->cierreYFirmas['firmaFbo'] ?? '', 'fbo', $walkAround);
             $this->guardarFirmaBase64($request->cierreYFirmas['firmaResponsable'] ?? '', 'responsable', $walkAround);
 
-            Bitacora::log('WalkAround', 'CREAR', "Se registró WalkAround ID {$walkAround->id}", auth()->id(), auth()->user()->name);
-
+            Bitacora::log(
+                'WALKAROUND',
+                Bitacora::ACCION_CREAR,
+                "Se creó el WalkAround #{$walkAround->id} de la matrícula {$walkAround->matricula}."
+            );
             DB::commit();
             return response()->json(['message' => 'WalkAround guardado correctamente', 'id' => $walkAround->id], 201);
 
@@ -436,101 +430,368 @@ class WalkAroundController extends Controller
     public function update(Request $request, WalkAround $walkAround)
     {
         DB::beginTransaction();
+
         try {
-            // 1. Actualizar datos principales (Metadata)
-            $walkAround->update([
-                'fecha'            => $request->metadata['fecha'],
-                'movimiento'       => $request->metadata['movimiento'],
-                'matricula'        => $request->metadata['matricula'],
-                'tipo'             => $request->metadata['aeronave'],
-                'tipo_aeronave'    => $request->metadata['tipo'],
-                'hora'             => $request->metadata['hora'],
-                'destino'          => $request->metadata['destino'],
-                'procedensia'      => $request->metadata['procedencia'],
-                'observaciones'    => $request->cierreYFirmas['observaciones'] ?? null,
-                'responsable'      => $request->cierreYFirmas['nombreResponsable'],
-                'jefe_area'        => $request->cierreYFirmas['nombreJefe'],
-                'fbo'              => $request->cierreYFirmas['nombreFbo'],
-                'numero_estaticas' => $request->inspeccionTecnica['numeroEstaticas'] ?? 0,
-            ]);
+            $metadata = $request->input('metadata', []);
+            $inspeccionTecnica = $request->input('inspeccionTecnica', []);
+            $cierreYFirmas = $request->input('cierreYFirmas', []);
 
-            // 2. Actualizar Checklist
-            $esAvion = ($request->metadata['aeronave'] === 'Avión');
-            $checklistPuro = $request->inspeccionTecnica['checklist'] ?? [];
+            $cambiosAnteriores = [];
+            $cambiosNuevos = [];
 
-            WalkaroundChecklist::updateOrCreate(
-                ['walk_around_id' => $walkAround->id],
-                [
-                    'checklist_avion'       => $esAvion ? $checklistPuro : null,
-                    'checklist_helicoptero' => !$esAvion ? $checklistPuro : null,
-                ]
-            );
-
-            // 3. Actualizar Marcas de Daño (Puntos 3D)
-            $walkAround->marcasDanio()->delete();
-            if (isset($request->inspeccionTecnica['puntos3D']) && is_array($request->inspeccionTecnica['puntos3D'])) {
-                foreach ($request->inspeccionTecnica['puntos3D'] as $punto) {
-                    WalkaroundMarcaDanio::create([
-                        'walk_around_id' => $walkAround->id,
-                        'x'              => $punto['x'],
-                        'y'              => $punto['y'],
-                        'z'              => $punto['z'] ?? 0,
-                        'descripcion'    => $punto['descripcion'] ?? null,
-                        'severidad'      => $punto['severidad'] ?? null,
-                    ]);
+            $normalizarParaBitacora = static function ($valor) {
+                if ($valor instanceof \DateTimeInterface) {
+                    return $valor->format('Y-m-d H:i:s');
                 }
+
+                if ($valor instanceof \Illuminate\Contracts\Support\Arrayable) {
+                    return $valor->toArray();
+                }
+
+                return $valor;
+            };
+
+            $nuevosDatosPrincipales = [
+                'fecha' => $metadata['fecha'],
+                'movimiento' => $metadata['movimiento'],
+                'matricula' => $metadata['matricula'],
+                'tipo' => $metadata['aeronave'],
+                'tipo_aeronave' => $metadata['tipo'],
+                'hora' => $metadata['hora'],
+                'destino' => $metadata['destino'],
+                'procedensia' => $metadata['procedencia'],
+                'observaciones' => $cierreYFirmas['observaciones'] ?? null,
+                'responsable' => $cierreYFirmas['nombreResponsable'] ?? null,
+                'jefe_area' => $cierreYFirmas['nombreJefe'] ?? null,
+                'fbo' => $cierreYFirmas['nombreFbo'] ?? null,
+                'numero_estaticas' => $inspeccionTecnica['numeroEstaticas'] ?? 0,
+            ];
+
+            $datosPrincipalesAnteriores = [];
+
+            foreach (array_keys($nuevosDatosPrincipales) as $campo) {
+                $datosPrincipalesAnteriores[$campo] = $normalizarParaBitacora(
+                    $walkAround->getAttribute($campo)
+                );
             }
 
-            // 4. Fotos: Procesar solo las nuevas (que vienen en base64)
-            if (isset($request->inspeccionTecnica['fotos']) && is_array($request->inspeccionTecnica['fotos'])) {
-                $startOrden = (int) ($walkAround->imagenes()->max('imageables.orden') ?? -1) + 1;
+            $walkAround->fill($nuevosDatosPrincipales);
 
-                foreach ($request->inspeccionTecnica['fotos'] as $index => $fotoData) {
-                    // Si la foto ya es una URL (contiene http), no hacemos nada
-                    if (is_string($fotoData) && str_contains($fotoData, 'http')) {
-                        continue;
-                    }
+            foreach ($walkAround->getDirty() as $campo => $nuevoValor) {
+                $cambiosAnteriores['datos_principales'][$campo] =
+                    $datosPrincipalesAnteriores[$campo] ?? null;
 
-                    $base64String = is_array($fotoData) ? ($fotoData['base64'] ?? null) : $fotoData;
+                $cambiosNuevos['datos_principales'][$campo] =
+                    $normalizarParaBitacora(
+                        $walkAround->getAttribute($campo)
+                    );
+            }
 
-                    if (!empty($base64String) && str_contains($base64String, 'data:image')) {
-                        $imagen = $this->guardarImagenBase64(
-                            $base64String,
-                            'walkaround/' . now()->format('Y/m')
-                        );
+            $walkAround->save();
 
-                        $walkAround->imagenes()->attach($imagen->id, [
-                            'tag'    => 'evidencia',
-                            'orden'  => $startOrden + $index,
-                            'status' => 'A',
+            $esAvion = ($metadata['aeronave'] === 'Avión');
+            $checklistPuro = $inspeccionTecnica['checklist'] ?? [];
+
+            $nuevoChecklist = [
+                'checklist_avion' => $esAvion
+                    ? $checklistPuro
+                    : null,
+
+                'checklist_helicoptero' => !$esAvion
+                    ? $checklistPuro
+                    : null,
+            ];
+
+            $checklist = WalkaroundChecklist::firstOrNew([
+                'walk_around_id' => $walkAround->id,
+            ]);
+
+            $checklistAnterior = [
+                'checklist_avion' => $normalizarParaBitacora(
+                    $checklist->checklist_avion
+                ),
+                'checklist_helicoptero' => $normalizarParaBitacora(
+                    $checklist->checklist_helicoptero
+                ),
+            ];
+
+            $checklist->fill($nuevoChecklist);
+
+            foreach ($checklist->getDirty() as $campo => $nuevoValor) {
+                if ($campo === 'walk_around_id') {
+                    continue;
+                }
+
+                $cambiosAnteriores['checklist'][$campo] =
+                    $checklistAnterior[$campo] ?? null;
+
+                $cambiosNuevos['checklist'][$campo] =
+                    $normalizarParaBitacora(
+                        $checklist->getAttribute($campo)
+                    );
+            }
+
+            $checklist->save();
+
+            if (
+                array_key_exists('puntos3D', $inspeccionTecnica) &&
+                is_array($inspeccionTecnica['puntos3D'])
+            ) {
+                $puntosAnteriores = $walkAround
+                    ->marcasDanio()
+                    ->orderBy('id')
+                    ->get([
+                        'x',
+                        'y',
+                        'z',
+                        'descripcion',
+                        'severidad',
+                    ])
+                    ->map(function ($punto) {
+                        return [
+                            'x' => round((float) $punto->x, 6),
+                            'y' => round((float) $punto->y, 6),
+                            'z' => round((float) ($punto->z ?? 0), 6),
+                            'descripcion' => $punto->descripcion,
+                            'severidad' => $punto->severidad,
+                        ];
+                    })
+                    ->values()
+                    ->toArray();
+
+                $puntosNuevos = collect($inspeccionTecnica['puntos3D'])
+                    ->map(function ($punto) {
+                        return [
+                            'x' => round((float) ($punto['x'] ?? 0), 6),
+                            'y' => round((float) ($punto['y'] ?? 0), 6),
+                            'z' => round((float) ($punto['z'] ?? 0), 6),
+                            'descripcion' => $punto['descripcion'] ?? null,
+                            'severidad' => $punto['severidad'] ?? null,
+                        ];
+                    })
+                    ->values()
+                    ->toArray();
+
+                if (
+                    json_encode($puntosAnteriores, JSON_UNESCAPED_UNICODE) !==
+                    json_encode($puntosNuevos, JSON_UNESCAPED_UNICODE)
+                ) {
+                    $cambiosAnteriores['marcas_danio'] = $puntosAnteriores;
+                    $cambiosNuevos['marcas_danio'] = $puntosNuevos;
+
+                    $walkAround->marcasDanio()->delete();
+
+                    foreach ($puntosNuevos as $punto) {
+                        WalkaroundMarcaDanio::create([
+                            'walk_around_id' => $walkAround->id,
+                            'x' => $punto['x'],
+                            'y' => $punto['y'],
+                            'z' => $punto['z'],
+                            'descripcion' => $punto['descripcion'],
+                            'severidad' => $punto['severidad'],
                         ]);
                     }
                 }
             }
 
-            // 5. Firmas: Solo guardar si el valor enviado es un Base64 nuevo
-            $this->procesarFirmaUpdate($request->cierreYFirmas['firmaJefe'] ?? '', 'jefe_area', $walkAround);
-            $this->procesarFirmaUpdate($request->cierreYFirmas['firmaFbo'] ?? '', 'fbo', $walkAround);
-            $this->procesarFirmaUpdate($request->cierreYFirmas['firmaResponsable'] ?? '', 'responsable', $walkAround);
+            $imagenesAgregadas = [];
 
-            // Bitácora
-            Bitacora::log('WalkAround', 'ACTUALIZAR', "Se actualizó WalkAround ID {$walkAround->id}", auth()->id(), auth()->user()->name);
+            $cantidadImagenesAntes = $walkAround
+                ->imagenes()
+                ->count();
+
+            $fotos = $inspeccionTecnica['fotos'] ?? [];
+
+            if (is_array($fotos)) {
+                $ultimoOrden = $walkAround
+                    ->imagenes()
+                    ->max('imageables.orden');
+
+                $ordenActual = $ultimoOrden === null
+                    ? 0
+                    : ((int) $ultimoOrden + 1);
+
+                foreach ($fotos as $fotoData) {
+                    $base64String = $this->obtenerBase64Imagen($fotoData);
+
+                    if ($base64String === null) {
+                        continue;
+                    }
+
+                    $imagen = $this->guardarImagenBase64(
+                        $base64String,
+                        'walkaround/' . now()->format('Y/m')
+                    );
+
+                    $walkAround->imagenes()->attach($imagen->id, [
+                        'tag' => 'evidencia',
+                        'orden' => $ordenActual,
+                        'status' => 'A',
+                    ]);
+
+                    $imagenesAgregadas[] = [
+                        'imagen_id' => $imagen->id,
+                        'tag' => 'evidencia',
+                        'orden' => $ordenActual,
+                    ];
+
+                    $ordenActual++;
+                }
+            }
+
+            if (!empty($imagenesAgregadas)) {
+                $cambiosAnteriores['imagenes'] = [
+                    'cantidad' => $cantidadImagenesAntes,
+                    'agregadas' => [],
+                ];
+
+                $cambiosNuevos['imagenes'] = [
+                    'cantidad' => $cantidadImagenesAntes + count($imagenesAgregadas),
+                    'agregadas' => $imagenesAgregadas,
+                ];
+            }
+
+            $firmasActualizadas = [];
+
+            $firmasRecibidas = [
+                'jefe_area' => $cierreYFirmas['firmaJefe'] ?? '',
+                'fbo' => $cierreYFirmas['firmaFbo'] ?? '',
+                'responsable' => $cierreYFirmas['firmaResponsable'] ?? '',
+            ];
+
+            foreach ($firmasRecibidas as $rol => $firma) {
+                $esFirmaNueva =
+                    is_string($firma) &&
+                    str_starts_with($firma, 'data:image/');
+
+                if ($esFirmaNueva) {
+                    $firmasActualizadas[] = $rol;
+                }
+
+                $this->procesarFirmaUpdate(
+                    $firma,
+                    $rol,
+                    $walkAround
+                );
+            }
+
+            if (!empty($firmasActualizadas)) {
+                $cambiosAnteriores['firmas'] = [
+                    'actualizadas' => [],
+                ];
+
+                $cambiosNuevos['firmas'] = [
+                    'actualizadas' => $firmasActualizadas,
+                ];
+            }
+
+            if (!empty($cambiosNuevos)) {
+                $etiquetasSecciones = [
+                    'datos_principales' => 'datos principales',
+                    'checklist' => 'checklist',
+                    'marcas_danio' => 'marcas de daño',
+                    'imagenes' => 'fotografías',
+                    'firmas' => 'firmas',
+                ];
+
+                $seccionesModificadas = array_map(
+                    function ($seccion) use ($etiquetasSecciones) {
+                        return $etiquetasSecciones[$seccion] ?? $seccion;
+                    },
+                    array_keys($cambiosNuevos)
+                );
+
+                $descripcion =
+                    "Se actualizó el WalkAround #{$walkAround->id} " .
+                    "de la matrícula {$walkAround->matricula}. " .
+                    "Secciones modificadas: " .
+                    implode(', ', $seccionesModificadas) .
+                    '.';
+
+                if (!empty($cambiosNuevos['datos_principales'])) {
+                    $camposPrincipales = array_keys(
+                        $cambiosNuevos['datos_principales']
+                    );
+
+                    $descripcion .=
+                        ' Campos modificados: ' .
+                        implode(', ', $camposPrincipales) .
+                        '.';
+                }
+
+                Bitacora::log(
+                    modulo: 'WALKAROUND',
+                    accion: Bitacora::ACCION_ACTUALIZAR,
+                    descripcion: $descripcion,
+                    registroId: $walkAround->id,
+                    datosAnteriores: $cambiosAnteriores,
+                    datosNuevos: $cambiosNuevos,
+                );
+            }
 
             DB::commit();
-            return response()->json(['message' => 'WalkAround actualizado correctamente', 'id' => $walkAround->id], 200);
 
+            return response()->json([
+                'message' => 'WalkAround actualizado correctamente',
+                'id' => $walkAround->id,
+                'cambios_registrados' => !empty($cambiosNuevos),
+                'secciones_modificadas' => array_keys($cambiosNuevos),
+                'imagenes_agregadas' => count($imagenesAgregadas),
+            ], 200);
         } catch (\Throwable $e) {
             DB::rollBack();
+
+            report($e);
+
             return response()->json([
                 'message' => 'Error al actualizar WalkAround',
-                'error'   => $e->getMessage(),
-                'line'    => $e->getLine()
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
             ], 500);
         }
     }
-    private function procesarFirmaUpdate($firmaData, $rol, $walkAround) {
-        if (!empty($firmaData) && str_contains($firmaData, 'data:image')) {
-            $this->guardarFirmaBase64($firmaData, $rol, $walkAround);
+    private function obtenerBase64Imagen($fotoData): ?string
+    {
+        if (is_string($fotoData)) {
+            return str_starts_with($fotoData, 'data:image/')
+                ? $fotoData
+                : null;
+        }
+
+        if (!is_array($fotoData)) {
+            return null;
+        }
+
+        $base64 = $fotoData['dataUrl']
+            ?? $fotoData['base64']
+            ?? $fotoData['data_url']
+            ?? $fotoData['preview']
+            ?? $fotoData['src']
+            ?? null;
+
+        if (
+            !is_string($base64) ||
+            !str_starts_with($base64, 'data:image/')
+        ) {
+            return null;
+        }
+
+        return $base64;
+    }
+    private function procesarFirmaUpdate(
+        $firmaData,
+        string $rol,
+        WalkAround $walkAround
+    ): void {
+        if (
+            is_string($firmaData) &&
+            str_starts_with($firmaData, 'data:image/')
+        ) {
+            $this->guardarFirmaBase64(
+                $firmaData,
+                $rol,
+                $walkAround
+            );
         }
     }
 
@@ -554,14 +815,7 @@ class WalkAroundController extends Controller
             $this->guardarFirmaBase64($request->firmaFboBase64 ?? '', 'fbo', $walkAround);
             $this->guardarFirmaBase64($request->firmaResponsableBase64 ?? '', 'responsable', $walkAround);
 
-            // ===== 3. BITÁCORA =====
-            Bitacora::log(
-                'WalkAround',
-                'ACTUALIZAR',
-                "Se firmo WalkAround ID {$walkAround->id} | Matrícula: {$walkAround->matricula}",
-                auth()->id(),
-                $request->elabora ?? auth()->user()->name
-            );
+
 
             DB::commit();
 
@@ -582,27 +836,69 @@ class WalkAroundController extends Controller
 
     private function guardarImagenBase64(string $base64, string $folder): Imagen
     {
-        if (!str_contains($base64, ',')) {
-            throw new \Exception('Formato base64 inválido');
+        if (
+            !preg_match(
+                '/^data:image\/([a-zA-Z0-9.+-]+);base64,/',
+                $base64,
+                $coincidencias
+            )
+        ) {
+            throw new \Exception(
+                'La imagen recibida no tiene un formato Base64 válido.'
+            );
         }
 
-        [$meta, $content] = explode(',', $base64);
-        preg_match('/data:(.*?);base64/', $meta, $matches);
+        [$meta, $contenidoBase64] = explode(',', $base64, 2);
 
-        $mime = $matches[1] ?? 'image/jpeg';
-        $extension = explode('/', $mime)[1] ?? 'jpg';
+        $contenido = base64_decode(
+            $contenidoBase64,
+            true
+        );
 
-        $fileName = Str::uuid() . '.' . $extension;
-        $path = $folder . '/' . $fileName;
+        if ($contenido === false) {
+            throw new \Exception(
+                'No se pudo decodificar la imagen Base64.'
+            );
+        }
 
-        Storage::disk('public')->put($path, base64_decode($content));
+        $tipo = strtolower($coincidencias[1] ?? 'jpeg');
+
+        $extensionesPermitidas = [
+            'jpeg' => 'jpg',
+            'jpg' => 'jpg',
+            'png' => 'png',
+            'webp' => 'webp',
+            'gif' => 'gif',
+        ];
+
+        $extension = $extensionesPermitidas[$tipo] ?? null;
+
+        if ($extension === null) {
+            throw new \Exception(
+                "El tipo de imagen {$tipo} no está permitido."
+            );
+        }
+
+        $fileName = Str::uuid()->toString() . '.' . $extension;
+        $path = trim($folder, '/') . '/' . $fileName;
+
+        $guardada = Storage::disk('public')->put(
+            $path,
+            $contenido
+        );
+
+        if (!$guardada) {
+            throw new \Exception(
+                'No fue posible guardar la imagen.'
+            );
+        }
 
         return Imagen::create([
-            'disk'          => 'public',
-            'path'          => $path,
+            'disk' => 'public',
+            'path' => $path,
             'original_name' => $fileName,
-            'mime'          => $mime,
-            'size'          => Storage::disk('public')->size($path),
+            'mime' => 'image/' . $tipo,
+            'size' => strlen($contenido),
         ]);
     }
 
@@ -690,31 +986,73 @@ class WalkAroundController extends Controller
     }
     public function bitacora(Request $request)
     {
-        $query = Bitacora::with('usuario')
-            ->orderBy('created_at', 'desc');
-        if ($request->filled('q')) {
-            $q = $request->q;
+        $request->validate([
+            'q'        => ['nullable', 'string', 'max:150'],
+            'accion'   => ['nullable', 'string', 'max:50'],
+            'desde'    => ['nullable', 'date'],
+            'hasta'    => ['nullable', 'date', 'after_or_equal:desde'],
+            'page'     => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
+        ]);
 
-            $query->where(function ($sub) use ($q) {
-                $sub->where('modulo', 'like', "%{$q}%")
+        $perPage = (int) $request->input('per_page', 20);
+
+        $query = Bitacora::query()
+            ->with([
+                'usuario:id,name,email'
+            ])
+            ->orderByDesc('created_at');
+
+        /*
+        * Si tu tabla de bitácora contiene registros de varios módulos
+        * y quieres mostrar solamente WalkAround, puedes habilitar:
+        *
+        * $query->where('modulo', 'WalkAround');
+        */
+
+        if ($request->filled('q')) {
+            $q = trim($request->input('q'));
+
+            $query->where(function ($subQuery) use ($q) {
+                $subQuery
+                    ->where('modulo', 'like', "%{$q}%")
                     ->orWhere('accion', 'like', "%{$q}%")
                     ->orWhere('descripcion', 'like', "%{$q}%")
-                    ->orWhere('elabora', 'like', "%{$q}%");
+                    ->orWhere('elabora', 'like', "%{$q}%")
+                    ->orWhereHas('usuario', function ($usuarioQuery) use ($q) {
+                        $usuarioQuery
+                            ->where('name', 'like', "%{$q}%")
+                            ->orWhere('email', 'like', "%{$q}%");
+                    });
             });
         }
 
         if ($request->filled('accion')) {
-            $query->where('accion', $request->accion);
+            $query->where(
+                'accion',
+                strtoupper($request->input('accion'))
+            );
         }
+
         if ($request->filled('desde')) {
-            $query->whereDate('fecha', '>=', $request->desde);
+            $query->whereDate(
+                'fecha',
+                '>=',
+                $request->input('desde')
+            );
         }
 
         if ($request->filled('hasta')) {
-            $query->whereDate('fecha', '<=', $request->hasta);
+            $query->whereDate(
+                'fecha',
+                '<=',
+                $request->input('hasta')
+            );
         }
 
-        $bitacoras = $query->paginate(20);
+        $bitacoras = $query
+            ->paginate($perPage)
+            ->appends($request->query());
 
         return response()->json($bitacoras);
     }
