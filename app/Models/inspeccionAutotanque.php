@@ -14,13 +14,16 @@ class inspeccionAutotanque extends Model
         'operador',
         'kilometraje',
         'porcentaje_combustible',
+        'suministro_combustible',
         'checklist_respuestas',
         'danos_grafico',
         'status',
     ];
     protected $casts = [
+        'fecha_inspeccion' => 'datetime',
         'checklist_respuestas' => 'array',
         'danos_grafico' => 'array',
+        'suministro_combustible' => 'array',
     ];
     public function turno(): BelongsTo
     {

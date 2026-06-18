@@ -221,7 +221,23 @@ function Watermark({ src }: { src: string }) {
         />
     );
 }
+const formatDateDMY = (value: unknown): string => {
+    if (!value) {
+        return "-";
+    }
 
+    const dateText = String(value)
+        .split("T")[0]
+        .split(" ")[0];
+
+    const [year, month, day] = dateText.split("-");
+
+    if (!year || !month || !day) {
+        return String(value);
+    }
+
+    return `${day}/${month}/${year}`;
+};
 export default function EntregaTurnoPdfDoc({ detalle }: { detalle: any }) {
     const watermarkUrl = `${window.location.origin}/1c463caa-e3a1-4093-a00b-1c0da40795f6.jpg`;
     const logoUrl = `${window.location.origin}/54657b8c-8428-41cc-a654-794ca81943d6.jpg`;
@@ -229,10 +245,8 @@ export default function EntregaTurnoPdfDoc({ detalle }: { detalle: any }) {
     const fondo = detalle.fondo_documentacion ?? {};
     const gastos = Array.isArray(fondo.gastos) ? fondo.gastos : [];
 
-    const fecha = detalle.fecha ? String(detalle.fecha).split("T")[0] : "-";
-    const fechaGenerado = detalle.created_at
-        ? String(detalle.created_at).split("T")[0]
-        : "-";
+    const fecha = formatDateDMY(detalle.fecha);
+    const fechaGenerado = formatDateDMY(detalle.created_at);
 
     return (
         <Document>

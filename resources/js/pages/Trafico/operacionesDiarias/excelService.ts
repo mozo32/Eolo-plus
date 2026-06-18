@@ -86,7 +86,20 @@ const parseStringToDate = (
 
     return null;
 };
+const formatearFechaHoraExcel = (
+    date: Date | null
+): string => {
+    if (!date) return "";
 
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
+};
 const obtenerFechaOperacion = (
     operacion?: Operacion | null
 ): Date | null => {
@@ -599,7 +612,7 @@ export const exportarOperacionesAExcel = async (
                 salida?.equipo ??
                 '',
             llegada?.id ?? '',
-            fechaLlegada ?? '',
+            formatearFechaHoraExcel(fechaLlegada),
             llegada?.lugar ?? '',
             llegada?.tipo_operacion ?? '',
             llegada
@@ -609,7 +622,7 @@ export const exportarOperacionesAExcel = async (
                 ? valorNumero(llegada.equipaje)
                 : '',
             salida?.id ?? '',
-            fechaSalida ?? '',
+            formatearFechaHoraExcel(fechaSalida),
             salida?.lugar ?? '',
             salida?.tipo_operacion ?? '',
             salida
@@ -626,8 +639,8 @@ export const exportarOperacionesAExcel = async (
                 fechaSalida
             ),
             mantenimientoCsae ? 'SI' : 'NO',
-            fechaCsaeEntrada ?? '',
-            fechaCsaeSalida ?? '',
+            formatearFechaHoraExcel(fechaCsaeEntrada),
+            formatearFechaHoraExcel(fechaCsaeSalida),
             mantenimientoCsae
                 ? formatearEstancia(
                     fechaCsaeEntrada,
@@ -670,14 +683,6 @@ export const exportarOperacionesAExcel = async (
                 cell.fill = csaeBodyFill;
             } else {
                 cell.fill = baseBodyFill;
-            }
-        });
-
-        [5, 11, 19, 20].forEach((columnNumber) => {
-            const cell = row.getCell(columnNumber);
-
-            if (cell.value instanceof Date) {
-                cell.numFmt = 'dd/mm/yyyy hh:mm';
             }
         });
 

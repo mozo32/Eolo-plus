@@ -34,6 +34,7 @@ class InspeccioAutotanqueController extends Controller
                         'operador'               => $request->operador,
                         'kilometraje'            => $request->km,
                         'porcentaje_combustible' => $request->combustible,
+                        'suministro_combustible' => $request->input('suministro_combustible'),
                         'checklist_respuestas'   => $request->checklist,
                         'danos_grafico'          => $request->danos,
                     ]
@@ -114,6 +115,7 @@ class InspeccioAutotanqueController extends Controller
                 'checklist'    => $inspeccion->checklist_respuestas,
                 'km'           => $inspeccion->kilometraje,
                 'combustible'  => $inspeccion->porcentaje_combustible,
+                'suministro_combustible' => $inspeccion->suministro_combustible,
                 'danos'        => $inspeccion->danos_grafico,
                 'operador'     => $inspeccion->operador,
                 'firmas_db'    => $firmasMapeadas,

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { usePage } from '@inertiajs/react';
 import { ClipboardCheck, Truck, PenTool, CheckCircle2, ArrowRight, Save, Layout } from 'lucide-react';
 import { SeccionChecklist } from './SeccionChecklist';
-import { SeccionVehiculo } from './SeccionVehiculo';
+import { SeccionVehiculo, type DatosVehiculo } from "./SeccionVehiculo";
 import { SeccionFirmas } from './SeccionFirmas';
 import { guardarInspeccion } from '@/stores/apiInspeccionAutoTanque';
 import { router } from '@inertiajs/react';
@@ -15,6 +15,15 @@ interface CheckEstadoProps {
     onSuccess?: () => void;
 }
 
+const DATOS_VEHICULO_INICIALES: DatosVehiculo = {
+    km: "",
+    combustible: "50",
+    suministroCombustible: {
+        suministrado: "",
+        hora: "",
+        litros: "",
+    },
+};
 const SECCIONES_CHECK = [
     {
         titulo: "Vehículo General",
@@ -59,7 +68,7 @@ export const CheckEstadoAutotanque = ({ data: dataProp, onSuccess }: CheckEstado
     const [firmasCargadas, setFirmasCargadas] = useState<Record<string, string>>({});
     const [tabActiva, setTabActiva] = useState('checklist');
     const [respuestas, setRespuestas] = useState<Record<string, string>>({});
-    const [datosVehiculo, setDatosVehiculo] = useState({ km: '', combustible: '50' });
+    const [datosVehiculo, setDatosVehiculo] = useState<DatosVehiculo>(DATOS_VEHICULO_INICIALES);
     const [marcasDanos, setMarcasDanos] = useState<any[]>([]);
     const [fotos, setFotos] = useState<File[]>([]);
     const [previews, setPreviews] = useState<string[]>([]);
@@ -79,9 +88,26 @@ export const CheckEstadoAutotanque = ({ data: dataProp, onSuccess }: CheckEstado
                 const data = await fetchInspeccionPorTurno(turnoId);
                 if (data) {
                     setRespuestas(data.checklist || {});
+                    const suministroGuardado =
+                        data.suministro_combustible ??
+                        data.suministroCombustible ??
+                        {};
+
                     setDatosVehiculo({
-                        km: data.km?.toString() || '',
-                        combustible: data.combustible?.toString() || '50'
+                        km: data.km?.toString() || "",
+                        combustible:
+                            data.combustible?.toString() || "50",
+                        suministroCombustible: {
+                            suministrado:
+                                suministroGuardado.suministrado ??
+                                "",
+                            hora:
+                                suministroGuardado.hora ??
+                                "",
+                            litros:
+                                suministroGuardado.litros?.toString() ??
+                                "",
+                        },
                     });
                     setMarcasDanos(data.danos || []);
                     setFirmasCargadas(data.firmas_db || {});
@@ -124,13 +150,27 @@ export const CheckEstadoAutotanque = ({ data: dataProp, onSuccess }: CheckEstado
                 checklist: respuestas,
                 km: datosVehiculo.km,
                 combustible: datosVehiculo.combustible,
+                suministro_combustible: {
+                    suministrado:
+                        datosVehiculo
+                            .suministroCombustible
+                            .suministrado,
+                    hora:
+                        datosVehiculo
+                            .suministroCombustible
+                            .hora,
+                    litros:
+                        datosVehiculo
+                            .suministroCombustible
+                            .litros,
+                },
                 danos: marcasDanos,
                 firmas: datosFirmas,
                 evidencias: nuevasEvidenciasBase64,
             };
             await guardarInspeccion(dataLog);
             setRespuestas({});
-            setDatosVehiculo({ km: '', combustible: '50' });
+            setDatosVehiculo(DATOS_VEHICULO_INICIALES,);
             setMarcasDanos([]);
             setFotos([]);
             setTabActiva('checklist');
@@ -200,7 +240,7 @@ export const CheckEstadoAutotanque = ({ data: dataProp, onSuccess }: CheckEstado
                         />
                     )}
                     {tabActiva === 'vehiculo' && (
-                        <SeccionVehiculo datos={datosVehiculo} onChange={setDatosVehiculo} />
+                        <SeccionVehiculo datos={datosVehiculo} onChange={setDatosVehiculo}/>
                     )}
                     {tabActiva === 'firmas' && (
                         <SeccionFirmas

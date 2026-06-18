@@ -152,6 +152,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                 items: [
                     { id: 'despacho-around', title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
                     { id: 'despacho-turno', title: 'Entrega Turno', href: entregaTurno(), icon: LayoutGrid },
+                    { id: 'despacho-operaciones', title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },
                     { id: 'despacho-aeronaves', title: 'Gestionar Aeronaves', href: gestionarAeronaves(), icon: LayoutGrid },
                 ],
             },
@@ -179,7 +180,6 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                 key: 4,
                 items: [
                     { id: 'rampa-turno', title: 'Entrega Turno de Rampa', href: entregaTurnoR(), icon: LayoutGrid },
-                    { id: 'rampa-personal', title: 'Asistencia de Personal', href: asistenciaPersonal(), icon: LayoutGrid },
                     { id: 'rampa-seguridad', title: 'checkList Equipo de Seguridad', href: checkListEquipo(), icon: LayoutGrid },
                     { id: 'rampa-operaciones', title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },
 

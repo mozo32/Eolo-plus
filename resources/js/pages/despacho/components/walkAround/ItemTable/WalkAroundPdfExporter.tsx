@@ -38,7 +38,27 @@ function toPct(n: number) {
     const clamped = Math.max(0, Math.min(100, v));
     return clamped;
 }
+function formatFechaDDMMYY(value: unknown): string {
+    if (!value) return "-";
 
+    const dateText = String(value).split("T")[0].split(" ")[0];
+    const [year, month, day] = dateText.split("-");
+
+    if (!year || !month || !day) return String(value);
+
+    return `${day}/${month}/${year.slice(-2)}`;
+}
+function formatHoraHHMM(value: unknown): string {
+    if (!value) return "-";
+
+    const hora = String(value);
+
+    if (hora.includes("T")) {
+        return hora.split("T")[1]?.slice(0, 5) || "-";
+    }
+
+    return hora.slice(0, 5);
+}
 function getFirmaByRol(detalle: any, rol: string) {
     const firmas = Array.isArray(detalle?.firmas) ? detalle.firmas : [];
     return firmas.find((x: any) => x?.rol === rol && x?.status !== "I") ?? null;
@@ -584,12 +604,14 @@ function WalkAroundPdfDoc({
                         </View>
                         <View style={[styles.fieldCell, { width: "12%" }]}>
                             <Text style={styles.label}>Hora</Text>
-                            <Text style={styles.value}>{detalle.hora ?? "-"}</Text>
+                            <Text style={styles.value}>
+                                {formatHoraHHMM(detalle.hora)}
+                            </Text>
                         </View>
                         <View style={[styles.fieldCell, styles.fieldCellLast, { width: "12%" }]}>
                             <Text style={styles.label}>Fecha</Text>
                             <Text style={styles.value}>
-                                {detalle.fecha ? String(detalle.fecha).split("T")[0] : "-"}
+                                {formatFechaDDMMYY(detalle.fecha)}
                             </Text>
                         </View>
                     </View>
