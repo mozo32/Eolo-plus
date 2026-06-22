@@ -6,7 +6,6 @@ const MESES = [
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
 
-// Diccionario con los nombres específicos de cada dren
 const NOMBRES_DRENES: Record<number, string> = {
     1: "Delantero del tanque",
     2: "Strainer",
@@ -21,17 +20,16 @@ const obtenerMes = (fecha: string) => {
     return d ? MESES[d.getMonth()] : '';
 };
 
-// Función para evitar que JavaScript altere o desfase la fecha/hora
 const parsearFechaSegura = (fechaStr: string): Date | null => {
     if (!fechaStr) return null;
-    // Espera formato "YYYY-MM-DD HH:mm:ss"
+
     const partes = fechaStr.split(' ');
-    if (partes.length !== 2) return new Date(fechaStr); // Fallback por si acaso
+
+    if (partes.length !== 2) return new Date(fechaStr);
 
     const [anio, mes, dia] = partes[0].split('-').map(Number);
     const [hora, min, seg] = partes[1].split(':').map(Number);
 
-    // los meses en JavaScript van de 0 a 11
     return new Date(anio, mes - 1, dia, hora, min, seg);
 };
 
@@ -46,8 +44,10 @@ const estiloHeader = (cell: ExcelJS.Cell) => {
     cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F5597' } };
     cell.border = {
-        top: { style: 'thin' }, left: { style: 'thin' },
-        bottom: { style: 'thin' }, right: { style: 'thin' }
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
     };
 };
 
@@ -61,23 +61,90 @@ const estiloFila = (cell: ExcelJS.Cell) => {
     };
 };
 
-// Formato de fecha corregido a 24 Horas (hh:mm:ss sin AM/PM)
 const aplicarFormatoFecha = (cell: ExcelJS.Cell) => {
     if (cell.value instanceof Date) {
         cell.numFmt = 'dd/mm/yyyy hh:mm:ss';
     }
 };
 
-export const exportarInspeccionesExcel = async (registros: any[]) => {
+const combinarCeldasPorId = (
+    worksheet: ExcelJS.Worksheet,
+    filaInicio: number,
+    filaFin: number,
+    columnasACombinar: number[] = [1, 2, 3],
+) => {
+    let inicioGrupo = 0;
+    let idActual: any = null;
 
+    const esFilaDeDatos = (fila: number) => {
+        const valorId = worksheet.getCell(fila, 1).value;
+
+        return (
+            valorId !== null &&
+            valorId !== undefined &&
+            valorId !== "" &&
+            !isNaN(Number(valorId))
+        );
+    };
+
+    const cerrarGrupo = (finGrupo: number) => {
+        if (inicioGrupo > 0 && inicioGrupo < finGrupo) {
+            columnasACombinar.forEach((columna) => {
+                worksheet.mergeCells(
+                    inicioGrupo,
+                    columna,
+                    finGrupo,
+                    columna,
+                );
+
+                const celda = worksheet.getCell(inicioGrupo, columna);
+
+                celda.alignment = {
+                    vertical: "middle",
+                    horizontal: "center",
+                    wrapText: true,
+                };
+
+                celda.border = {
+                    top: { style: "thin", color: { argb: "FFE5E7EB" } },
+                    left: { style: "thin", color: { argb: "FFE5E7EB" } },
+                    bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+                    right: { style: "thin", color: { argb: "FFE5E7EB" } },
+                };
+            });
+        }
+    };
+
+    for (let fila = filaInicio; fila <= filaFin + 1; fila++) {
+        if (fila > filaFin || !esFilaDeDatos(fila)) {
+            cerrarGrupo(fila - 1);
+            inicioGrupo = 0;
+            idActual = null;
+            continue;
+        }
+
+        const idFila = worksheet.getCell(fila, 1).value;
+
+        if (inicioGrupo === 0) {
+            inicioGrupo = fila;
+            idActual = idFila;
+            continue;
+        }
+
+        if (idFila !== idActual) {
+            cerrarGrupo(fila - 1);
+            inicioGrupo = fila;
+            idActual = idFila;
+        }
+    }
+};
+
+export const exportarInspeccionesExcel = async (registros: any[]) => {
     const workbook = new ExcelJS.Workbook();
 
     const combustible = registros.filter(r => r.tipo === 'COMBUSTIBLE');
     const autotanque = registros.filter(r => r.tipo === 'AUTOTANQUE');
 
-    /* =========================
-       COMBUSTIBLE
-    ========================= */
     const wsC = workbook.addWorksheet('Combustible');
 
     wsC.mergeCells('A1:E1');
@@ -93,6 +160,7 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
     headerRowC.eachCell(estiloHeader);
 
     const groupedC: Record<string, any[]> = {};
+
     combustible.forEach(item => {
         const mes = obtenerMes(item.fecha);
         if (!groupedC[mes]) groupedC[mes] = [];
@@ -101,6 +169,7 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
 
     Object.keys(groupedC).forEach(mes => {
         const groupRow = wsC.addRow([`MES: ${mes}`]);
+
         groupRow.eachCell(cell => {
             cell.font = { bold: true, color: { argb: 'FF1F4E79' } };
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F1FA' } };
@@ -111,23 +180,27 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
                 const row = wsC.addRow([
                     item.id,
                     mes,
-                    parsearFechaSegura(item.fecha) || '', // Objeto Date sin desfaces locales
+                    parsearFechaSegura(item.fecha) || '',
                     img.pivot?.tag || '',
                     img.pivot?.observacion || ''
                 ]);
+
                 row.eachCell(estiloFila);
                 aplicarFormatoFecha(row.getCell(3));
             });
         });
     });
 
+    combinarCeldasPorId(wsC, 4, wsC.lastRow?.number ?? 4, [1, 2, 3]);
+
     wsC.columns = [
-        { width: 10 }, { width: 15 }, { width: 25 }, { width: 30 }, { width: 30 }
+        { width: 10 },
+        { width: 15 },
+        { width: 25 },
+        { width: 30 },
+        { width: 30 }
     ];
 
-    /* =========================
-       AUTOTANQUE (DISEÑO VERTICAL)
-    ========================= */
     const wsA = workbook.addWorksheet('Autotanque');
 
     wsA.mergeCells('A1:G1');
@@ -138,12 +211,12 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
     wsA.mergeCells('A2:G2');
     wsA.getCell('A2').value = `Generado: ${new Date().toLocaleString()}`;
 
-    // Cambiamos "N° DREN" por "NOMBRE DEL DREN"
     const headersA = ['ID', 'MES', 'FECHA', 'NOMBRE DEL DREN', 'TOMA MUESTRA', 'CLARIDAD', 'SÓLIDOS/AGUA'];
     const headerRowA = wsA.addRow(headersA);
     headerRowA.eachCell(estiloHeader);
 
     const groupedA: Record<string, any[]> = {};
+
     autotanque.forEach(item => {
         const mes = obtenerMes(item.fecha);
         if (!groupedA[mes]) groupedA[mes] = [];
@@ -152,6 +225,7 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
 
     Object.keys(groupedA).forEach(mes => {
         const groupRow = wsA.addRow([`MES: ${mes}`]);
+
         groupRow.eachCell(cell => {
             cell.font = { bold: true, color: { argb: 'FF1F4E79' } };
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F1FA' } };
@@ -165,35 +239,40 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
                 const claridad = item[`prueba_claridad_brillantez_dren_${i}`];
                 const solidosAgua = item[`presencia_solidos_agua_dren_${i}`];
 
-                // Obtenemos el nombre descriptivo. Ej: "Dren 1: Delantero del tanque"
-                const nombreDren = NOMBRES_DRENES[i] ? `Dren ${i}: ${NOMBRES_DRENES[i]}` : `Dren ${i}`;
+                const nombreDren = NOMBRES_DRENES[i]
+                    ? `Dren ${i}: ${NOMBRES_DRENES[i]}`
+                    : `Dren ${i}`;
 
-                const filaDren = [
+                const row = wsA.addRow([
                     item.id,
                     mes,
                     fechaObjeto,
-                    nombreDren, // Se inserta el nombre descriptivo aquí
+                    nombreDren,
                     tomaMuestra || '',
                     claridad || '',
                     solidosAgua || ''
-                ];
+                ]);
 
-                const row = wsA.addRow(filaDren);
                 row.eachCell(estiloFila);
                 aplicarFormatoFecha(row.getCell(3));
             }
         });
     });
 
-    // Se ajustó el ancho de la columna del dren (de 15 a 30) para que quepa el nuevo nombre
+    combinarCeldasPorId(wsA, 4, wsA.lastRow?.number ?? 4, [1, 2, 3]);
+
     wsA.columns = [
-        { width: 10 }, { width: 15 }, { width: 25 }, { width: 30 }, { width: 20 }, { width: 20 }, { width: 20 }
+        { width: 10 },
+        { width: 15 },
+        { width: 25 },
+        { width: 30 },
+        { width: 20 },
+        { width: 20 },
+        { width: 20 }
     ];
 
-    /* =========================
-       DESCARGA DEL ARCHIVO
-    ========================= */
     const buffer = await workbook.xlsx.writeBuffer();
+
     const blob = new Blob([buffer], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     });

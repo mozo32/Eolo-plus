@@ -243,7 +243,7 @@ class InspeccioAutotanqueController extends Controller
             }
 
             $alerta = false;
-            $mensaje = "PRODUCTO CONFORME";
+            $mensaje = "PRODUCTO CONFORME (CLARA)";
 
             if ($tipo === 'SHELL') {
                 if ($h >= 75 && $h <= 250 && $s > 0.15) {
@@ -522,11 +522,42 @@ class InspeccioAutotanqueController extends Controller
 
     public function showExcel(Request $request)
     {
-        // Capturamos los parámetros reales que vienen del request
         $start = $request->query('fechaInicio');
-        $end   = $request->query('fechaFin');
-        $id    = $request->query('id'); // o 'buscar' si mapeas el ID ahí
+        $end = $request->query('fechaFin');
+        $id = $request->query('id');
         $inspector = $request->query('inspector');
+
+        $nombresDrenes = [
+            1 => 'delantero del tanque',
+            2 => 'strainer',
+            3 => 'succión auxiliar',
+            4 => 'trasero del tanque',
+            5 => 'entrada a elementos filtrantes',
+            6 => 'salida de elementos filtrantes',
+        ];
+
+        $obtenerChecklist = function ($valor) {
+            if (is_array($valor)) {
+                return $valor;
+            }
+
+            if (is_string($valor)) {
+                $json = json_decode($valor, true);
+                return is_array($json) ? $json : [];
+            }
+
+            return [];
+        };
+
+        $obtenerValorChecklist = function (array $check, array $posiblesLlaves) {
+            foreach ($posiblesLlaves as $llave) {
+                if (array_key_exists($llave, $check)) {
+                    return $check[$llave];
+                }
+            }
+
+            return null;
+        };
 
         $inspeccionesCombustibles = InspeccionCombustibles::with([
                 'user:id,name',
@@ -544,29 +575,38 @@ class InspeccioAutotanqueController extends Controller
                     $q->where('name', 'like', '%' . $inspector . '%');
                 });
             })
-            // CORREGIDO: Usar las variables mapeadas con los parámetros reales
             ->when($start && $end, function ($query) use ($start, $end) {
                 $query->whereBetween('fecha', [$start . ' 00:00:00', $end . ' 23:59:59']);
             })
-            ->orderBy('fecha', 'asc') // Ordenado ascendente desde la query
-            ->get();
-
+            ->orderBy('fecha', 'asc')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'tipo' => 'COMBUSTIBLE',
+                    'fecha' => $item->fecha,
+                    'usuario' => $item->user->name ?? null,
+                    'imagenes' => $item->imagenes
+                ];
+            });
 
         $inspeccionesAutotanque = InspeccionAutotanque::with(['imagenes'])
             ->where('status', 'A')
-            // CORREGIDO: Usar las variables mapeadas con los parámetros reales
             ->when($start && $end, function ($query) use ($start, $end) {
                 $query->whereBetween('fecha_inspeccion', [$start . ' 00:00:00', $end . ' 23:59:59']);
             })
-            ->orderBy('fecha_inspeccion', 'asc') // Ordenado ascendente desde la query
+            ->orderBy('fecha_inspeccion', 'asc')
             ->get()
-            ->map(function ($item) {
+            ->map(function ($item) use ($nombresDrenes, $obtenerChecklist, $obtenerValorChecklist) {
+                $check = $obtenerChecklist($item->checklist_respuestas);
 
-                $check = $item->checklist_respuestas ?? [];
+                $fechaInspeccion = (string) $item->fecha_inspeccion;
+                $createdAt = (string) $item->created_at;
 
-                $soloFecha = explode(' ', $item->fecha_inspeccion)[0];
-                $soloHora = explode(' ', $item->created_at)[1] ?? '00:00:00';
-                $fechaConHoraReal = $soloFecha . ' ' . $soloHora;
+                $soloFecha = explode(' ', $fechaInspeccion)[0] ?? null;
+                $soloHora = explode(' ', $createdAt)[1] ?? '00:00:00';
+
+                $fechaConHoraReal = $soloFecha ? $soloFecha . ' ' . $soloHora : $createdAt;
 
                 $resultado = [
                     'id' => $item->id,
@@ -575,39 +615,32 @@ class InspeccioAutotanqueController extends Controller
                     'operador' => $item->operador,
                 ];
 
-                for ($i = 1; $i <= 6; $i++) {
-                    $resultado["toma_muestra_combustible_dren_{$i}"] =
-                        $check["Toma de Muestra de Combustible - Dren {$i}"] ?? null;
+                foreach ($nombresDrenes as $numero => $nombreDren) {
+                    $resultado["toma_muestra_combustible_dren_{$numero}"] = $obtenerValorChecklist($check, [
+                        "Toma de Muestra de Combustible - Dren {$nombreDren}",
+                        "Toma de Muestra de Combustible - Dren {$numero}",
+                    ]);
 
-                    $resultado["prueba_claridad_brillantez_dren_{$i}"] =
-                        $check["Prueba de claridad y Brillantez - Dren {$i}"] ?? null;
+                    $resultado["prueba_claridad_brillantez_dren_{$numero}"] = $obtenerValorChecklist($check, [
+                        "Prueba de claridad y Brillantez - Dren {$nombreDren}",
+                        "Prueba de claridad y Brillantez - Dren {$numero}",
+                    ]);
 
-                    $resultado["presencia_solidos_agua_dren_{$i}"] =
-                        $check["Presencia de Sólidos y/o agua de forma visual - Dren {$i}"] ?? null;
+                    $resultado["presencia_solidos_agua_dren_{$numero}"] = $obtenerValorChecklist($check, [
+                        "Presencia de Sólidos y/o agua de forma visual - Dren {$nombreDren}",
+                        "Presencia de Sólidos y/o agua de forma visual - Dren {$numero}",
+                    ]);
                 }
+
                 $resultado['imagenes'] = $item->imagenes;
 
                 return $resultado;
             });
 
-
-        $inspeccionesCombustibles = $inspeccionesCombustibles->map(function ($item) {
-            return [
-                'id' => $item->id,
-                'tipo' => 'COMBUSTIBLE',
-                'fecha' => $item->fecha,
-                'usuario' => $item->user->name ?? null,
-                'imagenes' => $item->imagenes
-            ];
-        });
-
-
-        // MODIFICACIÓN: Unificar colecciones y ordenar de más antiguo a más reciente de forma estricta (sortBy)
         $resultado = $inspeccionesCombustibles
             ->merge($inspeccionesAutotanque)
-            ->sortBy('fecha') // Cambiado de sortByDesc a sortBy para mantener consistencia cronológica
+            ->sortBy('fecha')
             ->values();
-
 
         return response()->json($resultado);
     }

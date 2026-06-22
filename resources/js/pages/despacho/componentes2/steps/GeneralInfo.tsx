@@ -118,9 +118,27 @@ const GeneralInfo = ({ data, onChange }: Props) => {
                         <input
                             type="text"
                             value={data.tipo}
-                            onChange={(e) => onChange({ tipo: e.target.value.toUpperCase() })}
+                            onChange={(e) =>
+                                onChange({
+                                    tipo: e.target.value.replace(/\s/g, "").toUpperCase()
+                                })
+                            }
+                            onKeyDown={(e) => {
+                                if (e.key === " ") {
+                                    e.preventDefault();
+                                }
+                            }}
+                            onPaste={(e) => {
+                                e.preventDefault();
+
+                                const texto = e.clipboardData
+                                    .getData("text")
+                                    .replace(/\s/g, "")
+                                    .toUpperCase();
+
+                                onChange({ tipo: texto });
+                            }}
                             placeholder="Ej. C172"
-                            // disabled={data.bloqueado}
                             className={inputStyle}
                         />
                     </div>

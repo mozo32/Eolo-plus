@@ -248,7 +248,26 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
                             placeholder="Ejem. H25B"
                             value={formData.equipo}
                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100 disabled:text-slate-500"
-                            onChange={(e) => handleFieldChange("equipo", e.target.value.toUpperCase())}
+                            onChange={(e) =>
+                                handleFieldChange(
+                                    "equipo",
+                                    e.target.value.replace(/\s/g, "").toUpperCase()
+                                )
+                            }
+                            onKeyDown={(e) => {
+                                if (e.key === " ") {
+                                    e.preventDefault();
+                                }
+                            }}
+                            onPaste={(e) => {
+                                e.preventDefault();
+                                const texto = e.clipboardData
+                                    .getData("text")
+                                    .replace(/\s/g, "")
+                                    .toUpperCase();
+
+                                handleFieldChange("equipo", texto);
+                            }}
                             required
                             disabled={soloLectura}
                         />

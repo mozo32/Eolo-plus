@@ -22,6 +22,7 @@ const DATOS_VEHICULO_INICIALES: DatosVehiculo = {
         suministrado: "",
         hora: "",
         litros: "",
+        horometro: "",
     },
 };
 const SECCIONES_CHECK = [
@@ -107,6 +108,9 @@ export const CheckEstadoAutotanque = ({ data: dataProp, onSuccess }: CheckEstado
                             litros:
                                 suministroGuardado.litros?.toString() ??
                                 "",
+                            horometro:
+                                suministroGuardado.horometro?.toString() ??
+                                "",
                         },
                     });
                     setMarcasDanos(data.danos || []);
@@ -155,6 +159,10 @@ export const CheckEstadoAutotanque = ({ data: dataProp, onSuccess }: CheckEstado
                         datosVehiculo
                             .suministroCombustible
                             .suministrado,
+                    horometro:
+                        datosVehiculo
+                            .suministroCombustible
+                            .horometro,
                     hora:
                         datosVehiculo
                             .suministroCombustible

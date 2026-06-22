@@ -10,6 +10,7 @@ export interface SuministroCombustible {
     suministrado: "Sí" | "No" | "";
     hora: string;
     litros: string;
+    horometro: string;
 }
 
 export interface DatosVehiculo {
@@ -289,7 +290,7 @@ export const SeccionVehiculo = ({
 
                         <div>
                             <h3 className="text-sm font-black text-gray-800">
-                                Suministro de combustible
+                                Suministro de combustible diesel
                             </h3>
 
                             <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
@@ -324,12 +325,12 @@ export const SeccionVehiculo = ({
                             });
                         }}
                         className={`h-10 rounded-xl border px-4 text-xs font-black outline-none ${suministro.suministrado ===
-                                "Sí"
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                : suministro.suministrado ===
-                                    "No"
-                                    ? "border-red-200 bg-red-50 text-red-600"
-                                    : "border-amber-200 bg-white text-amber-700"
+                            "Sí"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : suministro.suministrado ===
+                                "No"
+                                ? "border-red-200 bg-red-50 text-red-600"
+                                : "border-amber-200 bg-white text-amber-700"
                             }`}
                     >
                         <option value="">
@@ -345,7 +346,32 @@ export const SeccionVehiculo = ({
                         </option>
                     </select>
                 </div>
+                <div className="mt-5 space-y-2">
+                    <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-gray-500">
+                        <Milestone size={14} />
+                        Horómetro
+                    </label>
 
+                    <div className="relative">
+                        <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={suministro.horometro}
+                            onChange={(event) =>
+                                actualizarSuministro({
+                                    horometro: event.target.value,
+                                })
+                            }
+                            className="h-12 w-full rounded-xl border border-gray-200 bg-white px-4 pr-14 text-sm font-bold text-gray-700 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
+                        />
+
+                        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs font-black text-gray-400">
+                            HRS
+                        </span>
+                    </div>
+                </div>
                 {suministro.suministrado ===
                     "Sí" && (
                         <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -370,8 +396,8 @@ export const SeccionVehiculo = ({
                                             })
                                         }
                                         className={`h-12 w-full rounded-xl border bg-white px-4 text-sm font-bold outline-none transition ${horaValida
-                                                ? "border-gray-200 text-gray-700 focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
-                                                : "border-red-300 text-red-600 focus:border-red-400 focus:ring-4 focus:ring-red-100"
+                                            ? "border-gray-200 text-gray-700 focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
+                                            : "border-red-300 text-red-600 focus:border-red-400 focus:ring-4 focus:ring-red-100"
                                             }`}
                                     />
 

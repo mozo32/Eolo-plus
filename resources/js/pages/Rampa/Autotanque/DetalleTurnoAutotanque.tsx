@@ -187,6 +187,7 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
     const remision = source?.remision || [];
     const sumaAutotanque = source?.sumaAutotanque || [];
     const inspeccion = turno?.inspeccion || source?.inspeccion;
+    console.log(inspeccion);
 
     const formatNumber = (val: any) => {
         const num = Number(val);
@@ -276,17 +277,34 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
 
     const respuestas = inspeccion?.checklist_respuestas || {};
     const marcasHistoricas: Marca3D[] = inspeccion?.danos_grafico || [];
+    const suministroCombustible =
+        inspeccion?.suministro_combustible ??
+        inspeccion?.suministroCombustible ??
+        (
+            inspeccion?.suministrado !== undefined ||
+                inspeccion?.horometro !== undefined ||
+                inspeccion?.hora !== undefined ||
+                inspeccion?.litros !== undefined
+                ? inspeccion
+                : {}
+        );
 
+    const valorTexto = (valor: any) => {
+        if (valor === null || valor === undefined || valor === "") {
+            return "---";
+        }
+
+        return valor.toString();
+    };
     return (
         <div className="space-y-6 p-1">
             <div className="flex border border-slate-200 bg-slate-50/70 p-1 rounded-xl">
                 <button
                     onClick={() => setActiveTab('balance')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
-                        activeTab === 'balance'
-                            ? 'bg-white text-indigo-600 shadow-sm border border-slate-100'
-                            : 'text-slate-500 hover:text-slate-800'
-                    }`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${activeTab === 'balance'
+                        ? 'bg-white text-indigo-600 shadow-sm border border-slate-100'
+                        : 'text-slate-500 hover:text-slate-800'
+                        }`}
                 >
                     <Calculator size={14} />
                     Balances y Ventas
@@ -294,11 +312,10 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
 
                 <button
                     onClick={() => setActiveTab('checklist')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
-                        activeTab === 'checklist'
-                            ? 'bg-white text-indigo-600 shadow-sm border border-slate-100'
-                            : 'text-slate-500 hover:text-slate-800'
-                    }`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${activeTab === 'checklist'
+                        ? 'bg-white text-indigo-600 shadow-sm border border-slate-100'
+                        : 'text-slate-500 hover:text-slate-800'
+                        }`}
                 >
                     <ShieldCheck size={14} />
                     Checklist e Inspección
@@ -306,11 +323,10 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
 
                 <button
                     onClick={() => setActiveTab('final')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
-                        activeTab === 'final'
-                            ? 'bg-white text-indigo-600 shadow-sm border border-slate-100'
-                            : 'text-slate-500 hover:text-slate-800'
-                    }`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${activeTab === 'final'
+                        ? 'bg-white text-indigo-600 shadow-sm border border-slate-100'
+                        : 'text-slate-500 hover:text-slate-800'
+                        }`}
                 >
                     <Eye size={14} />
                     Gráficos 3D y Firmas
@@ -382,8 +398,8 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                                                 <span className="font-bold text-slate-500">
                                                     {s.created_at
                                                         ? formatChronology(
-                                                              s.created_at.replace('T', ' ').substring(0, 19)
-                                                          ).split(' ')[0]
+                                                            s.created_at.replace('T', ' ').substring(0, 19)
+                                                        ).split(' ')[0]
                                                         : '---'}
                                                 </span>
                                                 <span className="font-black text-emerald-600">{s.folio}</span>
@@ -445,11 +461,10 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                             <div className="text-center md:bg-white/10 p-3 rounded-xl border border-white/20">
                                 <p className="text-[10px] font-black text-white/70 uppercase">Diferencia</p>
                                 <p
-                                    className={`text-xl font-black ${
-                                        Number(turno.diferenciaFinal) < 0
-                                            ? 'text-rose-300'
-                                            : 'text-emerald-300'
-                                    }`}
+                                    className={`text-xl font-black ${Number(turno.diferenciaFinal) < 0
+                                        ? 'text-rose-300'
+                                        : 'text-emerald-300'
+                                        }`}
                                 >
                                     {formatNumber(turno.diferenciaFinal)} <small className="text-xs">LTS</small>
                                 </p>
@@ -464,14 +479,48 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                     <section>
                         <SectionHeader title="Lectura de Odómetro y Combustible" icon={Gauge} />
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <DataBox
                                 label="Kilometraje"
-                                value={inspeccion ? `${formatNumber(inspeccion.kilometraje)} KM` : '---'}
+                                value={inspeccion?.kilometraje ? `${formatNumber(inspeccion.kilometraje)} KM` : "---"}
                             />
+
                             <DataBox
                                 label="Combustible %"
-                                value={inspeccion ? `${inspeccion.porcentaje_combustible}%` : '---'}
+                                value={
+                                    inspeccion?.porcentaje_combustible !== null &&
+                                        inspeccion?.porcentaje_combustible !== undefined
+                                        ? `${inspeccion.porcentaje_combustible}%`
+                                        : "---"
+                                }
+                            />
+
+                            <DataBox
+                                label="Suministro diésel"
+                                value={valorTexto(suministroCombustible.suministrado)}
+                            />
+
+                            <DataBox
+                                label="Horómetro"
+                                value={
+                                    suministroCombustible.horometro
+                                        ? `${formatNumber(suministroCombustible.horometro)} HRS`
+                                        : "---"
+                                }
+                            />
+
+                            <DataBox
+                                label="Hora suministro"
+                                value={valorTexto(suministroCombustible.hora)}
+                            />
+
+                            <DataBox
+                                label="Litros suministrados"
+                                value={
+                                    suministroCombustible.litros
+                                        ? `${formatNumber(suministroCombustible.litros)} LTS`
+                                        : "---"
+                                }
                             />
                         </div>
                     </section>
@@ -491,11 +540,10 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                                         >
                                             <span className="font-bold text-slate-600">{item}</span>
                                             <span
-                                                className={`font-black uppercase px-2 py-0.5 rounded ${
-                                                    respuestas[item] === 'Ok'
-                                                        ? 'bg-emerald-50 text-emerald-600'
-                                                        : 'bg-rose-50 text-rose-600'
-                                                }`}
+                                                className={`font-black uppercase px-2 py-0.5 rounded ${respuestas[item] === 'Ok'
+                                                    ? 'bg-emerald-50 text-emerald-600'
+                                                    : 'bg-rose-50 text-rose-600'
+                                                    }`}
                                             >
                                                 {respuestas[item] || '---'}
                                             </span>
@@ -517,11 +565,10 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                                         >
                                             <span className="font-bold text-slate-600">{item}</span>
                                             <span
-                                                className={`font-black uppercase px-2 py-0.5 rounded ${
-                                                    respuestas[item] === 'Ok'
-                                                        ? 'bg-emerald-50 text-emerald-600'
-                                                        : 'bg-rose-50 text-rose-600'
-                                                }`}
+                                                className={`font-black uppercase px-2 py-0.5 rounded ${respuestas[item] === 'Ok'
+                                                    ? 'bg-emerald-50 text-emerald-600'
+                                                    : 'bg-rose-50 text-rose-600'
+                                                    }`}
                                             >
                                                 {respuestas[item] || '---'}
                                             </span>
@@ -543,11 +590,10 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                                         >
                                             <span className="font-bold text-slate-600">{item}</span>
                                             <span
-                                                className={`font-black uppercase px-2 py-0.5 rounded ${
-                                                    respuestas[item] === 'Ok'
-                                                        ? 'bg-emerald-50 text-emerald-600'
-                                                        : 'bg-rose-50 text-rose-600'
-                                                }`}
+                                                className={`font-black uppercase px-2 py-0.5 rounded ${respuestas[item] === 'Ok'
+                                                    ? 'bg-emerald-50 text-emerald-600'
+                                                    : 'bg-rose-50 text-rose-600'
+                                                    }`}
                                             >
                                                 {respuestas[item] || '---'}
                                             </span>
@@ -568,11 +614,10 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                                                 key={num}
                                                 type="button"
                                                 onClick={() => setDrenActivo(num)}
-                                                className={`flex-1 min-w-[50px] py-1 text-[9px] font-black uppercase rounded transition-all ${
-                                                    drenActivo === num
-                                                        ? 'bg-indigo-600 text-white shadow-sm'
-                                                        : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
-                                                }`}
+                                                className={`flex-1 min-w-[50px] py-1 text-[9px] font-black uppercase rounded transition-all ${drenActivo === num
+                                                    ? 'bg-indigo-600 text-white shadow-sm'
+                                                    : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
+                                                    }`}
                                             >
                                                 DR {num}
                                             </button>
@@ -605,13 +650,12 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                                                     </div>
 
                                                     <span
-                                                        className={`font-black uppercase px-2 py-0.5 rounded ${
-                                                            valorRespuesta === 'Ok'
-                                                                ? 'bg-emerald-50 text-emerald-600'
-                                                                : valorRespuesta === 'No'
-                                                                  ? 'bg-rose-50 text-rose-600'
-                                                                  : 'bg-slate-100 text-slate-400'
-                                                        }`}
+                                                        className={`font-black uppercase px-2 py-0.5 rounded ${valorRespuesta === 'Ok'
+                                                            ? 'bg-emerald-50 text-emerald-600'
+                                                            : valorRespuesta === 'No'
+                                                                ? 'bg-rose-50 text-rose-600'
+                                                                : 'bg-slate-100 text-slate-400'
+                                                            }`}
                                                     >
                                                         {valorRespuesta || '---'}
                                                     </span>

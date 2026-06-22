@@ -38,11 +38,13 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     headerLeft: {
-        width: 95,
+        width: 120,
         color: "#ffffff",
         justifyContent: "center",
-        alignItems: "center",
+        alignItems: "flex-start",
         paddingVertical: 10,
+        paddingLeft: 14,
+        paddingRight: 8,
     },
     headerLeftText: {
         fontSize: 16,
@@ -111,18 +113,71 @@ const styles = StyleSheet.create({
         padding: 8,
         marginBottom: 8,
     },
+    checklistPanel: {
+        marginTop: 6,
+        borderTopWidth: 1,
+        borderColor: "#e5e7eb",
+        paddingTop: 6,
+    },
+    checklistTitle: {
+        fontSize: 7.5,
+        fontWeight: "bold" as any,
+        textTransform: "uppercase",
+        color: GREEN,
+        marginBottom: 5,
+    },
     checklistGrid: {
         flexDirection: "row",
         flexWrap: "wrap",
-        marginTop: 5,
-        borderTopWidth: 1,
-        borderColor: "#eee",
-        paddingTop: 5,
     },
     checkItem: {
-        width: "33%",
-        fontSize: 7,
-        marginBottom: 3,
+        width: "49%",
+        borderWidth: 1,
+        borderColor: "#e5e7eb",
+        backgroundColor: "#f9fafb",
+        borderRadius: 5,
+        padding: 5,
+        marginBottom: 5,
+        marginRight: "1%",
+    },
+    checkItemWide: {
+        width: "100%",
+        marginRight: 0,
+    },
+    checkItemTop: {
+        flexDirection: "row",
+    },
+    checkBullet: {
+        fontSize: 8,
+        color: GREEN,
+        marginRight: 3,
+    },
+    checkTextWrap: {
+        flex: 1,
+    },
+    checkKey: {
+        fontSize: 6.7,
+        color: "#111827",
+        lineHeight: 1.25,
+    },
+    checkDren: {
+        fontSize: 6,
+        color: "#2563eb",
+        fontWeight: "bold" as any,
+        textTransform: "uppercase",
+        marginTop: 2,
+    },
+    checkValueBox: {
+        marginTop: 4,
+        alignSelf: "flex-start",
+        borderWidth: 1,
+        borderRadius: 10,
+        paddingVertical: 2,
+        paddingHorizontal: 5,
+    },
+    checkValueText: {
+        fontSize: 6.2,
+        fontWeight: "bold" as any,
     },
     damageContainer: {
         width: "100%",
@@ -312,6 +367,178 @@ function AutotanquePdfDoc({
         return `${window.location.origin}/storage/${path.replace("public/", "")}`;
     };
 
+    const suministroCombustible =
+        inspeccion?.suministro_combustible ??
+        inspeccion?.suministroCombustible ??
+        (
+            inspeccion?.suministrado !== undefined ||
+                inspeccion?.horometro !== undefined ||
+                inspeccion?.hora !== undefined ||
+                inspeccion?.litros !== undefined
+                ? inspeccion
+                : {}
+        );
+
+    const valorTexto = (valor: any) => {
+        if (valor === null || valor === undefined || valor === "") {
+            return "-";
+        }
+
+        return valor.toString();
+    };
+
+    const valorNumero = (valor: any) => {
+        const numero = Number(valor);
+
+        if (Number.isNaN(numero)) {
+            return "-";
+        }
+
+        return numero.toLocaleString("en-US", {
+            maximumFractionDigits: 2,
+        });
+    };
+
+    const formatearFechaHora = (valor: any) => {
+        if (!valor) return "N/A";
+
+        const texto = String(valor).trim();
+
+        const match = texto.match(
+            /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::\d{2})?)?/
+        );
+
+        if (!match) return texto;
+
+        const [, anio, mes, dia, hora, minuto] = match;
+
+        if (hora && minuto) {
+            return `${dia}/${mes}/${anio} ${hora}:${minuto}`;
+        }
+
+        return `${dia}/${mes}/${anio}`;
+    };
+
+    const separarLlaveChecklist = (key: string) => {
+        const partes = key.split(" - Dren ");
+
+        if (partes.length > 1) {
+            return {
+                concepto: partes[0],
+                detalle: `Dren ${partes.slice(1).join(" - Dren ")}`,
+            };
+        }
+
+        return {
+            concepto: key,
+            detalle: "",
+        };
+    };
+
+    const formatearValorChecklist = (valor: any) => {
+        if (valor === null || valor === undefined || valor === "") {
+            return "-";
+        }
+
+        return String(valor).replace(/\s*\|\s*/g, " / ");
+    };
+
+    const obtenerColoresRespuesta = (valor: any) => {
+        const texto = String(valor || "").toLowerCase();
+
+        if (
+            texto === "ok" ||
+            texto.includes("claro y brillante") ||
+            texto.includes("sin presencia")
+        ) {
+            return {
+                background: "#dcfce7",
+                border: "#86efac",
+                text: "#166534",
+            };
+        }
+
+        if (
+            texto === "no" ||
+            texto.includes("no claro") ||
+            texto.includes("no brillante") ||
+            texto.includes("con presencia")
+        ) {
+            return {
+                background: "#fee2e2",
+                border: "#fecaca",
+                text: "#991b1b",
+            };
+        }
+
+        return {
+            background: "#f3f4f6",
+            border: "#d1d5db",
+            text: "#374151",
+        };
+    };
+
+    const checklistEntries = Object.entries(
+        inspeccion?.checklist_respuestas || {}
+    ) as [string, any][];
+
+    const checklistGenerales = checklistEntries.filter(
+        ([key]) => !key.toLowerCase().includes(" - dren ")
+    );
+
+    const checklistCalidad = checklistEntries.filter(
+        ([key]) => key.toLowerCase().includes(" - dren ")
+    );
+
+    const renderChecklistItem = (
+        [key, val]: [string, any],
+        i: number,
+        calidad: boolean = false
+    ) => {
+        const info = separarLlaveChecklist(key);
+        const colores = obtenerColoresRespuesta(val);
+
+        return (
+            <View
+                key={`${key}-${i}`}
+                style={[styles.checkItem, calidad ? styles.checkItemWide : {}]}
+            >
+                <View style={styles.checkItemTop}>
+                    <Text style={styles.checkBullet}>•</Text>
+
+                    <View style={styles.checkTextWrap}>
+                        <Text style={styles.checkKey}>{info.concepto}</Text>
+
+                        {info.detalle !== "" && (
+                            <Text style={styles.checkDren}>{info.detalle}</Text>
+                        )}
+                    </View>
+                </View>
+
+                <View
+                    style={[
+                        styles.checkValueBox,
+                        {
+                            backgroundColor: colores.background,
+                            borderColor: colores.border,
+                        },
+                    ]}
+                >
+                    <Text
+                        style={[
+                            styles.checkValueText,
+                            {
+                                color: colores.text,
+                            },
+                        ]}
+                    >
+                        {formatearValorChecklist(val)}
+                    </Text>
+                </View>
+            </View>
+        );
+    };
+
     return (
         <Document>
             <Page size="A4" style={styles.page}>
@@ -325,7 +552,7 @@ function AutotanquePdfDoc({
                     <View style={styles.headerMid}>
                         <Text style={styles.headerTitle}>Reporte de Turno Autotanque</Text>
                         <Text style={styles.headerSub}>
-                            Folio Turno: #{turno.id || "N/A"} · Fecha: {turno.fecha || "N/A"}
+                            Folio Turno: #{turno.id || "N/A"} · Fecha: {formatearFechaHora(turno.fecha)}
                         </Text>
                     </View>
                 </View>
@@ -376,30 +603,87 @@ function AutotanquePdfDoc({
                                     flexDirection: "row",
                                     justifyContent: "space-between",
                                     marginBottom: 4,
+                                    gap: 6,
                                 }}
                             >
-                                <Text style={styles.label}>Operador: {inspeccion.operador}</Text>
-                                <Text style={styles.label}>KM: {inspeccion.kilometraje}</Text>
+                                <Text style={styles.label}>Operador: {inspeccion.operador || "-"}</Text>
+
                                 <Text style={styles.label}>
-                                    Combustible: {inspeccion.porcentaje_combustible}%
+                                    KM: {inspeccion.kilometraje ? valorNumero(inspeccion.kilometraje) : "-"}
+                                </Text>
+
+                                <Text style={styles.label}>
+                                    Combustible:{" "}
+                                    {inspeccion.porcentaje_combustible !== null &&
+                                        inspeccion.porcentaje_combustible !== undefined
+                                        ? `${inspeccion.porcentaje_combustible}%`
+                                        : "-"}
                                 </Text>
                             </View>
 
-                            <View style={styles.checklistGrid}>
-                                {Object.entries(inspeccion.checklist_respuestas || {}).map(([key, val], i) => (
-                                    <View key={i} style={styles.checkItem}>
-                                        <Text>
-                                            • {key}:{" "}
-                                            <Text
-                                                style={{
-                                                    color: val === "Ok" ? "#065f46" : "#991b1b",
-                                                }}
-                                            >
-                                                {val as string}
-                                            </Text>
-                                        </Text>
+                            <View
+                                style={{
+                                    flexDirection: "row",
+                                    justifyContent: "space-between",
+                                    marginBottom: 4,
+                                    gap: 6,
+                                }}
+                            >
+                                <Text style={styles.label}>
+                                    Suministro diésel: {valorTexto(suministroCombustible.suministrado)}
+                                </Text>
+
+                                <Text style={styles.label}>
+                                    Horómetro: {valorTexto(suministroCombustible.horometro)} HRS
+                                </Text>
+                            </View>
+
+                            <View
+                                style={{
+                                    flexDirection: "row",
+                                    justifyContent: "space-between",
+                                    marginBottom: 6,
+                                    gap: 6,
+                                }}
+                            >
+                                <Text style={styles.label}>
+                                    Hora suministro: {valorTexto(suministroCombustible.hora)}
+                                </Text>
+
+                                <Text style={styles.label}>
+                                    Litros suministrados:{" "}
+                                    {suministroCombustible.litros
+                                        ? `${valorNumero(suministroCombustible.litros)} LTS`
+                                        : "-"}
+                                </Text>
+                            </View>
+
+                            <View style={styles.checklistPanel}>
+                                {checklistGenerales.length > 0 && (
+                                    <View>
+                                        <Text style={styles.checklistTitle}>Checklist general de unidad</Text>
+
+                                        <View style={styles.checklistGrid}>
+                                            {checklistGenerales.map((entry, i) =>
+                                                renderChecklistItem(entry, i, false)
+                                            )}
+                                        </View>
                                     </View>
-                                ))}
+                                )}
+
+                                {checklistCalidad.length > 0 && (
+                                    <View>
+                                        <Text style={[styles.checklistTitle, { marginTop: 6 }]}>
+                                            Pruebas de calidad de combustible
+                                        </Text>
+
+                                        <View style={styles.checklistGrid}>
+                                            {checklistCalidad.map((entry, i) =>
+                                                renderChecklistItem(entry, i, true)
+                                            )}
+                                        </View>
+                                    </View>
+                                )}
                             </View>
 
                             <View style={styles.damageContainer}>

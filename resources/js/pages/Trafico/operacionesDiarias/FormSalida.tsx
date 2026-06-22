@@ -223,7 +223,27 @@ export const FormSalida = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, so
                             placeholder="Ejem. H25B"
                             value={formData.equipo}
                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500 outline-none"
-                            onChange={(e) => handleFieldChange("equipo", e.target.value.toUpperCase())}
+                            onChange={(e) =>
+                                handleFieldChange(
+                                    "equipo",
+                                    e.target.value.replace(/\s/g, "").toUpperCase()
+                                )
+                            }
+                            onKeyDown={(e) => {
+                                if (e.key === " ") {
+                                    e.preventDefault();
+                                }
+                            }}
+                            onPaste={(e) => {
+                                e.preventDefault();
+
+                                const texto = e.clipboardData
+                                    .getData("text")
+                                    .replace(/\s/g, "")
+                                    .toUpperCase();
+
+                                handleFieldChange("equipo", texto);
+                            }}
                             required
                         />
                     </div>
@@ -287,11 +307,10 @@ export const FormSalida = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, so
                             disabled={estaBloqueado('Trafico')}
                             value={formData.equipaje ?? ''}
                             placeholder={moduloNombre !== 'Trafico' ? "Solo Tráfico" : "0"}
-                            className={`w-full p-3 border rounded-lg outline-none transition-colors ${
-                                estaBloqueado('Trafico')
-                                ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                                : 'bg-slate-50 border-slate-200 focus:ring-2 focus:ring-red-500'
-                            }`}
+                            className={`w-full p-3 border rounded-lg outline-none transition-colors ${estaBloqueado('Trafico')
+                                    ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                                    : 'bg-slate-50 border-slate-200 focus:ring-2 focus:ring-red-500'
+                                }`}
                             onChange={(e) => handleFieldChange("equipaje", e.target.value.toUpperCase())}
                         />
                     </div>
