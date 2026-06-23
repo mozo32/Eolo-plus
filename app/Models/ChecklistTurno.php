@@ -23,6 +23,8 @@ class ChecklistTurno extends Model
         'observaciones_entrega',
         'cantidad_pasajeros',
         'cantidad_operaciones',
+        'cantidad_nacionales',
+        'cantidad_internacionales',
         'validado_por_user_id',
         'status',
         'firma',

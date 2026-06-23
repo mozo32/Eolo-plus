@@ -5,7 +5,7 @@ import HotTrasComiCoor from "./sections/HotTrasComiCoor";
 import EntregaTurnoCon from "./sections/EntregaTurnoCon";
 import { validarPaso } from "./Validacion";
 import FirmaCanvas from "@/pages/FirmaCanvas";
-import { guardarCheckListTurnoApi, actualizarCheckListTurnoApi, buscarUsuariosApi, validarCheckListTurnoApi } from "@/stores/apiCheckListTurno";
+import { guardarCheckListTurnoApi, actualizarCheckListTurnoApi, buscarUsuariosApi, validarCheckListTurnoApi,operaciones } from "@/stores/apiCheckListTurno";
 import Swal from "sweetalert2";
 import { Package, CheckCircle2 } from "lucide-react";
 
@@ -33,6 +33,8 @@ const getInitialForm = (data?: any) => ({
     observaciones_entrega: data?.observaciones_entrega ?? "",
     cantidad_pasajeros: data?.cantidad_pasajeros ?? "",
     cantidad_operaciones: data?.cantidad_operaciones ?? "",
+    cantidad_operaciones_nacionales: data?.cantidad_nacionales ?? "",
+    cantidad_operaciones_internacionales: data?.cantidad_internacionales ?? "",
     firma: data?.firmas?.[0]?.url ?? "",
 });
 
@@ -43,7 +45,30 @@ export default function CheckListTurnoForm({ isEdit, isValidationMode = false, d
     const [usuarios, setUsuarios] = useState<any[]>([]);
     const [openFirma, setOpenFirma] = useState<null | "firma_validacion">(null);
     const [form, setForm] = useState(() => getInitialForm(data));
+    const [operacionesTotal, setOperacionesTotal] = useState<any[]>([]);
+    const cargarOperaciones = async (fecha: string) => {
+        try {
+            const res = await operaciones(fecha);
+            const data = res.data;
 
+            setOperacionesTotal(data.operaciones || []);
+
+            setForm((prev: any) => ({
+                ...prev,
+                cantidad_operaciones: data?.cantidad_operaciones ?? "",
+                cantidad_operaciones_nacionales: data?.cantidad_operaciones_nacionales ?? "",
+                cantidad_operaciones_internacionales: data?.cantidad_operaciones_internacionales ?? "",
+                cantidad_pasajeros: data?.cantidad_pasajeros ?? "",
+            }));
+        } catch (error) {
+            console.error(error);
+        }
+    };
+    useEffect(() => {
+        if ((isEdit || !isValidationMode) && form.fecha) {
+            cargarOperaciones(form.fecha);
+        }
+    }, [form.fecha, isEdit, isValidationMode]);
     useEffect(() => {
         setForm(getInitialForm(isEdit || isValidationMode ? data : undefined));
         setStep(1);
@@ -172,12 +197,53 @@ export default function CheckListTurnoForm({ isEdit, isValidationMode = false, d
                         <div className="grid grid-cols-1 gap-8 md:grid-cols-2 animate-in fade-in duration-500">
                             <div className="space-y-4">
                                 <div>
-                                    <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">Total Operaciones</label>
-                                    <input type="number" className="w-full rounded-md border-2 border-slate-400 px-4 py-3 text-sm font-bold focus:border-[#00677F]" value={form.cantidad_operaciones} onChange={(e) => updateField("cantidad_operaciones", e.target.value)} />
+                                    <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
+                                        Total Operaciones
+                                    </label>
+                                    <input
+                                        type="number"
+                                        className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold text-slate-700 focus:border-[#00677F] focus:outline-none"
+                                        value={form.cantidad_operaciones}
+                                        onChange={(e) => updateField("cantidad_operaciones", e.target.value)}
+                                    />
                                 </div>
+
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <div>
+                                        <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
+                                            Nacionales
+                                        </label>
+                                        <input
+                                            type="number"
+                                            className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold text-slate-700 focus:border-[#00677F] focus:outline-none"
+                                            value={form.cantidad_operaciones_nacionales}
+                                            onChange={(e) => updateField("cantidad_operaciones_nacionales", e.target.value)}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
+                                            Internacionales
+                                        </label>
+                                        <input
+                                            type="number"
+                                            className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold text-slate-700 focus:border-[#00677F] focus:outline-none"
+                                            value={form.cantidad_operaciones_internacionales}
+                                            onChange={(e) => updateField("cantidad_operaciones_internacionales", e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
                                 <div>
-                                    <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">Total Pasajeros</label>
-                                    <input type="number" className="w-full rounded-md border-2 border-slate-400 px-4 py-3 text-sm font-bold focus:border-[#00677F]" value={form.cantidad_pasajeros} onChange={(e) => updateField("cantidad_pasajeros", e.target.value)} />
+                                    <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
+                                        Total Pasajeros
+                                    </label>
+                                    <input
+                                        type="number"
+                                        className="w-full rounded-md border-2 border-slate-400 px-4 py-3 text-sm font-bold focus:border-[#00677F]"
+                                        value={form.cantidad_pasajeros}
+                                        onChange={(e) => updateField("cantidad_pasajeros", e.target.value)}
+                                    />
                                 </div>
                             </div>
                             <div>
@@ -213,10 +279,10 @@ export default function CheckListTurnoForm({ isEdit, isValidationMode = false, d
                                 key="btn-submit"
                                 type="submit"
                                 className={`rounded-md px-10 py-2.5 text-xs font-black uppercase tracking-widest text-white shadow-lg transition-all ${isValidationMode
-                                        ? "bg-purple-600 hover:bg-purple-700 shadow-purple-100" // Estilo único para validar
-                                        : isEdit
-                                            ? "bg-blue-600 hover:bg-blue-700"
-                                            : "bg-green-600 hover:bg-green-700"
+                                    ? "bg-purple-600 hover:bg-purple-700 shadow-purple-100" // Estilo único para validar
+                                    : isEdit
+                                        ? "bg-blue-600 hover:bg-blue-700"
+                                        : "bg-green-600 hover:bg-green-700"
                                     }`}
                             >
                                 {/* CAMBIO DE TEXTO DINÁMICO */}

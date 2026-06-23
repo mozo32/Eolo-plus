@@ -127,6 +127,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('EntregaTurnoR')->group(funct
     Route::put('/{entregaTurnoR}/firmas', [EntregaTurnoRController::class, 'updateFirmas']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('CheckListTurno')->group(function () {
+    Route::get('TotalOperaciones', [ChecklistTurnoController::class, 'TotalOperaciones']);
     Route::get('pendiente',[ChecklistTurnoController::class, 'checkPendiente']);
     Route::post('notas/', [ChecklistTurnoController::class, 'storenota']);
     Route::get('indexNotas/',[ChecklistTurnoController::class, 'indexnota']);

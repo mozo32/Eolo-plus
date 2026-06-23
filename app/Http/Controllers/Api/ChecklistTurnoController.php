@@ -11,6 +11,8 @@ use Illuminate\Support\Str;
 use App\Models\NotaOperacional;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
+use App\Models\OperacionDiaria;
+use Illuminate\Support\Carbon;
 
 class ChecklistTurnoController extends Controller
 {
@@ -34,6 +36,8 @@ class ChecklistTurnoController extends Controller
                 'observaciones_entrega' => 'nullable|string',
                 'cantidad_pasajeros' => 'nullable|integer|min:0',
                 'cantidad_operaciones' => 'nullable|integer|min:0',
+                'cantidad_operaciones_nacionales' => 'nullable|integer|min:0',
+                'cantidad_operaciones_internacionales' => 'nullable|integer|min:0',
             ]);
 
             $checklist = ChecklistTurno::create([
@@ -51,9 +55,36 @@ class ChecklistTurnoController extends Controller
                 'observaciones_entrega' => $validated['observaciones_entrega'] ?? null,
                 'cantidad_pasajeros' => $validated['cantidad_pasajeros'] ?? 0,
                 'cantidad_operaciones' => $validated['cantidad_operaciones'] ?? 0,
+                'cantidad_nacionales' => $validated['cantidad_operaciones_nacionales'] ?? 0,
+                'cantidad_internacionales' => $validated['cantidad_operaciones_internacionales'] ?? 0,
             ]);
+
             if ($request->filled('firma')) {
                 $this->guardarFirmaBase64($request->firma, 'firma_validacion', $checklist);
+            }
+
+            if (!empty($validated['observaciones_entrega'])) {
+                NotaOperacional::create([
+                    'descripcion' => mb_strtoupper($validated['observaciones_entrega'], 'UTF-8'),
+                    'departamento_id' => 7,
+                    'subdepartamento_id' => 16,
+                    'creado_por_user_id' => Auth::id(),
+                    'validado_por_user_id' => null,
+                ]);
+            }
+
+            foreach (($validated['HotTrasComiCoor'] ?? []) as $item) {
+                $descripcion = $this->generarDescripcionNotaHotTrasComiCoor($item);
+
+                if ($descripcion !== '') {
+                    NotaOperacional::create([
+                        'descripcion' => mb_strtoupper($descripcion, 'UTF-8'),
+                        'departamento_id' => 7,
+                        'subdepartamento_id' => 16,
+                        'creado_por_user_id' => Auth::id(),
+                        'validado_por_user_id' => null,
+                    ]);
+                }
             }
 
             DB::commit();
@@ -65,13 +96,39 @@ class ChecklistTurnoController extends Controller
 
         } catch (\Throwable $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Error al guardar checklist',
                 'error' => $e->getMessage(),
             ], 500);
         }
     }
+    private function generarDescripcionNotaHotTrasComiCoor(array $item): string
+    {
+        $partes = [];
 
+        if (!empty($item['matricula'])) {
+            $partes[] = 'Matrícula: ' . $item['matricula'];
+        }
+
+        if (!empty($item['descripcion'])) {
+            $partes[] = 'Descripción: ' . $item['descripcion'];
+        }
+
+        if (!empty($item['fecha'])) {
+            $partes[] = 'Fecha: ' . $item['fecha'];
+        }
+
+        if (!empty($item['hora'])) {
+            $partes[] = 'Hora: ' . $item['hora'];
+        }
+
+        if (!empty($item['notas'])) {
+            $partes[] = 'Notas: ' . $item['notas'];
+        }
+
+        return trim(implode(' | ', $partes));
+    }
     private function guardarFirmaBase64(string $value, string $rol, ChecklistTurno $checklist): void
     {
         if (trim($value) === '') return;
@@ -346,10 +403,12 @@ class ChecklistTurnoController extends Controller
     public function indexnota(): JsonResponse
     {
         try {
+            $desde = now()->subDays(2)->startOfDay();
+
             $notas = NotaOperacional::with(['departamento:id,nombre', 'subdepartamento:id,nombre'])
-                ->whereNull('validado_por_user_id')
                 ->where('departamento_id', 7)
                 ->where('subdepartamento_id', 16)
+                ->where('created_at', '>=', $desde)
                 ->orderBy('created_at', 'desc')
                 ->get();
 
@@ -476,5 +535,54 @@ class ChecklistTurnoController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+    public function TotalOperaciones(Request $request)
+    {
+        $fecha = $request->query('fecha', now()->toDateString());
+
+        $operaciones = OperacionDiaria::query()
+            ->whereDate('fecha', $fecha)
+            ->get([
+                'id',
+                'fecha',
+                'hora',
+                'tipo',
+                'tipo_operacion',
+                'tipo_cliente',
+                'matricula',
+                'equipo',
+                'pax',
+            ]);
+
+        $resumen = [
+            'fecha' => $fecha,
+            'cantidad_operaciones' => $operaciones->count(),
+            'cantidad_operaciones_nacionales' => 0,
+            'cantidad_operaciones_internacionales' => 0,
+            'cantidad_pasajeros' => $operaciones->sum(function ($op) {
+                return (int) ($op->pax ?? 0);
+            }),
+            'operaciones' => $operaciones->values(),
+        ];
+
+        foreach ($operaciones as $operacion) {
+            $tipoOperacion = Str::of($operacion->tipo_operacion ?? '')
+                ->ascii()
+                ->lower()
+                ->trim()
+                ->toString();
+
+            if (str_contains($tipoOperacion, 'nacional') && !str_contains($tipoOperacion, 'internacional')) {
+                $resumen['cantidad_operaciones_nacionales']++;
+            }
+
+            if (str_contains($tipoOperacion, 'internacional')) {
+                $resumen['cantidad_operaciones_internacionales']++;
+            }
+        }
+
+        return response()->json([
+            'data' => $resumen,
+        ]);
     }
 }

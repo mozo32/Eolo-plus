@@ -178,3 +178,23 @@ export async function validarCheckListTurnoApi(id: number, form: any) {
 
     return data;
 }
+export async function operaciones(fecha?: string) {
+    const params = new URLSearchParams();
+
+    if (fecha) {
+        params.append("fecha", fecha);
+    }
+
+    const query = params.toString();
+
+    const res = await fetch(`/api/CheckListTurno/TotalOperaciones${query ? `?${query}` : ""}`, {
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+    });
+
+    if (!res.ok) {
+        throw new Error("No se pudieron obtener las operaciones");
+    }
+
+    return await res.json();
+}

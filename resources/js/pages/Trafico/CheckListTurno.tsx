@@ -1,13 +1,14 @@
 import { type BreadcrumbItem } from '@/types';
-import { Head,usePage } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import CheckListTurnoForm from './checkListTurno/CheckListTurnoForm';
 import ModalActividadesNextTurno from './checkListTurno/ModalActividadesNextTurno';
 import ModalNotasOperacionales from './checkListTurno/ModalNotasOperacionales';
+import ModalDetalleCheckListTurno from "./checkListTurno/ModalDetalleCheckListTurno";
 import { fetchNotasOperacionales } from '@/stores/apiCheckListTurno';
 import { useEffect, useState, useCallback } from 'react';
-import { fetchCheckListTurno, fetchShowCheckListTurno, eliminar, fetchCheckListPendiente,validarNotaOperacional } from '@/stores/apiCheckListTurno';
-import { Plus, ChevronLeft, ChevronRight, Edit2, CheckCircle2, AlertCircle, ClipboardList, StickyNote,ShieldCheck  } from 'lucide-react';
+import { fetchCheckListTurno, fetchShowCheckListTurno, eliminar, fetchCheckListPendiente, validarNotaOperacional } from '@/stores/apiCheckListTurno';
+import { Plus, ChevronLeft, ChevronRight, Edit2, CheckCircle2, AlertCircle, ClipboardList, StickyNote, ShieldCheck, Eye } from 'lucide-react';
 import PdfExporterTurno from './checkListTurno/sections/PdfExporterTurno';
 import Swal from 'sweetalert2';
 interface Role {
@@ -47,6 +48,9 @@ export default function CheckListTurno() {
     const [notas, setNotas] = useState<any[]>([]);
     const [loadingNotas, setLoadingNotas] = useState(false);
     const [openNotasModal, setOpenNotasModal] = useState(false);
+    const [openDetalleModal, setOpenDetalleModal] = useState(false);
+    const [detalleVisualizar, setDetalleVisualizar] = useState<any>(null);
+    const [loadingDetalle, setLoadingDetalle] = useState(false);
     const { auth } = usePage<PageProps>().props;
     const user = auth?.user?.roles[0]?.slug;
 
@@ -57,8 +61,22 @@ export default function CheckListTurno() {
             .toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
     };
 
+    const visualizar = async (id: number) => {
+        try {
+            setLoadingDetalle(true);
+            setOpenDetalleModal(true);
+            setDetalleVisualizar(null);
 
-    // CARGA DE NOTAS OPERACIONALES
+            const dat = await fetchShowCheckListTurno(id);
+            setDetalleVisualizar(dat);
+        } catch (error) {
+            console.error(error);
+            Swal.fire("Error", "No se pudo cargar la información del registro", "error");
+            setOpenDetalleModal(false);
+        } finally {
+            setLoadingDetalle(false);
+        }
+    };
     const cargarNotas = async () => {
         try {
             setLoadingNotas(true);
@@ -166,7 +184,8 @@ export default function CheckListTurno() {
         cargarDatos();
         cargarNotas(); // Consulta las notas automáticamente al montar la vista
     }, [page, search]);
-
+    const rolUsuario = (user ?? "").toLowerCase();
+    const puedeUsarBotonPrincipal = !["admin2", "fac"].includes(rolUsuario);
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="CheckList de Turno" />
@@ -202,24 +221,26 @@ export default function CheckListTurno() {
                                 AGREGAR ACTIVIDADES
                             </button>
 
-                            <button
-                                onClick={handlePrincipalAction}
-                                className={`text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-white flex items-center gap-2 ${idPendiente
-                                        ? "bg-orange-500 hover:bg-orange-600 shadow-orange-100 ring-4 ring-orange-100"
-                                        : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100"
-                                    }`}
-                            >
-                                {idPendiente ? (
-                                    <>
-                                        <AlertCircle size={14} className="animate-pulse" />
-                                        FINALIZAR TURNO PENDIENTE
-                                    </>
-                                ) : (
-                                    <>
-                                        <Plus size={14} /> NUEVO REGISTRO
-                                    </>
-                                )}
-                            </button>
+                            {puedeUsarBotonPrincipal && (
+                                <button
+                                    onClick={handlePrincipalAction}
+                                    className={`text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-white flex items-center gap-2 ${idPendiente
+                                            ? "bg-orange-500 hover:bg-orange-600 shadow-orange-100 ring-4 ring-orange-100"
+                                            : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100"
+                                        }`}
+                                >
+                                    {idPendiente ? (
+                                        <>
+                                            <AlertCircle size={14} className="animate-pulse" />
+                                            FINALIZAR TURNO PENDIENTE
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Plus size={14} /> NUEVO REGISTRO
+                                        </>
+                                    )}
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -246,6 +267,39 @@ export default function CheckListTurno() {
                                     ) : data.length > 0 ? (
                                         data.map((row) => {
                                             const esFinalizado = row.estado_entrega === 'finalizado';
+                                            const rolUsuario = (user ?? "").toLowerCase();
+
+                                            const esAdmin = rolUsuario === "admin";
+                                            const esFbo = rolUsuario === "fbo";
+                                            const esEmpleado = rolUsuario === "empleado";
+                                            const esJefeArea = rolUsuario === "jefe_area";
+                                            const esAdmin2 = rolUsuario === "admin2";
+                                            const esFac = rolUsuario === "fac";
+
+                                            const puedeTodo = esAdmin || esFbo;
+
+                                            const puedeEditar =
+                                                puedeTodo ||
+                                                ((esEmpleado || esJefeArea) && !esFinalizado);
+
+                                            const puedeValidar =
+                                                puedeTodo ||
+                                                esEmpleado ||
+                                                esJefeArea;
+
+                                            const puedePrevisualizar =
+                                                puedeTodo ||
+                                                esEmpleado ||
+                                                esJefeArea ||
+                                                esAdmin2 ||
+                                                esFac;
+
+                                            const puedeGenerarPdf =
+                                                puedeTodo ||
+                                                esAdmin2 ||
+                                                esFac;
+
+                                            const puedeEliminar = puedeTodo;
                                             return (
                                                 <tr key={row.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors">
                                                     <td className="px-4 py-4 text-center font-black text-[10px] text-slate-700">#{row.id}</td>
@@ -271,31 +325,82 @@ export default function CheckListTurno() {
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         <div className="flex items-center justify-end gap-1">
-                                                            <button
-                                                                className={`p-2 rounded transition-colors ${esFinalizado ? "text-slate-400 hover:text-indigo-600" : "text-orange-500 hover:text-orange-600"
-                                                                    }`}
-                                                                onClick={() => show(row.id)}
-                                                                title="Editar Registro"
-                                                            >
-                                                                <Edit2 size={16} />
-                                                            </button>
-                                                            {!row.validado_por_user_id && (
+                                                            {puedeEditar && (
+                                                                <button
+                                                                    className={`p-2 rounded transition-colors ${esFinalizado
+                                                                        ? "text-slate-400 hover:text-indigo-600"
+                                                                        : "text-orange-500 hover:text-orange-600"
+                                                                        }`}
+                                                                    onClick={() => show(row.id)}
+                                                                    title="Editar Registro"
+                                                                >
+                                                                    <Edit2 size={16} />
+                                                                </button>
+                                                            )}
+
+                                                            {puedeValidar && !row.validado_por_user_id && (
                                                                 <button
                                                                     onClick={() => abrirParaValidar(row.id)}
-                                                                    className={`p-2 rounded transition-colors text-slate-400 hover:text-indigo-600`}
+                                                                    className="p-2 rounded transition-colors text-slate-400 hover:text-indigo-600"
                                                                     title="Validar Registro"
-                                                                    disabled={!!row.validado_por_user_id}
                                                                 >
                                                                     <ShieldCheck size={16} />
                                                                 </button>
                                                             )}
 
-                                                            <button className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]" onClick={() => setPdfId(row.id)} title="Descargar PDF">
-                                                                PDF
-                                                            </button>
-                                                            <button onClick={() => handleEliminar(row.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors" title="Eliminar Registro">
-                                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
-                                                            </button>
+                                                            {puedePrevisualizar && (
+                                                                <button
+                                                                    className="p-2 rounded transition-colors text-slate-400 hover:text-sky-600"
+                                                                    onClick={() => visualizar(row.id)}
+                                                                    title="Visualizar información"
+                                                                >
+                                                                    <Eye size={16} />
+                                                                </button>
+                                                            )}
+
+                                                            {puedeGenerarPdf && (
+                                                                <button
+                                                                    className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]"
+                                                                    onClick={() => setPdfId(row.id)}
+                                                                    title="Descargar PDF"
+                                                                >
+                                                                    PDF
+                                                                </button>
+                                                            )}
+
+                                                            {puedeEliminar && (
+                                                                <button
+                                                                    onClick={() => handleEliminar(row.id)}
+                                                                    className="p-2 text-slate-400 hover:text-red-600 transition-colors"
+                                                                    title="Eliminar Registro"
+                                                                >
+                                                                    <svg
+                                                                        xmlns="http://www.w3.org/2000/svg"
+                                                                        width="16"
+                                                                        height="16"
+                                                                        viewBox="0 0 24 24"
+                                                                        fill="none"
+                                                                        stroke="currentColor"
+                                                                        strokeWidth="2"
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                    >
+                                                                        <path d="M3 6h18" />
+                                                                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                                                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                                                    </svg>
+                                                                </button>
+                                                            )}
+
+                                                            {!puedeEditar &&
+                                                                !puedeValidar &&
+                                                                !puedePrevisualizar &&
+                                                                !puedeGenerarPdf &&
+                                                                !puedeEliminar && (
+                                                                    <span className="text-[10px] font-bold uppercase text-slate-300">
+                                                                        Sin acciones
+                                                                    </span>
+                                                                )}
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -398,7 +503,15 @@ export default function CheckListTurno() {
                     }
                 }}
             />
-
+            <ModalDetalleCheckListTurno
+                isOpen={openDetalleModal}
+                onClose={() => {
+                    setOpenDetalleModal(false);
+                    setDetalleVisualizar(null);
+                }}
+                data={detalleVisualizar}
+                loading={loadingDetalle}
+            />
             <PdfExporterTurno id={pdfId} onDone={handlePdfDone} />
         </AppLayout>
     );

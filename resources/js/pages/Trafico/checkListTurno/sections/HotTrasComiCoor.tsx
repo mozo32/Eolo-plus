@@ -76,7 +76,53 @@ export default function HotTrasComiCoor({ form, updateField }: Props) {
 
     const labelClass =
         "mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-700";
+    const handleHoraChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        let valor = e.target.value.replace(/\D/g, "").slice(0, 4);
 
+        if (valor.length >= 3) {
+            valor = `${valor.slice(0, 2)}:${valor.slice(2)}`;
+        }
+
+        setLocalForm((prev) => ({
+            ...prev,
+            hora: valor,
+        }));
+    };
+
+    const handleHoraBlur = () => {
+        const valor = localForm.hora;
+
+        if (!valor) return;
+
+        const partes = valor.split(":");
+
+        if (partes.length !== 2) {
+            setLocalForm((prev) => ({
+                ...prev,
+                hora: "",
+            }));
+            return;
+        }
+
+        let horas = Number(partes[0]);
+        let minutos = Number(partes[1]);
+
+        if (Number.isNaN(horas) || Number.isNaN(minutos)) {
+            setLocalForm((prev) => ({
+                ...prev,
+                hora: "",
+            }));
+            return;
+        }
+
+        if (horas > 23) horas = 23;
+        if (minutos > 59) minutos = 59;
+
+        setLocalForm((prev) => ({
+            ...prev,
+            hora: `${String(horas).padStart(2, "0")}:${String(minutos).padStart(2, "0")}`,
+        }));
+    };
     return (
         <div className="mx-auto max-w-6xl space-y-8 p-4">
             {/* SECCIÓN PRINCIPAL */}
@@ -126,10 +172,14 @@ export default function HotTrasComiCoor({ form, updateField }: Props) {
                         <div>
                             <label className={labelClass}>Hora</label>
                             <input
-                                type="time"
+                                type="text"
                                 name="hora"
                                 value={localForm.hora}
-                                onChange={handleChange}
+                                onChange={handleHoraChange}
+                                onBlur={handleHoraBlur}
+                                placeholder="HH:MM"
+                                inputMode="numeric"
+                                maxLength={5}
                                 className={inputClass}
                             />
                         </div>
@@ -190,11 +240,10 @@ export default function HotTrasComiCoor({ form, updateField }: Props) {
                 {EQUIPOS.map(({ id, label, sublabel }) => (
                     <label
                         key={id}
-                        className={`group relative flex cursor-pointer flex-col rounded-xl border-2 p-5 transition-all ${
-                            form[id]
-                            ? "border-sky-600 bg-sky-50 shadow-md shadow-sky-100"
-                            : "border-slate-300 bg-white hover:border-sky-400"
-                        }`}
+                        className={`group relative flex cursor-pointer flex-col rounded-xl border-2 p-5 transition-all ${form[id]
+                                ? "border-sky-600 bg-sky-50 shadow-md shadow-sky-100"
+                                : "border-slate-300 bg-white hover:border-sky-400"
+                            }`}
                     >
                         <div className="flex items-start justify-between">
                             <div className="pr-2">
