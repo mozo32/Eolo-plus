@@ -149,7 +149,26 @@ export default function CheckListTurno() {
         setIsValidationMode(false);
         setDetalle(null);
     };
+    const cerrarFormulario = async () => {
+        handleBack();
+        await cargarDatos();
+        await cargarNotas();
+    };
+    const cerrarNotasModal = async () => {
+        setOpenNotasModal(false);
+        await cargarNotas();
+    };
 
+    const cerrarDetalleModal = async () => {
+        setOpenDetalleModal(false);
+        setDetalleVisualizar(null);
+        await cargarNotas();
+    };
+
+    const cerrarActividadesModal = async () => {
+        setOpenActividades(false);
+        await cargarNotas();
+    };
     const handleCloseActividades = () => {
         setOpenActividades(false);
         cargarNotas();
@@ -199,7 +218,10 @@ export default function CheckListTurno() {
                             </div>
 
                             <button
-                                onClick={() => setOpenNotasModal(true)}
+                                onClick={async () => {
+                                    await cargarNotas();
+                                    setOpenNotasModal(true);
+                                }}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-100 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-all active:scale-95 group relative"
                                 title="Ver Notas Operacionales"
                             >
@@ -225,8 +247,8 @@ export default function CheckListTurno() {
                                 <button
                                     onClick={handlePrincipalAction}
                                     className={`text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-white flex items-center gap-2 ${idPendiente
-                                            ? "bg-orange-500 hover:bg-orange-600 shadow-orange-100 ring-4 ring-orange-100"
-                                            : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100"
+                                        ? "bg-orange-500 hover:bg-orange-600 shadow-orange-100 ring-4 ring-orange-100"
+                                        : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100"
                                         }`}
                                 >
                                     {idPendiente ? (
@@ -451,7 +473,11 @@ export default function CheckListTurno() {
                                 </h3>
                                 <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Módulo de Operaciones Diarias</p>
                             </div>
-                            <button onClick={handleBack} className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors">
+                            <button
+                                type="button"
+                                onClick={cerrarFormulario}
+                                className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors"
+                            >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                             </button>
                         </div>
@@ -461,7 +487,7 @@ export default function CheckListTurno() {
                                 isValidationMode={isValidationMode}
                                 data={detalle}
                                 open={openForm}
-                                onSuccess={() => { handleBack(); cargarDatos(); }}
+                                onSuccess={cerrarFormulario}
                             />
                         </div>
                     </div>
@@ -470,12 +496,12 @@ export default function CheckListTurno() {
 
             <ModalActividadesNextTurno
                 isOpen={openActividades}
-                onClose={handleCloseActividades}
+                onClose={cerrarActividadesModal}
             />
 
             <ModalNotasOperacionales
                 isOpen={openNotasModal}
-                onClose={() => setOpenNotasModal(false)}
+                onClose={cerrarNotasModal}
                 notas={notas}
                 loading={loadingNotas}
                 onValidar={async (id) => {
@@ -485,7 +511,7 @@ export default function CheckListTurno() {
                         icon: 'info',
                         showCancelButton: true,
                         confirmButtonColor: '#4f46e5',
-                        cancelButtonColor: '#slate-400',
+                        cancelButtonColor: '#64748b',
                         confirmButtonText: 'Sí, validar',
                         cancelButtonText: 'Cancelar'
                     });
@@ -505,10 +531,7 @@ export default function CheckListTurno() {
             />
             <ModalDetalleCheckListTurno
                 isOpen={openDetalleModal}
-                onClose={() => {
-                    setOpenDetalleModal(false);
-                    setDetalleVisualizar(null);
-                }}
+                onClose={cerrarDetalleModal}
                 data={detalleVisualizar}
                 loading={loadingDetalle}
             />

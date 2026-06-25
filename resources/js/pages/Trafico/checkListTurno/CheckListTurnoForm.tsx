@@ -5,7 +5,7 @@ import HotTrasComiCoor from "./sections/HotTrasComiCoor";
 import EntregaTurnoCon from "./sections/EntregaTurnoCon";
 import { validarPaso } from "./Validacion";
 import FirmaCanvas from "@/pages/FirmaCanvas";
-import { guardarCheckListTurnoApi, actualizarCheckListTurnoApi, buscarUsuariosApi, validarCheckListTurnoApi,operaciones } from "@/stores/apiCheckListTurno";
+import { guardarCheckListTurnoApi, actualizarCheckListTurnoApi, buscarUsuariosApi, validarCheckListTurnoApi, operaciones } from "@/stores/apiCheckListTurno";
 import Swal from "sweetalert2";
 import { Package, CheckCircle2 } from "lucide-react";
 
@@ -36,6 +36,12 @@ const getInitialForm = (data?: any) => ({
     cantidad_operaciones_nacionales: data?.cantidad_nacionales ?? "",
     cantidad_operaciones_internacionales: data?.cantidad_internacionales ?? "",
     firma: data?.firmas?.[0]?.url ?? "",
+    cantidad_equipaje: data?.cantidad_equipaje ?? "",
+    cantidad_transito: data?.cantidad_transito ?? "",
+    cantidad_guarda: data?.cantidad_guarda ?? "",
+    cantidad_aerotaxi: data?.cantidad_aerotaxi ?? "",
+    cantidad_mantenimiento: data?.cantidad_mantenimiento ?? "",
+    cantidad_handling: data?.cantidad_handling ?? "",
 });
 
 export default function CheckListTurnoForm({ isEdit, isValidationMode = false, data, onSuccess }: { isEdit: boolean; isValidationMode?: boolean; data?: any; open: boolean; onSuccess?: () => void }) {
@@ -59,6 +65,12 @@ export default function CheckListTurnoForm({ isEdit, isValidationMode = false, d
                 cantidad_operaciones_nacionales: data?.cantidad_operaciones_nacionales ?? "",
                 cantidad_operaciones_internacionales: data?.cantidad_operaciones_internacionales ?? "",
                 cantidad_pasajeros: data?.cantidad_pasajeros ?? "",
+                cantidad_equipaje: data?.cantidad_equipaje ?? "",
+                cantidad_transito: data?.cantidad_transito ?? "",
+                cantidad_guarda: data?.cantidad_guarda ?? "",
+                cantidad_aerotaxi: data?.cantidad_aerotaxi ?? "",
+                cantidad_mantenimiento: data?.cantidad_mantenimiento ?? "",
+                cantidad_handling: data?.cantidad_handling ?? "",
             }));
         } catch (error) {
             console.error(error);
@@ -194,62 +206,177 @@ export default function CheckListTurnoForm({ isEdit, isValidationMode = false, d
                     {step === 4 && <div className="animate-in fade-in duration-500"><EntregaTurnoCon form={form} updateField={updateField} /></div>}
 
                     {step === 5 && (
-                        <div className="grid grid-cols-1 gap-8 md:grid-cols-2 animate-in fade-in duration-500">
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
-                                        Total Operaciones
-                                    </label>
-                                    <input
-                                        type="number"
-                                        className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold text-slate-700 focus:border-[#00677F] focus:outline-none"
-                                        value={form.cantidad_operaciones}
-                                        onChange={(e) => updateField("cantidad_operaciones", e.target.value)}
-                                    />
-                                </div>
+                        <div className="space-y-8 animate-in fade-in duration-500">
+                            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                                    <h3 className="mb-4 text-xs font-black uppercase tracking-widest text-slate-700">
+                                        Total de Operaciones
+                                    </h3>
 
-                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                     <div>
                                         <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
-                                            Nacionales
+                                            Total Operaciones
                                         </label>
                                         <input
                                             type="number"
                                             className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold text-slate-700 focus:border-[#00677F] focus:outline-none"
-                                            value={form.cantidad_operaciones_nacionales}
-                                            onChange={(e) => updateField("cantidad_operaciones_nacionales", e.target.value)}
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
-                                            Internacionales
-                                        </label>
-                                        <input
-                                            type="number"
-                                            className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold text-slate-700 focus:border-[#00677F] focus:outline-none"
-                                            value={form.cantidad_operaciones_internacionales}
-                                            onChange={(e) => updateField("cantidad_operaciones_internacionales", e.target.value)}
+                                            value={form.cantidad_operaciones}
+                                            onChange={(e) => updateField("cantidad_operaciones", e.target.value)}
                                         />
                                     </div>
                                 </div>
 
-                                <div>
-                                    <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
-                                        Total Pasajeros
-                                    </label>
-                                    <input
-                                        type="number"
-                                        className="w-full rounded-md border-2 border-slate-400 px-4 py-3 text-sm font-bold focus:border-[#00677F]"
-                                        value={form.cantidad_pasajeros}
-                                        onChange={(e) => updateField("cantidad_pasajeros", e.target.value)}
-                                    />
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                                    <h3 className="mb-4 text-xs font-black uppercase tracking-widest text-slate-700">
+                                        Tipo de Operación
+                                    </h3>
+
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                        <div>
+                                            <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
+                                                Nacionales
+                                            </label>
+                                            <input
+                                                type="number"
+                                                className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold text-slate-700 focus:border-[#00677F] focus:outline-none"
+                                                value={form.cantidad_operaciones_nacionales}
+                                                onChange={(e) => updateField("cantidad_operaciones_nacionales", e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
+                                                Internacionales
+                                            </label>
+                                            <input
+                                                type="number"
+                                                className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold text-slate-700 focus:border-[#00677F] focus:outline-none"
+                                                value={form.cantidad_operaciones_internacionales}
+                                                onChange={(e) => updateField("cantidad_operaciones_internacionales", e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                                    <h3 className="mb-4 text-xs font-black uppercase tracking-widest text-slate-700">
+                                        Tipo de Cliente
+                                    </h3>
+
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                        <div>
+                                            <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
+                                                Tránsito
+                                            </label>
+                                            <input
+                                                type="number"
+                                                className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold text-slate-700 focus:border-[#00677F] focus:outline-none"
+                                                value={form.cantidad_transito}
+                                                onChange={(e) => updateField("cantidad_transito", e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
+                                                Guarda
+                                            </label>
+                                            <input
+                                                type="number"
+                                                className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold text-slate-700 focus:border-[#00677F] focus:outline-none"
+                                                value={form.cantidad_guarda}
+                                                onChange={(e) => updateField("cantidad_guarda", e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
+                                                Aerotaxi
+                                            </label>
+                                            <input
+                                                type="number"
+                                                className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold text-slate-700 focus:border-[#00677F] focus:outline-none"
+                                                value={form.cantidad_aerotaxi}
+                                                onChange={(e) => updateField("cantidad_aerotaxi", e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
+                                                Mantenimiento
+                                            </label>
+                                            <input
+                                                type="number"
+                                                className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold text-slate-700 focus:border-[#00677F] focus:outline-none"
+                                                value={form.cantidad_mantenimiento}
+                                                onChange={(e) => updateField("cantidad_mantenimiento", e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="md:col-span-2">
+                                            <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
+                                                Handling
+                                            </label>
+                                            <input
+                                                type="number"
+                                                className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold text-slate-700 focus:border-[#00677F] focus:outline-none"
+                                                value={form.cantidad_handling}
+                                                onChange={(e) => updateField("cantidad_handling", e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                                    <h3 className="mb-4 text-xs font-black uppercase tracking-widest text-slate-700">
+                                        Pasajeros y Equipaje
+                                    </h3>
+
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                        <div>
+                                            <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
+                                                Total Pasajeros
+                                            </label>
+                                            <input
+                                                type="number"
+                                                className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold text-slate-700 focus:border-[#00677F] focus:outline-none"
+                                                value={form.cantidad_pasajeros}
+                                                onChange={(e) => updateField("cantidad_pasajeros", e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
+                                                Equipaje
+                                            </label>
+                                            <input
+                                                type="number"
+                                                className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold text-slate-700 focus:border-[#00677F] focus:outline-none"
+                                                value={form.cantidad_equipaje}
+                                                onChange={(e) => updateField("cantidad_equipaje", e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                            <div>
-                                <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">Confirmación de Recibido</label>
-                                <FirmaBox label="Firma Autorizada" value={form.firma} onClick={() => setOpenFirma("firma_validacion")} />
-                                <FirmaCanvas open={openFirma === "firma_validacion"} title="Firma de Entrega" value={form.firma} onClose={() => setOpenFirma(null)} onChange={(b64: string) => updateField("firma", b64)} />
+
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                                <label className="mb-3 block text-xs font-extrabold uppercase tracking-widest text-slate-600">
+                                    Confirmación de Recibido
+                                </label>
+
+                                <FirmaBox
+                                    label="Firma Autorizada"
+                                    value={form.firma}
+                                    onClick={() => setOpenFirma("firma_validacion")}
+                                />
+
+                                <FirmaCanvas
+                                    open={openFirma === "firma_validacion"}
+                                    title="Firma de Entrega"
+                                    value={form.firma}
+                                    onClose={() => setOpenFirma(null)}
+                                    onChange={(b64: string) => updateField("firma", b64)}
+                                />
                             </div>
                         </div>
                     )}

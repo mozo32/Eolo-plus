@@ -75,17 +75,48 @@ class ServicioComisariatoController extends Controller
     }
     public function index(Request $request)
     {
+        $query = ServicioComisariato::query()
+            ->where('status', 'A');
 
-        $query = ServicioComisariato::query();
-        $query->where('status', 'A');
+        if ($request->filled('id')) {
+            $query->where('id', $request->id);
+        }
+
         if ($request->filled('search')) {
-            $search = $request->search;
+            $search = trim($request->search);
+
             $query->where(function ($q) use ($search) {
-                $q->where('matricula', 'like', "%{$search}%");
+                $q->where('matricula', 'like', "%{$search}%")
+                    ->orWhere('catering', 'like', "%{$search}%")
+                    ->orWhere('forma_pago', 'like', "%{$search}%")
+                    ->orWhere('detalle', 'like', "%{$search}%")
+                    ->orWhere('solicitado_por', 'like', "%{$search}%")
+                    ->orWhere('atendio', 'like', "%{$search}%");
             });
         }
 
-        $perPage = $request->get('per_page', 10);
+        if ($request->filled('catering')) {
+            $query->where('catering', 'like', '%' . trim($request->catering) . '%');
+        }
+
+        if ($request->filled('matricula')) {
+            $query->where('matricula', 'like', '%' . trim($request->matricula) . '%');
+        }
+
+        if ($request->filled('forma_pago')) {
+            $query->where('forma_pago', 'like', '%' . trim($request->forma_pago) . '%');
+        }
+
+        if ($request->filled('fechaInicio') && $request->filled('fechaFin')) {
+            $query->whereBetween('fecha_entrega', [
+                $request->fechaInicio,
+                $request->fechaFin,
+            ]);
+        } elseif ($request->filled('fechaInicio')) {
+            $query->whereDate('fecha_entrega', $request->fechaInicio);
+        }
+
+        $perPage = (int) $request->get('per_page', 10);
 
         return response()->json(
             $query->orderBy('created_at', 'desc')

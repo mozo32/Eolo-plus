@@ -38,6 +38,12 @@ class ChecklistTurnoController extends Controller
                 'cantidad_operaciones' => 'nullable|integer|min:0',
                 'cantidad_operaciones_nacionales' => 'nullable|integer|min:0',
                 'cantidad_operaciones_internacionales' => 'nullable|integer|min:0',
+                'cantidad_equipaje' => 'nullable|integer|min:0',
+                'cantidad_transito' => 'nullable|integer|min:0',
+                'cantidad_guarda' => 'nullable|integer|min:0',
+                'cantidad_aerotaxi' => 'nullable|integer|min:0',
+                'cantidad_mantenimiento' => 'nullable|integer|min:0',
+                'cantidad_handling' => 'nullable|integer|min:0',
             ]);
 
             $checklist = ChecklistTurno::create([
@@ -57,6 +63,12 @@ class ChecklistTurnoController extends Controller
                 'cantidad_operaciones' => $validated['cantidad_operaciones'] ?? 0,
                 'cantidad_nacionales' => $validated['cantidad_operaciones_nacionales'] ?? 0,
                 'cantidad_internacionales' => $validated['cantidad_operaciones_internacionales'] ?? 0,
+                'cantidad_equipaje' => $validated['cantidad_equipaje'] ?? 0,
+                'cantidad_transito' => $validated['cantidad_transito'] ?? 0,
+                'cantidad_guarda' => $validated['cantidad_guarda'] ?? 0,
+                'cantidad_aerotaxi' => $validated['cantidad_aerotaxi'] ?? 0,
+                'cantidad_mantenimiento' => $validated['cantidad_mantenimiento'] ?? 0,
+                'cantidad_handling' => $validated['cantidad_handling'] ?? 0,
             ]);
 
             if ($request->filled('firma')) {
@@ -263,6 +275,15 @@ class ChecklistTurnoController extends Controller
         DB::beginTransaction();
 
         try {
+            $observacionEntregaAnterior = trim((string) ($checklistTurno->observaciones_entrega ?? ''));
+
+            $hotAnterior = collect($checklistTurno->hot_tras_comi_coor ?? [])
+                ->map(function ($item) {
+                    return $this->generarClaveHotTrasComiCoor((array) $item);
+                })
+                ->values()
+                ->toArray();
+
             $validated = $request->validate([
                 'nombreEmpleado' => 'required|string|max:255',
                 'fecha' => 'required|date',
@@ -278,24 +299,58 @@ class ChecklistTurnoController extends Controller
                 'observaciones_entrega' => 'nullable|string',
                 'cantidad_pasajeros' => 'nullable|integer|min:0',
                 'cantidad_operaciones' => 'nullable|integer|min:0',
+                'cantidad_operaciones_nacionales' => 'nullable|integer|min:0',
+                'cantidad_operaciones_internacionales' => 'nullable|integer|min:0',
+                'cantidad_equipaje' => 'nullable|integer|min:0',
+                'cantidad_transito' => 'nullable|integer|min:0',
+                'cantidad_guarda' => 'nullable|integer|min:0',
+                'cantidad_aerotaxi' => 'nullable|integer|min:0',
+                'cantidad_mantenimiento' => 'nullable|integer|min:0',
+                'cantidad_handling' => 'nullable|integer|min:0',
             ]);
+
+            $observacionEntregaNueva = trim((string) ($validated['observaciones_entrega'] ?? ''));
 
             $checklistTurno->update([
                 'nombre_empleado' => $validated['nombreEmpleado'],
                 'fecha' => $validated['fecha'],
-                'recibe_turno_con' => $validated['recibeTurnoCon'],
+                'recibe_turno_con' => $validated['recibeTurnoCon'] ?? [],
                 'observaciones_recibe' => $validated['observaciones_recibe'] ?? null,
-                'revision_salas' => $validated['revisionSalas'],
+                'revision_salas' => $validated['revisionSalas'] ?? [],
                 'observaciones_salas' => $validated['observaciones_salas'] ?? null,
                 'hot_tras_comi_coor' => $validated['HotTrasComiCoor'] ?? [],
-                'revision_base_operaciones' => $validated['revision_base_operaciones'],
-                'envia_informe_diario' => $validated['envia_informe_diario'],
-                'envia_resumen_semanal' => $validated['envia_resumen_semanal'],
-                'entrega_turno_con' => $validated['entregaTurnoCon'],
+                'revision_base_operaciones' => $validated['revision_base_operaciones'] ?? false,
+                'envia_informe_diario' => $validated['envia_informe_diario'] ?? false,
+                'envia_resumen_semanal' => $validated['envia_resumen_semanal'] ?? false,
+                'entrega_turno_con' => $validated['entregaTurnoCon'] ?? [],
                 'observaciones_entrega' => $validated['observaciones_entrega'] ?? null,
-                'cantidad_pasajeros' => (int) $validated['cantidad_pasajeros'],
-                'cantidad_operaciones' => (int) $validated['cantidad_operaciones'],
+                'cantidad_pasajeros' => $validated['cantidad_pasajeros'] ?? 0,
+                'cantidad_operaciones' => $validated['cantidad_operaciones'] ?? 0,
+                'cantidad_nacionales' => $validated['cantidad_operaciones_nacionales'] ?? 0,
+                'cantidad_internacionales' => $validated['cantidad_operaciones_internacionales'] ?? 0,
+                'cantidad_equipaje' => $validated['cantidad_equipaje'] ?? 0,
+                'cantidad_transito' => $validated['cantidad_transito'] ?? 0,
+                'cantidad_guarda' => $validated['cantidad_guarda'] ?? 0,
+                'cantidad_aerotaxi' => $validated['cantidad_aerotaxi'] ?? 0,
+                'cantidad_mantenimiento' => $validated['cantidad_mantenimiento'] ?? 0,
+                'cantidad_handling' => $validated['cantidad_handling'] ?? 0,
             ]);
+
+            if ($observacionEntregaNueva !== '' && $observacionEntregaNueva !== $observacionEntregaAnterior) {
+                $this->crearNotaOperacionalChecklist($observacionEntregaNueva);
+            }
+
+            foreach (($validated['HotTrasComiCoor'] ?? []) as $item) {
+                $claveNueva = $this->generarClaveHotTrasComiCoor((array) $item);
+
+                if (!in_array($claveNueva, $hotAnterior, true)) {
+                    $descripcion = $this->generarDescripcionNotaHotTrasComiCoor($item);
+
+                    if ($descripcion !== '') {
+                        $this->crearNotaOperacionalChecklist($descripcion);
+                    }
+                }
+            }
 
             if (str_contains($request->firma ?? '', 'base64,')) {
                 $this->guardarFirmaBase64(
@@ -322,6 +377,31 @@ class ChecklistTurnoController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+    private function crearNotaOperacionalChecklist(string $descripcion): void
+    {
+        if (trim($descripcion) === '') {
+            return;
+        }
+
+        NotaOperacional::create([
+            'descripcion' => mb_strtoupper($descripcion, 'UTF-8'),
+            'departamento_id' => 7,
+            'subdepartamento_id' => 16,
+            'creado_por_user_id' => Auth::id(),
+            'validado_por_user_id' => null,
+        ]);
+    }
+
+    private function generarClaveHotTrasComiCoor(array $item): string
+    {
+        return md5(json_encode([
+            'matricula' => trim((string) ($item['matricula'] ?? '')),
+            'descripcion' => trim((string) ($item['descripcion'] ?? '')),
+            'fecha' => trim((string) ($item['fecha'] ?? '')),
+            'hora' => trim((string) ($item['hora'] ?? '')),
+            'notas' => trim((string) ($item['notas'] ?? '')),
+        ], JSON_UNESCAPED_UNICODE));
     }
     public function eliminar($id)
     {
@@ -377,7 +457,6 @@ class ChecklistTurnoController extends Controller
         try {
 
             $nota = NotaOperacional::create([
-                // Corregido: Se cambia 'uppercase()' por soporte nativo multibyte de PHP para evitar errores
                 'descripcion'          => mb_strtoupper($request->descripcion, 'UTF-8'),
                 'departamento_id'      =>  7,
                 'subdepartamento_id'   => 16,
@@ -552,32 +631,75 @@ class ChecklistTurnoController extends Controller
                 'matricula',
                 'equipo',
                 'pax',
+                'equipaje',
             ]);
+
+        $normalizar = function ($valor) {
+            return Str::of((string) $valor)
+                ->ascii()
+                ->upper()
+                ->trim()
+                ->replace(' ', '')
+                ->replace('-', '')
+                ->replace('_', '')
+                ->toString();
+        };
 
         $resumen = [
             'fecha' => $fecha,
+
             'cantidad_operaciones' => $operaciones->count(),
+
             'cantidad_operaciones_nacionales' => 0,
             'cantidad_operaciones_internacionales' => 0,
+
+            'cantidad_transito' => 0,
+            'cantidad_guarda' => 0,
+            'cantidad_aerotaxi' => 0,
+            'cantidad_mantenimiento' => 0,
+            'cantidad_handling' => 0,
+
             'cantidad_pasajeros' => $operaciones->sum(function ($op) {
                 return (int) ($op->pax ?? 0);
             }),
+
+            'cantidad_equipaje' => $operaciones->sum(function ($op) {
+                return (int) ($op->equipaje ?? 0);
+            }),
+
             'operaciones' => $operaciones->values(),
         ];
 
         foreach ($operaciones as $operacion) {
-            $tipoOperacion = Str::of($operacion->tipo_operacion ?? '')
-                ->ascii()
-                ->lower()
-                ->trim()
-                ->toString();
+            $tipoOperacion = $normalizar($operacion->tipo_operacion);
+            $tipoCliente = $normalizar($operacion->tipo_cliente);
 
-            if (str_contains($tipoOperacion, 'nacional') && !str_contains($tipoOperacion, 'internacional')) {
+            if ($tipoOperacion === 'NACIONAL') {
                 $resumen['cantidad_operaciones_nacionales']++;
             }
 
-            if (str_contains($tipoOperacion, 'internacional')) {
+            if ($tipoOperacion === 'INTERNACIONAL') {
                 $resumen['cantidad_operaciones_internacionales']++;
+            }
+
+            if ($tipoCliente === 'TRANSITO') {
+                $resumen['cantidad_transito']++;
+            }
+
+            if ($tipoCliente === 'GUARDA') {
+                $resumen['cantidad_guarda']++;
+            }
+
+            if ($tipoCliente === 'AEROTAXI') {
+                $resumen['cantidad_aerotaxi']++;
+            }
+
+            if ($tipoCliente === 'MANTENIMIENTO') {
+                $resumen['cantidad_mantenimiento']++;
+            }
+
+            if ($tipoCliente === 'HANDLING') {
+                $resumen['cantidad_handling']++;
             }
         }
 
