@@ -30,8 +30,18 @@ export async function fetchCheckListTurno(params: {
     page?: number;
     search?: string;
     per_page?: number;
+    id?: string;
+    fechaInicio?: string;
+    fechaFin?: string;
+    periodo?: string;
+    nombre_empleado?: string;
+    estado?: string;
 }) {
-    const qs = new URLSearchParams(params as any).toString();
+    const cleanParams = Object.fromEntries(
+        Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== "")
+    );
+
+    const qs = new URLSearchParams(cleanParams as any).toString();
 
     const res = await fetch(`/api/CheckListTurno?${qs}`, {
         headers: { Accept: "application/json" },
@@ -39,7 +49,8 @@ export async function fetchCheckListTurno(params: {
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.message);
+
+    if (!res.ok) throw new Error(data?.message || "Error al consultar checklist de turno");
 
     return data;
 }

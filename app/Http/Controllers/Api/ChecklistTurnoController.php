@@ -202,37 +202,66 @@ class ChecklistTurnoController extends Controller
     }
     public function index(Request $request)
     {
-        $query = ChecklistTurno::with(['firmas' => function($q) {
+        $query = ChecklistTurno::with(['firmas' => function ($q) {
             $q->wherePivot('status', 'A');
         }]);
+
         $query->where('status', 'A');
-        if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where('nombre_empleado', 'like', "%{$search}%");
+
+        if ($request->filled('id')) {
+            $query->where('id', $request->id);
         }
+
+        if ($request->filled('search')) {
+            $search = trim($request->search);
+
+            $query->where(function ($q) use ($search) {
+                $q->where('nombre_empleado', 'like', "%{$search}%");
+            });
+        }
+
+        if ($request->filled('nombre_empleado')) {
+            $nombre = trim($request->nombre_empleado);
+
+            $query->where('nombre_empleado', 'like', "%{$nombre}%");
+        }
+
+        if ($request->filled('fechaInicio') && $request->filled('fechaFin')) {
+            $query->whereBetween('fecha', [
+                $request->fechaInicio,
+                $request->fechaFin,
+            ]);
+        } elseif ($request->filled('fechaInicio')) {
+            $query->whereDate('fecha', $request->fechaInicio);
+        }
+
         if ($request->filled('estado')) {
-            $estado = $request->estado;
+            $estado = strtolower(trim($request->estado));
 
             if ($estado === 'finalizado') {
                 $query->whereNotNull('cantidad_pasajeros')
                     ->whereNotNull('cantidad_operaciones')
-                    ->whereHas('firmas', function($q) {
+                    ->whereHas('firmas', function ($q) {
                         $q->wherePivot('status', 'A');
                     });
-            } elseif ($estado === 'sin finalizar') {
-                $query->where(function($q) {
+            }
+
+            if ($estado === 'sin finalizar') {
+                $query->where(function ($q) {
                     $q->whereNull('cantidad_pasajeros')
-                    ->orWhereNull('cantidad_operaciones')
-                    ->orWhereDoesntHave('firmas', function($sq) {
-                        $sq->wherePivot('status', 'A');
-                    });
+                        ->orWhereNull('cantidad_operaciones')
+                        ->orWhereDoesntHave('firmas', function ($sq) {
+                            $sq->wherePivot('status', 'A');
+                        });
                 });
             }
         }
 
-        $perPage = $request->get('per_page', 10);
+        $perPage = (int) $request->get('per_page', 10);
 
-        $resultados = $query->orderBy('created_at', 'desc')->paginate($perPage);
+        $resultados = $query->orderBy('created_at', 'desc')
+            ->paginate($perPage);
+
         return response()->json($resultados);
     }
 
