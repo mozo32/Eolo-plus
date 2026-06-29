@@ -160,6 +160,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('ServicioComisariato')->group
 Route::middleware(['api', 'auth:sanctum'])->prefix('OperacionesDiarias')->group(function () {
     Route::get('/', [OperacionesDiariasController::class, 'index']);
     Route::get('/Excel/', [OperacionesDiariasController::class, 'obtenerExcel']);
+    Route::get('/Pdf/', [OperacionesDiariasController::class, 'obtenerPdf']);
     Route::put('/{id}', [OperacionesDiariasController::class, 'update']);
     Route::post('/',[OperacionesDiariasController::class, 'store']);
     Route::get('/autocomplete', [OperacionesDiariasController::class, 'autocomplete']);

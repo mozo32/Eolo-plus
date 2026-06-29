@@ -95,6 +95,22 @@ export async function excelOperacionesDiariasApi(filtros = {}) {
     if (!res.ok) throw new Error(data?.message || "Error al obtener registros");
     return data;
 }
+export async function pdfOperacionesDiariasApi(filtros = {}) {
+    const params = new URLSearchParams(filtros).toString();
+
+    const res = await fetch(`/api/OperacionesDiarias/Pdf?${params}`, {
+        method: "GET",
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+        },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || "Error al obtener registros");
+    return data;
+}
 
 export async function autocompleteMatriculaApi(query: string) {
     const xsrf = getXsrfToken();
