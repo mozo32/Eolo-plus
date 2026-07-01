@@ -35,18 +35,22 @@ class OperacionesDiariasController extends Controller
         ]);
 
         return DB::transaction(function () use ($validated) {
+            $matricula = strtoupper(trim($validated['matricula']));
+            $movimiento = strtolower(trim($validated['movimiento']));
+
             $ultimoRegistro = OperacionDiaria::query()
-                ->where('matricula', $validated['matricula'])
-                ->latest()
+                ->where('matricula', $matricula)
+                ->orderByDesc('fecha')
+                ->orderByDesc('hora')
+                ->orderByDesc('id')
                 ->first();
 
             if (
                 $ultimoRegistro &&
-                strtolower($ultimoRegistro->tipo) ===
-                    strtolower($validated['movimiento'])
+                strtolower($ultimoRegistro->tipo) === $movimiento
             ) {
                 $movimientoRequerido =
-                    $validated['movimiento'] === 'Llegada'
+                    $movimiento === 'llegada'
                         ? 'Salida'
                         : 'Llegada';
 
@@ -76,14 +80,14 @@ class OperacionesDiariasController extends Controller
 
             $infoMatricula = DB::connection('remota')
                 ->table('tb_matricula')
-                ->where('matricula', $validated['matricula'])
+                ->where('matricula', $matricula)
                 ->first();
 
             if (!$infoMatricula) {
                 DB::connection('remota')
                     ->table('tb_matricula')
                     ->insert([
-                        'matricula' => $validated['matricula'],
+                        'matricula' => $matricula,
                         'id_estatus' => 1,
                         'id_tipo' => $idTipo,
                         'id_categoria' => 0,
@@ -99,8 +103,8 @@ class OperacionesDiariasController extends Controller
             $operacion = OperacionDiaria::create([
                 'user_id' => Auth::id(),
                 'fecha' => $validated['fecha'],
-                'tipo' => strtolower($validated['movimiento']),
-                'matricula' => strtoupper($validated['matricula']),
+                'tipo' => $movimiento,
+                'matricula' => $matricula,
                 'equipo' => $validated['equipo'],
                 'hora' => $validated['hora'],
                 'lugar' => $validated['procedencia']

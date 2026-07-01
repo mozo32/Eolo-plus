@@ -627,37 +627,41 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                                     <div className="space-y-1.5">
                                         {gruposChecklist.calidadCombustible.map((item) => {
                                             const nombreDrenActual = NOMBRES_DRENES[drenActivo] || `${drenActivo}`;
+                                            const itemToma = 'Toma de Muestra de Combustible';
                                             const llaveCompuesta = `${item} - Dren ${nombreDrenActual.toLowerCase()}`;
-
+                                            const llaveFallback = `${item} - Dren ${drenActivo}`;
+                                            const llaveToma = `${itemToma} - Dren ${nombreDrenActual.toLowerCase()}`;
+                                            const llaveTomaFallback = `${itemToma} - Dren ${drenActivo}`;
                                             let valorRespuesta = respuestas[llaveCompuesta];
+                                            let valorToma = respuestas[llaveToma];
 
-                                            if (!valorRespuesta && respuestas[`${item} - Dren ${drenActivo}`]) {
-                                                valorRespuesta = respuestas[`${item} - Dren ${drenActivo}`];
-                                            }
+                                            if (!valorRespuesta && respuestas[llaveFallback]) valorRespuesta = respuestas[llaveFallback];
+                                            if (!valorToma && respuestas[llaveTomaFallback]) valorToma = respuestas[llaveTomaFallback];
+
+                                            const esToma = item === itemToma;
+                                            const noSeRealizo = !esToma && String(valorToma || '').toLowerCase() === 'no';
+                                            const valorMostrar = noSeRealizo ? 'No se realizaron pruebas' : valorRespuesta || '---';
 
                                             return (
-                                                <div
-                                                    key={item}
-                                                    className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 text-[10px]"
-                                                >
-                                                    <div className="flex flex-col max-w-[70%]">
-                                                        <span className="font-bold text-slate-600 truncate">
-                                                            {item}
-                                                        </span>
+                                                <div key={item} className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 text-[10px]">
+                                                    <div className="flex flex-col max-w-[62%]">
+                                                        <span className="font-bold text-slate-600 truncate">{item}</span>
                                                         <span className="text-[8px] text-indigo-500 font-bold tracking-tight">
                                                             Evaluando Dren {drenActivo}: {nombreDrenActual}
                                                         </span>
                                                     </div>
 
                                                     <span
-                                                        className={`font-black uppercase px-2 py-0.5 rounded ${valorRespuesta === 'Ok'
-                                                            ? 'bg-emerald-50 text-emerald-600'
-                                                            : valorRespuesta === 'No'
-                                                                ? 'bg-rose-50 text-rose-600'
-                                                                : 'bg-slate-100 text-slate-400'
+                                                        className={`font-black uppercase px-2 py-0.5 rounded text-right max-w-[38%] ${noSeRealizo
+                                                                ? 'bg-slate-100 text-slate-500'
+                                                                : valorRespuesta === 'Ok'
+                                                                    ? 'bg-emerald-50 text-emerald-600'
+                                                                    : valorRespuesta === 'No'
+                                                                        ? 'bg-rose-50 text-rose-600'
+                                                                        : 'bg-slate-100 text-slate-400'
                                                             }`}
                                                     >
-                                                        {valorRespuesta || '---'}
+                                                        {valorMostrar}
                                                     </span>
                                                 </div>
                                             );

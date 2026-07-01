@@ -1,11 +1,30 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
+const parseFechaExcel = (value: any) => {
+    if (!value) return null;
+    if (value instanceof Date && !isNaN(value.getTime())) {
+        return new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate(), value.getHours(), value.getMinutes(), 0));
+    }
+    const texto = String(value).trim();
+    const match = texto.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::\d{2})?)?/);
+    if (match) {
+        const [, y, m, d, h = '00', min = '00'] = match;
+        return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), Number(h), Number(min), 0));
+    }
+    return null;
+};
+
+const parseNumero = (value: any) => {
+    if (value === null || value === undefined || value === '') return 0;
+    const numero = Number(String(value).replace(/,/g, '').replace(/\s/g, ''));
+    return isNaN(numero) ? 0 : numero;
+};
+
 export const exportarAutotanqueAExcel = async (registros: any[]) => {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Reporte Autotanque');
 
-    // 1. Título Principal
     worksheet.mergeCells('A1:L1');
     const mainTitle = worksheet.getCell('A1');
     mainTitle.value = 'REPORTE DE ENTREGA DE TURNO - AUTOTANQUE';
@@ -14,10 +33,19 @@ export const exportarAutotanqueAExcel = async (registros: any[]) => {
     mainTitle.alignment = { horizontal: 'center', vertical: 'middle' };
     worksheet.getRow(1).height = 30;
 
-    // 2. Encabezados
     const headers = [
-        'N°', 'RESPONSABLE INICIO', 'FECHA INICIO', 'CM INICIAL', 'LITROS INICIAL', 'TOTALIZADOR INI',
-        'RESPONSABLE CIERRE', 'FECHA CIERRE', 'CM CIERRE', 'LITROS CIERRE', 'TOTALIZADOR CIERRE', 'DIFERENCIA (LTS)'
+        'N°',
+        'RESPONSABLE INICIO',
+        'FECHA INICIO',
+        'CM INICIAL',
+        'LITROS INICIAL',
+        'TOTALIZADOR INI',
+        'RESPONSABLE CIERRE',
+        'FECHA CIERRE',
+        'CM CIERRE',
+        'LITROS CIERRE',
+        'TOTALIZADOR CIERRE',
+        'DIFERENCIA (LTS)'
     ];
 
     const startRow = 3;
@@ -30,59 +58,62 @@ export const exportarAutotanqueAExcel = async (registros: any[]) => {
         cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 10 };
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
         cell.border = {
-            top: { style: 'thin' }, left: { style: 'thin' },
-            bottom: { style: 'thin' }, right: { style: 'thin' }
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
         };
     });
 
-    // 3. Configurar anchos de columna
     worksheet.columns = [
-        { width: 6 }, { width: 25 }, { width: 18 }, { width: 12 }, { width: 15 }, { width: 18 },
-        { width: 25 }, { width: 18 }, { width: 12 }, { width: 15 }, { width: 18 }, { width: 18 }
+        { width: 6 },
+        { width: 25 },
+        { width: 18 },
+        { width: 14 },
+        { width: 16 },
+        { width: 18 },
+        { width: 25 },
+        { width: 18 },
+        { width: 14 },
+        { width: 16 },
+        { width: 18 },
+        { width: 18 }
     ];
 
-    // 4. Agregar los datos
-    // Modificación: Creación de fechas reales y formateo dinámico
     registros.forEach((item, index) => {
-        // Convertir strings de fecha a objetos Date nativos si existen
-        const fechaInicioDate = item.fecha ? new Date(item.fecha) : '';
-        const fechaCierreDate = item.fechaCierre ? new Date(item.fechaCierre) : '';
-
-        const rowData = [
-            index + 1, // Consecutivo autoincrementable en vez de item.id
+        const row = worksheet.addRow([
+            index + 1,
             item.nombre?.toUpperCase() || 'N/A',
-            fechaInicioDate, // Pasamos el objeto Date
-            item.cmIni,
-            parseFloat(item.litrosIni) || 0,
-            item.totalizadorIni,
+            parseFechaExcel(item.fecha),
+            parseNumero(item.cmIni),
+            parseNumero(item.litrosIni),
+            parseNumero(item.totalizadorIni),
             item.nombreCierre?.toUpperCase() || 'PENDIENTE',
-            fechaCierreDate, // Pasamos el objeto Date
-            item.cmCierre,
-            parseFloat(item.litrosCierre) || 0,
-            item.totalizadorCierre,
-            parseFloat(item.diferenciaFinal) || 0
-        ];
+            parseFechaExcel(item.fechaCierre),
+            parseNumero(item.cmCierre),
+            parseNumero(item.litrosCierre),
+            parseNumero(item.totalizadorCierre),
+            parseNumero(item.diferenciaFinal)
+        ]);
 
-        const row = worksheet.addRow(rowData);
+        row.height = 22;
 
-        // Estilo de celdas de datos
         row.eachCell((cell, colNumber) => {
             cell.alignment = { vertical: 'middle', horizontal: 'center' };
             cell.border = {
                 bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } }
             };
 
-            // Formatear las columnas de FECHA (Columna 3 y Columna 8)
             if (colNumber === 3 || colNumber === 8) {
-                if (cell.value instanceof Date) {
-                    // Formato Excel para que sea reconocido como Fecha y Hora filtrable
-                    cell.numFmt = 'yyyy-mm-dd hh:mm:ss';
-                }
+                cell.numFmt = 'dd/mm/yy hh:mm';
             }
 
-            // Resaltar la diferencia negativa en rojo (Columna 12)
+            if ([4, 5, 6, 9, 10, 11, 12].includes(colNumber)) {
+                cell.numFmt = '#,##0';
+            }
+
             if (colNumber === 12) {
-                const valor = parseFloat(item.diferenciaFinal);
+                const valor = parseNumero(item.diferenciaFinal);
                 if (valor < 0) {
                     cell.font = { color: { argb: 'FFDC2626' }, bold: true };
                 }
@@ -90,9 +121,18 @@ export const exportarAutotanqueAExcel = async (registros: any[]) => {
         });
     });
 
-    // 5. Generar archivo
+    worksheet.autoFilter = {
+        from: { row: startRow, column: 1 },
+        to: { row: startRow, column: headers.length }
+    };
+
+    worksheet.views = [{ state: 'frozen', ySplit: 3 }];
+
     const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+
     const fechaHoy = new Date().toISOString().split('T')[0];
     saveAs(blob, `Reporte_Autotanque_${fechaHoy}.xlsx`);
 };
