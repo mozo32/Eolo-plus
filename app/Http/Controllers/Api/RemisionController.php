@@ -152,43 +152,43 @@ class RemisionController extends Controller
         $litros = $request->query('cantidad');
 
         $queryRemisiones = DB::table('remisiones')
-        ->select(
-            DB::raw("'R' as tipo"),
-            'folio',
-            'fecha',
-            'matricula',
-            DB::raw("'' as vta"),
-            DB::raw("'' as factura"),
-            'precio as precio_venta',
-            'total_litros as litros',
-            DB::raw("(total_litros * precio) as importe"),
-            'cliente',
-            'forma_pago',
-            DB::raw("MONTHNAME(fecha) as mes"),
-            'status',
-            'created_at',
-            'id'
-        )
-        ->where('status', 'A');
+            ->select(
+                DB::raw("'R' as tipo"),
+                'folio',
+                DB::raw("CONCAT(fecha, ' ', COALESCE(hora_llegada, '00:00:00')) as fecha"),
+                'matricula',
+                DB::raw("'' as vta"),
+                DB::raw("'' as factura"),
+                'precio as precio_venta',
+                'total_litros as litros',
+                DB::raw("(total_litros * precio) as importe"),
+                'cliente',
+                'forma_pago',
+                DB::raw("MONTHNAME(fecha) as mes"),
+                'status',
+                'created_at',
+                'id'
+            )
+            ->where('status', 'A');
 
         $queryAutotanques = DB::table('sumas_autotanque')
-        ->select(
-            DB::raw("'A' as tipo"),
-            'folio',
-            DB::raw("DATE(created_at) as fecha"),
-            DB::raw("'ASA' as matricula"),
-            DB::raw("'' as vta"),
-            DB::raw("'' as factura"),
-            'costo as precio_venta',
-            'litros',
-            DB::raw("(litros * costo) as importe"),
-            DB::raw("'' as cliente"),
-            DB::raw("'' as forma_pago"),
-            DB::raw("'' as mes"),
-            DB::raw("'Finalizado' as status"),
-            'created_at',
-            'id'
-        );
+            ->select(
+                DB::raw("'A' as tipo"),
+                'folio',
+                DB::raw("created_at as fecha"),
+                DB::raw("'ASA' as matricula"),
+                DB::raw("'' as vta"),
+                DB::raw("'' as factura"),
+                'costo as precio_venta',
+                'litros',
+                DB::raw("(litros * costo) as importe"),
+                DB::raw("'' as cliente"),
+                DB::raw("'' as forma_pago"),
+                DB::raw("MONTHNAME(created_at) as mes"),
+                DB::raw("'Finalizado' as status"),
+                'created_at',
+                'id'
+            );
 
         $this->applyDateFilters($queryRemisiones, $type, $start, $end, $request, 'fecha');
         $this->applyDateFilters($queryAutotanques, $type, $start, $end, $request, DB::raw('DATE(created_at)'));
@@ -205,7 +205,9 @@ class RemisionController extends Controller
             $queryRemisiones->where('total_litros', '>=', $litros);
             $queryAutotanques->where('litros', '>=', $litros);
         }
+
         $finalQuery = $queryRemisiones->unionAll($queryAutotanques);
+
         $results = DB::table(DB::raw("({$finalQuery->toSql()}) as combined"))
             ->mergeBindings($finalQuery)
             ->orderBy('fecha', 'asc')
@@ -214,7 +216,6 @@ class RemisionController extends Controller
 
         return response()->json($results);
     }
-
     private function applyDateFilters($query, $type, $start, $end, $request, $column)
     {
         switch ($type) {

@@ -207,13 +207,21 @@ const TablaWalkAround = () => {
                                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Inspección de Aeronaves</p>
                             </div>
                             {pendientes.length > 0 && (
-                                <button
-                                    onClick={() => setMostrarPanelPendientes(true)}
-                                    className="flex items-center gap-1.5 bg-amber-500 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-sm hover:bg-amber-600 transition-all animate-bounce"
-                                >
-                                    <Bell size={12} className="animate-pulse" />
-                                    <span>PENDIENTES ({pendientes.length})</span>
-                                </button>
+                                <>
+                                    <button
+                                        onClick={() => setMostrarPanelPendientes(true)}
+                                        className="relative flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md transition-all animate-pulse"
+                                    >
+                                        <span className="flex h-3 w-3">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+                                        </span>
+                                        <span className="font-bold text-sm">
+                                            PENDIENTES ({pendientes.length})
+                                        </span>
+                                    </button>
+                                </>
+
                             )}
                         </div>
 
@@ -332,7 +340,7 @@ const TablaWalkAround = () => {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
-                                                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter ${item.movimiento === 'entrada' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-orange-50 text-orange-600 border border-orange-100'}`}>
+                                                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter ${item.movimiento === 'entrada' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-red-100/50 text-red-700 ring-1 ring-red-200'}`}>
                                                         {item.movimiento === 'entrada' ? <ArrowDownLeft size={10} /> : <ArrowUpRight size={10} />}
                                                         {item.movimiento}
                                                     </span>

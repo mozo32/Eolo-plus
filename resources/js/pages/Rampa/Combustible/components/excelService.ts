@@ -15,22 +15,29 @@ const NOMBRES_DRENES: Record<number, string> = {
     6: "Salida de elementos filtrantes"
 };
 
-const obtenerMes = (fecha: string) => {
-    const d = parsearFechaSegura(fecha);
-    return d ? MESES[d.getMonth()] : '';
+const parsearFechaSegura = (value: any): Date | null => {
+    if (!value) return null;
+    if (value instanceof Date && !isNaN(value.getTime())) {
+        return new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate(), value.getHours(), value.getMinutes(), 0));
+    }
+
+    const texto = String(value).trim();
+    const match = texto.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::\d{2})?)?/);
+
+    if (match) {
+        const [, anio, mes, dia, hora = '00', minuto = '00'] = match;
+        return new Date(Date.UTC(Number(anio), Number(mes) - 1, Number(dia), Number(hora), Number(minuto), 0));
+    }
+
+    const fecha = new Date(texto);
+    if (isNaN(fecha.getTime())) return null;
+
+    return new Date(Date.UTC(fecha.getFullYear(), fecha.getMonth(), fecha.getDate(), fecha.getHours(), fecha.getMinutes(), 0));
 };
 
-const parsearFechaSegura = (fechaStr: string): Date | null => {
-    if (!fechaStr) return null;
-
-    const partes = fechaStr.split(' ');
-
-    if (partes.length !== 2) return new Date(fechaStr);
-
-    const [anio, mes, dia] = partes[0].split('-').map(Number);
-    const [hora, min, seg] = partes[1].split(':').map(Number);
-
-    return new Date(anio, mes - 1, dia, hora, min, seg);
+const obtenerMes = (fecha: string) => {
+    const d = parsearFechaSegura(fecha);
+    return d ? MESES[d.getUTCMonth()] : '';
 };
 
 const estiloTitulo = (cell: ExcelJS.Cell) => {
@@ -63,7 +70,7 @@ const estiloFila = (cell: ExcelJS.Cell) => {
 
 const aplicarFormatoFecha = (cell: ExcelJS.Cell) => {
     if (cell.value instanceof Date) {
-        cell.numFmt = 'dd/mm/yyyy hh:mm:ss';
+        cell.numFmt = 'dd/mm/yyyy hh:mm';
     }
 };
 
@@ -78,33 +85,15 @@ const combinarCeldasPorId = (
 
     const esFilaDeDatos = (fila: number) => {
         const valorId = worksheet.getCell(fila, 1).value;
-
-        return (
-            valorId !== null &&
-            valorId !== undefined &&
-            valorId !== "" &&
-            !isNaN(Number(valorId))
-        );
+        return valorId !== null && valorId !== undefined && valorId !== "" && !isNaN(Number(valorId));
     };
 
     const cerrarGrupo = (finGrupo: number) => {
         if (inicioGrupo > 0 && inicioGrupo < finGrupo) {
             columnasACombinar.forEach((columna) => {
-                worksheet.mergeCells(
-                    inicioGrupo,
-                    columna,
-                    finGrupo,
-                    columna,
-                );
-
+                worksheet.mergeCells(inicioGrupo, columna, finGrupo, columna);
                 const celda = worksheet.getCell(inicioGrupo, columna);
-
-                celda.alignment = {
-                    vertical: "middle",
-                    horizontal: "center",
-                    wrapText: true,
-                };
-
+                celda.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
                 celda.border = {
                     top: { style: "thin", color: { argb: "FFE5E7EB" } },
                     left: { style: "thin", color: { argb: "FFE5E7EB" } },
@@ -153,7 +142,7 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
     estiloTitulo(titleC);
 
     wsC.mergeCells('A2:E2');
-    wsC.getCell('A2').value = `Generado: ${new Date().toLocaleString()}`;
+    wsC.getCell('A2').value = `Generado: ${new Date().toLocaleString('es-MX', { hour12: false })}`;
 
     const headersC = ['ID', 'MES', 'FECHA', 'PRUEBA REALIZADA', 'RESULTADO'];
     const headerRowC = wsC.addRow(headersC);
@@ -176,11 +165,13 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
         });
 
         groupedC[mes].forEach(item => {
+            const fechaObjeto = parsearFechaSegura(item.fecha) || '';
+
             item.imagenes?.forEach((img: any) => {
                 const row = wsC.addRow([
                     item.id,
                     mes,
-                    parsearFechaSegura(item.fecha) || '',
+                    fechaObjeto,
                     img.pivot?.tag || '',
                     img.pivot?.observacion || ''
                 ]);
@@ -209,7 +200,7 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
     estiloTitulo(titleA);
 
     wsA.mergeCells('A2:G2');
-    wsA.getCell('A2').value = `Generado: ${new Date().toLocaleString()}`;
+    wsA.getCell('A2').value = `Generado: ${new Date().toLocaleString('es-MX', { hour12: false })}`;
 
     const headersA = ['ID', 'MES', 'FECHA', 'NOMBRE DEL DREN', 'TOMA MUESTRA', 'CLARIDAD', 'SÓLIDOS/AGUA'];
     const headerRowA = wsA.addRow(headersA);
@@ -235,9 +226,16 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
             const fechaObjeto = parsearFechaSegura(item.fecha) || '';
 
             for (let i = 1; i <= 6; i++) {
-                const tomaMuestra = item[`toma_muestra_combustible_dren_${i}`];
-                const claridad = item[`prueba_claridad_brillantez_dren_${i}`];
-                const solidosAgua = item[`presencia_solidos_agua_dren_${i}`];
+                const tomaMuestra = item[`toma_muestra_combustible_dren_${i}`] || '';
+                const tomaEsNo = String(tomaMuestra).trim().toLowerCase() === 'no';
+
+                const claridad = tomaEsNo
+                    ? 'No se realizaron pruebas'
+                    : item[`prueba_claridad_brillantez_dren_${i}`] || '';
+
+                const solidosAgua = tomaEsNo
+                    ? 'No se realizaron pruebas'
+                    : item[`presencia_solidos_agua_dren_${i}`] || '';
 
                 const nombreDren = NOMBRES_DRENES[i]
                     ? `Dren ${i}: ${NOMBRES_DRENES[i]}`
@@ -248,9 +246,9 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
                     mes,
                     fechaObjeto,
                     nombreDren,
-                    tomaMuestra || '',
-                    claridad || '',
-                    solidosAgua || ''
+                    tomaMuestra,
+                    claridad,
+                    solidosAgua
                 ]);
 
                 row.eachCell(estiloFila);
@@ -266,10 +264,23 @@ export const exportarInspeccionesExcel = async (registros: any[]) => {
         { width: 15 },
         { width: 25 },
         { width: 30 },
-        { width: 20 },
-        { width: 20 },
-        { width: 20 }
+        { width: 22 },
+        { width: 28 },
+        { width: 28 }
     ];
+
+    wsC.autoFilter = {
+        from: { row: 3, column: 1 },
+        to: { row: 3, column: headersC.length }
+    };
+
+    wsA.autoFilter = {
+        from: { row: 3, column: 1 },
+        to: { row: 3, column: headersA.length }
+    };
+
+    wsC.views = [{ state: 'frozen', ySplit: 3 }];
+    wsA.views = [{ state: 'frozen', ySplit: 3 }];
 
     const buffer = await workbook.xlsx.writeBuffer();
 
