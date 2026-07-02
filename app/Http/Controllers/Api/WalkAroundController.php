@@ -290,8 +290,7 @@ class WalkAroundController extends Controller
     public function store(Request $request)
     {
         $ultimoRegistro = WalkAround::where('matricula', $request->metadata['matricula'])
-            ->orderByDesc('fecha')
-            ->orderByDesc('hora')
+            ->latest()
             ->first();
 
         if ($ultimoRegistro) {
