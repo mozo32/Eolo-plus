@@ -12,13 +12,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Carbon\Carbon;
 
 class ControlMedicamentoController extends Controller
 {
-    /**
-     * Guardar control diario de medicamentos
-     */
     public function store(Request $request)
     {
         DB::beginTransaction();
@@ -33,17 +31,20 @@ class ControlMedicamentoController extends Controller
                 'medicamentos'  => 'required|array|min:1',
             ]);
 
-            // Validación de lógica de inventario
             foreach ($validated['medicamentos'] as $nombre => $data) {
                 if (!isset($data['inicio'], $data['final'])) {
-                    return response()->json(['message' => "El medicamento {$nombre} está incompleto"], 422);
+                    return response()->json([
+                        'message' => "El medicamento {$nombre} está incompleto",
+                    ], 422);
                 }
+
                 if ($data['final'] > $data['inicio']) {
-                    return response()->json(['message' => "En {$nombre}, el FINAL no puede ser mayor al INICIO"], 422);
+                    return response()->json([
+                        'message' => "En {$nombre}, el FINAL no puede ser mayor al INICIO",
+                    ], 422);
                 }
             }
 
-            // 1. Crear el registro de control
             $control = ControlMedicamento::create([
                 'responsable'  => $validated['responsable'],
                 'fecha'        => $validated['fecha'],
@@ -53,12 +54,9 @@ class ControlMedicamentoController extends Controller
                 'user_id'      => auth()->id(),
             ]);
 
-            // 2. Guardar firma
             $this->guardarFirmaBase64($validated['firma'], 'firma_responsable', $control);
 
-            // 3. CAMBIO DE STATUS: De 'A' a 'N'
-            // Esto hace que las entregas de este turno dejen de sumar al inventario actual
-            \App\Models\EntregaMedicamento::where('status', 'A')
+            EntregaMedicamento::where('status', 'A')
                 ->update(['status' => 'N']);
 
             DB::commit();
@@ -70,6 +68,7 @@ class ControlMedicamentoController extends Controller
 
         } catch (\Throwable $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Error al guardar el control de medicamentos',
                 'error'   => $e->getMessage(),
@@ -85,7 +84,6 @@ class ControlMedicamentoController extends Controller
         if (trim($value) === '') return;
         if (!str_contains($value, 'base64,')) return;
 
-        // Desactivar firma anterior
         $control->firmas()
             ->newPivotStatement()
             ->where('firmable_type', ControlMedicamento::class)
@@ -94,13 +92,11 @@ class ControlMedicamentoController extends Controller
             ->where('status', 'A')
             ->update(['status' => 'N']);
 
-        // Guardar archivo
         $firma = $this->guardarFirmaArchivoBase64(
             $value,
             'firmas/ControlMedicamento/' . now()->format('Y/m')
         );
 
-        // Asociar
         $control->firmas()->attach($firma->id, [
             'rol'    => $rol,
             'tag'    => $this->humanizeRol($rol),
@@ -166,11 +162,9 @@ class ControlMedicamentoController extends Controller
         }
 
         $controles = $query->get()->map(function ($control) {
-
             $control->setRelation(
                 'firmas',
                 $control->firmas->map(function (Firma $firma) {
-
                     $disk = $firma->disk ?? 'public';
                     $path = $firma->path;
 
@@ -197,6 +191,7 @@ class ControlMedicamentoController extends Controller
 
             return $control;
         });
+
         return response()->json($controles);
     }
 
@@ -222,22 +217,20 @@ class ControlMedicamentoController extends Controller
         $control->setRelation(
             'firmas',
             $control->firmas->map(function ($firma) {
-
                 $disk = $firma->disk ?? 'public';
                 $path = $firma->path;
 
                 return [
-                    'id'    => $firma->id,
-                    'rol'   => $firma->pivot->rol ?? null,
-                    'tag'   => $firma->pivot->tag ?? null,
-                    'orden' => $firma->pivot->orden ?? 0,
-                    'status'=> $firma->pivot->status ?? 'A',
-                    'url'   => $path
-                        ? Storage::disk($disk)->url($path)
-                        : null,
+                    'id'     => $firma->id,
+                    'rol'    => $firma->pivot->rol ?? null,
+                    'tag'    => $firma->pivot->tag ?? null,
+                    'orden'  => $firma->pivot->orden ?? 0,
+                    'status' => $firma->pivot->status ?? 'A',
+                    'url'    => $path ? Storage::disk($disk)->url($path) : null,
                 ];
             })->values()
         );
+
         return response()->json($control);
     }
 
@@ -255,7 +248,6 @@ class ControlMedicamentoController extends Controller
             ]);
 
             foreach ($validated['medicamentos'] as $nombre => $data) {
-
                 if (!isset($data['inicio'], $data['final'])) {
                     return response()->json([
                         'message' => "El medicamento {$nombre} está incompleto",
@@ -309,17 +301,26 @@ class ControlMedicamentoController extends Controller
 
     public function medicamentos()
     {
-        $data = Medicamento::withSum(['entregas as total_entregado' => function($query) {
+        $data = medicamento::withSum(['entregas as total_entregado' => function ($query) {
                 $query->where('status', 'A');
             }], 'cantidad')
+            ->where('status', 'A')
+            ->orderBy('nombre', 'asc')
             ->get();
 
         return response()->json($data);
     }
+
     public function ultimosMovimientos()
     {
         try {
-            $entregas = EntregaMedicamento::with('medicamento:id,nombre')
+            $entregas = EntregaMedicamento::with(['medicamento' => function ($query) {
+                    $query->select('id', 'nombre', 'status')
+                        ->where('status', 'A');
+                }])
+                ->whereHas('medicamento', function ($query) {
+                    $query->where('status', 'A');
+                })
                 ->orderBy('created_at', 'desc')
                 ->limit(5)
                 ->get()
@@ -332,7 +333,7 @@ class ControlMedicamentoController extends Controller
                         'cantidad' => "-" . $e->cantidad,
                         'fecha' => $e->created_at->format('d/m/Y H:i'),
                         'fecha_raw' => $e->created_at,
-                        'estado' => $e->status == 'A' ? 'Activo' : 'Cerrado'
+                        'estado' => $e->status == 'A' ? 'Activo' : 'Cerrado',
                     ];
                 });
 
@@ -348,7 +349,7 @@ class ControlMedicamentoController extends Controller
                         'cantidad' => 'OK',
                         'fecha' => $c->created_at->format('d/m/Y H:i'),
                         'fecha_raw' => $c->created_at,
-                        'estado' => 'Finalizado'
+                        'estado' => 'Finalizado',
                     ];
                 });
 
@@ -358,38 +359,65 @@ class ControlMedicamentoController extends Controller
                 ->values();
 
             return response()->json($movimientos);
+
         } catch (\Throwable $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
+            return response()->json([
+                'error' => $e->getMessage(),
+            ], 500);
         }
     }
+
     public function storeEntrega(Request $request)
     {
         $validated = $request->validate([
-            'medicamentoId' => 'required|exists:medicamentos,id',
-            'recibe'        => 'required|string|max:255',
-            'cantidad'      => 'required|integer|min:1',
+            'medicamentoId' => [
+                'required',
+                Rule::exists('medicamentos', 'id')->where(function ($query) {
+                    $query->where('status', 'A');
+                }),
+            ],
+            'recibe' => 'required|string|max:255',
+            'cantidad' => 'required|integer|min:1',
         ]);
 
-        return DB::transaction(function () use ($validated) {
-            $medicamento = medicamento::findOrFail($validated['medicamentoId']);
+        try {
+            return DB::transaction(function () use ($validated) {
+                $medicamento = medicamento::where('status', 'A')
+                    ->findOrFail($validated['medicamentoId']);
 
-            if ($medicamento->cantidad < $validated['cantidad']) {
-                return back()->withErrors([
-                    'cantidad' => "Stock insuficiente. Solo quedan {$medicamento->cantidad} unidades."
+                if ($medicamento->cantidad < $validated['cantidad']) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => "Stock insuficiente. Solo quedan {$medicamento->cantidad} unidades.",
+                    ], 422);
+                }
+
+                EntregaMedicamento::create([
+                    'medicamento_id' => $validated['medicamentoId'],
+                    'receptor' => $validated['recibe'],
+                    'cantidad' => $validated['cantidad'],
+                    'user_id' => Auth::id(),
+                    'status' => 'A',
                 ]);
-            }
-            EntregaMedicamento::create([
-                'medicamento_id' => $validated['medicamentoId'],
-                'receptor'       => $validated['recibe'],
-                'cantidad'       => $validated['cantidad'],
-                'user_id'        => Auth::id(),
-            ]);
 
-            $medicamento->decrement('cantidad', $validated['cantidad']);
+                $medicamento->decrement('cantidad', $validated['cantidad']);
 
-            return back()->with('message', 'Entrega registrada exitosamente');
-        });
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Entrega registrada exitosamente',
+                    'nuevo_stock' => $medicamento->cantidad,
+                    'medicamento' => $medicamento->nombre,
+                ], 201);
+            });
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No se pudo registrar la entrega: ' . $e->getMessage(),
+            ], 500);
+        }
     }
+
     public function reabastecer(Request $request, $id)
     {
         $validated = $request->validate([
@@ -398,8 +426,8 @@ class ControlMedicamentoController extends Controller
 
         try {
             return DB::transaction(function () use ($validated, $id) {
-
-                $medicamento = medicamento::findOrFail($id);
+                $medicamento = medicamento::where('status', 'A')
+                    ->findOrFail($id);
 
                 $medicamento->increment('cantidad', $validated['cantidad']);
 
@@ -407,14 +435,70 @@ class ControlMedicamentoController extends Controller
                     'status' => 'success',
                     'message' => 'Stock actualizado correctamente',
                     'nuevo_stock' => $medicamento->cantidad,
-                    'medicamento' => $medicamento->nombre
+                    'medicamento' => $medicamento->nombre,
                 ], 200);
             });
 
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'No se pudo actualizar el inventario: ' . $e->getMessage()
+                'message' => 'No se pudo actualizar el inventario: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function deshabilitar($id)
+    {
+        try {
+            return DB::transaction(function () use ($id) {
+                $medicamento = medicamento::where('status', 'A')
+                    ->findOrFail($id);
+
+                $medicamento->status = 'N';
+                $medicamento->save();
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Medicamento deshabilitado correctamente',
+                    'nuevo_stock' => $medicamento->cantidad,
+                    'medicamento' => $medicamento->nombre,
+                ], 200);
+            });
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No se pudo deshabilitar el medicamento: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function agregarMedicamento(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'nombre' => ['required', 'string', 'max:255'],
+                'stockInicial' => ['required', 'integer', 'min:0'],
+            ]);
+
+            return DB::transaction(function () use ($validated) {
+                $medicamento = medicamento::create([
+                    'nombre' => trim($validated['nombre']),
+                    'cantidad' => $validated['stockInicial'],
+                    'status' => 'A',
+                ]);
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Medicamento agregado correctamente',
+                    'medicamento' => $medicamento,
+                ], 201);
+            });
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No se pudo agregar el medicamento: ' . $e->getMessage(),
             ], 500);
         }
     }

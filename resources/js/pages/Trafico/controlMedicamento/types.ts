@@ -27,4 +27,4 @@ export interface Medicamento {
     created_at?: string;
     updated_at?: string;
 }
-export type ViewType = 'entrega' | 'inventario' | 'cierre';
+export type ViewType = 'entrega' | 'inventario' | 'cierre' | 'medicamentos';

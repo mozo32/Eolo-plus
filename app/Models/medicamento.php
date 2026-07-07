@@ -11,6 +11,7 @@ class medicamento extends Model
     protected $fillable = [
         'nombre',
         'cantidad',
+        'status'
     ];
     public function entregas()
     {

@@ -7,22 +7,9 @@ import ModalNotasOperacionales from './checkListTurno/ModalNotasOperacionales';
 import ModalDetalleCheckListTurno from "./checkListTurno/ModalDetalleCheckListTurno";
 import { fetchNotasOperacionales } from '@/stores/apiCheckListTurno';
 import { useEffect, useState, useCallback } from 'react';
-import { fetchCheckListTurno, fetchShowCheckListTurno, eliminar, fetchCheckListPendiente, validarNotaOperacional } from '@/stores/apiCheckListTurno';
+import { fetchCheckListTurno, fetchShowCheckListTurno, eliminar, fetchCheckListPendiente, validarNotaOperacional, obtenerPendientestrafico } from '@/stores/apiCheckListTurno';
 import {
-    Plus,
-    ChevronLeft,
-    ChevronRight,
-    Edit2,
-    CheckCircle2,
-    AlertCircle,
-    ClipboardList,
-    StickyNote,
-    ShieldCheck,
-    Eye,
-    Filter,
-    X,
-    Calendar,
-    ChevronDown
+    Plus, ChevronLeft, ChevronRight, Edit2, CheckCircle2, AlertCircle, ClipboardList, StickyNote, ShieldCheck, Eye, Filter, X, Calendar, ChevronDown
 } from 'lucide-react';
 import PdfExporterTurno from './checkListTurno/sections/PdfExporterTurno';
 import Swal from 'sweetalert2';
@@ -91,8 +78,11 @@ export default function CheckListTurno() {
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
     const [filtros, setFiltros] = useState<FiltrosCheckList>(() => filtrosIniciales());
     const [filtrosEdicion, setFiltrosEdicion] = useState<FiltrosCheckList>(() => filtrosIniciales());
+    const [pendientes, setPendientes] = useState<any[]>([]);
+    const [openPendientesPanel, setOpenPendientesPanel] = useState(false);
+    const [loadingPendientes, setLoadingPendientes] = useState(false);
 
-    const { auth } = usePage<PageProps>().props;
+    const { auth } = usePage<{ auth: { user: any } }>().props;
     const user = auth?.user?.roles[0]?.slug;
 
     const formatFecha = (fecha: string) => {
@@ -107,7 +97,30 @@ export default function CheckListTurno() {
                 year: "numeric",
             });
     };
+    const nombreRol = auth.user.roles?.[0]?.nombre;
+    const cargarPendientes = async () => {
+        try {
+            setLoadingPendientes(true);
 
+            const res = await obtenerPendientestrafico();
+
+            const registros = Array.isArray(res)
+                ? res
+                : Array.isArray(res?.data)
+                    ? res.data
+                    : [];
+
+            setPendientes(registros);
+        } catch (error) {
+            console.error("Error al cargar pendientes:", error);
+            setPendientes([]);
+        } finally {
+            setLoadingPendientes(false);
+        }
+    };
+    useEffect(() => {
+        cargarPendientes();
+    }, []);
     const formatFechaCorta = (fecha?: string | null) => {
         if (!fecha) return "—";
 
@@ -337,22 +350,26 @@ export default function CheckListTurno() {
         handleBack();
         await cargarDatos();
         await cargarNotas();
+        await cargarPendientes();
     };
 
     const cerrarNotasModal = async () => {
         setOpenNotasModal(false);
         await cargarNotas();
+        await cargarPendientes();
     };
 
     const cerrarDetalleModal = async () => {
         setOpenDetalleModal(false);
         setDetalleVisualizar(null);
         await cargarNotas();
+        await cargarPendientes();
     };
 
     const cerrarActividadesModal = async () => {
         setOpenActividades(false);
         await cargarNotas();
+        await cargarPendientes();
     };
 
     const handleEliminar = async (id: number) => {
@@ -433,17 +450,40 @@ export default function CheckListTurno() {
                                     {loadingNotas ? '...' : notas.length}
                                 </span>
                             </button>
+                            {pendientes.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        await cargarPendientes();
+                                        setOpenPendientesPanel(true);
+                                    }}
+                                    className={`relative flex items-center gap-2 px-4 py-2 text-white rounded-lg shadow-md transition-all ${pendientes.length > 0
+                                        ? 'bg-red-600 hover:bg-red-700 animate-pulse'
+                                        : 'bg-slate-400 hover:bg-slate-500'
+                                        }`}
+                                >
+                                    <span className="relative flex h-3 w-3">
+                                        {pendientes.length > 0 && (
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                                        )}
+                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-white" />
+                                    </span>
+
+                                    <span className="font-bold text-sm">
+                                        PENDIENTES ({pendientes.length})
+                                    </span>
+                                </button>
+                            )}
                         </div>
 
                         <div className="flex gap-2 items-center">
                             <button
                                 type="button"
                                 onClick={() => setFiltersOpen(!filtersOpen)}
-                                className={`flex items-center gap-2 text-[10px] font-black px-4 py-2 rounded border transition-all ${
-                                    filtersOpen
-                                        ? 'bg-slate-800 text-white border-slate-800'
-                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                                }`}
+                                className={`flex items-center gap-2 text-[10px] font-black px-4 py-2 rounded border transition-all ${filtersOpen
+                                    ? 'bg-slate-800 text-white border-slate-800'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                    }`}
                             >
                                 <Filter size={14} />
                                 <span>{filtersOpen ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
@@ -460,11 +500,10 @@ export default function CheckListTurno() {
                             {puedeUsarBotonPrincipal && (
                                 <button
                                     onClick={handlePrincipalAction}
-                                    className={`text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-white flex items-center gap-2 ${
-                                        idPendiente
-                                            ? "bg-orange-500 hover:bg-orange-600 shadow-orange-100 ring-4 ring-orange-100"
-                                            : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100"
-                                    }`}
+                                    className={`text-[10px] font-black px-4 py-2 rounded shadow-md transition-all active:scale-95 text-white flex items-center gap-2 ${idPendiente
+                                        ? "bg-orange-500 hover:bg-orange-600 shadow-orange-100 ring-4 ring-orange-100"
+                                        : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100"
+                                        }`}
                                 >
                                     {idPendiente ? (
                                         <>
@@ -639,11 +678,10 @@ export default function CheckListTurno() {
                                                     </td>
 
                                                     <td className="px-6 py-4 text-center">
-                                                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-tight border ${
-                                                            esFinalizado
-                                                                ? "bg-green-50 text-green-600 border-green-200"
-                                                                : "bg-orange-50 text-orange-600 border-orange-200"
-                                                        }`}>
+                                                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-tight border ${esFinalizado
+                                                            ? "bg-green-50 text-green-600 border-green-200"
+                                                            : "bg-orange-50 text-orange-600 border-orange-200"
+                                                            }`}>
                                                             {esFinalizado ? (
                                                                 <CheckCircle2 size={12} />
                                                             ) : (
@@ -657,11 +695,10 @@ export default function CheckListTurno() {
                                                         <div className="flex items-center justify-end gap-1">
                                                             {puedeEditar && (
                                                                 <button
-                                                                    className={`p-2 rounded transition-colors ${
-                                                                        esFinalizado
-                                                                            ? "text-slate-400 hover:text-indigo-600"
-                                                                            : "text-orange-500 hover:text-orange-600"
-                                                                    }`}
+                                                                    className={`p-2 rounded transition-colors ${esFinalizado
+                                                                        ? "text-slate-400 hover:text-indigo-600"
+                                                                        : "text-orange-500 hover:text-orange-600"
+                                                                        }`}
                                                                     onClick={() => show(row.id)}
                                                                     title="Editar Registro"
                                                                 >
@@ -780,7 +817,147 @@ export default function CheckListTurno() {
                     )}
                 </div>
             </div>
+            {openPendientesPanel && (
+                <div className="fixed inset-0 z-[120] flex justify-end">
+                    <div
+                        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+                        onClick={() => setOpenPendientesPanel(false)}
+                    />
 
+                    <div className="relative z-10 w-full max-w-md h-full bg-white shadow-2xl border-l border-slate-200 animate-in slide-in-from-right duration-300 flex flex-col">
+                        <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-lg font-black uppercase text-slate-800 tracking-tight">
+                                    Registros pendientes
+                                </h3>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                                    Pendientes por validar: {pendientes.length}
+                                </p>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => setOpenPendientesPanel(false)}
+                                className="p-2 rounded-full hover:bg-slate-200 text-slate-500 transition-colors"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="p-4 overflow-y-auto custom-scrollbar flex-1 space-y-3">
+                            {loadingPendientes ? (
+                                <div className="py-20 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    Cargando pendientes...
+                                </div>
+                            ) : pendientes.length > 0 ? (
+                                pendientes.map((item) => (
+                                    <div
+                                        key={item.id}
+                                        className="rounded-2xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-all overflow-hidden"
+                                    >
+                                        <div className="p-4 space-y-3">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                        Registro #{item.id}
+                                                    </p>
+                                                    <h4 className="text-sm font-black uppercase text-slate-800 leading-tight">
+                                                        {item.nombre_empleado || 'Sin responsable'}
+                                                    </h4>
+                                                </div>
+
+                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-50 text-red-600 border border-red-100 text-[9px] font-black uppercase">
+                                                    <AlertCircle size={12} />
+                                                    Pendiente
+                                                </span>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                                <div className="rounded-xl bg-slate-50 p-3 border border-slate-100">
+                                                    <p className="font-black text-slate-400 uppercase">Fecha</p>
+                                                    <p className="font-bold text-slate-700">
+                                                        {formatFechaCorta(item.fecha)}
+                                                    </p>
+                                                </div>
+
+                                                <div className="rounded-xl bg-slate-50 p-3 border border-slate-100">
+                                                    <p className="font-black text-slate-400 uppercase">Operaciones</p>
+                                                    <p className="font-bold text-slate-700">
+                                                        {item.cantidad_operaciones ?? '—'}
+                                                    </p>
+                                                </div>
+
+                                                <div className="rounded-xl bg-slate-50 p-3 border border-slate-100">
+                                                    <p className="font-black text-slate-400 uppercase">Pasajeros</p>
+                                                    <p className="font-bold text-slate-700">
+                                                        {item.cantidad_pasajeros ?? '—'}
+                                                    </p>
+                                                </div>
+
+                                                <div className="rounded-xl bg-slate-50 p-3 border border-slate-100">
+                                                    <p className="font-black text-slate-400 uppercase">Equipaje</p>
+                                                    <p className="font-bold text-slate-700">
+                                                        {item.cantidad_equipaje ?? '—'}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center justify-end gap-2 pt-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => visualizar(item.id)}
+                                                    className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-black uppercase flex items-center gap-1.5 transition-colors"
+                                                >
+                                                    <Eye size={14} />
+                                                    Ver
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setOpenPendientesPanel(false);
+                                                        abrirParaValidar(item.id);
+                                                    }}
+                                                    className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase flex items-center gap-1.5 transition-colors"
+                                                >
+                                                    <ShieldCheck size={14} />
+                                                    Validar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="py-20 text-center">
+                                    <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3">
+                                        <CheckCircle2 size={28} />
+                                    </div>
+
+                                    <h4 className="text-sm font-black uppercase text-slate-700">
+                                        Sin pendientes
+                                    </h4>
+
+                                    <p className="text-xs font-medium text-slate-500 mt-1">
+                                        No hay registros pendientes por validar.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-4 border-t border-slate-200 bg-slate-50">
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    await cargarPendientes();
+                                }}
+                                className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-black uppercase tracking-widest transition-colors"
+                            >
+                                Actualizar pendientes
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {mostrarModalFecha && (
                 <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
                     <div
@@ -810,11 +987,10 @@ export default function CheckListTurno() {
                                         key={modo}
                                         type="button"
                                         onClick={() => activarPeriodo(modo)}
-                                        className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all uppercase ${
-                                            filtrosEdicion.periodo === modo
-                                                ? 'bg-white shadow-sm text-indigo-600'
-                                                : 'text-slate-500 hover:text-slate-700'
-                                        }`}
+                                        className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all uppercase ${filtrosEdicion.periodo === modo
+                                            ? 'bg-white shadow-sm text-indigo-600'
+                                            : 'text-slate-500 hover:text-slate-700'
+                                            }`}
                                     >
                                         {modo}
                                     </button>

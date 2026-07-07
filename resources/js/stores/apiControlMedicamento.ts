@@ -102,6 +102,51 @@ export async function revastecimientoMedicamentos(id: number, form: any) {
 
     return data;
 }
+export async function deshabilitarMedicamento(id: number) {
+    const xsrf = getXsrfToken();
+    const res = await fetch(`/api/ControlMedicamento/medicamento/deshabilitar/${id}`, {
+        method: "PUT",
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-XSRF-TOKEN': xsrf,
+        },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+        throw new Error(data?.message || "Error al Deshabilitar el medicamento");
+    }
+
+    return data;
+}
+export async function agregarMedicamento(data: {
+    nombre: string;
+    stockInicial: number;
+}) {
+    const xsrf = getXsrfToken();
+
+    const res = await fetch(`/api/ControlMedicamento/medicamento/agregar`, {
+        method: "POST",
+        headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "X-XSRF-TOKEN": xsrf,
+        },
+        credentials: "same-origin",
+        body: JSON.stringify(data),
+    });
+
+    const response = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+        throw new Error(response?.message || "Error al agregar el medicamento");
+    }
+
+    return response;
+}
 export async function movimientos() {
     const res = await fetch(`/api/ControlMedicamento/ultimosMovimientos`, {
         headers: { Accept: "application/json" },

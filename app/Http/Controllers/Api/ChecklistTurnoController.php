@@ -736,4 +736,46 @@ class ChecklistTurnoController extends Controller
             'data' => $resumen,
         ]);
     }
+    public function listaPendientes()
+    {
+        try {
+            $pendientes = ChecklistTurno::select([
+                    'id',
+                    'nombre_empleado',
+                    'fecha',
+                    'cantidad_pasajeros',
+                    'cantidad_operaciones',
+                    'cantidad_nacionales',
+                    'cantidad_internacionales',
+                    'cantidad_transito',
+                    'cantidad_guarda',
+                    'cantidad_aerotaxi',
+                    'cantidad_mantenimiento',
+                    'cantidad_handling',
+                    'cantidad_equipaje',
+                    'validado_por_user_id',
+                    'status',
+                    'created_at',
+                ])
+                ->whereNull('validado_por_user_id')
+                ->whereHas('firmas', function ($q) {
+                    $q->where('firmables.status', 'A');
+                })
+                ->where('status', 'A')
+                ->orderBy('fecha', 'desc')
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $pendientes,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No se pudieron obtener los registros pendientes: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 }

@@ -209,3 +209,20 @@ export async function operaciones(fecha?: string) {
 
     return await res.json();
 }
+export async function obtenerPendientestrafico() {
+    const res = await fetch(
+        `/api/CheckListTurno/listaPendientes`, {
+            method: "GET",
+            headers: { 'Accept': 'application/json' },
+            credentials: "same-origin",
+        }
+    );
+
+    const data = await res.json().catch(() => []);
+
+    if (!res.ok) {
+        throw new Error(data?.message || "Error al obtener los pendientes");
+    }
+
+    return data;
+}
