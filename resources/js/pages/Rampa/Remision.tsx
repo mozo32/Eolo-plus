@@ -3,7 +3,7 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
 import EoloForm from './Autotanque/EoloForm';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchRemisionesDelDia, fetchRemisionById } from '@/stores/apiAutoTanque';
 import { Plus, Mail, Calendar, X, Edit2, Filter, ChevronDown, Download, Eye } from "lucide-react";
 import ModalEnviarCorreo from './Autotanque/ModalEnviarCorreo';
@@ -11,6 +11,7 @@ import Swal from 'sweetalert2';
 import { ExcelRemisiones } from './Autotanque/ExcelRemisiones';
 import { excelRemisionesApi, consultaAsa } from '@/stores/apiRemision';
 import VistaPreviaRemision from './Autotanque/VistaPreviaRemision';
+import { useEchoPublic } from '@laravel/echo-react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Remisiones' }];
 interface Role {
@@ -32,6 +33,14 @@ interface PageProps {
     };
     [key: string]: any;
 }
+type FiltrosRemision = {
+    buscar: string;
+    matricula: string;
+    cantidad: string;
+    fechaInicio: string;
+    fechaFin: string;
+    periodo: string;
+};
 export default function Remision() {
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any[]>([]);
@@ -50,7 +59,8 @@ export default function Remision() {
     const [datosCombustible, setDatosCombustible] = useState<any>(null);
     const { auth } = usePage<PageProps>().props;
     const user = auth?.user;
-    const [filtros, setFiltros] = useState({
+
+    const [filtros, setFiltros] = useState<FiltrosRemision>({
         buscar: '',
         matricula: '',
         cantidad: '',
@@ -59,7 +69,96 @@ export default function Remision() {
         periodo: 'dia'
     });
 
-    const [filtrosEdicion, setFiltrosEdicion] = useState({ ...filtros });
+    const [filtrosEdicion, setFiltrosEdicion] = useState<FiltrosRemision>({ ...filtros });
+    const [actualizacionPendiente, setActualizacionPendiente] = useState(false);
+    const filtrosRef = useRef<FiltrosRemision>(filtros);
+    const paginaRef = useRef<number>(pagina);
+    const [sonidoActivo, setSonidoActivo] = useState(false);
+    const sonidoActivoRef = useRef(false);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const ultimoSonidoRef = useRef(0);
+
+    const reproducirSonidoNotificacion = useCallback(() => {
+        if (!sonidoActivoRef.current) return;
+
+        const ahora = Date.now();
+
+        if (ahora - ultimoSonidoRef.current < 1500) return;
+
+        ultimoSonidoRef.current = ahora;
+
+        try {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+
+            if (!AudioContextClass) return;
+
+            const audioContext = audioContextRef.current || new AudioContextClass();
+
+            audioContextRef.current = audioContext;
+
+            if (audioContext.state === 'suspended') {
+                audioContext.resume().catch(() => { });
+                return;
+            }
+
+            const oscillator = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+
+            gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.25, audioContext.currentTime + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.35);
+
+            oscillator.connect(gain);
+            gain.connect(audioContext.destination);
+
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.36);
+        } catch (error) {
+            console.error(error);
+        }
+    }, []);
+
+    const activarSonido = useCallback(async () => {
+        try {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+
+            if (!AudioContextClass) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Sonido no disponible',
+                    text: 'Este navegador no permite reproducir notificaciones de audio.',
+                    confirmButtonColor: '#4f46e5'
+                });
+                return;
+            }
+
+            const audioContext = audioContextRef.current || new AudioContextClass();
+
+            audioContextRef.current = audioContext;
+
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+
+            sonidoActivoRef.current = true;
+            setSonidoActivo(true);
+
+            reproducirSonidoNotificacion();
+        } catch (error) {
+            console.error(error);
+        }
+    }, [reproducirSonidoNotificacion]);
+
+    useEffect(() => {
+        filtrosRef.current = filtros;
+    }, [filtros]);
+
+    useEffect(() => {
+        paginaRef.current = pagina;
+    }, [pagina]);
 
     useEffect(() => {
         if (mostrarModalFecha) setFiltrosEdicion({ ...filtros });
@@ -69,17 +168,23 @@ export default function Remision() {
         setFiltros({ ...filtrosEdicion });
         setMostrarModalFecha(false);
         setPagina(1);
+        setActualizacionPendiente(false);
     };
 
     const limpiarFiltros = () => {
-        setFiltros({
+        const filtrosLimpios = {
             buscar: '',
             matricula: '',
             cantidad: '',
             fechaInicio: new Date().toLocaleDateString('en-CA'),
             fechaFin: new Date().toLocaleDateString('en-CA'),
             periodo: 'dia'
-        });
+        };
+
+        setFiltros(filtrosLimpios);
+        setFiltrosEdicion(filtrosLimpios);
+        setPagina(1);
+        setActualizacionPendiente(false);
     };
 
     const getXsrfToken = () => {
@@ -117,41 +222,83 @@ export default function Remision() {
     };
 
     const handlePdfDone = useCallback(() => setPdfId(null), []);
-    const cosultaCombustible = async () => {
+
+    const cosultaCombustible = useCallback(async () => {
         try {
             const res = await consultaAsa();
             setDatosCombustible(res);
         } catch (error) {
             console.error(error);
         }
-    }
-    const cargarDatos = async () => {
+    }, []);
+
+    const cargarDatos = useCallback(async (opciones?: {
+        page?: number;
+        filtrosActuales?: FiltrosRemision;
+        silencioso?: boolean;
+    }) => {
+        const page = opciones?.page ?? paginaRef.current;
+        const filtrosUsados = opciones?.filtrosActuales ?? filtrosRef.current;
+        const silencioso = opciones?.silencioso ?? false;
+
         try {
-            setLoading(true);
+            if (!silencioso) setLoading(true);
+
             const params = {
-                page: pagina,
-                type: filtros.periodo,
-                start: filtros.fechaInicio,
-                end: filtros.fechaFin,
-                folio: filtros.buscar,
-                matricula: filtros.matricula,
-                cantidad: filtros.cantidad,
+                page,
+                type: filtrosUsados.periodo,
+                start: filtrosUsados.fechaInicio,
+                end: filtrosUsados.fechaFin,
+                folio: filtrosUsados.buscar,
+                matricula: filtrosUsados.matricula,
+                cantidad: filtrosUsados.cantidad,
                 vinculado: true
             };
-            const res = await fetchRemisionesDelDia({ params, page: pagina, per_page: 20 });
+
+            const res = await fetchRemisionesDelDia({
+                params,
+                page,
+                per_page: 20
+            });
+
             setData(res.data || []);
             setMeta(res);
         } catch (error) {
             console.error(error);
         } finally {
-            setLoading(false);
+            if (!silencioso) setLoading(false);
         }
-    };
+    }, []);
+
 
     useEffect(() => {
-        cargarDatos();
+        cargarDatos({
+            page: pagina,
+            filtrosActuales: filtros,
+            silencioso: false
+        });
+
         cosultaCombustible();
-    }, [pagina, filtros]);
+    }, [pagina, filtros, cargarDatos, cosultaCombustible]);
+
+    useEchoPublic('remisiones', 'RemisionCreada', () => {
+        const paginaActual = paginaRef.current;
+        const filtrosActuales = filtrosRef.current;
+
+        reproducirSonidoNotificacion();
+        cosultaCombustible();
+
+        if (paginaActual !== 1) {
+            setActualizacionPendiente(true);
+            return;
+        }
+
+        cargarDatos({
+            page: paginaActual,
+            filtrosActuales,
+            silencioso: true
+        });
+    });
 
     const handleEdit = async (row: any) => {
         try {
@@ -260,6 +407,16 @@ export default function Remision() {
                                 </button>
                             )}
                             <button
+                                onClick={activarSonido}
+                                className={`flex items-center gap-2 text-[10px] font-black px-3 py-2 rounded border transition-all ${sonidoActivo
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                    }`}
+                                title="Activar sonido de notificaciones"
+                            >
+                                {sonidoActivo ? 'SONIDO ACTIVO' : 'ACTIVAR SONIDO'}
+                            </button>
+                            <button
                                 onClick={() => setMostrarFiltros(!mostrarFiltros)}
                                 className={`flex items-center gap-2 text-[10px] font-black px-4 py-2 rounded border transition-all ${mostrarFiltros ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                             >
@@ -281,7 +438,30 @@ export default function Remision() {
 
                         </div>
                     </div>
+                    {actualizacionPendiente && (
+                        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] font-bold text-amber-800">
+                            <span>Hay nuevas remisiones disponibles.</span>
+                            <button
+                                onClick={() => {
+                                    setActualizacionPendiente(false);
 
+                                    if (paginaRef.current !== 1) {
+                                        setPagina(1);
+                                        return;
+                                    }
+
+                                    cargarDatos({
+                                        page: 1,
+                                        filtrosActuales: filtrosRef.current,
+                                        silencioso: false
+                                    });
+                                }}
+                                className="rounded bg-amber-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-white hover:bg-amber-700"
+                            >
+                                Actualizar
+                            </button>
+                        </div>
+                    )}
                     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse min-w-[800px]">

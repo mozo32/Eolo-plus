@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\RemisionMail;
 use Illuminate\Http\JsonResponse;
 use App\Models\TurnoAutotanque;
+use App\Events\RemisionCreada;
 
 class RemisionController extends Controller
 {
@@ -34,7 +35,7 @@ class RemisionController extends Controller
                 'lecturaFinal'   => 'required|numeric',
             ]);
 
-            return DB::transaction(function () use ($request) {
+            $remision = DB::transaction(function () use ($request) {
                 $ultimoId = Remision::max('id') ?? 0;
                 $nuevoFolio = "EOLO-" . str_pad($ultimoId + 1, 4, '0', STR_PAD_LEFT);
 
@@ -51,7 +52,7 @@ class RemisionController extends Controller
                     'fecha'           => $request->fecha,
                     'operador'        => $request->operador,
                     'cliente'         => $request->cliente,
-                    'presionDif'     => $request->presionDif,
+                    'presionDif'      => $request->presionDif,
                     'forma_pago'      => $request->formaPago,
                     'aeronave_tipo'   => $request->aeronaveTipo,
                     'matricula'       => $request->matricula,
@@ -68,11 +69,15 @@ class RemisionController extends Controller
                 $this->guardarFirmaBase64($request->firmaCliente ?? '', 'cliente', $remision);
                 $this->guardarFirmaBase64($request->firmaOperador ?? '', 'operador', $remision);
 
-                return response()->json([
-                    'message' => 'Remisión guardada con éxito',
-                    'id'      => $remision->id
-                ], 201);
+                return $remision;
             });
+
+            event(new RemisionCreada($remision->id));
+
+            return response()->json([
+                'message' => 'Remisión guardada con éxito',
+                'id'      => $remision->id
+            ], 201);
 
         } catch (\Exception $e) {
             return response()->json([

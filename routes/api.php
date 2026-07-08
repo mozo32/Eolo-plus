@@ -40,7 +40,24 @@ Route::post('/nuevo-tipo-aeronaves', [TipoAeronaveController::class, 'newTipoAer
 Route::middleware(['auth:sanctum'])->get(
     '/usuarios/buscar',[UsuarioController::class, 'buscar']
 );
+Route::get('/debug-broadcast', function () {
+    return response()->json([
+        'default' => config('broadcasting.default'),
+        'driver' => config('broadcasting.connections.' . config('broadcasting.default') . '.driver'),
+        'connection' => config('broadcasting.connections.' . config('broadcasting.default')),
+        'env_broadcast_connection' => env('BROADCAST_CONNECTION'),
+        'env_broadcast_driver' => env('BROADCAST_DRIVER'),
+    ]);
+});
+Route::get('/test-broadcast', function () {
+    event(new \App\Events\RemisionCreada(777));
 
+    return response()->json([
+        'ok' => true,
+        'default' => config('broadcasting.default'),
+        'driver' => config('broadcasting.connections.' . config('broadcasting.default') . '.driver'),
+    ]);
+});
 Route::middleware('auth:sanctum')
     ->prefix('bitacoras')
     ->name('bitacoras.')
