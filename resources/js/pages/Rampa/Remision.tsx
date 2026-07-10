@@ -5,8 +5,9 @@ import { Head, usePage } from '@inertiajs/react';
 import EoloForm from './Autotanque/EoloForm';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchRemisionesDelDia, fetchRemisionById } from '@/stores/apiAutoTanque';
-import { Plus, Mail, Calendar, X, Edit2, Filter, ChevronDown, Download, Eye } from "lucide-react";
+import { Plus, Mail, Calendar, X, Edit2, Filter, ChevronDown, Download, Eye, FolderCog } from "lucide-react";
 import ModalEnviarCorreo from './Autotanque/ModalEnviarCorreo';
+import ModalPrefactura from './Autotanque/ModalPrefactura';
 import Swal from 'sweetalert2';
 import { ExcelRemisiones } from './Autotanque/ExcelRemisiones';
 import { excelRemisionesApi, consultaAsa } from '@/stores/apiRemision';
@@ -49,6 +50,7 @@ export default function Remision() {
     const [detalle, setDetalle] = useState<any>(null);
     const [pdfId, setPdfId] = useState<number | null>(null);
     const [emailModalOpen, setEmailModalOpen] = useState(false);
+    const [prefacturaModalOpen, setPrefacturaModalOpen] = useState(false);
     const [selectedRow, setSelectedRow] = useState<any>(null);
     const [pagina, setPagina] = useState(1);
     const [meta, setMeta] = useState<any>(null);
@@ -219,6 +221,31 @@ export default function Remision() {
         } catch (error) {
             Swal.fire({ icon: 'error', title: 'Error', confirmButtonColor: '#ef4444' });
         }
+    };
+    const handleSendPrefactura = async (prefactura: string) => {
+        const xsrf = getXsrfToken();
+        Swal.fire({
+            title: 'guardando',
+            text: 'Espere un momento...',
+            allowOutsideClick: false,
+            didOpen: () => { Swal.showLoading(); }
+        });
+        try {
+            const response = await fetch('api/Remision/vincularPrefactura', {
+                method: 'PUT',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-XSRF-TOKEN': xsrf,
+                },
+                body: JSON.stringify({ id: selectedRow?.id, prefactura: prefactura })
+            });
+            if (!response.ok) throw new Error('Error');
+            Swal.fire({ icon: 'success', title: '¡Enviado!', confirmButtonColor: '#4f46e5' });
+        } catch (error) {
+            Swal.fire({ icon: 'error', title: 'Error', confirmButtonColor: '#ef4444' });
+        }
+
     };
 
     const handlePdfDone = useCallback(() => setPdfId(null), []);
@@ -409,8 +436,8 @@ export default function Remision() {
                             <button
                                 onClick={activarSonido}
                                 className={`flex items-center gap-2 text-[10px] font-black px-3 py-2 rounded border transition-all ${sonidoActivo
-                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                                     }`}
                                 title="Activar sonido de notificaciones"
                             >
@@ -516,6 +543,11 @@ export default function Remision() {
                                                         {row.id_turno && (
                                                             <span className="text-[7px] bg-emerald-600 text-white px-1 rounded-sm tracking-widest">VINCULADO</span>
                                                         )}
+                                                        {Boolean(row.status_prefactura) && (
+                                                            <span className="rounded-sm bg-indigo-600 px-1 text-[7px] tracking-widest text-white">
+                                                                PREFACTURA
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
@@ -548,16 +580,49 @@ export default function Remision() {
                                                                         <button onClick={() => { setSelectedRow(row); setEmailModalOpen(true); }} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors">
                                                                             <Mail size={16} />
                                                                         </button>
+                                                                        {!Boolean(row.status_prefactura) && (
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    setSelectedRow(row);
+                                                                                    setPrefacturaModalOpen(true);
+                                                                                }}
+                                                                                className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"
+                                                                            >
+                                                                                <FolderCog size={16} />
+                                                                            </button>
+                                                                        )}
                                                                     </>
                                                                 )}
                                                                 {user?.roles?.[0]?.slug === 'fac' && (
                                                                     <>
-                                                                        <button onClick={() => setPdfId(row.id)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors uppercase font-black text-[10px]">
+                                                                        <button
+                                                                            onClick={() => setPdfId(row.id)}
+                                                                            className="p-2 text-slate-400 hover:text-amber-600 transition-colors uppercase font-black text-[10px]"
+                                                                        >
                                                                             PDF
                                                                         </button>
-                                                                        <button onClick={() => { setSelectedRow(row); setEmailModalOpen(true); }} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors">
+
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setSelectedRow(row);
+                                                                                setEmailModalOpen(true);
+                                                                            }}
+                                                                            className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"
+                                                                        >
                                                                             <Mail size={16} />
                                                                         </button>
+
+                                                                        {!Boolean(row.status_prefactura) && (
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    setSelectedRow(row);
+                                                                                    setPrefacturaModalOpen(true);
+                                                                                }}
+                                                                                className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"
+                                                                            >
+                                                                                <FolderCog size={16} />
+                                                                            </button>
+                                                                        )}
                                                                     </>
                                                                 )}
                                                                 {user?.roles?.[0]?.slug === 'admin2' && (
@@ -671,6 +736,7 @@ export default function Remision() {
                     </div>
                 )}
                 <ModalEnviarCorreo isOpen={emailModalOpen} onClose={() => setEmailModalOpen(false)} onSend={handleSendEmail} row={selectedRow} />
+                <ModalPrefactura isOpen={prefacturaModalOpen} onClose={() => setPrefacturaModalOpen(false)} onSend={handleSendPrefactura} row={selectedRow} />
                 <PdfExporterRemision id={pdfId} onDone={handlePdfDone} />
             </div>
         </AppLayout>

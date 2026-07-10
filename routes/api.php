@@ -209,6 +209,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('RegistroVisitantes')->group(
 Route::middleware(['api', 'auth:sanctum'])->prefix('Remision')->group(function () {
     Route::get('/Excel/', [RemisionController::class, 'obtenerExcel']);
     Route::post('/enviar-correo', [RemisionController::class, 'enviarCorreo']);
+    Route::put('/vincularPrefactura', [RemisionController::class, 'vincularPrefactura']);
     Route::get('/ultimaLectura', [RemisionController::class, 'ultimaLectura']);
     Route::get('/combustibleAsa', [RemisionController::class, 'combustibleAsa']);
     Route::get('/formaPago', [RemisionController::class, 'formaPago']);

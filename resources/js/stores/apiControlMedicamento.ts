@@ -157,3 +157,30 @@ export async function movimientos() {
     if (!res.ok) throw new Error(data?.message);
     return data;
 }
+
+export async function fetchCierresMedicamento(params: any = {}) {
+    const qs = new URLSearchParams();
+
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+            qs.append(key, String(value));
+        }
+    });
+
+    const url = qs.toString()
+        ? `/api/ControlMedicamento/index?${qs.toString()}`
+        : `/api/ControlMedicamento/index`;
+
+    const res = await fetch(url, {
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+    });
+
+    const data = await res.json().catch(() => []);
+
+    if (!res.ok) {
+        throw new Error(data?.message || "Error al cargar cierres de turno");
+    }
+
+    return data;
+}

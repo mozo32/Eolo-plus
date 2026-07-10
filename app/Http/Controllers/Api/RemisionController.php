@@ -72,14 +72,21 @@ class RemisionController extends Controller
                 return $remision;
             });
 
-            event(new RemisionCreada($remision->id));
+            try {
+                event(new RemisionCreada($remision->id));
+            } catch (\Throwable $e) {
+                Log::warning('No se pudo emitir evento RemisionCreada', [
+                    'remision_id' => $remision->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
 
             return response()->json([
                 'message' => 'Remisión guardada con éxito',
                 'id'      => $remision->id
             ], 201);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return response()->json([
                 'message' => 'Error al procesar el registro',
                 'error'   => $e->getMessage()
@@ -101,7 +108,7 @@ class RemisionController extends Controller
         $queryRemisiones = DB::table('remisiones')
             ->select(
                 'id', DB::raw("'R' as tipo"), 'matricula', 'folio', 'destino', 'created_at',
-                'total_litros as litros', 'fecha', 'hora_llegada', 'id_turno'
+                'total_litros as litros', 'fecha', 'hora_llegada', 'id_turno', 'status_prefactura'
             )
             ->where('status', 'A');
 
@@ -109,7 +116,7 @@ class RemisionController extends Controller
             ->select(
                 'id', DB::raw("'A' as tipo"), DB::raw("'ASA' as matricula"), 'folio', DB::raw("NULL as destino"),
                 'created_at', 'litros', DB::raw("DATE(created_at) as fecha"),
-                DB::raw("NULL as hora_llegada"), 'id_turno'
+                DB::raw("NULL as hora_llegada"), 'id_turno',DB::raw("0 as status_prefactura")
             );
 
         if (!$vinculado) {
@@ -451,5 +458,38 @@ class RemisionController extends Controller
         }
 
         return response()->json(['message' => 'No hay registros'], 404);
+    }
+
+    public function vincularPrefactura(Request $request)
+    {
+        $validated = $request->validate([
+            'id' => ['required', 'integer', 'exists:remisiones,id'],
+            'prefactura' => ['required', 'string', 'max:255'],
+        ]);
+
+        try {
+            $remision = DB::transaction(function () use ($validated) {
+                $remision = Remision::findOrFail($validated['id']);
+
+                $remision->update([
+                    'status_prefactura' => true,
+                    'folio_orden_venta' => $validated['prefactura'],
+                ]);
+
+                return $remision->fresh();
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'La remisión fue vinculada correctamente.',
+                'data' => $remision,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No fue posible vincular la remisión.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 }

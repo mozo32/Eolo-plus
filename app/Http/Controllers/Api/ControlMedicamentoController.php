@@ -139,7 +139,12 @@ class ControlMedicamentoController extends Controller
     public function index(Request $request)
     {
         $query = ControlMedicamento::with('firmas')
-            ->orderBy('fecha', 'asc');
+            ->orderBy('fecha', 'desc')
+            ->orderBy('created_at', 'desc');
+
+        if ($request->filled('fecha')) {
+            $query->whereDate('fecha', $request->fecha);
+        }
 
         if ($request->filled('week')) {
             [$year, $week] = explode('-W', $request->week);

@@ -4,20 +4,41 @@ import { Pill, History, UserPlus, Archive, PackagePlus } from 'lucide-react';
 import { AuthUser, ViewType, Medicamento } from './types';
 import InventoryTable from './InventoryTable';
 import ActionForms from './ActionForms';
-import { fetchMedicamentos, movimientos } from '@/stores/apiControlMedicamento';
+import { fetchMedicamentos, movimientos, fetchCierresMedicamento } from '@/stores/apiControlMedicamento';
 
 const MedicamentosModule = () => {
     const [view, setView] = useState<ViewType>('entrega');
     const [medicamentos, setMedicamentos] = useState<Medicamento[]>([]);
     const [moviemientos, setMovimientos] = useState<any[]>([]);
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
-
+    const [cierres, setCierres] = useState<any[]>([]);
     const fetchActivos = async () => {
         try {
             const data = await fetchMedicamentos();
             setMedicamentos(data);
         } catch (error) {
             console.error("Error cargando medicamentos:", error);
+        }
+    };
+    const fetchCierres = async (params: any = {}) => {
+        const tieneFiltros = Object.values(params).some(
+            (value) => value !== undefined && value !== null && value !== ''
+        );
+
+        if (!tieneFiltros) {
+            setCierres([]);
+            return [];
+        }
+
+        try {
+            const data = await fetchCierresMedicamento(params);
+            const lista = Array.isArray(data) ? data : [];
+            setCierres(lista);
+            return lista;
+        } catch (error) {
+            console.error("Error cargando cierres:", error);
+            setCierres([]);
+            return [];
         }
     };
 
@@ -84,6 +105,7 @@ const MedicamentosModule = () => {
                             onSuccess={() => {
                                 fetchActivos();
                                 fetchMoviminetos();
+                                setCierres([]);
                             }}
                         />
 
@@ -159,7 +181,11 @@ const MedicamentosModule = () => {
                     </div>
 
                     <div className="lg:col-span-2 space-y-6">
-                        <InventoryTable medicamentos={medicamentos} />
+                        <InventoryTable
+                            medicamentos={medicamentos}
+                            cierres={cierres}
+                            onBuscarCierres={fetchCierres}
+                        />
                     </div>
                 </div>
             </div>

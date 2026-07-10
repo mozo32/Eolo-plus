@@ -12,7 +12,10 @@ class Remision extends Model
         'folio','fecha', 'operador', 'cliente', 'forma_pago','presionDif',
         'aeronave_tipo', 'matricula', 'destino', 'hora_llegada',
         'hora_inicial', 'hora_final', 'lectura_inicial',
-        'lectura_final', 'total_litros', 'id_turno','status', 'precio'
+        'lectura_final', 'total_litros', 'id_turno','status', 'precio','status_prefactura','folio_orden_venta',
+    ];
+    protected $casts = [
+        'status_prefactura' => 'boolean',
     ];
     public function firmas()
     {
