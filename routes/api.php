@@ -159,10 +159,13 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('CheckListTurno')->group(func
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('ControlMedicamento')->group(function () {
     Route::get('/ultimosMovimientos',[ControlMedicamentoController::class, 'ultimosMovimientos']);
+    Route::get('/medicamentos/deshabilitados',[ControlMedicamentoController::class, 'medicamentosDeshabilitados']);
+    Route::get('/exportar-pdf', [ControlMedicamentoController::class, 'exportarPdf']);
     Route::get('/medicamentos',[ControlMedicamentoController::class, 'medicamentos']);
     Route::post('/entregaMedicamento',[ControlMedicamentoController::class, 'storeEntrega']);
     Route::put('/medicamento/{id}',[ControlMedicamentoController::class, 'reabastecer']);
     Route::put('/medicamento/deshabilitar/{id}',[ControlMedicamentoController::class, 'deshabilitar']);
+    Route::put('/medicamento/habilitar/{id}',[ControlMedicamentoController::class, 'habilitar']);
     Route::post('/medicamento/agregar', [ControlMedicamentoController::class, 'agregarMedicamento']);
     Route::post('/',[ControlMedicamentoController::class, 'store']);
     Route::get('/index',[ControlMedicamentoController::class, 'index']);

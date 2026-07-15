@@ -9,6 +9,7 @@ use App\Models\EntregaMedicamento;
 use App\Models\Firma;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
@@ -141,7 +142,16 @@ class ControlMedicamentoController extends Controller
         $query = ControlMedicamento::with('firmas')
             ->orderBy('fecha', 'desc')
             ->orderBy('created_at', 'desc');
+        if ($request->filled('fecha_inicio') && $request->filled('fecha_fin')) {
+            $query->whereBetween('fecha', [
+                Carbon::parse($request->fecha_inicio)->toDateString(),
+                Carbon::parse($request->fecha_fin)->toDateString(),
+            ]);
+        }
 
+        if ($request->filled('fecha') && !$request->filled('fecha_inicio') && !$request->filled('fecha_fin')) {
+            $query->whereDate('fecha', $request->fecha);
+        }
         if ($request->filled('fecha')) {
             $query->whereDate('fecha', $request->fecha);
         }
@@ -316,57 +326,230 @@ class ControlMedicamentoController extends Controller
         return response()->json($data);
     }
 
-    public function ultimosMovimientos()
+    public function ultimosMovimientos(Request $request)
     {
+        $validated = $request->validate([
+            'periodo' => [
+                'nullable',
+                'in:todos,dia,rango,mes,anio',
+            ],
+            'tipo' => [
+                'nullable',
+                'in:todos,ENTREGA,CIERRE',
+            ],
+            'fecha' => [
+                'nullable',
+                'required_if:periodo,dia',
+                'date_format:Y-m-d',
+            ],
+            'fecha_inicio' => [
+                'nullable',
+                'required_if:periodo,rango',
+                'date_format:Y-m-d',
+            ],
+            'fecha_fin' => [
+                'nullable',
+                'required_if:periodo,rango',
+                'date_format:Y-m-d',
+                'after_or_equal:fecha_inicio',
+            ],
+            'mes' => [
+                'nullable',
+                'required_if:periodo,mes',
+                'date_format:Y-m',
+            ],
+            'anio' => [
+                'nullable',
+                'required_if:periodo,anio',
+                'integer',
+                'min:2000',
+                'max:2100',
+            ],
+            'page' => [
+                'nullable',
+                'integer',
+                'min:1',
+            ],
+            'per_page' => [
+                'nullable',
+                'integer',
+                'min:1',
+                'max:50',
+            ],
+        ]);
+
         try {
-            $entregas = EntregaMedicamento::with(['medicamento' => function ($query) {
-                    $query->select('id', 'nombre', 'status')
-                        ->where('status', 'A');
-                }])
-                ->whereHas('medicamento', function ($query) {
-                    $query->where('status', 'A');
-                })
-                ->orderBy('created_at', 'desc')
-                ->limit(5)
-                ->get()
-                ->map(function ($e) {
-                    return [
-                        'id' => 'ent-' . $e->id,
-                        'tipo' => 'ENTREGA',
-                        'titulo' => $e->medicamento->nombre,
-                        'detalle' => "Recibe: {$e->receptor}",
-                        'cantidad' => "-" . $e->cantidad,
-                        'fecha' => $e->created_at->format('d/m/Y H:i'),
-                        'fecha_raw' => $e->created_at,
-                        'estado' => $e->status == 'A' ? 'Activo' : 'Cerrado',
-                    ];
-                });
+            $periodo = $validated['periodo'] ?? 'todos';
+            $tipo = $validated['tipo'] ?? 'todos';
+            $pagina = (int) ($validated['page'] ?? 1);
+            $porPagina = (int) ($validated['per_page'] ?? 5);
 
-            $cierres = ControlMedicamento::orderBy('created_at', 'desc')
-                ->limit(5)
-                ->get()
-                ->map(function ($c) {
-                    return [
-                        'id' => 'cie-' . $c->id,
-                        'tipo' => 'CIERRE',
-                        'titulo' => 'Corte de Turno',
-                        'detalle' => "Resp: {$c->responsable}",
-                        'cantidad' => 'OK',
-                        'fecha' => $c->created_at->format('d/m/Y H:i'),
-                        'fecha_raw' => $c->created_at,
-                        'estado' => 'Finalizado',
-                    ];
-                });
+            $tablaEntregas = (new EntregaMedicamento())->getTable();
+            $tablaMedicamentos = (new Medicamento())->getTable();
+            $tablaControles = (new ControlMedicamento())->getTable();
 
-            $movimientos = $entregas->concat($cierres)
-                ->sortByDesc('fecha_raw')
-                ->take(10)
-                ->values();
+            $aplicarPeriodo = function (
+                $query,
+                string $columnaFecha
+            ) use ($periodo, $validated) {
+                if ($periodo === 'dia') {
+                    $query->whereDate(
+                        $columnaFecha,
+                        $validated['fecha']
+                    );
+                }
+
+                if ($periodo === 'rango') {
+                    $fechaInicio = Carbon::createFromFormat(
+                        'Y-m-d',
+                        $validated['fecha_inicio']
+                    )->startOfDay();
+
+                    $fechaFin = Carbon::createFromFormat(
+                        'Y-m-d',
+                        $validated['fecha_fin']
+                    )->endOfDay();
+
+                    $query->whereBetween($columnaFecha, [
+                        $fechaInicio,
+                        $fechaFin,
+                    ]);
+                }
+
+                if ($periodo === 'mes') {
+                    [$anio, $mes] = explode(
+                        '-',
+                        $validated['mes']
+                    );
+
+                    $query
+                        ->whereYear($columnaFecha, (int) $anio)
+                        ->whereMonth($columnaFecha, (int) $mes);
+                }
+
+                if ($periodo === 'anio') {
+                    $query->whereYear(
+                        $columnaFecha,
+                        (int) $validated['anio']
+                    );
+                }
+
+                return $query;
+            };
+
+            $consultaEntregas = null;
+            $consultaCierres = null;
+
+            if ($tipo !== 'CIERRE') {
+                $consultaEntregas = DB::table(
+                    "{$tablaEntregas} as entregas"
+                )
+                    ->join(
+                        "{$tablaMedicamentos} as medicamentos",
+                        'medicamentos.id',
+                        '=',
+                        'entregas.medicamento_id'
+                    )
+                    ->where('medicamentos.status', 'A')
+                    ->select([
+                        DB::raw("'ENTREGA' as tipo"),
+                        'entregas.id as registro_id',
+                        'medicamentos.nombre as titulo',
+                        'entregas.receptor as responsable',
+                        'entregas.cantidad as cantidad',
+                        'entregas.created_at as fecha_raw',
+                        'entregas.status as estado_raw',
+                    ]);
+
+                $aplicarPeriodo(
+                    $consultaEntregas,
+                    'entregas.created_at'
+                );
+            }
+
+            if ($tipo !== 'ENTREGA') {
+                $consultaCierres = DB::table(
+                    "{$tablaControles} as controles"
+                )->select([
+                    DB::raw("'CIERRE' as tipo"),
+                    'controles.id as registro_id',
+                    DB::raw("'Corte de Turno' as titulo"),
+                    'controles.responsable as responsable',
+                    DB::raw('NULL as cantidad'),
+                    'controles.created_at as fecha_raw',
+                    DB::raw("'Finalizado' as estado_raw"),
+                ]);
+
+                $aplicarPeriodo(
+                    $consultaCierres,
+                    'controles.created_at'
+                );
+            }
+
+            if ($consultaEntregas && $consultaCierres) {
+                $consultaUnificada =
+                    $consultaEntregas->unionAll(
+                        $consultaCierres
+                    );
+            } else {
+                $consultaUnificada =
+                    $consultaEntregas ?? $consultaCierres;
+            }
+
+            $movimientos = DB::query()
+                ->fromSub(
+                    $consultaUnificada,
+                    'movimientos_unificados'
+                )
+                ->orderByDesc('fecha_raw')
+                ->paginate(
+                    $porPagina,
+                    ['*'],
+                    'page',
+                    $pagina
+                );
+
+            $movimientos->setCollection(
+                $movimientos
+                    ->getCollection()
+                    ->map(function ($movimiento) {
+                        $esEntrega =
+                            $movimiento->tipo === 'ENTREGA';
+
+                        return [
+                            'id' => $esEntrega
+                                ? 'ent-' .
+                                    $movimiento->registro_id
+                                : 'cie-' .
+                                    $movimiento->registro_id,
+                            'tipo' => $movimiento->tipo,
+                            'titulo' => $movimiento->titulo,
+                            'detalle' => $esEntrega
+                                ? "Recibe: {$movimiento->responsable}"
+                                : "Resp: {$movimiento->responsable}",
+                            'cantidad' => $esEntrega
+                                ? '-' . $movimiento->cantidad
+                                : 'OK',
+                            'fecha' => Carbon::parse(
+                                $movimiento->fecha_raw
+                            )->format('d/m/Y H:i'),
+                            'estado' => $esEntrega
+                                ? (
+                                    $movimiento->estado_raw ===
+                                    'A'
+                                        ? 'Activo'
+                                        : 'Cerrado'
+                                )
+                                : 'Finalizado',
+                        ];
+                    })
+            );
 
             return response()->json($movimientos);
-
         } catch (\Throwable $e) {
             return response()->json([
+                'message' =>
+                    'No se pudieron obtener los movimientos.',
                 'error' => $e->getMessage(),
             ], 500);
         }
@@ -451,7 +634,28 @@ class ControlMedicamentoController extends Controller
             ], 500);
         }
     }
+    public function medicamentosDeshabilitados()
+    {
+        try {
+            $medicamentos = Medicamento::query()
+                ->where('status', 'N')
+                ->orderBy('nombre')
+                ->get([
+                    'id',
+                    'nombre',
+                    'cantidad',
+                    'status',
+                ]);
 
+            return response()->json($medicamentos);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No se pudieron obtener los medicamentos deshabilitados.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
     public function deshabilitar($id)
     {
         try {
@@ -477,7 +681,36 @@ class ControlMedicamentoController extends Controller
             ], 500);
         }
     }
+    public function habilitar($id)
+    {
+        try {
+            return DB::transaction(function () use ($id) {
+                $medicamento = Medicamento::findOrFail($id);
 
+                if ($medicamento->status === 'A') {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'El medicamento ya se encuentra habilitado.',
+                    ], 422);
+                }
+
+                $medicamento->status = 'A';
+                $medicamento->save();
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Medicamento habilitado correctamente',
+                    'nuevo_stock' => $medicamento->cantidad,
+                    'medicamento' => $medicamento->nombre,
+                ]);
+            });
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No se pudo habilitar el medicamento: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
     public function agregarMedicamento(Request $request)
     {
         try {
@@ -506,5 +739,29 @@ class ControlMedicamentoController extends Controller
                 'message' => 'No se pudo agregar el medicamento: ' . $e->getMessage(),
             ], 500);
         }
+    }
+    public function exportarPdf(Request $request)
+    {
+        $validated = $request->validate([
+            'fecha_inicio' => 'required|date',
+            'fecha_fin' => 'required|date|after_or_equal:fecha_inicio',
+        ]);
+
+        $fechaInicio = Carbon::parse($validated['fecha_inicio'])->toDateString();
+        $fechaFin = Carbon::parse($validated['fecha_fin'])->toDateString();
+
+        $cierres = ControlMedicamento::query()
+            ->whereBetween('fecha', [$fechaInicio, $fechaFin])
+            ->orderBy('fecha', 'asc')
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        $pdf = Pdf::loadView('pdf.control-medicamento-cierres', [
+            'cierres' => $cierres,
+            'fechaInicio' => $fechaInicio,
+            'fechaFin' => $fechaFin,
+        ])->setPaper('letter', 'portrait');
+
+        return $pdf->download("cierres_medicamento_{$fechaInicio}_{$fechaFin}.pdf");
     }
 }
