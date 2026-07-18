@@ -435,6 +435,7 @@ class OperacionesDiariasController extends Controller
                     'guarda' => 0,
                     'aerotaxi' => 0,
                     'handling' => 0,
+                    'mantenimiento' => 0,
                     'total_pax_dia' => 0,
                 ];
 
@@ -449,6 +450,8 @@ class OperacionesDiariasController extends Controller
                         $fila['aerotaxi']++;
                     } elseif ($cliente === 'HANDLING') {
                         $fila['handling']++;
+                    }elseif ($cliente === 'MANTENIMIENTO') {
+                        $fila['mantenimiento']++;
                     }
 
                     $fila['total_pax_dia'] += is_numeric($item->pax) ? (int) $item->pax : 0;
@@ -463,6 +466,7 @@ class OperacionesDiariasController extends Controller
             'guarda' => $resumen->sum('guarda'),
             'aerotaxi' => $resumen->sum('aerotaxi'),
             'handling' => $resumen->sum('handling'),
+            'mantenimiento' => $resumen->sum('mantenimiento'),
             'total_pax_dia' => $resumen->sum('total_pax_dia'),
         ];
 

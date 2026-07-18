@@ -222,30 +222,72 @@ export default function Remision() {
             Swal.fire({ icon: 'error', title: 'Error', confirmButtonColor: '#ef4444' });
         }
     };
-    const handleSendPrefactura = async (prefactura: string) => {
+    const handleSendPrefactura = async (
+        prefactura: string
+    ): Promise<boolean> => {
         const xsrf = getXsrfToken();
+
         Swal.fire({
-            title: 'guardando',
+            title: 'Guardando',
             text: 'Espere un momento...',
             allowOutsideClick: false,
-            didOpen: () => { Swal.showLoading(); }
+            didOpen: () => {
+                Swal.showLoading();
+            }
         });
+
         try {
-            const response = await fetch('api/Remision/vincularPrefactura', {
+            const response = await fetch('/api/Remision/vincularPrefactura', {
                 method: 'PUT',
                 headers: {
-                    'Accept': 'application/json',
+                    Accept: 'application/json',
                     'Content-Type': 'application/json',
-                    'X-XSRF-TOKEN': xsrf,
+                    'X-XSRF-TOKEN': xsrf
                 },
-                body: JSON.stringify({ id: selectedRow?.id, prefactura: prefactura })
+                body: JSON.stringify({
+                    id: selectedRow?.id,
+                    prefactura
+                })
             });
-            if (!response.ok) throw new Error('Error');
-            Swal.fire({ icon: 'success', title: '¡Enviado!', confirmButtonColor: '#4f46e5' });
-        } catch (error) {
-            Swal.fire({ icon: 'error', title: 'Error', confirmButtonColor: '#ef4444' });
-        }
 
+            const resultado = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                throw new Error(
+                    resultado?.message ||
+                    'No se pudo vincular la prefactura.'
+                );
+            }
+
+            await cargarDatos({
+                page: paginaRef.current,
+                filtrosActuales: filtrosRef.current,
+                silencioso: true
+            });
+
+            setSelectedRow(null);
+
+            await Swal.fire({
+                icon: 'success',
+                title: '¡Prefactura vinculada!',
+                text: 'La tabla se actualizó correctamente.',
+                confirmButtonColor: '#4f46e5'
+            });
+
+            return true;
+        } catch (error) {
+            await Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text:
+                    error instanceof Error
+                        ? error.message
+                        : 'No se pudo vincular la prefactura.',
+                confirmButtonColor: '#ef4444'
+            });
+
+            return false;
+        }
     };
 
     const handlePdfDone = useCallback(() => setPdfId(null), []);
@@ -397,6 +439,7 @@ export default function Remision() {
             });
         }
     };
+    const rol = user?.roles?.[0]?.slug;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -534,16 +577,57 @@ export default function Remision() {
                                         <tr><td colSpan={6} className="px-6 py-20 text-center text-[10px] font-black text-slate-400 uppercase">Cargando datos...</td></tr>
                                     ) : data.map((row, index) => {
                                         const numeroFila = (pagina - 1) * (meta?.per_page || 20) + (index + 1);
+                                        const esVinculado =
+                                            (rol === 'fbo' || rol === 'admin') &&
+                                            Boolean(row.id_turno);
+
+                                        const esPrefactura =
+                                            (rol === 'fac' || rol === 'admin') &&
+                                            Boolean(row.status_prefactura);
+
+                                        const claseFila =
+                                            esVinculado && esPrefactura
+                                                ? `
+                                                    bg-gradient-to-r
+                                                    from-emerald-50/70 from-[50%]
+                                                    to-indigo-50/70 to-[50%]
+                                                    hover:from-emerald-100/80
+                                                    hover:to-indigo-100/80
+                                                    border-l-4 border-l-emerald-500
+                                                    border-r-4 border-r-indigo-500
+                                                `
+                                                : esVinculado
+                                                    ? `
+                                                        bg-emerald-50/40
+                                                        hover:bg-emerald-100/60
+                                                        border-l-4 border-l-emerald-500
+                                                    `
+                                                    : esPrefactura
+                                                        ? `
+                                                            bg-indigo-50/40
+                                                            hover:bg-indigo-100/60
+                                                            border-l-4 border-l-indigo-500
+                                                        `
+                                                        : `
+                                                            hover:bg-slate-50/80
+                                                            border-l-4 border-l-transparent
+                                                        `;
                                         return (
-                                            <tr key={`${row.id}-${index}`} className={`border-b border-slate-50 transition-colors ${row.id_turno ? 'bg-emerald-50/40 hover:bg-emerald-100/60 border-l-4 border-l-emerald-500' : 'hover:bg-slate-50/80 border-l-4 border-l-transparent'}`}>
-                                                <td className="px-4 py-4 text-center font-bold text-[10px] text-slate-400">{numeroFila}</td>
+                                            <tr key={`${row.id}-${index}`} className={`border-b border-slate-50 transition-colors ${claseFila}`}>
+                                                <td className="px-4 py-4 text-center font-bold text-[10px] text-slate-400">
+                                                    {numeroFila}
+                                                </td>
                                                 <td className="px-6 py-4 text-center font-black text-[10px] text-slate-700">
                                                     <div className="flex flex-col items-center gap-1">
-                                                        {row.folio || `#${row.id}`}
-                                                        {row.id_turno && (
-                                                            <span className="text-[7px] bg-emerald-600 text-white px-1 rounded-sm tracking-widest">VINCULADO</span>
+                                                        <span>{row.folio || `#${row.id}`}</span>
+
+                                                        {esVinculado && (
+                                                            <span className="rounded-sm bg-emerald-600 px-1 text-[7px] tracking-widest text-white">
+                                                                VINCULADO
+                                                            </span>
                                                         )}
-                                                        {Boolean(row.status_prefactura) && (
+
+                                                        {esPrefactura && (
                                                             <span className="rounded-sm bg-indigo-600 px-1 text-[7px] tracking-widest text-white">
                                                                 PREFACTURA
                                                             </span>
@@ -736,7 +820,12 @@ export default function Remision() {
                     </div>
                 )}
                 <ModalEnviarCorreo isOpen={emailModalOpen} onClose={() => setEmailModalOpen(false)} onSend={handleSendEmail} row={selectedRow} />
-                <ModalPrefactura isOpen={prefacturaModalOpen} onClose={() => setPrefacturaModalOpen(false)} onSend={handleSendPrefactura} row={selectedRow} />
+                <ModalPrefactura
+                    isOpen={prefacturaModalOpen}
+                    onClose={() => setPrefacturaModalOpen(false)}
+                    onSend={handleSendPrefactura}
+                    row={selectedRow}
+                />
                 <PdfExporterRemision id={pdfId} onDone={handlePdfDone} />
             </div>
         </AppLayout>

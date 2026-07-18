@@ -3,9 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { FormLlegada } from './FormLlegada';
 import { FormSalida } from './FormSalida';
 import { Filter, Calendar, ArrowDownLeft, ArrowUpRight, X, ChevronDown, Info, Download, History} from 'lucide-react';
-import { obtenerOperacionesDiariasApi, excelOperacionesDiariasApi, obtenerPendientesApi, pdfOperacionesDiariasApi} from '@/stores/apiOperacionesDiarias';
+import { obtenerOperacionesDiariasApi, excelOperacionesDiariasApi, obtenerPendientesApi } from '@/stores/apiOperacionesDiarias';
 import { exportarOperacionesAExcel } from './excelService';
-import { generarReporteRapidoOperacionesPdf } from './ReporteRapidoOperacionesPdf';
+import ReporteRapidoOperacionesModal from './ReporteRapidoOperacionesModal';
 import Swal from 'sweetalert2';
 import MatriculasPendientes from './MatriculasPendientes';
 import BitacoraModal from '@/pages/BitacoraModal';
@@ -18,7 +18,6 @@ interface OperacionesCardsProps {
 
 const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsProps) => {
     const [registros, setRegistros] = useState<any[]>([]);
-    const [datosExcel, setDatosExcel] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [stripExpandida, setStripExpandida] = useState<number | null>(null);
     const [creando, setCreando] = useState<'llegada' | 'salida' | null>(null);
@@ -30,6 +29,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
     const [mostrarBitacora, setMostrarBitacora] = useState(false);
     const [pendientes, setPendientes] = useState<any[]>([]);
     const [mostrarModal, setMostrarModal] = useState(false);
+    const [mostrarReporteRapido, setMostrarReporteRapido] = useState(false);
     const COLORES_DEPARTAMENTOS: Record<string, string> = {
         "Seguridad": "bg-blue-500",
         "Rampa": "bg-amber-500",
@@ -106,15 +106,6 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
             throw error;
         }
     };
-    const cargarPdf = async () => {
-        try {
-            const data = await pdfOperacionesDiariasApi({ ...filtros });
-            return Array.isArray(data) ? data : (data.data || []);
-        } catch (error) {
-            console.error("Error al obtener datos para Excel:", error);
-            throw error;
-        }
-    };
     const handleExportarExcel = async () => {
         Swal.fire({
             title: 'Generando Excel',
@@ -149,33 +140,8 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
             });
         }
     };
-    const handleExportarpdf = async () => {
-        Swal.fire({
-            title: 'Generando PDF',
-            text: 'Estamos preparando el reporte rápido, por favor espere...',
-            allowOutsideClick: false,
-            didOpen: () => {
-                Swal.showLoading();
-            }
-        });
-
-        try {
-            await generarReporteRapidoOperacionesPdf({ ...filtros });
-
-            Swal.fire({
-                icon: 'success',
-                title: '¡Descarga lista!',
-                text: 'El reporte rápido se generó correctamente.',
-                timer: 2000,
-                showConfirmButton: false
-            });
-        } catch (error: any) {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Sin información',
-                text: error?.message || 'No hay registros para generar el reporte.'
-            });
-        }
+    const abrirVistaPreviaReporteRapido = () => {
+        setMostrarReporteRapido(true);
     };
     useEffect(() => {
         cargarDatos();
@@ -276,7 +242,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                             <>
                                 <div className="w-[1px] bg-slate-200 mx-1"></div>
                                 <button
-                                    onClick={handleExportarpdf}
+                                    onClick={abrirVistaPreviaReporteRapido}
                                     disabled={loading}
                                     className="flex items-center gap-2 bg-white text-slate-600 text-[10px] font-black px-3 py-2 rounded border border-slate-200 shadow-sm hover:bg-slate-50 transition-all active:scale-95 uppercase tracking-wider disabled:opacity-50"
                                     title="Descargar Reporte"
@@ -613,6 +579,12 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                     </div>
                 </div>
             )}
+            <ReporteRapidoOperacionesModal
+                open={mostrarReporteRapido}
+                onClose={() => setMostrarReporteRapido(false)}
+                filtros={filtros}
+            />
+
             <BitacoraModal
                 open={mostrarBitacora}
                 onClose={() => setMostrarBitacora(false)}

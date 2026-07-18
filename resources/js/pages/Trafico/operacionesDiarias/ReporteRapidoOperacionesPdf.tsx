@@ -10,7 +10,7 @@ import {
 import { saveAs } from 'file-saver';
 import { pdfOperacionesDiariasApi } from '@/stores/apiOperacionesDiarias';
 
-type FiltrosReporte = {
+export type FiltrosReporte = {
     buscar?: string;
     tipo?: string;
     fechaInicio?: string;
@@ -24,21 +24,23 @@ type FiltrosReporte = {
     cliente?: string;
 };
 
-type FilaResumen = {
+export type FilaResumen = {
     fecha: string;
     fecha_original?: string;
     transito: number;
     guarda: number;
     aerotaxi: number;
     handling: number;
+    mantenimiento: number;
     total_pax_dia: number;
 };
 
-type TotalesResumen = {
+export type TotalesResumen = {
     transito: number;
     guarda: number;
     aerotaxi: number;
     handling: number;
+    mantenimiento: number;
     total_pax_dia: number;
 };
 
@@ -171,22 +173,25 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
     },
     colFecha: {
-        width: '23%',
+        width: '22%',
     },
     colTransito: {
-        width: '16.5%',
+        width: '13%',
     },
     colGuarda: {
-        width: '14%',
+        width: '11%',
     },
     colAerotaxi: {
-        width: '16.5%',
+        width: '14%',
     },
     colHandling: {
+        width: '13%',
+    },
+    colMantenimiento: {
         width: '16%',
     },
     colTotal: {
-        width: '14%',
+        width: '11%',
     },
 });
 
@@ -259,6 +264,7 @@ const calcularTotales = (filas: FilaResumen[]): TotalesResumen => {
             acc.guarda += Number(fila.guarda || 0);
             acc.aerotaxi += Number(fila.aerotaxi || 0);
             acc.handling += Number(fila.handling || 0);
+            acc.mantenimiento += Number(fila.mantenimiento || 0);
             acc.total_pax_dia += Number(fila.total_pax_dia || 0);
             return acc;
         },
@@ -267,6 +273,7 @@ const calcularTotales = (filas: FilaResumen[]): TotalesResumen => {
             guarda: 0,
             aerotaxi: 0,
             handling: 0,
+            mantenimiento: 0,
             total_pax_dia: 0,
         }
     );
@@ -310,6 +317,10 @@ const ReporteRapidoOperacionesDocument = ({
                             <Text style={styles.headerText}>Handling</Text>
                         </View>
 
+                        <View style={[styles.headerCell, styles.colMantenimiento]}>
+                            <Text style={styles.headerText}>Mantenimiento</Text>
+                        </View>
+
                         <View style={[styles.headerCellLast, styles.colTotal]}>
                             <Text style={styles.headerText}>Total{'\n'}Pax por{'\n'}Dia</Text>
                         </View>
@@ -335,6 +346,10 @@ const ReporteRapidoOperacionesDocument = ({
 
                             <View style={[styles.bodyCell, styles.colHandling]}>
                                 <Text style={styles.bodyText}>{fila.handling}</Text>
+                            </View>
+
+                            <View style={[styles.bodyCell, styles.colMantenimiento]}>
+                                <Text style={styles.bodyText}>{fila.mantenimiento}</Text>
                             </View>
 
                             <View style={[styles.bodyCellLast, styles.colTotal]}>
@@ -364,6 +379,10 @@ const ReporteRapidoOperacionesDocument = ({
                             <Text style={styles.totalText}>{totales.handling}</Text>
                         </View>
 
+                        <View style={[styles.totalCell, styles.colMantenimiento]}>
+                            <Text style={styles.totalText}>{totales.mantenimiento}</Text>
+                        </View>
+
                         <View style={[styles.totalCellLast, styles.colTotal]}>
                             <Text style={styles.totalText}>{totales.total_pax_dia}</Text>
                         </View>
@@ -374,7 +393,22 @@ const ReporteRapidoOperacionesDocument = ({
     );
 };
 
-export const generarReporteRapidoOperacionesPdf = async (filtros: FiltrosReporte = {}) => {
+export type ReporteRapidoPreparado = {
+    blob: Blob;
+    filas: FilaResumen[];
+    totales: TotalesResumen;
+};
+
+const obtenerNombreArchivoReporteRapido = (filtros: FiltrosReporte = {}) => {
+    const fechaInicio = filtros.fechaInicio || new Date().toLocaleDateString('en-CA');
+    const fechaFin = filtros.fechaFin || fechaInicio;
+
+    return `Resumen_Semanal_Operaciones_${fechaInicio}_${fechaFin}.pdf`;
+};
+
+export const prepararReporteRapidoOperacionesPdf = async (
+    filtros: FiltrosReporte = {}
+): Promise<ReporteRapidoPreparado> => {
     const respuesta = await pdfOperacionesDiariasApi(filtros);
 
     const filas: FilaResumen[] = Array.isArray(respuesta)
@@ -397,10 +431,25 @@ export const generarReporteRapidoOperacionesPdf = async (filtros: FiltrosReporte
         />
     ).toBlob();
 
-    const fechaInicio = filtros.fechaInicio || new Date().toLocaleDateString('en-CA');
-    const fechaFin = filtros.fechaFin || fechaInicio;
+    return {
+        blob,
+        filas,
+        totales,
+    };
+};
 
-    saveAs(blob, `Resumen_Semanal_Operaciones_${fechaInicio}_${fechaFin}.pdf`);
+export const descargarReporteRapidoOperacionesPdf = (
+    blob: Blob,
+    filtros: FiltrosReporte = {}
+) => {
+    saveAs(blob, obtenerNombreArchivoReporteRapido(filtros));
+};
+
+export const generarReporteRapidoOperacionesPdf = async (
+    filtros: FiltrosReporte = {}
+) => {
+    const reporte = await prepararReporteRapidoOperacionesPdf(filtros);
+    descargarReporteRapidoOperacionesPdf(reporte.blob, filtros);
 };
 
 export default generarReporteRapidoOperacionesPdf;
