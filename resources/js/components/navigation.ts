@@ -151,7 +151,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                 key: 1,
                 items: [
                     { id: 'despacho-around', title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
-                    { id: 'despacho-turno', title: 'Entrega Turno', href: entregaTurno(), icon: LayoutGrid },
+                    { id: 'despacho-turno', title: 'Entrega de Turno', href: entregaTurno(), icon: LayoutGrid },
                     { id: 'despacho-operaciones', title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },
                     { id: 'despacho-aeronaves', title: 'Gestionar Aeronaves', href: gestionarAeronaves(), icon: LayoutGrid },
                 ],
@@ -179,7 +179,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                 module: 'Rampa',
                 key: 4,
                 items: [
-                    { id: 'rampa-turno', title: 'Entrega Turno de Rampa', href: entregaTurnoR(), icon: LayoutGrid },
+                    { id: 'rampa-turno', title: 'Entrega de Turno', href: entregaTurnoR(), icon: LayoutGrid },
                     { id: 'rampa-seguridad', title: 'checkList Equipo de Seguridad', href: checkListEquipo(), icon: LayoutGrid },
                     { id: 'rampa-operaciones', title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },
 
@@ -189,13 +189,13 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                         children: [
                             {
                                 id: 'rampa-autotanque',
-                                title: 'Entrega Turno Autotanque',
+                                title: 'Entrega Turno',
                                 href: reporteEntregaTurno(),
                                 icon: LayoutGrid,
                             },
                             {
                                 id: 'rampa-remision',
-                                title: 'Remisión Autotanque',
+                                title: 'Remisión',
                                 href: remision(),
                                 icon: LayoutGrid,
                             },
@@ -215,7 +215,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                 module: 'Trafico',
                 key: 5,
                 items: [
-                    { id: 'trafico-turno', title: 'checkList de Turno', href: checkListTurno(), icon: LayoutGrid },
+                    { id: 'trafico-turno', title: 'Entrega de Turno', href: checkListTurno(), icon: LayoutGrid },
                     { id: 'trafico-medicamento', title: 'Control de Medicamento', href: controlMedicamento(), icon: LayoutGrid },
                     { id: 'trafico-operaciones', title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },
                     { id: 'trafico-comisariato', title: 'Servicio de Comisariato', href: servicioComisariato(), icon: LayoutGrid },

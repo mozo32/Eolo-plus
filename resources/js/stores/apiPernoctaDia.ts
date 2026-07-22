@@ -1,17 +1,95 @@
-import Swal from "sweetalert2";
-
 function getXsrfToken(): string {
     const match = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('XSRF-TOKEN='));
+        .split("; ")
+        .find((row) => row.startsWith("XSRF-TOKEN="));
 
-    return match ? decodeURIComponent(match.split('=')[1]) : '';
+    return match
+        ? decodeURIComponent(match.split("=")[1])
+        : "";
+}
+
+export type PernoctaRegistro = {
+    id: number;
+    fecha: string;
+    hora: string;
+    matricula: string;
+    ubicacion: string;
+    observaciones: string | null;
+    nombre: string;
+    aeronave?: string | null;
+    tipo_cliente?: string | null;
+    categoria?: string | null;
+};
+
+export type PernoctaFiltros = {
+    matricula?: string;
+    ubicacion?: string;
+    responsable?: string;
+    fechaInicio?: string;
+    fechaFin?: string;
+    periodo?: string;
+    page?: number;
+    per_page?: number;
+};
+
+export type PernoctaPaginationMeta = {
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+    from: number | null;
+    to: number | null;
+};
+
+export type PernoctaPaginationResponse = {
+    data: PernoctaRegistro[];
+    meta: PernoctaPaginationMeta;
+};
+
+export async function obtenerPernoctasApi(
+    filtros: PernoctaFiltros = {},
+    signal?: AbortSignal,
+): Promise<PernoctaPaginationResponse> {
+    const params = new URLSearchParams();
+
+    Object.entries(filtros).forEach(([key, value]) => {
+        if (
+            value !== undefined &&
+            value !== null &&
+            value !== ""
+        ) {
+            params.append(key, String(value));
+        }
+    });
+
+    const response = await fetch(
+        `/api/PernoctaDia?${params.toString()}`,
+        {
+            method: "GET",
+            headers: {
+                Accept: "application/json",
+            },
+            credentials: "same-origin",
+            signal,
+        },
+    );
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        throw new Error(
+            data?.message ||
+                "No se pudieron consultar las pernoctas",
+        );
+    }
+
+    return data;
 }
 
 export async function guardarPernoctaDiaApi(form: any) {
     const xsrf = getXsrfToken();
 
-    const res = await fetch("/api/PernoctaDia", {
+    const response = await fetch("/api/PernoctaDia", {
         method: "POST",
         headers: {
             Accept: "application/json",
@@ -22,23 +100,14 @@ export async function guardarPernoctaDiaApi(form: any) {
         credentials: "same-origin",
     });
 
-    const data = await res.json().catch(() => ({}));
+    const data = await response.json().catch(() => ({}));
 
-    if (!res.ok) {
-        Swal.fire({
-            icon: "error",
-            title: "Error",
-            text: data?.message || "Error al guardar la pernocta del día",
-        });
-
-        throw new Error(data?.message || "Error al guardar la pernocta del día");
+    if (!response.ok) {
+        throw new Error(
+            data?.message ||
+                "Error al guardar la pernocta del día",
+        );
     }
-
-    Swal.fire({
-        icon: "success",
-        title: "Proceso exitoso",
-        text: data.message,
-    });
 
     return data;
 }

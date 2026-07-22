@@ -1,14 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent, type FormEvent } from "react";
 import MovimientoCSAEEntrada from "./MovimientoCSAEEntrada";
 import MovimientoCSAESalida from "./MovimientoCSAESalida";
-import { guardarMovimientoCSAEApi, guardarMovimientoCSASalida } from "@/stores/apiMovimientoCSAE";
+import MovimientoCSAEEditarCompleto from "./MovimientoCSAEEditarCompleto";
+import {
+    guardarMovimientoCSAEApi,
+    guardarMovimientoCSASalida,
+} from "@/stores/apiMovimientoCSAE";
 import Swal from "sweetalert2";
+
 type Props = {
     isEdit: boolean;
+    modoSalida?: boolean;
+    modoCompleto?: boolean;
     data?: any;
     open: boolean;
-    onSuccess?: () => void;
+    onSuccess?: () => void | Promise<void>;
 };
+
 const getInitialForm = (data?: any) => {
     const firmaEntrada = data?.firmas?.find(
         (f: any) => f.rol === "firma_entrada" && f.status === "A"
@@ -33,50 +41,75 @@ const getInitialForm = (data?: any) => {
         firma_salida: firmaSalida?.url ?? "",
     };
 };
+
 export default function MovimientoCSAEForm({
     isEdit,
+    modoSalida = false,
+    modoCompleto = false,
     data,
     open,
     onSuccess,
 }: Props) {
     const [formData, setFormData] = useState(() => getInitialForm(data));
-    useEffect(() => {
-        setFormData(getInitialForm(isEdit ? data : undefined));
-    }, [data, isEdit]);
-    const updateField = (key: string, value: any) => {
-        setFormData((prev) => ({ ...prev, [key]: value }));
-    };
 
-    const handleChange = (
-        e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-    ) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({
+    useEffect(() => {
+        if (open) {
+            setFormData(getInitialForm(isEdit ? data : undefined));
+        }
+    }, [data, isEdit, modoSalida, modoCompleto, open]);
+
+    const updateField = (key: string, value: any) => {
+        setFormData((prev) => ({
             ...prev,
-            [name]: value
+            [key]: value,
         }));
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleChange = (
+        e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    ) => {
+        const { name, value } = e.target;
+
+        setFormData((prev) => ({
+            ...prev,
+            [name]: value,
+        }));
+    };
+
+    const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
+
         try {
-            Swal.fire({ title: 'Procesando...', didOpen: () => Swal.showLoading() });
+            Swal.fire({
+                title: "Procesando...",
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading(),
+            });
+
             if (isEdit && data?.id) {
                 await guardarMovimientoCSASalida(data.id, formData);
-
             } else {
                 await guardarMovimientoCSAEApi(formData);
             }
 
             await Swal.fire({
-                icon: 'success',
-                title: 'Guardado correctamente',
+                icon: "success",
+                title: modoCompleto
+                    ? "Registro actualizado correctamente"
+                    : modoSalida
+                        ? "Salida guardada correctamente"
+                        : "Entrada guardada correctamente",
                 timer: 1200,
                 showConfirmButton: false,
             });
-            onSuccess?.();
+
+            await onSuccess?.();
         } catch (e: any) {
-            Swal.fire({ icon: 'error', title: 'Error', text: e.message });
+            Swal.fire({
+                icon: "error",
+                title: "Error",
+                text: e.message || "No se pudo guardar la información",
+            });
         }
     };
 
@@ -85,7 +118,13 @@ export default function MovimientoCSAEForm({
             onSubmit={handleSubmit}
             className="max-w-5xl mx-auto p-6 space-y-8"
         >
-            {isEdit ? (
+            {modoCompleto ? (
+                <MovimientoCSAEEditarCompleto
+                    data={formData}
+                    onChange={handleChange}
+                    updateField={updateField}
+                />
+            ) : modoSalida ? (
                 <MovimientoCSAESalida
                     data={formData}
                     onChange={handleChange}
@@ -98,12 +137,17 @@ export default function MovimientoCSAEForm({
                     updateField={updateField}
                 />
             )}
+
             <div className="text-center">
                 <button
                     type="submit"
                     className="bg-blue-600 text-white px-8 py-2 rounded hover:bg-blue-700"
                 >
-                    Guardar movimiento
+                    {modoCompleto
+                        ? "Actualizar registro completo"
+                        : modoSalida
+                            ? "Guardar salida"
+                            : "Guardar movimiento"}
                 </button>
             </div>
         </form>

@@ -99,9 +99,16 @@ class MovimientoCSAEController extends Controller
     }
     public function index(Request $request)
     {
+        $query = MovimientoCSAE::query()
+            ->select('movimientos_csae.*')
+            ->selectRaw("
+                CASE
+                    WHEN fecha_hora_salida IS NOT NULL THEN 1
+                    ELSE 0
+                END AS ya_salio
+            ")
+            ->where('status', 'A');
 
-        $query = MovimientoCSAE::query();
-        $query->where('status', 'A');
         if ($request->filled('search')) {
             $search = $request->search;
 

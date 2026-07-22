@@ -242,12 +242,8 @@ const RoundRegisterForm: React.FC<VehicleEntryFormProps> = ({ onClose }) => {
     };
 
     return (
-        <div className="min-h-screen bg-[#f8fafc] p-4 md:p-8 animate-in fade-in duration-500">
+        <div className="bg-[#f8fafc] p-4 md:p-6 animate-in fade-in duration-500">
             <div className="max-w-6xl mx-auto">
-                <button onClick={onClose} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-blue-600 font-bold transition-colors">
-                    <ArrowLeft size={20} /> Volver al panel principal
-                </button>
-
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-1">
                         <div className="bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden sticky top-8">

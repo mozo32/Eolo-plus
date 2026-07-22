@@ -109,13 +109,17 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('EntregarTurno')->group(funct
 });
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('PernoctaDia')->group(function () {
+    Route::get('/', [PernoctaDiaController::class, 'index']);
     Route::post('/', [PernoctaDiaController::class, 'store']);
     Route::get('/matriculas/buscar', [PernoctaDiaController::class, 'buscar']);
     Route::get('/pernocta-anios', [PernoctaDiaController::class, 'anios']);
 });
-Route::middleware(['api', 'auth:sanctum'])->prefix('PernoctaMes')->group(function () {
-    Route::get('/pernocta-mes', [PernoctaMesController::class, 'index']);
-});
+
+Route::middleware(['api', 'auth:sanctum'])
+    ->prefix('PernoctaMes')
+    ->group(function () {
+        Route::get('/', [PernoctaMesController::class, 'index']);
+    });
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('EstacionamientoSubTerraneo')->group(function () {
     Route::get('/',[EstacionamientoSubterraneoController::class, 'index']);

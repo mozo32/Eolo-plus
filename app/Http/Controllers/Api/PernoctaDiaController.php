@@ -6,9 +6,159 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\PernoctaDia;
+use Carbon\Carbon;
 
 class PernoctaDiaController extends Controller
 {
+    public function index(Request $request)
+    {
+        $validated = $request->validate([
+            'fechaInicio' => [
+                'nullable',
+                'date',
+                'required_with:fechaFin',
+            ],
+            'fechaFin' => [
+                'nullable',
+                'date',
+                'required_with:fechaInicio',
+                'after_or_equal:fechaInicio',
+            ],
+            'periodo' => [
+                'nullable',
+                'in:dia,rango,mes,año',
+            ],
+            'matricula' => [
+                'nullable',
+                'string',
+                'max:30',
+            ],
+            'ubicacion' => [
+                'nullable',
+                'in:H1,H2',
+            ],
+            'responsable' => [
+                'nullable',
+                'string',
+                'max:150',
+            ],
+            'per_page' => [
+                'nullable',
+                'integer',
+                'in:5,10,20,50,100',
+            ],
+            'page' => [
+                'nullable',
+                'integer',
+                'min:1',
+            ],
+        ]);
+
+        $perPage = (int) ($validated['per_page'] ?? 20);
+
+        $query = PernoctaDia::query()
+            ->select([
+                'id',
+                'fecha',
+                'matricula',
+                'nombre',
+                'observaciones',
+                'ubicacion',
+                'aeronave',
+                'tipo_cliente',
+                'categoria',
+                'created_at',
+            ])
+            ->when(
+                !empty($validated['matricula']),
+                function ($query) use ($validated) {
+                    $query->where(
+                        'matricula',
+                        'like',
+                        '%' . trim($validated['matricula']) . '%'
+                    );
+                }
+            )
+            ->when(
+                !empty($validated['ubicacion']),
+                function ($query) use ($validated) {
+                    $query->where(
+                        'ubicacion',
+                        $validated['ubicacion']
+                    );
+                }
+            )
+            ->when(
+                !empty($validated['responsable']),
+                function ($query) use ($validated) {
+                    $query->where(
+                        'nombre',
+                        'like',
+                        '%' . trim($validated['responsable']) . '%'
+                    );
+                }
+            )
+            ->when(
+                !empty($validated['fechaInicio']),
+                function ($query) use ($validated) {
+                    $query->whereDate(
+                        'fecha',
+                        '>=',
+                        $validated['fechaInicio']
+                    );
+                }
+            )
+            ->when(
+                !empty($validated['fechaFin']),
+                function ($query) use ($validated) {
+                    $query->whereDate(
+                        'fecha',
+                        '<=',
+                        $validated['fechaFin']
+                    );
+                }
+            )
+            ->orderByDesc('fecha')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
+
+        $registros = $query->paginate($perPage);
+
+        $registros->getCollection()->transform(
+            function ($registro) {
+                return [
+                    'id' => $registro->id,
+                    'fecha' => Carbon::parse(
+                        $registro->fecha
+                    )->format('Y-m-d'),
+                    'hora' => $registro->created_at
+                        ? Carbon::parse(
+                            $registro->created_at
+                        )->format('H:i:s')
+                        : '',
+                    'matricula' => $registro->matricula,
+                    'ubicacion' => $registro->ubicacion,
+                    'observaciones' => $registro->observaciones,
+                    'nombre' => $registro->nombre,
+                    'aeronave' => $registro->aeronave,
+                    'tipo_cliente' => $registro->tipo_cliente,
+                    'categoria' => $registro->categoria,
+                ];
+            }
+        );
+
+        return response()->json([
+            'data' => $registros->items(),
+            'meta' => [
+                'current_page' => $registros->currentPage(),
+                'last_page' => $registros->lastPage(),
+                'per_page' => $registros->perPage(),
+                'total' => $registros->total(),
+                'from' => $registros->firstItem(),
+                'to' => $registros->lastItem(),
+            ],
+        ]);
+    }
     public function store(Request $request)
     {
         $data = $request->all();
