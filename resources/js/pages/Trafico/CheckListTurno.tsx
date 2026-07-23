@@ -631,7 +631,6 @@ export default function CheckListTurno() {
 
                                             const puedeValidar =
                                                 puedeTodo ||
-                                                esEmpleado ||
                                                 esJefeArea;
 
                                             const puedePrevisualizar =
