@@ -91,3 +91,60 @@ export async function eliminar(id: number) {
         ...data,
     };
 }
+
+
+export type AeronavePendienteCSAE = {
+    id: number;
+    matricula: string;
+    tipo_aeronave: string;
+    como_llega?: string | null;
+    transportista?: string | null;
+    observaciones_entrada?: string | null;
+    fecha_hora_entrada: string;
+    fecha_entrada: string;
+    hora_entrada: string;
+    minutos_en_csae: number;
+    tiempo_en_csae: string;
+    estado: string;
+    ya_salio: boolean;
+};
+
+export type AeronavesPendientesResponse = {
+    total: number;
+    aeronaves: AeronavePendienteCSAE[];
+};
+
+export async function fetchAeronavesPendientesCSAE(
+    search = '',
+): Promise<AeronavesPendientesResponse> {
+    const params = new URLSearchParams();
+
+    if (search.trim()) {
+        params.append('search', search.trim());
+    }
+
+    const query = params.toString();
+
+    const res = await fetch(
+        `/api/MovimientosCSAE/pendientes-salida${query ? `?${query}` : ''}`,
+        {
+            method: 'GET',
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
+        },
+    );
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+        throw new Error(
+            data?.message ||
+            'No se pudieron obtener las aeronaves pendientes',
+        );
+    }
+
+    return data;
+}

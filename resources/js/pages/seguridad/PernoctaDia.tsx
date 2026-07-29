@@ -1,10 +1,7 @@
 import AppLayout from "@/layouts/app-layout";
 import { Head } from "@inertiajs/react";
-import {
-    useCallback,
-    useEffect,
-    useState,
-} from "react";
+;
+import { Fragment, useCallback, useEffect, useState } from "react";
 import ModalVistaPreviaExcelPernocta from "./pernoctaDia/ModalVistaPreviaExcelPernocta";
 import {
     obtenerPernoctasExcelApi,
@@ -88,7 +85,7 @@ export default function PernoctaDia() {
     const [descargandoExcel, setDescargandoExcel] = useState(false);
     const [registrosExcel, setRegistrosExcel] = useState<PernoctaExcelRegistro[]>([]);
     const [periodoExcel, setPeriodoExcel] = useState("");
-
+    const [gruposAbiertos, setGruposAbiertos] = useState<Record<string, boolean>>({});
     const fechaActual = obtenerFechaActual();
     const anioActual = new Date().getFullYear().toString();
 
@@ -106,7 +103,12 @@ export default function PernoctaDia() {
 
     const [anioEdicion, setAnioEdicion] =
         useState(anioActual);
-
+    const alternarGrupo = (grupoId: string) => {
+        setGruposAbiertos((prev) => ({
+            ...prev,
+            [grupoId]: !prev[grupoId],
+        }));
+    };
     const [meta, setMeta] = useState<PernoctaPaginationMeta>({
         current_page: 1,
         last_page: 1,
@@ -250,7 +252,16 @@ export default function PernoctaDia() {
         let filtrosAplicar: FiltrosPernocta = {
             ...filtrosEdicion,
         };
+        if (filtrosAplicar.periodo === "mes") {
+            const rangoMes = obtenerRangoMes(
+                filtrosAplicar.fechaInicio,
+            );
 
+            filtrosAplicar = {
+                ...filtrosAplicar,
+                ...rangoMes,
+            };
+        }
         if (filtrosEdicion.periodo === "año") {
             if (!/^\d{4}$/.test(anioEdicion)) {
                 Swal.fire({
@@ -319,7 +330,25 @@ export default function PernoctaDia() {
         setPagina(1);
         setMostrarModalFecha(false);
     };
+    const obtenerRangoMes = (fechaBase?: string) => {
+        const valorMes = (
+            fechaBase || fechaActual
+        ).substring(0, 7);
 
+        const [year, month] = valorMes.split("-");
+
+        const ultimoDia = obtenerUltimoDiaMes(
+            Number(year),
+            Number(month),
+        );
+
+        return {
+            fechaInicio: `${year}-${month}-01`,
+            fechaFin: `${year}-${month}-${String(
+                ultimoDia,
+            ).padStart(2, "0")}`,
+        };
+    };
     const cambiarPeriodo = (
         periodo: PeriodoPernocta,
     ) => {
@@ -334,8 +363,21 @@ export default function PernoctaDia() {
 
             nuevosFiltros.fechaInicio =
                 fechaSeleccionada;
+
             nuevosFiltros.fechaFin =
                 fechaSeleccionada;
+        }
+
+        if (periodo === "mes") {
+            const rangoMes = obtenerRangoMes(
+                nuevosFiltros.fechaInicio,
+            );
+
+            nuevosFiltros.fechaInicio =
+                rangoMes.fechaInicio;
+
+            nuevosFiltros.fechaFin =
+                rangoMes.fechaFin;
         }
 
         if (periodo === "año") {
@@ -346,6 +388,12 @@ export default function PernoctaDia() {
                 ) || anioActual;
 
             setAnioEdicion(year);
+
+            nuevosFiltros.fechaInicio =
+                `${year}-01-01`;
+
+            nuevosFiltros.fechaFin =
+                `${year}-12-31`;
         }
 
         setFiltrosEdicion(nuevosFiltros);
@@ -893,110 +941,285 @@ export default function PernoctaDia() {
                                             </td>
                                         </tr>
                                     ) : registros.length > 0 ? (
-                                        registros.map(
-                                            (
-                                                registro,
-                                                index,
-                                            ) => {
-                                                const numeroFila =
-                                                    (meta.current_page -
-                                                        1) *
-                                                    meta.per_page +
-                                                    index +
-                                                    1;
+                                        registros.map((grupo, index) => {
+                                            const numeroFila =
+                                                (meta.current_page - 1) *
+                                                meta.per_page +
+                                                index +
+                                                1;
 
-                                                return (
+                                            const estaAbierto =
+                                                Boolean(gruposAbiertos[grupo.id]);
+
+                                            const ubicaciones = Array.from(
+                                                new Set(
+                                                    grupo.registros
+                                                        .map((registro) => registro.ubicacion)
+                                                        .filter(Boolean),
+                                                ),
+                                            );
+
+                                            const responsables = Array.from(
+                                                new Set(
+                                                    grupo.registros
+                                                        .map((registro) => registro.nombre)
+                                                        .filter(Boolean),
+                                                ),
+                                            );
+
+                                            return (
+                                                <Fragment key={grupo.id}>
+                                                    {/* Fila principal del grupo */}
                                                     <tr
-                                                        key={
-                                                            registro.id
+                                                        onClick={() =>
+                                                            alternarGrupo(grupo.id)
                                                         }
-                                                        className="border-b border-l-4 border-b-slate-50 border-l-transparent transition-colors hover:bg-slate-50/80"
+                                                        className={`cursor-pointer border-b border-l-4 transition-colors ${estaAbierto
+                                                            ? "border-b-indigo-100 border-l-indigo-500 bg-indigo-50/40"
+                                                            : "border-b-slate-50 border-l-transparent hover:bg-slate-50/80"
+                                                            }`}
                                                     >
                                                         <td className="px-4 py-4 text-center text-[10px] font-bold text-slate-400">
-                                                            {
-                                                                numeroFila
-                                                            }
+                                                            {numeroFila}
                                                         </td>
 
                                                         <td className="px-6 py-4 text-center">
                                                             <span className="block text-[10px] font-bold text-slate-400">
                                                                 {formatearFecha(
-                                                                    registro.fecha,
+                                                                    grupo.fecha,
                                                                 )}
                                                             </span>
 
                                                             <span className="text-sm font-black text-slate-700">
-                                                                {registro.hora
-                                                                    ? formatearHora(
-                                                                        registro.hora,
-                                                                    )
-                                                                    : "--:--"}
+                                                                {formatearHora(
+                                                                    grupo.hora,
+                                                                )}
                                                             </span>
                                                         </td>
 
                                                         <td className="px-6 py-4 text-center">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-sm font-black uppercase tracking-tighter text-slate-800">
-                                                                    {
-                                                                        registro.matricula
-                                                                    }
+                                                            <div className="flex flex-col items-center">
+                                                                <span className="inline-flex min-w-8 items-center justify-center rounded-full bg-indigo-600 px-2 py-1 text-[10px] font-black text-white">
+                                                                    {grupo.total}
                                                                 </span>
 
-                                                                <span className="text-[8px] font-bold uppercase tracking-widest text-slate-400">
-                                                                    {registro.aeronave ||
-                                                                        "Sin tipo registrado"}
+                                                                <span className="mt-1 text-[8px] font-bold uppercase tracking-widest text-slate-400">
+                                                                    {grupo.total === 1
+                                                                        ? "Aeronave"
+                                                                        : "Aeronaves"}
                                                                 </span>
                                                             </div>
                                                         </td>
 
                                                         <td className="px-6 py-4 text-center">
-                                                            <span className="inline-flex items-center gap-1.5 rounded border border-indigo-200 bg-indigo-50 px-3 py-1 text-[9px] font-black uppercase text-indigo-600">
-                                                                <MapPin
-                                                                    size={
-                                                                        11
-                                                                    }
-                                                                />
+                                                            <div className="flex flex-wrap justify-center gap-1">
+                                                                {ubicaciones.map(
+                                                                    (ubicacion) => (
+                                                                        <span
+                                                                            key={ubicacion}
+                                                                            className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[9px] font-black uppercase text-indigo-600"
+                                                                        >
+                                                                            <MapPin size={10} />
 
-                                                                {registro.ubicacion ===
-                                                                    "H1"
-                                                                    ? "Hangar 1"
-                                                                    : registro.ubicacion ===
-                                                                        "H2"
-                                                                        ? "Hangar 2"
-                                                                        : registro.ubicacion}
-                                                            </span>
+                                                                            {ubicacion === "H1"
+                                                                                ? "Hangar 1"
+                                                                                : ubicacion === "H2"
+                                                                                    ? "Hangar 2"
+                                                                                    : ubicacion}
+                                                                        </span>
+                                                                    ),
+                                                                )}
+                                                            </div>
                                                         </td>
 
-                                                        <td className="max-w-sm px-6 py-4 text-center">
-                                                            <span
-                                                                className="line-clamp-2 text-[10px] font-bold text-slate-600"
-                                                                title={
-                                                                    registro.observaciones ||
-                                                                    "Sin observaciones"
-                                                                }
-                                                            >
-                                                                {registro.observaciones ||
-                                                                    "Sin observaciones"}
+                                                        <td className="px-6 py-4 text-center">
+                                                            <span className="text-[10px] font-bold text-slate-500">
+                                                                Haz clic para ver las matrículas
                                                             </span>
                                                         </td>
 
                                                         <td className="px-6 py-4 text-center">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-[8px] font-bold uppercase tracking-widest text-slate-400">
-                                                                    Registró
-                                                                </span>
+                                                            <div className="flex items-center justify-center gap-3">
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-[8px] font-bold uppercase tracking-widest text-slate-400">
+                                                                        Responsables
+                                                                    </span>
 
-                                                                <span className="text-[10px] font-black text-slate-700">
-                                                                    {
-                                                                        registro.nombre
+                                                                    <span className="text-[10px] font-black text-slate-700">
+                                                                        {responsables.length}
+                                                                    </span>
+                                                                </div>
+
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(event) => {
+                                                                        event.stopPropagation();
+                                                                        alternarGrupo(
+                                                                            grupo.id,
+                                                                        );
+                                                                    }}
+                                                                    className="rounded-full p-2 text-slate-400 transition-colors hover:bg-indigo-100 hover:text-indigo-600"
+                                                                    title={
+                                                                        estaAbierto
+                                                                            ? "Ocultar aeronaves"
+                                                                            : "Mostrar aeronaves"
                                                                     }
-                                                                </span>
+                                                                >
+                                                                    <ChevronDown
+                                                                        size={17}
+                                                                        className={`transition-transform duration-300 ${estaAbierto
+                                                                            ? "rotate-180"
+                                                                            : ""
+                                                                            }`}
+                                                                    />
+                                                                </button>
                                                             </div>
                                                         </td>
                                                     </tr>
-                                                );
-                                            },
-                                        )
+
+                                                    {/* Información desplegable */}
+                                                    {estaAbierto && (
+                                                        <tr className="border-b border-indigo-100 bg-slate-50">
+                                                            <td
+                                                                colSpan={6}
+                                                                className="px-4 py-4 sm:px-8"
+                                                            >
+                                                                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm animate-in slide-in-from-top-2 duration-200">
+                                                                    <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+                                                                        <div>
+                                                                            <h4 className="text-xs font-black uppercase text-slate-700">
+                                                                                Aeronaves registradas
+                                                                            </h4>
+
+                                                                            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">
+                                                                                {formatearFecha(
+                                                                                    grupo.fecha,
+                                                                                )}{" "}
+                                                                                a las{" "}
+                                                                                {formatearHora(
+                                                                                    grupo.hora,
+                                                                                )}
+                                                                            </p>
+                                                                        </div>
+
+                                                                        <span className="rounded-lg bg-indigo-600 px-3 py-1 text-[10px] font-black text-white">
+                                                                            {grupo.total}
+                                                                        </span>
+                                                                    </div>
+
+                                                                    <div className="overflow-x-auto">
+                                                                        <table className="w-full min-w-[850px]">
+                                                                            <thead>
+                                                                                <tr className="border-b border-slate-100 bg-white">
+                                                                                    <th className="px-4 py-3 text-center text-[9px] font-black uppercase text-slate-400">
+                                                                                        #
+                                                                                    </th>
+
+                                                                                    <th className="px-4 py-3 text-center text-[9px] font-black uppercase text-slate-400">
+                                                                                        Matrícula
+                                                                                    </th>
+
+                                                                                    <th className="px-4 py-3 text-center text-[9px] font-black uppercase text-slate-400">
+                                                                                        Aeronave
+                                                                                    </th>
+
+                                                                                    <th className="px-4 py-3 text-center text-[9px] font-black uppercase text-slate-400">
+                                                                                        Ubicación
+                                                                                    </th>
+
+                                                                                    <th className="px-4 py-3 text-center text-[9px] font-black uppercase text-slate-400">
+                                                                                        Observaciones
+                                                                                    </th>
+
+                                                                                    <th className="px-4 py-3 text-center text-[9px] font-black uppercase text-slate-400">
+                                                                                        Responsable
+                                                                                    </th>
+                                                                                </tr>
+                                                                            </thead>
+
+                                                                            <tbody>
+                                                                                {grupo.registros.map(
+                                                                                    (
+                                                                                        detalle,
+                                                                                        detalleIndex,
+                                                                                    ) => (
+                                                                                        <tr
+                                                                                            key={
+                                                                                                detalle.id
+                                                                                            }
+                                                                                            className="border-b border-slate-50 last:border-b-0 hover:bg-slate-50"
+                                                                                        >
+                                                                                            <td className="px-4 py-3 text-center text-[10px] font-bold text-slate-400">
+                                                                                                {detalleIndex +
+                                                                                                    1}
+                                                                                            </td>
+
+                                                                                            <td className="px-4 py-3 text-center">
+                                                                                                <span className="text-sm font-black uppercase text-slate-800">
+                                                                                                    {
+                                                                                                        detalle.matricula
+                                                                                                    }
+                                                                                                </span>
+                                                                                            </td>
+
+                                                                                            <td className="px-4 py-3 text-center">
+                                                                                                <span className="text-[10px] font-bold uppercase text-slate-600">
+                                                                                                    {detalle.aeronave ||
+                                                                                                        "Sin tipo registrado"}
+                                                                                                </span>
+                                                                                            </td>
+
+                                                                                            <td className="px-4 py-3 text-center">
+                                                                                                <span className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[9px] font-black uppercase text-indigo-600">
+                                                                                                    <MapPin
+                                                                                                        size={
+                                                                                                            10
+                                                                                                        }
+                                                                                                    />
+
+                                                                                                    {detalle.ubicacion ===
+                                                                                                        "H1"
+                                                                                                        ? "Hangar 1"
+                                                                                                        : detalle.ubicacion ===
+                                                                                                            "H2"
+                                                                                                            ? "Hangar 2"
+                                                                                                            : detalle.ubicacion}
+                                                                                                </span>
+                                                                                            </td>
+
+                                                                                            <td className="max-w-xs px-4 py-3 text-center">
+                                                                                                <span
+                                                                                                    className="line-clamp-2 text-[10px] font-bold text-slate-600"
+                                                                                                    title={
+                                                                                                        detalle.observaciones ||
+                                                                                                        "Sin observaciones"
+                                                                                                    }
+                                                                                                >
+                                                                                                    {detalle.observaciones ||
+                                                                                                        "Sin observaciones"}
+                                                                                                </span>
+                                                                                            </td>
+
+                                                                                            <td className="px-4 py-3 text-center">
+                                                                                                <span className="text-[10px] font-black text-slate-700">
+                                                                                                    {
+                                                                                                        detalle.nombre
+                                                                                                    }
+                                                                                                </span>
+                                                                                            </td>
+                                                                                        </tr>
+                                                                                    ),
+                                                                                )}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </Fragment>
+                                            );
+                                        })
                                     ) : (
                                         <tr>
                                             <td

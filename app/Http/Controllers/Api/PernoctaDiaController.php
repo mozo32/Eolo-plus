@@ -56,106 +56,216 @@ class PernoctaDiaController extends Controller
 
         $perPage = (int) ($validated['per_page'] ?? 20);
 
-        $query = PernoctaDia::query()
-            ->select([
-                'id',
-                'fecha',
-                'matricula',
-                'nombre',
-                'observaciones',
-                'ubicacion',
-                'aeronave',
-                'tipo_cliente',
-                'categoria',
-                'created_at',
-            ])
-            ->when(
-                !empty($validated['matricula']),
-                function ($query) use ($validated) {
-                    $query->where(
-                        'matricula',
-                        'like',
-                        '%' . trim($validated['matricula']) . '%'
-                    );
-                }
-            )
-            ->when(
-                !empty($validated['ubicacion']),
-                function ($query) use ($validated) {
-                    $query->where(
-                        'ubicacion',
-                        $validated['ubicacion']
-                    );
-                }
-            )
-            ->when(
-                !empty($validated['responsable']),
-                function ($query) use ($validated) {
-                    $query->where(
-                        'nombre',
-                        'like',
-                        '%' . trim($validated['responsable']) . '%'
-                    );
-                }
-            )
-            ->when(
-                !empty($validated['fechaInicio']),
-                function ($query) use ($validated) {
-                    $query->whereDate(
-                        'fecha',
-                        '>=',
-                        $validated['fechaInicio']
-                    );
-                }
-            )
-            ->when(
-                !empty($validated['fechaFin']),
-                function ($query) use ($validated) {
-                    $query->whereDate(
-                        'fecha',
-                        '<=',
-                        $validated['fechaFin']
-                    );
-                }
-            )
-            ->orderByDesc('fecha')
-            ->orderByDesc('created_at')
-            ->orderByDesc('id');
+        /*
+        * Se utiliza una función para aplicar los mismos filtros
+        * tanto a los grupos como a sus registros.
+        */
+        $aplicarFiltros = function ($query) use ($validated) {
+            return $query
+                ->when(
+                    !empty($validated['matricula']),
+                    function ($query) use ($validated) {
+                        $query->where(
+                            'matricula',
+                            'like',
+                            '%' . trim($validated['matricula']) . '%'
+                        );
+                    }
+                )
+                ->when(
+                    !empty($validated['ubicacion']),
+                    function ($query) use ($validated) {
+                        $query->where(
+                            'ubicacion',
+                            $validated['ubicacion']
+                        );
+                    }
+                )
+                ->when(
+                    !empty($validated['responsable']),
+                    function ($query) use ($validated) {
+                        $query->where(
+                            'nombre',
+                            'like',
+                            '%' . trim($validated['responsable']) . '%'
+                        );
+                    }
+                )
+                ->when(
+                    !empty($validated['fechaInicio']),
+                    function ($query) use ($validated) {
+                        $query->whereDate(
+                            'fecha',
+                            '>=',
+                            $validated['fechaInicio']
+                        );
+                    }
+                )
+                ->when(
+                    !empty($validated['fechaFin']),
+                    function ($query) use ($validated) {
+                        $query->whereDate(
+                            'fecha',
+                            '<=',
+                            $validated['fechaFin']
+                        );
+                    }
+                );
+        };
 
-        $registros = $query->paginate($perPage);
+        /*
+        * Consulta base con los filtros.
+        */
+        $queryBase = $aplicarFiltros(
+            PernoctaDia::query()
+        );
 
-        $registros->getCollection()->transform(
+        /*
+        * Agrupa los registros por fecha y minuto.
+        *
+        * Ejemplo:
+        * 2026-07-24 10:35
+        */
+        $grupos = (clone $queryBase)
+            ->selectRaw('DATE(fecha) as fecha_grupo')
+            ->selectRaw("
+                DATE_FORMAT(created_at, '%H:%i') as hora_grupo
+            ")
+            ->selectRaw('COUNT(*) as total_registros')
+            ->groupByRaw("
+                DATE(fecha),
+                DATE_FORMAT(created_at, '%H:%i')
+            ")
+            ->orderByDesc('fecha_grupo')
+            ->orderByDesc('hora_grupo')
+            ->paginate($perPage);
+
+        $gruposPagina = collect(
+            $grupos->items()
+        );
+
+        $detalles = collect();
+
+        /*
+        * Solamente consulta los registros pertenecientes
+        * a los grupos de la página actual.
+        */
+        if ($gruposPagina->isNotEmpty()) {
+            $queryDetalles = (clone $queryBase)
+                ->select([
+                    'id',
+                    'fecha',
+                    'matricula',
+                    'nombre',
+                    'observaciones',
+                    'ubicacion',
+                    'aeronave',
+                    'tipo_cliente',
+                    'categoria',
+                    'created_at',
+                ])
+                ->where(function ($query) use ($gruposPagina) {
+                    foreach ($gruposPagina as $grupo) {
+                        $query->orWhere(
+                            function ($subQuery) use ($grupo) {
+                                $subQuery
+                                    ->whereDate(
+                                        'fecha',
+                                        $grupo->fecha_grupo
+                                    )
+                                    ->whereRaw(
+                                        "DATE_FORMAT(created_at, '%H:%i') = ?",
+                                        [$grupo->hora_grupo]
+                                    );
+                            }
+                        );
+                    }
+                })
+                ->orderByDesc('fecha')
+                ->orderByDesc('created_at')
+                ->orderByDesc('id');
+
+            $detalles = $queryDetalles->get();
+        }
+
+        /*
+        * Organiza las aeronaves utilizando la misma clave:
+        * fecha|hora.
+        */
+        $detallesAgrupados = $detalles->groupBy(
             function ($registro) {
-                return [
-                    'id' => $registro->id,
-                    'fecha' => Carbon::parse(
-                        $registro->fecha
-                    )->format('Y-m-d'),
-                    'hora' => $registro->created_at
-                        ? Carbon::parse(
-                            $registro->created_at
-                        )->format('H:i:s')
-                        : '',
-                    'matricula' => $registro->matricula,
-                    'ubicacion' => $registro->ubicacion,
-                    'observaciones' => $registro->observaciones,
-                    'nombre' => $registro->nombre,
-                    'aeronave' => $registro->aeronave,
-                    'tipo_cliente' => $registro->tipo_cliente,
-                    'categoria' => $registro->categoria,
-                ];
+                $fecha = Carbon::parse(
+                    $registro->fecha
+                )->format('Y-m-d');
+
+                $hora = Carbon::parse(
+                    $registro->created_at
+                )->format('H:i');
+
+                return $fecha . '|' . $hora;
             }
         );
 
+        /*
+        * Modifica la colección paginada para agregar
+        * los registros dentro de cada grupo.
+        */
+        $grupos->setCollection(
+            $grupos->getCollection()->map(
+                function ($grupo) use ($detallesAgrupados) {
+                    $claveGrupo =
+                        $grupo->fecha_grupo .
+                        '|' .
+                        $grupo->hora_grupo;
+
+                    $registrosGrupo = $detallesAgrupados
+                        ->get($claveGrupo, collect())
+                        ->values()
+                        ->map(function ($registro) {
+                            return [
+                                'id' => $registro->id,
+
+                                'fecha' => Carbon::parse(
+                                    $registro->fecha
+                                )->format('Y-m-d'),
+
+                                'hora' => $registro->created_at
+                                    ? Carbon::parse(
+                                        $registro->created_at
+                                    )->format('H:i:s')
+                                    : '',
+
+                                'matricula' => $registro->matricula,
+                                'ubicacion' => $registro->ubicacion,
+                                'observaciones' => $registro->observaciones,
+                                'nombre' => $registro->nombre,
+                                'aeronave' => $registro->aeronave,
+                                'tipo_cliente' => $registro->tipo_cliente,
+                                'categoria' => $registro->categoria,
+                            ];
+                        });
+
+                    return [
+                        'id' => $claveGrupo,
+                        'fecha' => $grupo->fecha_grupo,
+                        'hora' => $grupo->hora_grupo,
+                        'total' => (int) $grupo->total_registros,
+                        'registros' => $registrosGrupo,
+                    ];
+                }
+            )
+        );
+
         return response()->json([
-            'data' => $registros->items(),
+            'data' => $grupos->items(),
+
             'meta' => [
-                'current_page' => $registros->currentPage(),
-                'last_page' => $registros->lastPage(),
-                'per_page' => $registros->perPage(),
-                'total' => $registros->total(),
-                'from' => $registros->firstItem(),
-                'to' => $registros->lastItem(),
+                'current_page' => $grupos->currentPage(),
+                'last_page' => $grupos->lastPage(),
+                'per_page' => $grupos->perPage(),
+                'total' => $grupos->total(),
+                'from' => $grupos->firstItem(),
+                'to' => $grupos->lastItem(),
             ],
         ]);
     }

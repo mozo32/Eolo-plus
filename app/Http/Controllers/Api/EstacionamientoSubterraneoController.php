@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use App\Models\EstacionamientoSubterraneo;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Auth;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class EstacionamientoSubterraneoController extends Controller
 {
@@ -109,13 +111,129 @@ class EstacionamientoSubterraneoController extends Controller
         return response()->json($placas);
     }
 
-    // 2. Detalle de la placa (Trae registros previos para sugerir datos)
+    public function vehiculosMasDeCincoDias(Request $request)
+    {
+        $request->validate([
+            'fecha' => 'nullable|date',
+        ]);
+
+        $fechaCorte = $request->filled('fecha')
+            ? Carbon::parse($request->query('fecha'))->toDateString()
+            : Carbon::today()->toDateString();
+
+        if ($fechaCorte) {
+            $fechaCorte = Carbon::parse($fechaCorte)->toDateString();
+        } else {
+            $ultimoRegistro = EstacionamientoSubterraneo::max('fecha_ingreso');
+
+            if (!$ultimoRegistro) {
+                return response()->json([
+                    'fecha_corte' => null,
+                    'total' => 0,
+                    'vehiculos' => [],
+                ]);
+            }
+
+            $fechaCorte = Carbon::parse($ultimoRegistro)->toDateString();
+        }
+
+        $vehiculos = DB::select("
+            WITH registros_diarios AS (
+                SELECT
+                    UPPER(placas) AS placas,
+                    DATE(fecha_ingreso) AS fecha_registro
+                FROM estacionamiento_subterraneos
+                WHERE DATE(fecha_ingreso) <= ?
+                GROUP BY
+                    UPPER(placas),
+                    DATE(fecha_ingreso)
+            ),
+
+            registros_numerados AS (
+                SELECT
+                    placas,
+                    fecha_registro,
+                    DATEDIFF(fecha_registro, '2000-01-01')
+                        - ROW_NUMBER() OVER (
+                            PARTITION BY placas
+                            ORDER BY fecha_registro
+                        ) AS grupo_racha
+                FROM registros_diarios
+            ),
+
+            rachas AS (
+                SELECT
+                    placas,
+                    MIN(fecha_registro) AS fecha_inicio,
+                    MAX(fecha_registro) AS fecha_ultimo_registro,
+                    COUNT(*) AS dias_estacionado
+                FROM registros_numerados
+                GROUP BY
+                    placas,
+                    grupo_racha
+            ),
+
+            rachas_actuales AS (
+                SELECT
+                    placas,
+                    fecha_inicio,
+                    fecha_ultimo_registro,
+                    dias_estacionado
+                FROM rachas
+                WHERE fecha_ultimo_registro = ?
+                AND dias_estacionado > 5
+            ),
+
+            ultimo_registro_del_dia AS (
+                SELECT
+                    UPPER(placas) AS placas,
+                    MAX(id) AS ultimo_id
+                FROM estacionamiento_subterraneos
+                WHERE DATE(fecha_ingreso) = ?
+                GROUP BY UPPER(placas)
+            )
+
+            SELECT
+                es.id,
+                UPPER(es.placas) AS placas,
+                es.vehiculo,
+                es.color,
+                es.responsable,
+                es.matricula,
+                es.llaves,
+                es.oficial,
+                ra.fecha_inicio,
+                ra.fecha_ultimo_registro,
+                ra.dias_estacionado
+            FROM rachas_actuales AS ra
+
+            INNER JOIN ultimo_registro_del_dia AS ultimo
+                ON ultimo.placas = ra.placas
+
+            INNER JOIN estacionamiento_subterraneos AS es
+                ON es.id = ultimo.ultimo_id
+
+            ORDER BY
+                ra.dias_estacionado DESC,
+                es.placas ASC
+        ", [
+            $fechaCorte,
+            $fechaCorte,
+            $fechaCorte,
+        ]);
+
+        return response()->json([
+            'fecha_corte' => $fechaCorte,
+            'total' => count($vehiculos),
+            'vehiculos' => $vehiculos,
+        ]);
+    }
     public function detallePorPlaca($placa)
     {
         $registros = EstacionamientoSubterraneo::where('placas', $placa)
             ->select('vehiculo', 'color', 'responsable', 'matricula', 'llaves')
-            ->latest() // Trae los más recientes primero
-            ->limit(3) // Traemos los últimos 3 responsables/configuraciones diferentes
+            ->latest()
+            ->limit(3)
             ->get();
 
         return response()->json($registros);

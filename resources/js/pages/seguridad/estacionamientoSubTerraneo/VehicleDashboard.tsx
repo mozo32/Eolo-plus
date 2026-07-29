@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Calendar, ChevronRight, FileText, Filter, Plus, X } from 'lucide-react';
-import { listarEstaSubTerraneo } from '@/stores/apiEstacionamientoSubterraneo';
+import { Calendar, ChevronRight, FileText, Filter, Plus, X, TriangleAlert } from 'lucide-react';
+import { listarEstaSubTerraneo, obtenerVehiculosMasDeCincoDias} from '@/stores/apiEstacionamientoSubterraneo';
 import VehicleDetail from './VehicleDetail';
 import RoundRegisterForm from './RoundRegisterForm';
+import VehiculosEstacionados from './VehiculosEstacionados';
 
 interface MesRegistro {
     valor: string;
@@ -25,6 +26,7 @@ const mesesOpciones = [
 ];
 
 const VehicleDashboard = () => {
+    const [totalVehiclesAlert, setTotalVehiclesAlert] = useState(0);
     const [showForm, setShowForm] = useState(false);
     const [meses, setMeses] = useState<MesRegistro[]>([]);
     const [loading, setLoading] = useState(true);
@@ -33,6 +35,7 @@ const VehicleDashboard = () => {
     const [selectedVehicle, setSelectedVehicle] = useState('');
     const [isDetailOpen, setIsDetailOpen] = useState(false);
     const [filtersOpen, setFiltersOpen] = useState(false);
+    const [isVehiclesAlertOpen, setIsVehiclesAlertOpen] = useState(false);
 
     const cargarMeses = async () => {
         try {
@@ -50,7 +53,19 @@ const VehicleDashboard = () => {
     useEffect(() => {
         cargarMeses();
     }, [filterMonth, filterYear]);
+    const cargarTotalAlertas = async () => {
+        try {
+            const response = await obtenerVehiculosMasDeCincoDias();
 
+            setTotalVehiclesAlert(response.total || 0);
+        } catch (error) {
+            console.error('Error al cargar las alertas:', error);
+            setTotalVehiclesAlert(0);
+        }
+    };
+    useEffect(() => {
+        cargarTotalAlertas();
+    }, []);
     const mesesFiltrados = meses.filter((m) => {
         const [year, month] = m.valor.split('-');
         const matchMonth = filterMonth === '' || month === filterMonth;
@@ -106,6 +121,26 @@ const VehicleDashboard = () => {
                             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
                                 Historial de vigilancia
                             </p>
+                        </div>
+                        <div className="flex items-center gap-3 p-4">
+                            <button
+                                type="button"
+                                onClick={() => setIsVehiclesAlertOpen(true)}
+                                className={`relative flex items-center justify-center px-4 py-2 text-white rounded-lg shadow-md transition-all active:scale-95 ${
+                                    totalVehiclesAlert > 0
+                                        ? 'bg-red-600 hover:bg-red-700 animate-pulse'
+                                        : 'bg-slate-500 hover:bg-slate-600'
+                                }`}
+                                title="Ver vehículos con más de 5 días"
+                            >
+                                <TriangleAlert size={20} />
+
+                                {totalVehiclesAlert > 0 && (
+                                    <span className="absolute -top-2 -right-2 min-w-5 h-5 px-1 rounded-full bg-white border-2 border-red-600 text-red-600 text-[9px] font-black flex items-center justify-center">
+                                        {totalVehiclesAlert > 99 ? '99+' : totalVehiclesAlert}
+                                    </span>
+                                )}
+                            </button>
                         </div>
                     </div>
 
@@ -313,6 +348,11 @@ const VehicleDashboard = () => {
                     selectedVehicle={selectedVehicle}
                 />
             )}
+            <VehiculosEstacionados
+                isOpen={isVehiclesAlertOpen}
+                onClose={() => setIsVehiclesAlertOpen(false)}
+                onTotalChange={setTotalVehiclesAlert}
+            />
             {showForm && (
                 <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" />
@@ -336,6 +376,7 @@ const VehicleDashboard = () => {
                                 onClick={() => {
                                     setShowForm(false);
                                     cargarMeses();
+                                    cargarTotalAlertas();
                                 }}
                                 className="p-2 rounded-full hover:bg-slate-200 text-slate-500 transition-colors"
                                 title="Cerrar"
@@ -349,6 +390,7 @@ const VehicleDashboard = () => {
                                 onClose={() => {
                                     setShowForm(false);
                                     cargarMeses();
+                                    cargarTotalAlertas();
                                 }}
                             />
                         </div>

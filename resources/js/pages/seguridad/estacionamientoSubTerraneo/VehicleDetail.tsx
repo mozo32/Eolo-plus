@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { User, Loader2, CreditCard, LayoutGrid, CheckCircle2, Car, Plane, X } from 'lucide-react';
 import { obtenerDetalleVehiculo } from '@/stores/apiEstacionamientoSubterraneo';
 
@@ -35,10 +35,30 @@ const VehicleDetail: React.FC<VehicleDetailProps> = ({ isOpen, onClose, selected
 
             setDataAgrupada(agrupados);
 
-            const matriculas = Object.keys(agrupados);
+            const matriculasOrdenadasIniciales = Object.keys(
+                agrupados,
+            ).sort((matriculaA, matriculaB) => {
+                const totalA = agrupados[matriculaA]?.length ?? 0;
+                const totalB = agrupados[matriculaB]?.length ?? 0;
 
-            if (matriculas.length > 0) {
-                setActiveMatricula(matriculas[0]);
+                if (totalB !== totalA) {
+                    return totalB - totalA;
+                }
+
+                return matriculaA.localeCompare(
+                    matriculaB,
+                    'es',
+                    {
+                        sensitivity: 'base',
+                    },
+                );
+            });
+
+            if (matriculasOrdenadasIniciales.length > 0) {
+                setActiveMatricula(
+                    matriculasOrdenadasIniciales[0],
+                );
+
                 setActiveSubIndex(0);
             } else {
                 setActiveMatricula(null);
@@ -73,7 +93,26 @@ const VehicleDetail: React.FC<VehicleDetailProps> = ({ isOpen, onClose, selected
     const totalDays = selectedVehicle ? getDaysInMonth(selectedVehicle) : 31;
     const vehiculosDeMatricula = activeMatricula ? dataAgrupada[activeMatricula] || [] : [];
     const selectedData = vehiculosDeMatricula[activeSubIndex];
+    const matriculasOrdenadas = useMemo(() => {
+        return Object.keys(dataAgrupada).sort((matriculaA, matriculaB) => {
+            const totalA = dataAgrupada[matriculaA]?.length ?? 0;
+            const totalB = dataAgrupada[matriculaB]?.length ?? 0;
 
+            // Primero, ordenar de mayor a menor cantidad.
+            if (totalB !== totalA) {
+                return totalB - totalA;
+            }
+
+            // Si tienen la misma cantidad, ordenar alfabéticamente.
+            return matriculaA.localeCompare(
+                matriculaB,
+                'es',
+                {
+                    sensitivity: 'base',
+                },
+            );
+        });
+    }, [dataAgrupada]);
     const coloresModelos = [
         'bg-blue-600 border-blue-200 text-blue-600',
         'bg-purple-600 border-purple-200 text-purple-600',
@@ -138,8 +177,8 @@ const VehicleDetail: React.FC<VehicleDetailProps> = ({ isOpen, onClose, selected
                                     Listado de matrículas
                                 </p>
 
-                                {Object.keys(dataAgrupada).length > 0 ? (
-                                    Object.keys(dataAgrupada).map((mat) => (
+                                {matriculasOrdenadas.length > 0 ? (
+                                    matriculasOrdenadas.map((mat) => (
                                         <button
                                             key={mat}
                                             type="button"
@@ -147,18 +186,16 @@ const VehicleDetail: React.FC<VehicleDetailProps> = ({ isOpen, onClose, selected
                                                 setActiveMatricula(mat);
                                                 setActiveSubIndex(0);
                                             }}
-                                            className={`w-full flex items-center gap-4 p-4 rounded-2xl border transition-all ${
-                                                activeMatricula === mat
+                                            className={`w-full flex items-center gap-4 p-4 rounded-2xl border transition-all ${activeMatricula === mat
                                                     ? 'bg-white border-indigo-500 shadow-sm'
                                                     : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                                            }`}
+                                                }`}
                                         >
                                             <div
-                                                className={`p-2 rounded-lg ${
-                                                    activeMatricula === mat
+                                                className={`p-2 rounded-lg ${activeMatricula === mat
                                                         ? 'bg-indigo-600 text-white'
                                                         : 'bg-slate-100 text-slate-500'
-                                                }`}
+                                                    }`}
                                             >
                                                 {mat === 'SIN MATRÍCULA' ? <LayoutGrid size={18} /> : <Plane size={18} />}
                                             </div>
@@ -193,15 +230,13 @@ const VehicleDetail: React.FC<VehicleDetailProps> = ({ isOpen, onClose, selected
                                                     <div className="flex items-center gap-6">
                                                         <div className="relative group">
                                                             <div
-                                                                className={`absolute -inset-1 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 ${
-                                                                    coloresModelos[activeSubIndex % coloresModelos.length].split(' ')[0]
-                                                                }`}
+                                                                className={`absolute -inset-1 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 ${coloresModelos[activeSubIndex % coloresModelos.length].split(' ')[0]
+                                                                    }`}
                                                             />
 
                                                             <div
-                                                                className={`relative w-16 h-16 rounded-2xl flex items-center justify-center shadow-2xl border border-white/10 ${
-                                                                    coloresModelos[activeSubIndex % coloresModelos.length].split(' ')[0]
-                                                                }`}
+                                                                className={`relative w-16 h-16 rounded-2xl flex items-center justify-center shadow-2xl border border-white/10 ${coloresModelos[activeSubIndex % coloresModelos.length].split(' ')[0]
+                                                                    }`}
                                                             >
                                                                 <Car size={32} strokeWidth={2.5} />
                                                             </div>
@@ -298,11 +333,10 @@ const VehicleDetail: React.FC<VehicleDetailProps> = ({ isOpen, onClose, selected
                                                     return (
                                                         <div
                                                             key={day}
-                                                            className={`aspect-square rounded-2xl flex flex-col items-center justify-center transition-all duration-300 border-2 ${
-                                                                isActive
+                                                            className={`aspect-square rounded-2xl flex flex-col items-center justify-center transition-all duration-300 border-2 ${isActive
                                                                     ? `${colorBase} text-white border-transparent shadow-md`
                                                                     : 'bg-slate-50 border-slate-100 text-slate-300'
-                                                            }`}
+                                                                }`}
                                                         >
                                                             <span className="text-[11px] font-black">{day}</span>
                                                             {isActive && <CheckCircle2 size={10} className="mt-1 opacity-70" />}

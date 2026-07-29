@@ -284,4 +284,78 @@ class MovimientoCSAEController extends Controller
             ], 500);
         }
     }
+    public function pendientesSalida(Request $request)
+    {
+        try {
+            $query = MovimientoCSAE::query()
+                ->where('status', 'A')
+                ->whereNull('fecha_hora_salida');
+
+            if ($request->filled('search')) {
+                $search = trim($request->query('search'));
+
+                $query->where(function ($q) use ($search) {
+                    $q->where('matricula', 'like', "%{$search}%")
+                        ->orWhere('tipo_aeronave', 'like', "%{$search}%")
+                        ->orWhere('transportista', 'like', "%{$search}%");
+                });
+            }
+
+            $aeronaves = $query
+                ->select([
+                    'id',
+                    'fecha_hora_entrada',
+                    'matricula',
+                    'tipo_aeronave',
+                    'como_llega',
+                    'transportista',
+                    'observaciones_entrada',
+                    'created_at',
+                ])
+                ->orderBy('fecha_hora_entrada', 'asc')
+                ->get()
+                ->map(function (MovimientoCSAE $movimiento) {
+                    $fechaEntrada = $movimiento->fecha_hora_entrada;
+
+                    return [
+                        'id' => $movimiento->id,
+                        'matricula' => $movimiento->matricula,
+                        'tipo_aeronave' => $movimiento->tipo_aeronave,
+                        'como_llega' => $movimiento->como_llega,
+                        'transportista' => $movimiento->transportista,
+                        'observaciones_entrada' => $movimiento->observaciones_entrada,
+
+                        'fecha_hora_entrada' => $fechaEntrada?->format('Y-m-d H:i:s'),
+                        'fecha_entrada' => $fechaEntrada?->format('d/m/Y'),
+                        'hora_entrada' => $fechaEntrada?->format('H:i'),
+
+                        'minutos_en_csae' => $fechaEntrada
+                            ? $fechaEntrada->diffInMinutes(now())
+                            : 0,
+
+                        'tiempo_en_csae' => $fechaEntrada
+                            ? $fechaEntrada->locale('es')->diffForHumans(
+                                now(),
+                                true
+                            )
+                            : 'Sin fecha',
+
+                        'estado' => 'pendiente',
+                        'ya_salio' => false,
+                    ];
+                })
+                ->values();
+
+            return response()->json([
+                'total' => $aeronaves->count(),
+                'aeronaves' => $aeronaves,
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Error al obtener las aeronaves pendientes de salida',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

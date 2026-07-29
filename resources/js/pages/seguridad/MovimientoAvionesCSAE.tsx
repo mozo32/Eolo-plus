@@ -3,11 +3,12 @@ import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import MovimientoCSAEForm from './MovimientoAvionesCSAE/MovimientoCSAEForm';
 import { useState, useEffect, useCallback } from 'react';
-import { fetchMovimientoCSAE, fetchShowMovimientoCSAE, eliminar } from '@/stores/apiMovimientoCSAE';
-import { Search, Plane, X, Edit2, Plus, Filter, ChevronLeft, ChevronRight, CheckCircle2, AlertCircle, LogOut,} from 'lucide-react';
+import {fetchMovimientoCSAE,fetchShowMovimientoCSAE,fetchAeronavesPendientesCSAE,eliminar,type AeronavePendienteCSAE} from '@/stores/apiMovimientoCSAE';
+import { Search, Plane, X, Edit2, Plus, Filter, ChevronLeft, ChevronRight, CheckCircle2, AlertCircle, LogOut, Eye} from 'lucide-react';
 import PdfCsae from './MovimientoAvionesCSAE/PdfCsae';
 import Swal from 'sweetalert2';
-
+import AeronavesPendientesCSAE from './MovimientoAvionesCSAE/AeronavesPendientesCSAE';
+import VistaPreviaCsae from './MovimientoAvionesCSAE/VistaPreviaCsae';
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Movimiento Aviones CSAE' }];
 
 export default function MovimientoAvionesCSAE() {
@@ -23,6 +24,11 @@ export default function MovimientoAvionesCSAE() {
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [modoSalida, setModoSalida] = useState(false);
     const [modoCompleto, setModoCompleto] = useState(false);
+    const [pendientesOpen, setPendientesOpen] = useState(false);
+    const [aeronavesPendientes, setAeronavesPendientes] = useState<AeronavePendienteCSAE[]>([]);
+    const [previewId, setPreviewId] = useState<number | null>(null);
+    const [loadingPendientes, setLoadingPendientes] = useState(false);
+    const [errorPendientes, setErrorPendientes] = useState<string | null>(null);
     const formatFecha = (fecha?: string | null) => {
         if (!fecha) return '—';
 
@@ -71,7 +77,37 @@ export default function MovimientoAvionesCSAE() {
             setLoading(false);
         }
     };
+    const cargarPendientes = useCallback(async () => {
+        try {
+            setLoadingPendientes(true);
+            setErrorPendientes(null);
 
+            const response = await fetchAeronavesPendientesCSAE();
+
+            setAeronavesPendientes(response.aeronaves || []);
+        } catch (error: any) {
+            console.error(
+                'Error al obtener aeronaves pendientes:',
+                error,
+            );
+
+            setAeronavesPendientes([]);
+
+            setErrorPendientes(
+                error?.message ||
+                'No se pudieron cargar las aeronaves pendientes',
+            );
+        } finally {
+            setLoadingPendientes(false);
+        }
+    }, []);
+    const abrirPanelPendientes = async () => {
+        setPendientesOpen(true);
+        await cargarPendientes();
+    };
+    useEffect(() => {
+        cargarPendientes();
+    }, [cargarPendientes]);
     const abrirNuevo = () => {
         setIsEdit(false);
         setModoSalida(false);
@@ -110,7 +146,11 @@ export default function MovimientoAvionesCSAE() {
         setModoSalida(false);
         setModoCompleto(false);
         setDetalle(null);
-        await cargarDatos();
+
+        await Promise.all([
+            cargarDatos(),
+            cargarPendientes(),
+        ]);
     };
 
     const limpiarFiltros = () => {
@@ -173,7 +213,7 @@ export default function MovimientoAvionesCSAE() {
             <div className="p-6 bg-[#f3f4f6] min-h-screen">
                 <div className="space-y-4 animate-in fade-in duration-500">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-lg shadow-sm border border-slate-200">
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3">
                             <div>
                                 <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter">
                                     Movimiento de Aeronaves
@@ -182,6 +222,19 @@ export default function MovimientoAvionesCSAE() {
                                     Gestión de entradas y salidas CSAE
                                 </p>
                             </div>
+                            <button
+                                type="button"
+                                onClick={abrirPanelPendientes}
+                                className="relative flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md transition-all animate-pulse"
+                            >
+                                <span className="flex h-3 w-3">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+                                </span>
+                                <span className="font-bold text-sm">
+                                    PENDIENTES ({aeronavesPendientes.length})
+                                </span>
+                            </button>
                         </div>
 
                         <div className="flex gap-2 items-center">
@@ -402,6 +455,14 @@ export default function MovimientoAvionesCSAE() {
 
                                                     <td className="px-6 py-4">
                                                         <div className="flex items-center justify-end gap-1">
+                                                            <button
+                                                                type="button"
+                                                                className="rounded p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600"
+                                                                onClick={() => setPreviewId(row.id)}
+                                                                title="Vista previa"
+                                                            >
+                                                                <Eye size={16} />
+                                                            </button>
                                                             {!salio && (
 
                                                                 <button
@@ -507,28 +568,33 @@ export default function MovimientoAvionesCSAE() {
 
             {openForm && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-                    <div className="relative z-10 w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-300 max-h-[90vh] flex flex-col">
-                        <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                    <div className="relative z-10 flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
+                        <div className="flex items-center justify-between border-b border-blue-800 bg-blue-900 px-6 py-5 text-white">
                             <div>
-                                <h3 className="text-lg font-black uppercase text-slate-800 tracking-tighter">
-                                    {modoCompleto ? 'Editar Registro Completo CSAE' : modoSalida ? 'Registrar Salida CSAE' : 'Registrar Movimiento CSAE'}
+                                <h3 className="text-lg font-black uppercase tracking-tight">
+                                    {modoCompleto
+                                        ? 'Editar registro completo CSAE'
+                                        : modoSalida
+                                            ? 'Registrar salida CSAE'
+                                            : 'Registrar movimiento CSAE'}
                                 </h3>
-                                <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">
-                                    Módulo de Movimiento de Aeronaves
+
+                                <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-blue-200">
+                                    Módulo de movimiento de aeronaves
                                 </p>
                             </div>
 
                             <button
                                 type="button"
                                 onClick={cerrarFormulario}
-                                className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors"
+                                className="rounded-full p-2 text-blue-200 transition-colors hover:bg-blue-800 hover:text-white"
                                 title="Cerrar"
                             >
                                 <X size={20} />
                             </button>
                         </div>
 
-                        <div className="p-6 overflow-y-auto custom-scrollbar">
+                        <div className="overflow-y-auto bg-[#f8fafc] custom-scrollbar">
                             <MovimientoCSAEForm
                                 isEdit={isEdit}
                                 modoSalida={modoSalida}
@@ -543,6 +609,18 @@ export default function MovimientoAvionesCSAE() {
             )}
 
             <PdfCsae id={pdfId} onDone={handlePdfDone} />
+            <VistaPreviaCsae
+                id={previewId}
+                onClose={() => setPreviewId(null)}
+            />
+            <AeronavesPendientesCSAE
+                isOpen={pendientesOpen}
+                onClose={() => setPendientesOpen(false)}
+                aeronaves={aeronavesPendientes}
+                loading={loadingPendientes}
+                error={errorPendientes}
+                onReload={cargarPendientes}
+            />
         </AppLayout>
     );
 }

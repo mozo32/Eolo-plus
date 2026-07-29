@@ -42,7 +42,153 @@ const parseNumero = (value: any) => {
 
     return isNaN(numero) ? 0 : numero;
 };
+const formatearMesReferencia = (value: any): string => {
+    if (
+        value === null ||
+        value === undefined ||
+        value === ''
+    ) {
+        return '';
+    }
 
+    const meses: Record<string, string> = {
+        january: 'Enero',
+        february: 'Febrero',
+        march: 'Marzo',
+        april: 'Abril',
+        may: 'Mayo',
+        june: 'Junio',
+        july: 'Julio',
+        august: 'Agosto',
+        september: 'Septiembre',
+        october: 'Octubre',
+        november: 'Noviembre',
+        december: 'Diciembre',
+
+        enero: 'Enero',
+        febrero: 'Febrero',
+        marzo: 'Marzo',
+        abril: 'Abril',
+        mayo: 'Mayo',
+        junio: 'Junio',
+        julio: 'Julio',
+        agosto: 'Agosto',
+        septiembre: 'Septiembre',
+        octubre: 'Octubre',
+        noviembre: 'Noviembre',
+        diciembre: 'Diciembre',
+    };
+
+    const obtenerNombreMes = (
+        numeroMes: number,
+    ): string => {
+        const fecha = new Date(
+            Date.UTC(2026, numeroMes - 1, 1),
+        );
+
+        const resultado =
+            new Intl.DateTimeFormat('es-MX', {
+                month: 'long',
+                timeZone: 'UTC',
+            }).format(fecha);
+
+        return (
+            resultado.charAt(0).toUpperCase() +
+            resultado.slice(1)
+        );
+    };
+
+    if (
+        value instanceof Date &&
+        !isNaN(value.getTime())
+    ) {
+        const mes = obtenerNombreMes(
+            value.getUTCMonth() + 1,
+        );
+
+        return `${mes} de ${value.getUTCFullYear()}`;
+    }
+
+    const texto = String(value).trim();
+
+    /*
+     * Formatos:
+     * 2026-04
+     * 2026-04-01
+     * 2026-04-01 12:00:00
+     */
+    const fechaAnioMes = texto.match(
+        /^(\d{4})[-/](\d{1,2})(?:[-/]\d{1,2})?/,
+    );
+
+    if (fechaAnioMes) {
+        const [, anio, numeroMes] =
+            fechaAnioMes;
+
+        const mes = obtenerNombreMes(
+            Number(numeroMes),
+        );
+
+        return `${mes} de ${anio}`;
+    }
+
+    /*
+     * Formatos:
+     * 04/2026
+     * 4-2026
+     */
+    const fechaMesAnio = texto.match(
+        /^(\d{1,2})[-/](\d{4})$/,
+    );
+
+    if (fechaMesAnio) {
+        const [, numeroMes, anio] =
+            fechaMesAnio;
+
+        const mes = obtenerNombreMes(
+            Number(numeroMes),
+        );
+
+        return `${mes} de ${anio}`;
+    }
+
+    /*
+     * Formatos:
+     * 04
+     * 4
+     */
+    if (/^(0?[1-9]|1[0-2])$/.test(texto)) {
+        return obtenerNombreMes(Number(texto));
+    }
+
+    /*
+     * Formatos:
+     * April
+     * April 2026
+     * April de 2026
+     * Abril
+     * Abril 2026
+     */
+    const nombreMes = texto.match(
+        /^([a-záéíóúñ]+)(?:\s+(?:de\s+)?(\d{4}))?$/i,
+    );
+
+    if (nombreMes) {
+        const nombreOriginal =
+            nombreMes[1].toLowerCase();
+
+        const anio = nombreMes[2];
+        const mesTraducido = meses[nombreOriginal];
+
+        if (mesTraducido) {
+            return anio
+                ? `${mesTraducido} de ${anio}`
+                : mesTraducido;
+        }
+    }
+
+    return texto;
+};
 export const ExcelRemisiones = async (datos: any[]) => {
     const workbook = new ExcelJS.Workbook();
 
@@ -114,21 +260,21 @@ export const ExcelRemisiones = async (datos: any[]) => {
                 folio: item.folio,
                 fecha: parseFechaExcel(item.fecha),
                 matricula: item.matricula,
-                litros: parseNumero(item.litros),
+                litros: Math.round(parseNumero(item.litros)),
                 vta: item.vta,
                 factura: item.factura,
                 precio_venta: parseNumero(item.precio_venta),
                 importe: parseNumero(item.importe),
                 cliente: item.cliente,
                 forma_pago: item.forma_pago,
-                mes: item.mes,
+                mes: formatearMesReferencia(item.mes),
                 status: item.status === 'A' ? 'Activo' : item.status
             });
         } else {
             sheetCompras.addRow({
                 folio: item.folio,
                 fecha: parseFechaExcel(item.fecha),
-                litros: parseNumero(item.litros),
+                litros: Math.round(parseNumero(item.litros)),
                 factura: item.factura,
                 precio_venta: parseNumero(item.precio_venta),
                 importe: parseNumero(item.importe)
@@ -165,13 +311,13 @@ export const ExcelRemisiones = async (datos: any[]) => {
     sheetVentas.getColumn('fecha').numFmt = 'dd/mm/yyyy hh:mm';
     sheetCompras.getColumn('fecha').numFmt = 'dd/mm/yyyy hh:mm';
 
-    sheetVentas.getColumn('litros').numFmt = '#,##0.00';
-    sheetVentas.getColumn('precio_venta').numFmt = '$#,##0.0000';
-    sheetVentas.getColumn('importe').numFmt = '$#,##0.0000';
+    sheetVentas.getColumn('litros').numFmt = '#,##0';
+    sheetVentas.getColumn('precio_venta').numFmt = '$#,##0.00';
+    sheetVentas.getColumn('importe').numFmt = '$#,##0.00';
 
-    sheetCompras.getColumn('litros').numFmt = '#,##0.00';
-    sheetCompras.getColumn('precio_venta').numFmt = '$#,##0.0000';
-    sheetCompras.getColumn('importe').numFmt = '$#,##0.0000';
+    sheetCompras.getColumn('litros').numFmt = '#,##0';
+    sheetCompras.getColumn('precio_venta').numFmt = '$#,##0.00';
+    sheetCompras.getColumn('importe').numFmt = '$#,##0.00';
 
     sheetVentas.autoFilter = {
         from: { row: 1, column: 1 },

@@ -104,3 +104,54 @@ export async function obtenerDetallePorPlaca(placa: string) {
     });
     return await res.json();
 }
+export type VehiculoAlerta = {
+    id: number;
+    placas: string;
+    vehiculo: string;
+    color?: string | null;
+    responsable?: string | null;
+    matricula?: string | null;
+    llaves?: string | null;
+    oficial?: string | null;
+    fecha_inicio: string;
+    fecha_ultimo_registro: string;
+    dias_estacionado: number;
+};
+
+export type VehiculosAlertaResponse = {
+    fecha_corte: string | null;
+    total: number;
+    vehiculos: VehiculoAlerta[];
+};
+
+export async function obtenerVehiculosMasDeCincoDias(
+    fecha = '',
+): Promise<VehiculosAlertaResponse> {
+    const params = new URLSearchParams();
+
+    if (fecha) {
+        params.append('fecha', fecha);
+    }
+
+    const query = params.toString();
+    const url = `/api/EstacionamientoSubTerraneo/alerta${query ? `?${query}` : ''}`;
+
+    const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+            Accept: 'application/json',
+        },
+        credentials: 'same-origin',
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+        throw new Error(
+            data?.message ||
+            'Error al obtener los vehículos con más de 5 días',
+        );
+    }
+
+    return data;
+}

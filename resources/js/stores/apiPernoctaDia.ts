@@ -8,19 +8,26 @@ function getXsrfToken(): string {
         : "";
 }
 
-export type PernoctaRegistro = {
+
+export type PernoctaRegistroDetalle = {
     id: number;
     fecha: string;
     hora: string;
     matricula: string;
     ubicacion: string;
-    observaciones: string | null;
+    observaciones?: string | null;
     nombre: string;
     aeronave?: string | null;
     tipo_cliente?: string | null;
     categoria?: string | null;
 };
-
+export type PernoctaRegistro = {
+    id: string;
+    fecha: string;
+    hora: string;
+    total: number;
+    registros: PernoctaRegistroDetalle[];
+};
 export type PernoctaFiltros = {
     matricula?: string;
     ubicacion?: string;
@@ -111,3 +118,5 @@ export async function guardarPernoctaDiaApi(form: any) {
 
     return data;
 }
+
+
