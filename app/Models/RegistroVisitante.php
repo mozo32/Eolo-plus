@@ -22,10 +22,27 @@ class RegistroVisitante extends Model
         'fecha_salida',
         'hora_salida',
         'user_id',
+        'tipo_gafete',
     ];
 
     protected $casts = [
         'fecha_entrada' => 'date',
         'fecha_salida'  => 'date',
     ];
+    public function firmas()
+    {
+        return $this->morphToMany(
+            Firma::class,
+            'firmable',
+            'firmables'
+        )->withPivot(['rol', 'tag', 'orden', 'status'])
+        ->wherePivot('status', 'A')
+        ->withTimestamps();
+    }
+
+    public function firmasAll()
+    {
+        return $this->morphToMany(Firma::class, 'firmable')
+            ->withPivot(['rol', 'tag', 'orden', 'status']);
+    }
 }

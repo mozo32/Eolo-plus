@@ -3,51 +3,110 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
+use App\Models\Firma;
 use App\Models\RegistroVisitante;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class RegistroVisitantesController extends Controller
 {
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'nombre'         => 'required|string|max:255',
-            'procedencia'    => 'required|string|max:255',
+            'nombre' => 'required|string|max:255',
+            'procedencia' => 'required|string|max:255',
             'a_quien_visita' => 'required|string|max:255',
-            'gafete'         => 'required|string|max:50',
-            'empresa'        => 'required|string',
-            'autoriza'       => 'required|string',
-            'fechaRegistro'       => 'required|string',
-            'horaEntrada'       => 'required|string',
+            'gafete' => 'required|string|max:50',
+            'tipo_gafete' => 'required|string|in:Rojo,Verde',
+            'empresa' => 'required|string',
+            'autoriza' => 'required|string',
+            'fechaRegistro' => 'required|string',
+            'horaEntrada' => 'required|string',
+            'firma_entrada' => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) {
+                    if (!str_contains($value, 'base64,')) {
+                        $fail('La firma del visitante no tiene un formato válido.');
+                    }
+                },
+            ],
         ]);
 
-        $registro = RegistroVisitante::create([
-            ...$validated,
-            'fecha_entrada' => $validated['fechaRegistro'],
-            'hora_entrada'  => $validated['horaEntrada'],
-            'user_id'       => Auth::id(),
-        ]);
-
-        return response()->json([
-            'message' => 'Entrada registrada con éxito',
-            'data'    => $registro
-        ], 201);
-    }
-    public function salida(Request $request, RegistroVisitante $registroVisitante)
-    {
         DB::beginTransaction();
+
         try {
-            $validated = $request->validate([
-                'fechaSalida'       => 'required|string',
-                'horaSalida'       => 'required|string',
+            $registro = new RegistroVisitante();
+            $registro->forceFill([
+                'nombre' => $validated['nombre'],
+                'procedencia' => $validated['procedencia'],
+                'a_quien_visita' => $validated['a_quien_visita'],
+                'gafete' => $validated['gafete'],
+                'tipo_gafete' => $validated['tipo_gafete'],
+                'empresa' => $validated['empresa'],
+                'autoriza' => $validated['autoriza'],
+                'fecha_entrada' => $validated['fechaRegistro'],
+                'hora_entrada' => $validated['horaEntrada'],
+                'user_id' => Auth::id(),
+            ]);
+            $registro->save();
+
+            $this->guardarFirmaBase64(
+                $validated['firma_entrada'],
+                'firma_entrada',
+                $registro,
+            );
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Entrada registrada con éxito',
+                'data' => $registro,
+            ], 201);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'message' => 'Error al guardar el registro del visitante',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function salida(
+        Request $request,
+        RegistroVisitante $registroVisitante,
+    ) {
+        $validated = $request->validate([
+            'fechaSalida' => 'required|string',
+            'horaSalida' => 'required|string',
+            'firma_salida' => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) {
+                    if (!str_contains($value, 'base64,')) {
+                        $fail('La firma de salida no tiene un formato válido.');
+                    }
+                },
+            ],
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $registroVisitante->update([
+                'fecha_salida' => $validated['fechaSalida'],
+                'hora_salida' => $validated['horaSalida'],
             ]);
 
-            $registroVisitante->update([
-                'fecha_salida'    => $validated['fechaSalida'] ?? null,
-                'hora_salida' => $validated['horaSalida'] ?? null,
-            ]);
+            $this->guardarFirmaBase64(
+                $validated['firma_salida'],
+                'firma_salida',
+                $registroVisitante,
+            );
 
             DB::commit();
 
@@ -55,7 +114,6 @@ class RegistroVisitantesController extends Controller
                 'message' => 'Salida registrada correctamente',
                 'data' => $registroVisitante,
             ]);
-
         } catch (\Throwable $e) {
             DB::rollBack();
 
@@ -65,25 +123,100 @@ class RegistroVisitantesController extends Controller
             ], 500);
         }
     }
+
     public function index(Request $request)
     {
-        $query = RegistroVisitante::query();
-        $query->whereNull('hora_salida');
+        $validated = $request->validate([
+            'search' => 'nullable|string|max:255',
+            'fecha' => 'nullable|date',
+            'page' => 'nullable|integer|min:1',
+            'per_page' => 'nullable|integer|in:5,10,20,50,100',
+        ]);
 
-        if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('nombre', 'like', "%{$search}%")
-                ->orWhere('gafete', 'like', "%{$search}%");
-            });
+        $search = trim($validated['search'] ?? '');
+        $fecha = $validated['fecha'] ?? today()->toDateString();
+        $perPage = (int) ($validated['per_page'] ?? 10);
+
+        $query = RegistroVisitante::query()
+            ->whereNull('hora_salida')
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($subquery) use ($search) {
+                    $subquery
+                        ->where('nombre', 'like', "%{$search}%")
+                        ->orWhere('gafete', 'like', "%{$search}%")
+                        ->orWhere('tipo_gafete', 'like', "%{$search}%")
+                        ->orWhere('procedencia', 'like', "%{$search}%");
+                });
+            })
+            ->whereDate('fecha_entrada', $fecha)
+            ->orderByDesc('fecha_entrada')
+            ->orderByDesc('hora_entrada');
+
+        return response()->json(
+            $query->paginate($perPage)->withQueryString(),
+        );
+    }
+
+    private function guardarFirmaBase64(
+        string $value,
+        string $rol,
+        RegistroVisitante $registro,
+    ): void {
+        if (trim($value) === '' || !str_contains($value, 'base64,')) {
+            return;
         }
 
-        if ($request->filled('fecha')) {
-            $query->whereDate('created_at', $request->fecha);
-        } else {
-            $query->whereDate('created_at', today());
-        }
-        $data = $query->orderBy('hora_entrada', 'desc')->get();
-        return response()->json($data);
+        $registro->firmas()
+            ->newPivotStatement()
+            ->where('firmable_type', RegistroVisitante::class)
+            ->where('firmable_id', $registro->id)
+            ->where('rol', $rol)
+            ->where('status', 'A')
+            ->update(['status' => 'N']);
+
+        $firma = $this->guardarFirmaArchivoBase64(
+            $value,
+            'firmas/RegistroVisitante/' . now()->format('Y/m'),
+        );
+
+        $registro->firmas()->attach($firma->id, [
+            'rol' => $rol,
+            'tag' => $this->humanizeRol($rol),
+            'orden' => 0,
+            'status' => 'A',
+        ]);
+    }
+
+    private function guardarFirmaArchivoBase64(
+        string $base64,
+        string $folder,
+    ): Firma {
+        [$meta, $content] = explode(',', $base64, 2);
+        preg_match('/data:(.*?);base64/', $meta, $matches);
+
+        $mime = $matches[1] ?? 'image/png';
+        $extension = explode('/', $mime)[1] ?? 'png';
+        $fileName = Str::uuid() . '.' . $extension;
+        $path = $folder . '/' . $fileName;
+
+        Storage::disk('public')->put($path, base64_decode($content));
+
+        return Firma::create([
+            'disk' => 'public',
+            'path' => $path,
+            'original_name' => $fileName,
+            'mime' => $mime,
+            'size' => Storage::disk('public')->size($path),
+            'sha1' => sha1_file(Storage::disk('public')->path($path)),
+        ]);
+    }
+
+    private function humanizeRol(string $rol): string
+    {
+        return match ($rol) {
+            'firma_entrada' => 'Firma de entrada del visitante',
+            'firma_salida' => 'Firma de salida del visitante',
+            default => ucfirst(str_replace('_', ' ', $rol)),
+        };
     }
 }

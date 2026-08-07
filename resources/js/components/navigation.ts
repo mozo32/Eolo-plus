@@ -19,7 +19,8 @@ import {
     reporteEntregaTurno,
     verificacionEstadoAutotanque,
     remision,
-    inspeccionCombustible
+    inspeccionCombustible,
+    registroVisitantes
 } from '@/routes'
 import { LayoutGrid } from 'lucide-react'
 
@@ -90,9 +91,13 @@ const ROUTE_CONFIG: Record<
         href: estacionamiento,
         title: 'Estacionamiento Subterráneo',
     },
+    registrovisitantes: {
+        href: registroVisitantes,
+        title: 'Registro de Visitantes',
+    },
     entregaturnor: {
         href: entregaTurnoR,
-        title: 'Entrega de Turno de Rampa',
+        title: 'Entrega de Turno',
     },
     checklistequipo: {
         href: checkListEquipo,
@@ -120,15 +125,15 @@ const ROUTE_CONFIG: Record<
     },
     checklistturno: {
         href: checkListTurno,
-        title: 'CheckList de Turno',
+        title: 'Entrega de Turno',
     },
     reporteentregaturno: {
         href: reporteEntregaTurno,
-        title: 'Entrega Turno Autotanque',
+        title: 'Entrega de Turno',
     },
     remision: {
         href: remision,
-        title: 'Remisión Autotanque',
+        title: 'Remisión',
     },
     verificacionestadoautotanque: {
         href: verificacionEstadoAutotanque,
@@ -173,6 +178,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                     { id: 'seguridad-csae', title: 'Movimiento de Aviones CSAE', href: movimientoAvionesCSAE(), icon: LayoutGrid },
                     { id: 'seguridad-vehiculos', title: 'Movimientos de Vehiculos EOLO', href: movimientosVehiculoEolo(), icon: LayoutGrid },
                     { id: 'seguridad-operaciones', title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },
+                    { id: 'seguridad-visitantes', title: 'Registro de Visitantes', href: registroVisitantes(), icon: LayoutGrid },
                 ],
             },
             {
@@ -224,6 +230,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
             },
         ]
     }
+    console.log(user.departamentos);
 
     return (user.departamentos ?? [])
         .map((dep) => {

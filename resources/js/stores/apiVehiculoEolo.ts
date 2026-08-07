@@ -21,15 +21,21 @@ export const apiVehiculoEolo = {
         if (!response.ok) throw new Error('Error al cargar vehículos');
         return await response.json();
     },
-    registrarMovimiento: async (movimientoData: any) => {
+    registrarMovimiento: async (formData: FormData) => {
         const response = await fetch('/api/VehiculoEolo/movimientos', {
             method: 'POST',
-            headers: headers,
-            body: JSON.stringify(movimientoData)
+            headers: {
+                Accept: 'application/json',
+                'X-XSRF-TOKEN': getXsrfToken(),
+            },
+            body: formData,
         });
 
         const result = await response.json();
-        if (!response.ok) throw result;
+
+        if (!response.ok) {
+            throw result;
+        }
 
         return result;
     },

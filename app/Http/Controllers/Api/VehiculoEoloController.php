@@ -8,6 +8,9 @@ use App\Models\Vehiculo;
 use App\Models\movimientoVehiculo;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use App\Models\Imagen;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 class VehiculoEoloController extends Controller
 {
@@ -36,17 +39,27 @@ class VehiculoEoloController extends Controller
             'movimiento'   => 'required|in:Salida,Entrada',
             'chofer'       => 'required|string|max:255',
             'kilometraje'  => 'required|numeric',
-            'gasolina'     => 'required|string',
-            'destino'      => 'nullable|string',
-            'autoriza'     => 'nullable|string',
+            'gasolina'     => 'required|string|max:50',
+            'destino'      => 'nullable|string|max:255',
+            'autoriza'     => 'nullable|string|max:255',
+            'matricula'    => 'nullable|string|max:255',
+            'motivo'       => 'nullable|string|max:255',
+            'notas'        => 'nullable|string',
+
+            'evidencias'   => 'required|array|min:1',
+            'evidencias.*' => 'required|image|mimes:jpg,jpeg,png,webp|max:10240',
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
+            return response()->json([
+                'errors' => $validator->errors()
+            ], 422);
         }
 
+        $rutasGuardadas = [];
+
         try {
-            return DB::transaction(function () use ($request) {
+            return DB::transaction(function () use ($request, &$rutasGuardadas) {
                 $movimiento = movimientoVehiculo::create([
                     'vehiculo_id'   => $request->vehiculo_id,
                     'tipo'          => $request->movimiento,
@@ -60,22 +73,59 @@ class VehiculoEoloController extends Controller
                     'observaciones' => $request->notas,
                 ]);
 
-                $vehiculo = Vehiculo::find($request->vehiculo_id);
+                foreach ($request->file('evidencias', []) as $orden => $archivo) {
+                    $imagen = $this->guardarImagenSubida(
+                        $archivo,
+                        "movimientos-vehiculos/{$movimiento->id}",
+                        $rutasGuardadas
+                    );
+
+                    $movimiento->imagenes()->attach($imagen->id, [
+                        'tag'    => 'evidencia',
+                        'orden'  => $orden,
+                        'status' => 'A',
+                    ]);
+                }
+
+                $vehiculo = Vehiculo::findOrFail($request->vehiculo_id);
+
                 $vehiculo->update([
-                    'estado'           => ($request->movimiento === 'Salida') ? 'En Ruta' : 'En Planta',
+                    'estado' => $request->movimiento === 'Salida'
+                        ? 'En Ruta'
+                        : 'En Planta',
                     'ultima_actividad' => now(),
                 ]);
 
+                $imagenes = $movimiento->imagenes()
+                    ->get()
+                    ->map(function (Imagen $imagen) {
+                        $disk = $imagen->disk ?? 'public';
+
+                        return [
+                            'id'     => $imagen->id,
+                            'url'    => Storage::disk($disk)->url($imagen->path),
+                            'tag'    => $imagen->pivot->tag,
+                            'orden'  => $imagen->pivot->orden,
+                            'status' => $imagen->pivot->status,
+                        ];
+                    })
+                    ->values();
+
                 return response()->json([
-                    'message' => 'Movimiento registrado con éxito',
-                    'vehiculo' => $vehiculo,
-                    'movimiento' => $movimiento
+                    'message'    => 'Movimiento registrado con éxito',
+                    'vehiculo'   => $vehiculo,
+                    'movimiento' => $movimiento,
+                    'imagenes'   => $imagenes,
                 ], 201);
             });
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            if (!empty($rutasGuardadas)) {
+                Storage::disk('public')->delete($rutasGuardadas);
+            }
+
             return response()->json([
                 'message' => 'Error al procesar el registro',
-                'error' => $e->getMessage()
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
@@ -83,23 +133,72 @@ class VehiculoEoloController extends Controller
     public function obtenerHistorial(Request $request, $id)
     {
         $movimientos = movimientoVehiculo::where('vehiculo_id', $id)
+            ->with('imagenes')
             ->when($request->chofer, function ($query, $chofer) {
-                $query->where('chofer', 'like', '%' . $chofer . '%');
+                $query->where(
+                    'chofer',
+                    'like',
+                    '%' . $chofer . '%'
+                );
             })
             ->when($request->tipo, function ($query, $tipo) {
                 $query->where('tipo', $tipo);
             })
-            ->when($request->fecha_inicio, function ($query, $fecha) {
-                $query->whereDate('created_at', '>=', $fecha);
+            ->when($request->fecha_inicio, function ($query, $fechaInicio) {
+                $query->whereDate(
+                    'created_at',
+                    '>=',
+                    $fechaInicio
+                );
             })
-            ->when($request->fecha_fin, function ($query, $fecha) {
-                $query->whereDate('created_at', '<=', $fecha);
+            ->when($request->fecha_fin, function ($query, $fechaFin) {
+                $query->whereDate(
+                    'created_at',
+                    '<=',
+                    $fechaFin
+                );
             })
             ->orderBy('created_at', 'desc')
             ->get();
 
+        $movimientos->each(function ($movimiento) {
+            $imagenes = $movimiento->imagenes
+                ->map(function (Imagen $imagen) {
+                    $disk = $imagen->disk ?? 'public';
+                    $path = $imagen->path;
+
+                    $url = null;
+                    $error = null;
+
+                    if (
+                        $path &&
+                        Storage::disk($disk)->exists($path)
+                    ) {
+                        $url = Storage::disk($disk)->url($path);
+                    } else {
+                        $error = 'archivo_no_encontrado';
+                    }
+
+                    return [
+                        'id'     => $imagen->id,
+                        'url'    => $url,
+                        'tag'    => $imagen->pivot->tag ?? null,
+                        'orden'  => $imagen->pivot->orden ?? 0,
+                        'status' => $imagen->pivot->status ?? null,
+                        'error'  => $error,
+                    ];
+                })
+                ->values();
+
+            $movimiento->setRelation(
+                'imagenes',
+                $imagenes
+            );
+        });
+
         return response()->json($movimientos);
     }
+
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -134,5 +233,25 @@ class VehiculoEoloController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    private function guardarImagenSubida(UploadedFile $archivo, string $folder, array &$rutasGuardadas): Imagen {
+        $path = $archivo->store($folder, 'public');
+
+        if (!$path) {
+            throw new \RuntimeException(
+                'No fue posible guardar una de las evidencias fotográficas.'
+            );
+        }
+
+        $rutasGuardadas[] = $path;
+
+        return Imagen::create([
+            'disk'          => 'public',
+            'path'          => $path,
+            'original_name' => $archivo->getClientOriginalName(),
+            'mime'          => $archivo->getMimeType() ?? 'image/jpeg',
+            'size'          => (int) $archivo->getSize(),
+        ]);
     }
 }

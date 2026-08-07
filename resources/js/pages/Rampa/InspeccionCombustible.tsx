@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import AppLayout from '@/layouts/app-layout';
-import { exportarInspeccionesExcel } from './Combustible/components/excelService';
+import ExcelInspeccionesModal from './Combustible/components/ExcelInspeccionesModal';
 import { type BreadcrumbItem } from '@/types';
 import { Head, usePage} from '@inertiajs/react';
 import { indexCombustible, apiEliminar, fetchInspeccionId, excelInspeccionCombustible } from '@/stores/apiInspeccionCombustible';
@@ -63,6 +63,7 @@ export default function InspeccionCombustible() {
     const [isEdit, setIsEdit] = useState(false);
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
+    const [mostrarExcelModal, setMostrarExcelModal] = useState(false);
     const [filtros, setFiltros] = useState({
         buscar: '',
         inspector: '',
@@ -71,7 +72,7 @@ export default function InspeccionCombustible() {
         periodo: 'dia'
     });
 
-    const cargarExcel = async () => {
+    const cargarExcel = useCallback(async () => {
         try {
             const data = await excelInspeccionCombustible({ ...filtros });
             return Array.isArray(data) ? data : (data.data || []);
@@ -79,43 +80,7 @@ export default function InspeccionCombustible() {
             console.error("Error al obtener datos para Excel:", error);
             throw error;
         }
-    };
-
-    const handleExportarExcel = async () => {
-        Swal.fire({
-            title: 'Generando Excel',
-            text: 'Estamos recopilando todos los registros, por favor espere...',
-            allowOutsideClick: false,
-            didOpen: () => {
-                Swal.showLoading();
-            }
-        });
-
-        try {
-            const datosParaExcel = await cargarExcel();
-
-            if (datosParaExcel.length === 0) {
-                Swal.fire('Atención', 'No hay registros para exportar con los filtros seleccionados.', 'warning');
-                return;
-            }
-
-            await exportarInspeccionesExcel(datosParaExcel);
-            Swal.fire({
-                icon: 'success',
-                title: '¡Descarga lista!',
-                text: 'El reporte se ha generado correctamente.',
-                timer: 2000,
-                showConfirmButton: false
-            });
-
-        } catch (error) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: 'Hubo un problema al generar el archivo. Intente de nuevo.'
-            });
-        }
-    };
+    }, [filtros]);
 
     const [filtrosEdicion, setFiltrosEdicion] = useState({ ...filtros });
     const [pagina, setPagina] = useState(1);
@@ -252,10 +217,10 @@ export default function InspeccionCombustible() {
                             <div className="w-[1px] bg-slate-200 mx-1"></div>
                             {(user?.roles?.[0]?.slug === 'admin2' || user?.roles?.[0]?.slug === 'fbo' || user?.roles?.[0]?.slug === 'admin') && (
                                 <button
-                                    onClick={handleExportarExcel}
+                                    onClick={() => setMostrarExcelModal(true)}
                                     disabled={loading}
                                     className="flex items-center gap-2 bg-white text-slate-600 text-[10px] font-black px-3 py-2 rounded border border-slate-200 shadow-sm hover:bg-slate-50 transition-all active:scale-95 uppercase tracking-wider disabled:opacity-50"
-                                    title="Descargar Excel"
+                                    title="Vista previa del Excel"
                                 >
                                     <Download size={14} className="text-green-600" />
                                     <span className="hidden md:inline">EXCEL</span>
@@ -438,6 +403,12 @@ export default function InspeccionCombustible() {
                 )}
 
                 <PdfInspeccionCombustible id={pdfId} onDone={() => setPdfId(null)} />
+
+                <ExcelInspeccionesModal
+                    open={mostrarExcelModal}
+                    onClose={() => setMostrarExcelModal(false)}
+                    cargarRegistros={cargarExcel}
+                />
             </div>
         </AppLayout>
     );

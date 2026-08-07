@@ -7,7 +7,7 @@ import { Download, Plus, X, Eye, Edit2, AlertCircle, ClipboardList, Filter, Chev
 import { useState, useEffect, useCallback } from 'react';
 import { fetchAutotanque, eliminarTurno, showAutotanque, fetchTurnoActivo, excelAutoTanqueApi } from '@/stores/apiAutoTanque';
 import PdfExporterAutotanque from './Autotanque/PdfExporterAutotanque';
-import { exportarAutotanqueAExcel } from './Autotanque/excelService';
+import ExcelAutotanqueModal from './Autotanque/ExcelAutotanqueModal';
 import { CheckEstadoAutotanque } from './VerificacionEstadoAutotanque/CheckEstadoAutotanque';
 import { DetalleTurnoAutotanque } from './Autotanque/DetalleTurnoAutotanque';
 
@@ -44,6 +44,7 @@ export default function ReporteEntregaTurno() {
     const [turnoPendiente, setTurnoPendiente] = useState<any>(null);
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
+    const [mostrarExcelModal, setMostrarExcelModal] = useState(false);
     const { auth } = usePage<PageProps>().props;
     const user = auth?.user;
     const [filtros, setFiltros] = useState({
@@ -162,7 +163,7 @@ export default function ReporteEntregaTurno() {
         } catch (error) { console.error(error); }
     };
 
-    const cargarExcel = async () => {
+    const cargarExcel = useCallback(async () => {
         try {
             const data = await excelAutoTanqueApi({ ...filtros });
             return Array.isArray(data) ? data : (data.data || []);
@@ -170,44 +171,7 @@ export default function ReporteEntregaTurno() {
             console.error("Error al obtener datos para Excel:", error);
             throw error;
         }
-    };
-
-    const handleExportarExcel = async () => {
-        Swal.fire({
-            title: 'Generando Excel',
-            text: 'Estamos recopilando todos los registros, por favor espere...',
-            allowOutsideClick: false,
-            didOpen: () => {
-                Swal.showLoading();
-            }
-        });
-
-        try {
-            const datosParaExcel = await cargarExcel();
-
-            if (datosParaExcel.length === 0) {
-                Swal.fire('Atención', 'No hay registros para exportar con los filtros seleccionados.', 'warning');
-                return;
-            }
-
-            await exportarAutotanqueAExcel(datosParaExcel);
-
-            Swal.fire({
-                icon: 'success',
-                title: '¡Descarga lista!',
-                text: 'El reporte se ha generado correctamente.',
-                timer: 2000,
-                showConfirmButton: false
-            });
-
-        } catch (error) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: 'Hubo un problema al generar el archivo. Intente de nuevo.'
-            });
-        }
-    };
+    }, [filtros]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -230,10 +194,10 @@ export default function ReporteEntregaTurno() {
                             <>
                                 <div className="w-[1px] bg-slate-200 mx-1"></div>
                                 <button
-                                    onClick={handleExportarExcel}
+                                    onClick={() => setMostrarExcelModal(true)}
                                     disabled={loading}
                                     className="flex items-center gap-2 bg-white text-slate-600 text-[10px] font-black px-3 py-2 rounded border border-slate-200 shadow-sm hover:bg-slate-50 transition-all active:scale-95 uppercase tracking-wider disabled:opacity-50"
-                                    title="Descargar Excel"
+                                    title="Vista previa del Excel"
                                 >
                                     <Download size={14} className="text-green-600" />
                                     <span className="hidden md:inline">EXCEL</span>
@@ -449,6 +413,12 @@ export default function ReporteEntregaTurno() {
                 )}
 
                 <PdfExporterAutotanque id={pdfId} onDone={handlePdfDone} />
+
+                <ExcelAutotanqueModal
+                    open={mostrarExcelModal}
+                    onClose={() => setMostrarExcelModal(false)}
+                    cargarRegistros={cargarExcel}
+                />
             </div>
         </AppLayout>
     );

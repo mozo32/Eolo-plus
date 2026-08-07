@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
-type Operacion = {
+export type Operacion = {
     id: number;
     tipo?: string | null;
     matricula?: string | null;
@@ -19,6 +19,84 @@ type Operacion = {
     fecha_hora_llegada_csae?: string | null;
     fecha_hora_salida_csae?: string | null;
 };
+
+export type GrupoColumnaReporteOperaciones =
+    | 'base'
+    | 'llegada'
+    | 'salida'
+    | 'csae';
+
+export type ColumnaReporteOperaciones = {
+    titulo: string;
+    ancho: number;
+    grupo: GrupoColumnaReporteOperaciones;
+    esFecha?: boolean;
+};
+
+export type FilaReporteOperaciones = {
+    valores: Array<string | number>;
+    estanciaPendiente: boolean;
+    estanciaCsaePendiente: boolean;
+};
+
+export const COLUMNAS_REPORTE_OPERACIONES: readonly ColumnaReporteOperaciones[] = [
+    { titulo: 'ID', ancho: 9, grupo: 'base' },
+    { titulo: 'MATRÍCULA', ancho: 15, grupo: 'base' },
+    { titulo: 'EQUIPO', ancho: 12, grupo: 'base' },
+    { titulo: 'ID LLEGADA', ancho: 12, grupo: 'llegada' },
+    { titulo: 'FECHA-HORA LLEGADA', ancho: 21, grupo: 'llegada', esFecha: true },
+    { titulo: 'ORIGEN', ancho: 14, grupo: 'llegada' },
+    { titulo: 'TIPO DE OPERACIÓN', ancho: 18, grupo: 'llegada' },
+    { titulo: 'PAX', ancho: 8, grupo: 'llegada' },
+    { titulo: 'EQP', ancho: 8, grupo: 'llegada' },
+    { titulo: 'ID SALIDA', ancho: 12, grupo: 'salida' },
+    { titulo: 'FECHA-HORA SALIDA', ancho: 21, grupo: 'salida', esFecha: true },
+    { titulo: 'DESTINO', ancho: 14, grupo: 'salida' },
+    { titulo: 'TIPO DE OPERACIÓN', ancho: 18, grupo: 'salida' },
+    { titulo: 'PAX', ancho: 8, grupo: 'salida' },
+    { titulo: 'EQP', ancho: 8, grupo: 'salida' },
+    { titulo: 'TIPO DE CLIENTE', ancho: 17, grupo: 'base' },
+    { titulo: 'ESTANCIA', ancho: 24, grupo: 'base' },
+    { titulo: 'MANTENIMIENTO CSAE', ancho: 18, grupo: 'csae' },
+    { titulo: 'FECHA-HORA LLEGADA CSAE', ancho: 22, grupo: 'csae', esFecha: true },
+    { titulo: 'FECHA-HORA SALIDA CSAE', ancho: 22, grupo: 'csae', esFecha: true },
+    { titulo: 'ESTANCIA CSAE', ancho: 22, grupo: 'csae' },
+];
+
+export const GRUPOS_REPORTE_OPERACIONES = [
+    { titulo: '', columnas: 3, grupo: 'base' as const },
+    { titulo: 'LLEGADAS', columnas: 6, grupo: 'llegada' as const },
+    { titulo: 'SALIDAS', columnas: 6, grupo: 'salida' as const },
+    { titulo: '', columnas: 2, grupo: 'base' as const },
+    { titulo: 'CSAE', columnas: 4, grupo: 'csae' as const },
+];
+
+export const ESTILOS_REPORTE_OPERACIONES = {
+    borde: '#CBD5E1',
+    titulo: '#0369A1',
+    texto: '#0F172A',
+    textoSecundario: '#475569',
+    base: {
+        encabezado: '#DCE6F1',
+        cuerpo: '#F8FAFC',
+        texto: '#0F172A',
+    },
+    llegada: {
+        encabezado: '#D9FBE5',
+        cuerpo: '#F0FDF4',
+        texto: '#166534',
+    },
+    salida: {
+        encabezado: '#FFE0E0',
+        cuerpo: '#FFF1F2',
+        texto: '#B91C1C',
+    },
+    csae: {
+        encabezado: '#E8E3F3',
+        cuerpo: '#F7F4FC',
+        texto: '#5B3F8C',
+    },
+} as const;
 
 type FilaOperacion = {
     llegada: Operacion | null;
@@ -71,10 +149,10 @@ const parseStringToDate = (dateString?: string | null): Date | null => {
     return null;
 };
 
-const formatearFechaHoraExcel = (date: Date | null): number | string => {
-    if (!date) return "";
+const EXCEL_EPOCH = Date.UTC(1899, 11, 30);
 
-    const excelEpoch = Date.UTC(1899, 11, 30);
+const formatearFechaHoraExcel = (date: Date | null): number | string => {
+    if (!date) return '';
 
     const fechaLocalComoUtc = Date.UTC(
         date.getFullYear(),
@@ -85,7 +163,40 @@ const formatearFechaHoraExcel = (date: Date | null): number | string => {
         date.getSeconds()
     );
 
-    return (fechaLocalComoUtc - excelEpoch) / 86400000;
+    return (fechaLocalComoUtc - EXCEL_EPOCH) / 86400000;
+};
+
+export const formatearFechaGeneracionReporte = (fecha: Date): string => {
+    return fecha.toLocaleString('es-MX', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+};
+
+export const formatearValorVistaPreviaReporte = (
+    valor: string | number,
+    indiceColumna: number
+): string => {
+    const columna = COLUMNAS_REPORTE_OPERACIONES[indiceColumna];
+
+    if (valor === '') return '';
+
+    if (columna?.esFecha && typeof valor === 'number') {
+        const fecha = new Date(EXCEL_EPOCH + valor * 86400000);
+        const dia = String(fecha.getUTCDate()).padStart(2, '0');
+        const mes = String(fecha.getUTCMonth() + 1).padStart(2, '0');
+        const anio = fecha.getUTCFullYear();
+        const hora = String(fecha.getUTCHours()).padStart(2, '0');
+        const minuto = String(fecha.getUTCMinutes()).padStart(2, '0');
+
+        return `${dia}/${mes}/${anio} ${hora}:${minuto}`;
+    }
+
+    return String(valor);
 };
 
 const obtenerFechaOperacion = (operacion?: Operacion | null): Date | null => {
@@ -239,14 +350,71 @@ const valorNumero = (valor: number | string | null | undefined) => {
     return Number.isNaN(numero) ? valor : numero;
 };
 
+export const prepararFilasReporteOperaciones = (
+    registros: Operacion[]
+): FilaReporteOperaciones[] => {
+    return agruparOperaciones(registros).map((fila, index) => {
+        const llegada = fila.llegada;
+        const salida = fila.salida;
+        const fechaLlegada = obtenerFechaOperacion(llegada);
+        const fechaSalida = obtenerFechaOperacion(salida);
+        const fechaCsaeEntrada = obtenerFechaCsaeEntrada(fila);
+        const fechaCsaeSalida = obtenerFechaCsaeSalida(fila);
+
+        const mantenimientoCsae = Boolean(
+            llegada?.mantenimiento_csae ||
+            salida?.mantenimiento_csae ||
+            fechaCsaeEntrada ||
+            fechaCsaeSalida
+        );
+
+        return {
+            valores: [
+                index + 1,
+                llegada?.matricula ?? salida?.matricula ?? '',
+                llegada?.equipo ?? salida?.equipo ?? '',
+                llegada?.id ?? '',
+                formatearFechaHoraExcel(fechaLlegada),
+                llegada?.lugar ?? '',
+                llegada?.tipo_operacion ?? '',
+                llegada ? valorNumero(llegada.pax) : '',
+                llegada ? valorNumero(llegada.equipaje) : '',
+                salida?.id ?? '',
+                formatearFechaHoraExcel(fechaSalida),
+                salida?.lugar ?? '',
+                salida?.tipo_operacion ?? '',
+                salida ? valorNumero(salida.pax) : '',
+                salida ? valorNumero(salida.equipaje) : '',
+                llegada?.tipo_cliente ?? salida?.tipo_cliente ?? '',
+                formatearEstancia(fechaLlegada, fechaSalida),
+                mantenimientoCsae ? 'SI' : 'NO',
+                formatearFechaHoraExcel(fechaCsaeEntrada),
+                formatearFechaHoraExcel(fechaCsaeSalida),
+                mantenimientoCsae
+                    ? formatearEstancia(fechaCsaeEntrada, fechaCsaeSalida)
+                    : '',
+            ],
+            estanciaPendiente: Boolean(
+                (!llegada && salida) || (llegada && !salida)
+            ),
+            estanciaCsaePendiente: Boolean(
+                mantenimientoCsae && fechaCsaeEntrada && !fechaCsaeSalida
+            ),
+        };
+    });
+};
+
+const aArgb = (color: string): string => `FF${color.replace('#', '')}`;
+
 export const exportarOperacionesAExcel = async (
     registros: Operacion[],
-    filtros: any = {}
+    _filtros: any = {},
+    fechaReporte: Date = new Date()
 ) => {
     const workbook = new ExcelJS.Workbook();
 
     workbook.creator = 'Eolo Plus';
-    workbook.created = new Date();
+    workbook.created = fechaReporte;
 
     const worksheet = workbook.addWorksheet('Reporte de Operaciones', {
         views: [
@@ -258,50 +426,25 @@ export const exportarOperacionesAExcel = async (
         ],
     });
 
-    const filas = agruparOperaciones(registros);
-
-    const totalColumns = 21;
-
-    const headers = [
-        'ID',
-        'MATRÍCULA',
-        'EQUIPO',
-        'ID LLEGADA',
-        'FECHA-HORA LLEGADA',
-        'ORIGEN',
-        'TIPO DE OPERACIÓN',
-        'PAX',
-        'EQP',
-        'ID SALIDA',
-        'FECHA-HORA SALIDA',
-        'DESTINO',
-        'TIPO DE OPERACIÓN',
-        'PAX',
-        'EQP',
-        'TIPO DE CLIENTE',
-        'ESTANCIA',
-        'MANTENIMIENTO CSAE',
-        'FECHA-HORA LLEGADA CSAE',
-        'FECHA-HORA SALIDA CSAE',
-        'ESTANCIA CSAE',
-    ];
+    const filas = prepararFilasReporteOperaciones(registros);
+    const totalColumns = COLUMNAS_REPORTE_OPERACIONES.length;
 
     const border: Partial<ExcelJS.Borders> = {
         top: {
             style: 'thin',
-            color: { argb: 'FFCBD5E1' },
+            color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.borde) },
         },
         left: {
             style: 'thin',
-            color: { argb: 'FFCBD5E1' },
+            color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.borde) },
         },
         bottom: {
             style: 'thin',
-            color: { argb: 'FFCBD5E1' },
+            color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.borde) },
         },
         right: {
             style: 'thin',
-            color: { argb: 'FFCBD5E1' },
+            color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.borde) },
         },
     };
 
@@ -314,49 +457,49 @@ export const exportarOperacionesAExcel = async (
     const baseHeaderFill: ExcelJS.Fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFDCE6F1' },
+        fgColor: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.base.encabezado) },
     };
 
     const arrivalHeaderFill: ExcelJS.Fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFD9FBE5' },
+        fgColor: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.llegada.encabezado) },
     };
 
     const departureHeaderFill: ExcelJS.Fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFFFE0E0' },
+        fgColor: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.salida.encabezado) },
     };
 
     const csaeHeaderFill: ExcelJS.Fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFE8E3F3' },
+        fgColor: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.csae.encabezado) },
     };
 
     const baseBodyFill: ExcelJS.Fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFF8FAFC' },
+        fgColor: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.base.cuerpo) },
     };
 
     const arrivalBodyFill: ExcelJS.Fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFF0FDF4' },
+        fgColor: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.llegada.cuerpo) },
     };
 
     const departureBodyFill: ExcelJS.Fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFFFF1F2' },
+        fgColor: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.salida.cuerpo) },
     };
 
     const csaeBodyFill: ExcelJS.Fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFF7F4FC' },
+        fgColor: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.csae.cuerpo) },
     };
 
     worksheet.mergeCells(1, 1, 1, totalColumns);
@@ -367,7 +510,7 @@ export const exportarOperacionesAExcel = async (
         name: 'Arial',
         size: 16,
         bold: true,
-        color: { argb: 'FF0369A1' },
+        color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.titulo) },
     };
     titleCell.alignment = {
         horizontal: 'center',
@@ -376,14 +519,7 @@ export const exportarOperacionesAExcel = async (
 
     worksheet.getRow(1).height = 34;
 
-    const fechaGeneracion = new Date().toLocaleString('es-MX', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-    });
+    const fechaGeneracion = formatearFechaGeneracionReporte(fechaReporte);
 
     worksheet.mergeCells(2, 1, 2, totalColumns);
 
@@ -391,7 +527,7 @@ export const exportarOperacionesAExcel = async (
     fechaCell.value = `Fecha de reporte: ${fechaGeneracion}`;
     fechaCell.font = {
         size: 10,
-        color: { argb: 'FF475569' },
+        color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.textoSecundario) },
     };
     fechaCell.alignment = {
         horizontal: 'left',
@@ -411,7 +547,7 @@ export const exportarOperacionesAExcel = async (
     llegadaGroup.font = {
         bold: true,
         size: 11,
-        color: { argb: 'FF166534' },
+        color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.llegada.texto) },
     };
     llegadaGroup.alignment = alignment;
     llegadaGroup.border = border;
@@ -422,7 +558,7 @@ export const exportarOperacionesAExcel = async (
     salidaGroup.font = {
         bold: true,
         size: 11,
-        color: { argb: 'FFB91C1C' },
+        color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.salida.texto) },
     };
     salidaGroup.alignment = alignment;
     salidaGroup.border = border;
@@ -433,7 +569,7 @@ export const exportarOperacionesAExcel = async (
     csaeGroup.font = {
         bold: true,
         size: 11,
-        color: { argb: 'FF5B3F8C' },
+        color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.csae.texto) },
     };
     csaeGroup.alignment = alignment;
     csaeGroup.border = border;
@@ -441,17 +577,17 @@ export const exportarOperacionesAExcel = async (
     const headerRow = worksheet.getRow(5);
     headerRow.height = 42;
 
-    headers.forEach((header, index) => {
+    COLUMNAS_REPORTE_OPERACIONES.forEach((columna, index) => {
         const columnNumber = index + 1;
         const cell = headerRow.getCell(columnNumber);
 
-        cell.value = header;
+        cell.value = columna.titulo;
         cell.border = border;
         cell.alignment = alignment;
         cell.font = {
             bold: true,
             size: 9,
-            color: { argb: 'FF0F172A' },
+            color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.texto) },
         };
 
         if (columnNumber >= 4 && columnNumber <= 9) {
@@ -459,112 +595,51 @@ export const exportarOperacionesAExcel = async (
             cell.font = {
                 bold: true,
                 size: 9,
-                color: { argb: 'FF166534' },
+                color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.llegada.texto) },
             };
         } else if (columnNumber >= 10 && columnNumber <= 15) {
             cell.fill = departureHeaderFill;
             cell.font = {
                 bold: true,
                 size: 9,
-                color: { argb: 'FFB91C1C' },
+                color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.salida.texto) },
             };
         } else if (columnNumber >= 18 && columnNumber <= 21) {
             cell.fill = csaeHeaderFill;
             cell.font = {
                 bold: true,
                 size: 9,
-                color: { argb: 'FF5B3F8C' },
+                color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.csae.texto) },
             };
         } else {
             cell.fill = baseHeaderFill;
         }
     });
 
-    const columnWidths = [
-        9,
-        15,
-        12,
-        12,
-        21,
-        14,
-        18,
-        8,
-        8,
-        12,
-        21,
-        14,
-        18,
-        8,
-        8,
-        17,
-        24,
-        18,
-        22,
-        22,
-        22,
-    ];
-
-    columnWidths.forEach((width, index) => {
-        worksheet.getColumn(index + 1).width = width;
+    COLUMNAS_REPORTE_OPERACIONES.forEach((columna, index) => {
+        worksheet.getColumn(index + 1).width = columna.ancho;
     });
 
-    worksheet.getColumn(5).numFmt = 'dd/mm/yyyy hh:mm';
-    worksheet.getColumn(11).numFmt = 'dd/mm/yyyy hh:mm';
-    worksheet.getColumn(19).numFmt = 'dd/mm/yyyy hh:mm';
-    worksheet.getColumn(20).numFmt = 'dd/mm/yyyy hh:mm';
+    COLUMNAS_REPORTE_OPERACIONES.forEach((columna, index) => {
+        if (columna.esFecha) {
+            worksheet.getColumn(index + 1).numFmt = 'dd/mm/yyyy hh:mm';
+        }
+    });
 
     filas.forEach((fila, index) => {
-        const llegada = fila.llegada;
-        const salida = fila.salida;
-
-        const fechaLlegada = obtenerFechaOperacion(llegada);
-        const fechaSalida = obtenerFechaOperacion(salida);
-        const fechaCsaeEntrada = obtenerFechaCsaeEntrada(fila);
-        const fechaCsaeSalida = obtenerFechaCsaeSalida(fila);
-
-        const mantenimientoCsae = Boolean(
-            llegada?.mantenimiento_csae ||
-            salida?.mantenimiento_csae ||
-            fechaCsaeEntrada ||
-            fechaCsaeSalida
-        );
-
-        const values = [
-            index + 1,
-            llegada?.matricula ?? salida?.matricula ?? '',
-            llegada?.equipo ?? salida?.equipo ?? '',
-            llegada?.id ?? '',
-            formatearFechaHoraExcel(fechaLlegada),
-            llegada?.lugar ?? '',
-            llegada?.tipo_operacion ?? '',
-            llegada ? valorNumero(llegada.pax) : '',
-            llegada ? valorNumero(llegada.equipaje) : '',
-            salida?.id ?? '',
-            formatearFechaHoraExcel(fechaSalida),
-            salida?.lugar ?? '',
-            salida?.tipo_operacion ?? '',
-            salida ? valorNumero(salida.pax) : '',
-            salida ? valorNumero(salida.equipaje) : '',
-            llegada?.tipo_cliente ?? salida?.tipo_cliente ?? '',
-            formatearEstancia(fechaLlegada, fechaSalida),
-            mantenimientoCsae ? 'SI' : 'NO',
-            formatearFechaHoraExcel(fechaCsaeEntrada),
-            formatearFechaHoraExcel(fechaCsaeSalida),
-            mantenimientoCsae ? formatearEstancia(fechaCsaeEntrada, fechaCsaeSalida) : '',
-        ];
-
         const rowNumber = index + 6;
         const row = worksheet.getRow(rowNumber);
 
         row.height = 25;
 
-        values.forEach((value, valueIndex) => {
+        fila.valores.forEach((value, valueIndex) => {
             const columnNumber = valueIndex + 1;
             const cell = row.getCell(columnNumber);
+            const columna = COLUMNAS_REPORTE_OPERACIONES[valueIndex];
 
             cell.value = value;
 
-            if ([5, 11, 19, 20].includes(columnNumber) && typeof value === 'number') {
+            if (columna?.esFecha && typeof value === 'number') {
                 cell.numFmt = 'dd/mm/yyyy hh:mm';
             }
 
@@ -572,7 +647,7 @@ export const exportarOperacionesAExcel = async (
             cell.alignment = alignment;
             cell.font = {
                 size: 9,
-                color: { argb: 'FF0F172A' },
+                color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.texto) },
             };
 
             if (columnNumber >= 4 && columnNumber <= 9) {
@@ -586,32 +661,22 @@ export const exportarOperacionesAExcel = async (
             }
         });
 
-        if (!llegada && salida) {
+        if (fila.estanciaPendiente) {
             const estanciaCell = row.getCell(17);
             estanciaCell.font = {
                 size: 9,
                 bold: true,
-                color: { argb: 'FFB91C1C' },
+                color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.salida.texto) },
             };
             estanciaCell.fill = departureHeaderFill;
         }
 
-        if (llegada && !salida) {
-            const estanciaCell = row.getCell(17);
-            estanciaCell.font = {
-                size: 9,
-                bold: true,
-                color: { argb: 'FFB91C1C' },
-            };
-            estanciaCell.fill = departureHeaderFill;
-        }
-
-        if (mantenimientoCsae && fechaCsaeEntrada && !fechaCsaeSalida) {
+        if (fila.estanciaCsaePendiente) {
             const estanciaCsaeCell = row.getCell(21);
             estanciaCsaeCell.font = {
                 size: 9,
                 bold: true,
-                color: { argb: 'FFB91C1C' },
+                color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.salida.texto) },
             };
         }
     });
@@ -651,7 +716,7 @@ export const exportarOperacionesAExcel = async (
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     });
 
-    const fechaHoy = new Date().toLocaleDateString('en-CA');
+    const fechaHoy = fechaReporte.toLocaleDateString('en-CA');
 
     saveAs(blob, `Reporte_Operaciones_${fechaHoy}.xlsx`);
 };

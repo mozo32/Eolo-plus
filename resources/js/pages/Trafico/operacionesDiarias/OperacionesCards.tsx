@@ -3,10 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { FormLlegada } from './FormLlegada';
 import { FormSalida } from './FormSalida';
 import { Filter, Calendar, ArrowDownLeft, ArrowUpRight, X, ChevronDown, Info, Download, History} from 'lucide-react';
-import { obtenerOperacionesDiariasApi, excelOperacionesDiariasApi, obtenerPendientesApi } from '@/stores/apiOperacionesDiarias';
-import { exportarOperacionesAExcel } from './excelService';
+import { obtenerOperacionesDiariasApi, obtenerPendientesApi } from '@/stores/apiOperacionesDiarias';
 import ReporteRapidoOperacionesModal from './ReporteRapidoOperacionesModal';
-import Swal from 'sweetalert2';
+import ExcelOperacionesModal from './ExcelOperacionesModal';
 import MatriculasPendientes from './MatriculasPendientes';
 import BitacoraModal from '@/pages/BitacoraModal';
 
@@ -30,6 +29,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
     const [pendientes, setPendientes] = useState<any[]>([]);
     const [mostrarModal, setMostrarModal] = useState(false);
     const [mostrarReporteRapido, setMostrarReporteRapido] = useState(false);
+    const [mostrarVistaPreviaExcel, setMostrarVistaPreviaExcel] = useState(false);
     const COLORES_DEPARTAMENTOS: Record<string, string> = {
         "Seguridad": "bg-blue-500",
         "Rampa": "bg-amber-500",
@@ -97,51 +97,11 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
             setLoading(false);
         }
     };
-    const cargarExcel = async () => {
-        try {
-            const data = await excelOperacionesDiariasApi({ ...filtros });
-            return Array.isArray(data) ? data : (data.data || []);
-        } catch (error) {
-            console.error("Error al obtener datos para Excel:", error);
-            throw error;
-        }
-    };
-    const handleExportarExcel = async () => {
-        Swal.fire({
-            title: 'Generando Excel',
-            text: 'Estamos recopilando todos los registros, por favor espere...',
-            allowOutsideClick: false,
-            didOpen: () => {
-                Swal.showLoading();
-            }
-        });
-
-        try {
-            const datosParaExcel = await cargarExcel();
-
-            if (datosParaExcel.length === 0) {
-                Swal.fire('Atención', 'No hay registros para exportar con los filtros seleccionados.', 'warning');
-                return;
-            }
-            await exportarOperacionesAExcel(datosParaExcel);
-            Swal.fire({
-                icon: 'success',
-                title: '¡Descarga lista!',
-                text: 'El reporte se ha generado correctamente.',
-                timer: 2000,
-                showConfirmButton: false
-            });
-
-        } catch (error) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: 'Hubo un problema al generar el archivo. Intente de nuevo.'
-            });
-        }
-    };
     const abrirVistaPreviaReporteRapido = () => {
         setMostrarReporteRapido(true);
+    };
+    const abrirVistaPreviaExcel = () => {
+        setMostrarVistaPreviaExcel(true);
     };
     useEffect(() => {
         cargarDatos();
@@ -279,10 +239,11 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                         <>
                             <div className="w-[1px] bg-slate-200 mx-1"></div>
                             <button
-                                onClick={handleExportarExcel}
+                                type="button"
+                                onClick={abrirVistaPreviaExcel}
                                 disabled={loading}
                                 className="flex items-center gap-2 bg-white text-slate-600 text-[10px] font-black px-3 py-2 rounded border border-slate-200 shadow-sm hover:bg-slate-50 transition-all active:scale-95 uppercase tracking-wider disabled:opacity-50"
-                                title="Descargar Excel"
+                                title="Vista previa del Excel"
                             >
                                 <Download size={14} className="text-green-600" />
                                 <span className="hidden md:inline">EXCEL</span>
@@ -582,6 +543,12 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
             <ReporteRapidoOperacionesModal
                 open={mostrarReporteRapido}
                 onClose={() => setMostrarReporteRapido(false)}
+                filtros={filtros}
+            />
+
+            <ExcelOperacionesModal
+                open={mostrarVistaPreviaExcel}
+                onClose={() => setMostrarVistaPreviaExcel(false)}
                 filtros={filtros}
             />
 

@@ -54,28 +54,37 @@ const ControlVehiculos = () => {
     };
 
     const handleFormSubmit = async (formData: FormData) => {
-        const logData = {
-            vehiculo_id: selectedVehiculo?.id,
-            movimiento: tipoAccion,
-            gasolina: formData.get('gasolina'),
-            kilometraje: formData.get('kilometraje'),
-            chofer: formData.get('chofer'),
-            autoriza: formData.get('autoriza'),
-            destino: formData.get('destino') || 'N/A',
-            matricula: formData.get('matricula') || '',
-            motivo: formData.get('motivo') || '',
-            notas: formData.get('notas') || '',
-        };
+        if (!selectedVehiculo) {
+            alert('No se seleccionó ningún vehículo');
+            return;
+        }
+
+        formData.set('vehiculo_id', String(selectedVehiculo.id));
+        formData.set('movimiento', tipoAccion);
+
+        // Puedes quitarlo después de comprobar la carga.
+        console.log(
+            'Fotografías enviadas:',
+            formData.getAll('evidencias[]')
+        );
 
         try {
-            await apiVehiculoEolo.registrarMovimiento(logData);
+            await apiVehiculoEolo.registrarMovimiento(formData);
+
             await fetchVehiculos();
-            window.dispatchEvent(new CustomEvent('movimiento-registrado'));
+
+            window.dispatchEvent(
+                new CustomEvent('movimiento-registrado')
+            );
+
             cerrarModal();
-            alert("Registro guardado correctamente");
+            alert('Registro guardado correctamente');
         } catch (error: any) {
-            const errorMessages = Object.values(error.errors || {}).flat().join('\n');
-            alert("Error:\n" + (errorMessages || error.message));
+            const errorMessages = Object.values(error.errors || {})
+                .flat()
+                .join('\n');
+
+            alert('Error:\n' + (errorMessages || error.message));
         }
     };
 

@@ -219,7 +219,7 @@ export default function MovimientoAvionesCSAE() {
                                     Movimiento de Aeronaves
                                 </h2>
                                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                                    Gestión de entradas y salidas CSAE
+                                    Registro de entradas y salidas CSAE
                                 </p>
                             </div>
                             <button

@@ -9,7 +9,7 @@ import { Plus, Mail, Calendar, X, Edit2, Filter, ChevronDown, Download, Eye, Fol
 import ModalEnviarCorreo from './Autotanque/ModalEnviarCorreo';
 import ModalPrefactura from './Autotanque/ModalPrefactura';
 import Swal from 'sweetalert2';
-import { ExcelRemisiones } from './Autotanque/ExcelRemisiones';
+import ExcelRemisionesModal from './Autotanque/ExcelRemisionesModal';
 import { excelRemisionesApi, consultaAsa } from '@/stores/apiRemision';
 import VistaPreviaRemision from './Autotanque/VistaPreviaRemision';
 import { useEchoPublic } from '@laravel/echo-react';
@@ -51,6 +51,7 @@ export default function Remision() {
     const [pdfId, setPdfId] = useState<number | null>(null);
     const [emailModalOpen, setEmailModalOpen] = useState(false);
     const [prefacturaModalOpen, setPrefacturaModalOpen] = useState(false);
+    const [excelModalOpen, setExcelModalOpen] = useState(false);
     const [selectedRow, setSelectedRow] = useState<any>(null);
     const [pagina, setPagina] = useState(1);
     const [meta, setMeta] = useState<any>(null);
@@ -400,7 +401,7 @@ export default function Remision() {
         setDetalle(null);
     };
 
-    const cargarExcel = async () => {
+    const cargarExcel = useCallback(async () => {
         try {
             const data = await excelRemisionesApi({ ...filtros });
             return Array.isArray(data) ? data : (data.data || []);
@@ -408,37 +409,7 @@ export default function Remision() {
             console.error("Error al obtener datos para Excel:", error);
             throw error;
         }
-    };
-
-    const handleExportarExcel = async () => {
-        Swal.fire({
-            title: 'Generando Excel',
-            text: 'Estamos recopilando todos los registros, por favor espere...',
-            allowOutsideClick: false,
-            didOpen: () => { Swal.showLoading(); }
-        });
-        try {
-            const datosParaExcel = await cargarExcel();
-            if (datosParaExcel.length === 0) {
-                Swal.fire('Atención', 'No hay registros para exportar con los filtros seleccionados.', 'warning');
-                return;
-            }
-            await ExcelRemisiones(datosParaExcel);
-            Swal.fire({
-                icon: 'success',
-                title: '¡Descarga lista!',
-                text: 'El reporte se ha generado correctamente.',
-                timer: 2000,
-                showConfirmButton: false
-            });
-        } catch (error) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: 'Hubo un problema al generar el archivo. Intente de nuevo.'
-            });
-        }
-    };
+    }, [filtros]);
     const rol = user?.roles?.[0]?.slug;
 
     return (
@@ -467,10 +438,10 @@ export default function Remision() {
                             <div className="w-[1px] bg-slate-200 mx-1"></div>
                             {(user?.roles?.[0]?.slug === 'admin2' || user?.roles?.[0]?.slug === 'fbo' || user?.roles?.[0]?.slug === 'admin') && (
                                 <button
-                                    onClick={handleExportarExcel}
+                                    onClick={() => setExcelModalOpen(true)}
                                     disabled={loading}
                                     className="flex items-center gap-2 bg-white text-slate-600 text-[10px] font-black px-3 py-2 rounded border border-slate-200 shadow-sm hover:bg-slate-50 transition-all active:scale-95 uppercase tracking-wider disabled:opacity-50"
-                                    title="Descargar Excel"
+                                    title="Vista previa del Excel"
                                 >
                                     <Download size={14} className="text-green-600" />
                                     <span className="hidden md:inline">EXCEL</span>
@@ -825,6 +796,11 @@ export default function Remision() {
                     onClose={() => setPrefacturaModalOpen(false)}
                     onSend={handleSendPrefactura}
                     row={selectedRow}
+                />
+                <ExcelRemisionesModal
+                    open={excelModalOpen}
+                    onClose={() => setExcelModalOpen(false)}
+                    cargarRegistros={cargarExcel}
                 />
                 <PdfExporterRemision id={pdfId} onDone={handlePdfDone} />
             </div>
