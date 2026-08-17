@@ -242,7 +242,7 @@ const TablaWalkAround = () => {
                                     + NUEVO REGISTRO
                                 </button>
                             )}
-                            {[1, 44, 42].includes(Number(idUser)) && (
+                            {[1, 44, 42, 15].includes(Number(idUser)) && (
                                 <button
                                     type="button"
                                     onClick={() => setMostrarBitacora(true)}

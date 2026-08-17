@@ -251,7 +251,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                         </>
                     )}
                     <div className="w-[1px] bg-slate-200 mx-1"></div>
-                    {[1, 44, 42].includes(Number(idUser)) && (
+                    {[1, 44, 42, 15].includes(Number(idUser)) && (
                         <button
                             type="button"
                             onClick={() => setMostrarBitacora(true)}
