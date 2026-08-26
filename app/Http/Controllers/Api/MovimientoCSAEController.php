@@ -27,7 +27,7 @@ class MovimientoCSAEController extends Controller
                 'tipo_aeronave'         => 'required|string|max:50',
                 'como_llega'            => 'required|string|max:50',
                 'transportista'         => 'required|string|max:100',
-                'firma_entrada'         => 'required|string',
+                'firma_entrada'         => 'sometimes|nullable|string',
                 'observaciones_entrada' => 'nullable|string',
             ]);
 
@@ -80,7 +80,18 @@ class MovimientoCSAEController extends Controller
                 'user_entrada_id'       => Auth::id(),
             ]);
 
-            $this->guardarFirmaBase64($request->firma_entrada, 'firma_entrada', $movimiento);
+            $firmaEntrada = $validated['firma_entrada'] ?? null;
+
+            if (
+                is_string($firmaEntrada) &&
+                str_contains($firmaEntrada, 'base64,')
+            ) {
+                $this->guardarFirmaBase64(
+                    $firmaEntrada,
+                    'firma_entrada',
+                    $movimiento
+                );
+            }
 
             DB::commit();
 
@@ -99,6 +110,18 @@ class MovimientoCSAEController extends Controller
     }
     public function index(Request $request)
     {
+        $validated = $request->validate([
+            'page'            => 'nullable|integer|min:1',
+            'per_page'        => 'nullable|integer|min:1|max:100',
+            'search'          => 'nullable|string|max:100',
+            'tipo_aeronave'   => 'nullable|string|max:100',
+            'entrada_inicio'  => 'nullable|date_format:Y-m-d',
+            'entrada_fin'     => 'nullable|date_format:Y-m-d|after_or_equal:entrada_inicio',
+            'salida_inicio'   => 'nullable|date_format:Y-m-d',
+            'salida_fin'      => 'nullable|date_format:Y-m-d|after_or_equal:salida_inicio',
+            'estado'          => 'nullable|in:pendiente,salio',
+        ]);
+
         $query = MovimientoCSAE::query()
             ->select('movimientos_csae.*')
             ->selectRaw("
@@ -109,18 +132,71 @@ class MovimientoCSAEController extends Controller
             ")
             ->where('status', 'A');
 
-        if ($request->filled('search')) {
-            $search = $request->search;
+        if (!empty($validated['search'])) {
+            $search = trim($validated['search']);
 
-            $query->where(function ($q) use ($search) {
-                $q->where('matricula', 'like', "%{$search}%");
-            });
+            $query->where(
+                'matricula',
+                'like',
+                "%{$search}%"
+            );
         }
 
-        $perPage = $request->get('per_page', 10);
+        if (!empty($validated['tipo_aeronave'])) {
+            $tipoAeronave = trim($validated['tipo_aeronave']);
+
+            $query->where(
+                'tipo_aeronave',
+                'like',
+                "%{$tipoAeronave}%"
+            );
+        }
+
+        if (!empty($validated['entrada_inicio'])) {
+            $query->whereDate(
+                'fecha_hora_entrada',
+                '>=',
+                $validated['entrada_inicio']
+            );
+        }
+
+        if (!empty($validated['entrada_fin'])) {
+            $query->whereDate(
+                'fecha_hora_entrada',
+                '<=',
+                $validated['entrada_fin']
+            );
+        }
+
+        if (!empty($validated['salida_inicio'])) {
+            $query->whereDate(
+                'fecha_hora_salida',
+                '>=',
+                $validated['salida_inicio']
+            );
+        }
+
+        if (!empty($validated['salida_fin'])) {
+            $query->whereDate(
+                'fecha_hora_salida',
+                '<=',
+                $validated['salida_fin']
+            );
+        }
+
+        if (($validated['estado'] ?? null) === 'pendiente') {
+            $query->whereNull('fecha_hora_salida');
+        }
+
+        if (($validated['estado'] ?? null) === 'salio') {
+            $query->whereNotNull('fecha_hora_salida');
+        }
+
+        $perPage = (int) ($validated['per_page'] ?? 10);
 
         return response()->json(
-            $query->orderBy('created_at', 'desc')
+            $query
+                ->orderByDesc('created_at')
                 ->paginate($perPage)
         );
     }
@@ -166,7 +242,7 @@ class MovimientoCSAEController extends Controller
         try {
             $validated = $request->validate([
                 'fecha_hora_salida'    => 'nullable|date',
-                'firma_salida'         => 'nullable|string',
+                'firma_salida'         => 'sometimes|nullable|string',
                 'observaciones_salida' => 'nullable|string',
             ]);
 
@@ -176,9 +252,14 @@ class MovimientoCSAEController extends Controller
                 'user_salida_id'       => Auth::id(),
             ]);
 
-            if (str_contains($request->firma_salida ?? '', 'base64,')) {
+            $firmaSalida = $validated['firma_salida'] ?? null;
+
+            if (
+                is_string($firmaSalida) &&
+                str_contains($firmaSalida, 'base64,')
+            ) {
                 $this->guardarFirmaBase64(
-                    $request->firma_salida,
+                    $firmaSalida,
                     'firma_salida',
                     $movimientoCSAE
                 );

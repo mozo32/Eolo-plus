@@ -272,14 +272,14 @@ export default function MovimientoCSAESalida({
                                                     type="date"
                                                     name="fecha_salida"
                                                     value={data.fecha_salida}
-                                                    readOnly
-                                                    tabIndex={-1}
-                                                    className={`${inputStyle} cursor-not-allowed pl-10 text-slate-500`}
+                                                    onChange={onChange}
+                                                    required
+                                                    className={`${inputStyle} pl-10`}
                                                 />
                                             </div>
 
                                             <p className="ml-1 mt-1 text-[9px] font-bold text-slate-400">
-                                                Fecha automática de México
+                                                Puede modificar la fecha de salida
                                             </p>
                                         </div>
 
@@ -358,7 +358,7 @@ export default function MovimientoCSAESalida({
                                         </h3>
 
                                         <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
-                                            Firma del personal
+                                            Firma opcional del personal
                                             responsable
                                         </p>
                                     </div>
@@ -371,10 +371,10 @@ export default function MovimientoCSAESalida({
                                         </h4>
 
                                         <p className="mt-2 text-xs font-medium leading-relaxed text-blue-700">
-                                            Al firmar, el personal
-                                            certifica que la aeronave
-                                            sale bajo las condiciones
-                                            descritas.
+                                            La firma es opcional. Si se
+                                            captura, el personal certifica
+                                            que la aeronave sale bajo las
+                                            condiciones descritas.
                                         </p>
                                     </div>
 
@@ -405,7 +405,7 @@ export default function MovimientoCSAESalida({
                                                 </div>
 
                                                 <span className="mt-3 text-[10px] font-black uppercase tracking-wider text-slate-400 group-hover:text-blue-600">
-                                                    Capturar firma
+                                                    Capturar firma (opcional)
                                                 </span>
                                             </>
                                         )}

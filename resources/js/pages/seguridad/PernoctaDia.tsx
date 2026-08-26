@@ -1,6 +1,5 @@
 import AppLayout from "@/layouts/app-layout";
 import { Head } from "@inertiajs/react";
-;
 import { Fragment, useCallback, useEffect, useState } from "react";
 import ModalVistaPreviaExcelPernocta from "./pernoctaDia/ModalVistaPreviaExcelPernocta";
 import {
@@ -17,6 +16,7 @@ import { ExcelPernoctaDia } from "./pernoctaDia/ExcelPernoctaDia";
 import {
     guardarPernoctaDiaApi,
     obtenerPernoctasApi,
+    type ErrorGuardarPernocta,
     type PernoctaPaginationMeta,
     type PernoctaRegistro,
 } from "@/stores/apiPernoctaDia";
@@ -77,6 +77,21 @@ const obtenerUltimoDiaMes = (
     month: number,
 ) => {
     return new Date(year, month, 0).getDate();
+};
+
+const escaparHtml = (valor: unknown): string => {
+    const entidades: Record<string, string> = {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;",
+    };
+
+    return String(valor ?? "").replace(
+        /[&<>"']/g,
+        (caracter) => entidades[caracter] ?? caracter,
+    );
 };
 
 export default function PernoctaDia() {
@@ -556,13 +571,14 @@ export default function PernoctaDia() {
     const handleGuardar = async () => {
         if (!items.length || guardando) return;
 
-        const horaActual =
-            new Date().toLocaleTimeString("es-MX", {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-                hour12: false,
-            });
+        const ahora = new Date();
+        const horaActual = [
+            ahora.getHours(),
+            ahora.getMinutes(),
+            ahora.getSeconds(),
+        ]
+            .map((valor) => String(valor).padStart(2, "0"))
+            .join(":");
 
         const itemsForms = items.map((item) => ({
             ...item,
@@ -592,13 +608,45 @@ export default function PernoctaDia() {
                 confirmButtonColor: "#4f46e5",
             });
         } catch (error) {
-            Swal.fire({
+            const errorApi = error as ErrorGuardarPernocta;
+            const aeronavesFuera =
+                errorApi.data?.aeronaves_fuera_hangar;
+
+            if (
+                Array.isArray(aeronavesFuera) &&
+                aeronavesFuera.length > 0
+            ) {
+                const detalle = aeronavesFuera
+                    .map((aeronave) => {
+                        const ultimaOperacion =
+                            aeronave.fecha_hora_ultima_operacion
+                                ? `<div style="margin-top:4px;color:#64748b;font-size:12px;">Último movimiento: <strong>${escaparHtml(aeronave.ultima_operacion)}</strong> · ${escaparHtml(aeronave.fecha_hora_ultima_operacion)}</div>`
+                                : "";
+
+                        return `<div style="margin-top:10px;padding:12px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;"><div style="font-weight:800;color:#0f172a;">${escaparHtml(aeronave.matricula)}</div><div style="margin-top:4px;color:#475569;font-size:13px;">${escaparHtml(aeronave.motivo)}</div>${ultimaOperacion}</div>`;
+                    })
+                    .join("");
+
+                await Swal.fire({
+                    icon: "warning",
+                    title:
+                        aeronavesFuera.length === 1
+                            ? "Aeronave fuera del hangar"
+                            : "Aeronaves fuera del hangar",
+                    html: `<div style="text-align:left;"><p style="margin:0;color:#475569;">No se guardó ningún registro.</p>${detalle}</div>`,
+                    confirmButtonColor: "#4f46e5",
+                    confirmButtonText: "Aceptar",
+                });
+
+                return;
+            }
+
+            await Swal.fire({
                 icon: "error",
                 title: "Error",
                 text:
-                    error instanceof Error
-                        ? error.message
-                        : "No se pudo guardar la información",
+                    errorApi.message ||
+                    "No se pudo guardar la información",
                 confirmButtonColor: "#4f46e5",
             });
         } finally {
@@ -969,7 +1017,6 @@ export default function PernoctaDia() {
 
                                             return (
                                                 <Fragment key={grupo.id}>
-                                                    {/* Fila principal del grupo */}
                                                     <tr
                                                         onClick={() =>
                                                             alternarGrupo(grupo.id)
@@ -1077,7 +1124,6 @@ export default function PernoctaDia() {
                                                         </td>
                                                     </tr>
 
-                                                    {/* Información desplegable */}
                                                     {estaAbierto && (
                                                         <tr className="border-b border-indigo-100 bg-slate-50">
                                                             <td

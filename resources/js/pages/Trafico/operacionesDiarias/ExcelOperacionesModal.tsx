@@ -457,11 +457,18 @@ const ExcelOperacionesModal = ({
                                                                 indiceColumna
                                                             );
                                                         const fija = indiceColumna <= 2;
+                                                        const esCeldaCsaeMultilinea =
+                                                            indiceColumna >= 18 &&
+                                                            indiceColumna <= 20;
 
                                                         return (
                                                             <td
                                                                 key={`${indiceFila}-${indiceColumna}`}
-                                                                className="h-[33px] whitespace-nowrap px-2 py-1.5 text-[12px]"
+                                                                className={`px-2 text-[12px] ${
+                                                                    esCeldaCsaeMultilinea
+                                                                        ? 'whitespace-pre-line py-2 leading-5'
+                                                                        : 'h-[33px] whitespace-nowrap py-1.5'
+                                                                }`}
                                                                 title={texto}
                                                                 style={{
                                                                     width: obtenerAnchoColumna(
@@ -497,9 +504,17 @@ const ExcelOperacionesModal = ({
                                                                         indiceColumna
                                                                     ),
                                                                     zIndex: fija ? 10 : 1,
+                                                                    whiteSpace:
+                                                                        esCeldaCsaeMultilinea
+                                                                            ? 'pre-line'
+                                                                            : 'nowrap',
                                                                     overflow: 'hidden',
                                                                     textOverflow:
-                                                                        'ellipsis',
+                                                                        esCeldaCsaeMultilinea
+                                                                            ? undefined
+                                                                            : 'ellipsis',
+                                                                    verticalAlign:
+                                                                        'middle',
                                                                 }}
                                                             >
                                                                 {texto || '\u00A0'}

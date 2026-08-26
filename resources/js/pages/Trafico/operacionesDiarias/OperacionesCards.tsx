@@ -15,11 +15,32 @@ interface OperacionesCardsProps {
     idUser?: number;
 }
 
+interface PestanaLlegada {
+    id: number;
+    titulo: string;
+}
+
+interface PestanaSalida {
+    id: number;
+    titulo: string;
+}
+
+interface EstadoPestanasBorrador {
+    pestanasLlegada: PestanaLlegada[];
+    pestanaLlegadaActiva: number | null;
+    pestanasSalida: PestanaSalida[];
+    pestanaSalidaActiva: number | null;
+}
+
 const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsProps) => {
     const [registros, setRegistros] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [stripExpandida, setStripExpandida] = useState<number | null>(null);
     const [creando, setCreando] = useState<'llegada' | 'salida' | null>(null);
+    const [pestanasLlegada, setPestanasLlegada] = useState<PestanaLlegada[]>([]);
+    const [pestanaLlegadaActiva, setPestanaLlegadaActiva] = useState<number | null>(null);
+    const [pestanasSalida, setPestanasSalida] = useState<PestanaSalida[]>([]);
+    const [pestanaSalidaActiva, setPestanaSalidaActiva] = useState<number | null>(null);
     const [pagina, setPagina] = useState(1);
     const [meta, setMeta] = useState<any>(null);
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
@@ -30,6 +51,10 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
     const [mostrarModal, setMostrarModal] = useState(false);
     const [mostrarReporteRapido, setMostrarReporteRapido] = useState(false);
     const [mostrarVistaPreviaExcel, setMostrarVistaPreviaExcel] = useState(false);
+    const [claveCacheCargada, setClaveCacheCargada] = useState<string | null>(null);
+    const identificadorBorradores = `${idUser ?? 'anonimo'}:${moduloNombre ?? nombreRol ?? 'general'}`;
+    const prefijoBorradores = `operaciones-diarias:borradores:${identificadorBorradores}`;
+    const claveEstadoPestanas = `${prefijoBorradores}:pestanas`;
     const COLORES_DEPARTAMENTOS: Record<string, string> = {
         "Seguridad": "bg-blue-500",
         "Rampa": "bg-amber-500",
@@ -55,11 +80,124 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
     const [filtrosEdicion, setFiltrosEdicion] = useState({ ...filtros });
 
     useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        let pestanasLlegadaGuardadas: PestanaLlegada[] = [];
+        let pestanaLlegadaActivaGuardada: number | null = null;
+        let pestanasSalidaGuardadas: PestanaSalida[] = [];
+        let pestanaSalidaActivaGuardada: number | null = null;
+
+        try {
+            const contenidoGuardado = window.localStorage.getItem(claveEstadoPestanas);
+
+            if (contenidoGuardado) {
+                const estadoGuardado = JSON.parse(contenidoGuardado) as Partial<EstadoPestanasBorrador>;
+
+                pestanasLlegadaGuardadas = Array.isArray(estadoGuardado.pestanasLlegada)
+                    ? estadoGuardado.pestanasLlegada.filter(pestana => Number.isFinite(pestana?.id) && typeof pestana?.titulo === 'string')
+                    : [];
+
+                pestanasSalidaGuardadas = Array.isArray(estadoGuardado.pestanasSalida)
+                    ? estadoGuardado.pestanasSalida.filter(pestana => Number.isFinite(pestana?.id) && typeof pestana?.titulo === 'string')
+                    : [];
+
+                pestanaLlegadaActivaGuardada = pestanasLlegadaGuardadas.some(pestana => pestana.id === estadoGuardado.pestanaLlegadaActiva)
+                    ? estadoGuardado.pestanaLlegadaActiva ?? null
+                    : pestanasLlegadaGuardadas[0]?.id ?? null;
+
+                pestanaSalidaActivaGuardada = pestanasSalidaGuardadas.some(pestana => pestana.id === estadoGuardado.pestanaSalidaActiva)
+                    ? estadoGuardado.pestanaSalidaActiva ?? null
+                    : pestanasSalidaGuardadas[0]?.id ?? null;
+            }
+        } catch (error) {
+            console.error('No se pudieron restaurar las pestañas guardadas', error);
+            window.localStorage.removeItem(claveEstadoPestanas);
+        }
+
+        setCreando(null);
+        setPestanasLlegada(pestanasLlegadaGuardadas);
+        setPestanaLlegadaActiva(pestanaLlegadaActivaGuardada);
+        setPestanasSalida(pestanasSalidaGuardadas);
+        setPestanaSalidaActiva(pestanaSalidaActivaGuardada);
+        setClaveCacheCargada(claveEstadoPestanas);
+    }, [claveEstadoPestanas]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || claveCacheCargada !== claveEstadoPestanas) return;
+
+        if (pestanasLlegada.length === 0 && pestanasSalida.length === 0) {
+            window.localStorage.removeItem(claveEstadoPestanas);
+            return;
+        }
+
+        const estadoPestanas: EstadoPestanasBorrador = {
+            pestanasLlegada,
+            pestanaLlegadaActiva,
+            pestanasSalida,
+            pestanaSalidaActiva
+        };
+
+        try {
+            window.localStorage.setItem(claveEstadoPestanas, JSON.stringify(estadoPestanas));
+        } catch (error) {
+            console.error('No se pudieron guardar las pestañas', error);
+        }
+    }, [
+        claveCacheCargada,
+        claveEstadoPestanas,
+        pestanasLlegada,
+        pestanaLlegadaActiva,
+        pestanasSalida,
+        pestanaSalidaActiva
+    ]);
+
+    useEffect(() => {
         if (mostrarModalFecha) {
             setFiltrosEdicion({ ...filtros });
         }
     }, [mostrarModalFecha, filtros]);
 
+    const cambiarPeriodoFecha = (
+        modo: 'dia' | 'rango' | 'mes' | 'año',
+    ) => {
+        setFiltrosEdicion((actual) => {
+            const ahora = new Date();
+            const anioActual = ahora.getFullYear();
+            const numeroMesActual = ahora.getMonth() + 1;
+            const mesActual = String(numeroMesActual).padStart(2, '0');
+
+            if (modo === 'mes') {
+                const ultimoDia = new Date(
+                    anioActual,
+                    numeroMesActual,
+                    0,
+                ).getDate();
+
+                return {
+                    ...actual,
+                    periodo: modo,
+                    fechaInicio: `${anioActual}-${mesActual}-01`,
+                    fechaFin: `${anioActual}-${mesActual}-${String(
+                        ultimoDia,
+                    ).padStart(2, '0')}`,
+                };
+            }
+
+            if (modo === 'año') {
+                return {
+                    ...actual,
+                    periodo: modo,
+                    fechaInicio: `${anioActual}-01-01`,
+                    fechaFin: `${anioActual}-12-31`,
+                };
+            }
+
+            return {
+                ...actual,
+                periodo: modo,
+            };
+        });
+    };
     const aplicarFiltroFecha = () => {
         setFiltros({ ...filtrosEdicion });
         setMostrarModalFecha(false);
@@ -112,6 +250,109 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
         if (recargar) cargarDatos();
     };
 
+    const obtenerClaveBorrador = (tipo: 'llegada' | 'salida', id: number) => `${prefijoBorradores}:${tipo}:${id}`;
+
+    const eliminarBorrador = (tipo: 'llegada' | 'salida', id: number) => {
+        if (typeof window === 'undefined') return;
+        window.localStorage.removeItem(obtenerClaveBorrador(tipo, id));
+    };
+
+    const abrirFormularioLlegada = () => {
+        if (pestanasLlegada.length === 0) {
+            const primeraPestana = { id: 1, titulo: 'Llegada 1' };
+
+            setPestanasLlegada([primeraPestana]);
+            setPestanaLlegadaActiva(primeraPestana.id);
+        }
+
+        setCreando('llegada');
+    };
+
+    const agregarPestanaLlegada = () => {
+        const siguienteId = pestanasLlegada.reduce(
+            (mayor, pestana) => Math.max(mayor, pestana.id),
+            0
+        ) + 1;
+        const nuevaPestana = {
+            id: siguienteId,
+            titulo: `Llegada ${siguienteId}`
+        };
+
+        setPestanasLlegada(prev => [...prev, nuevaPestana]);
+        setPestanaLlegadaActiva(nuevaPestana.id);
+    };
+
+    const cerrarPestanaLlegada = (id: number, recargar = false) => {
+        const indiceActual = pestanasLlegada.findIndex(pestana => pestana.id === id);
+        const pestanasRestantes = pestanasLlegada.filter(pestana => pestana.id !== id);
+
+        eliminarBorrador('llegada', id);
+
+        if (recargar) cargarDatos();
+
+        if (pestanasRestantes.length === 0) {
+            setPestanasLlegada([]);
+            setPestanaLlegadaActiva(null);
+            setCreando(null);
+            return;
+        }
+
+        setPestanasLlegada(pestanasRestantes);
+
+        if (pestanaLlegadaActiva === id) {
+            const siguienteIndice = Math.min(indiceActual, pestanasRestantes.length - 1);
+            setPestanaLlegadaActiva(pestanasRestantes[siguienteIndice].id);
+        }
+    };
+
+    const abrirFormularioSalida = () => {
+        if (pestanasSalida.length === 0) {
+            const primeraPestana = { id: 1, titulo: 'Salida 1' };
+
+            setPestanasSalida([primeraPestana]);
+            setPestanaSalidaActiva(primeraPestana.id);
+        }
+
+        setCreando('salida');
+    };
+
+    const agregarPestanaSalida = () => {
+        const siguienteId = pestanasSalida.reduce(
+            (mayor, pestana) => Math.max(mayor, pestana.id),
+            0
+        ) + 1;
+        const nuevaPestana = {
+            id: siguienteId,
+            titulo: `Salida ${siguienteId}`
+        };
+
+        setPestanasSalida(prev => [...prev, nuevaPestana]);
+        setPestanaSalidaActiva(nuevaPestana.id);
+    };
+
+    const cerrarPestanaSalida = (id: number, recargar = false) => {
+        const indiceActual = pestanasSalida.findIndex(pestana => pestana.id === id);
+        const pestanasRestantes = pestanasSalida.filter(pestana => pestana.id !== id);
+
+        eliminarBorrador('salida', id);
+
+        if (recargar) cargarDatos();
+
+        if (pestanasRestantes.length === 0) {
+            setPestanasSalida([]);
+            setPestanaSalidaActiva(null);
+            setCreando(null);
+            return;
+        }
+
+        setPestanasSalida(pestanasRestantes);
+
+        if (pestanaSalidaActiva === id) {
+            const siguienteIndice = Math.min(indiceActual, pestanasRestantes.length - 1);
+            setPestanaSalidaActiva(pestanasRestantes[siguienteIndice].id);
+        }
+    };
+
     const toggleStrip = (id: number) => {
         setStripExpandida(stripExpandida === id ? null : id);
     };
@@ -138,15 +379,135 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
 
     return (
         <div className="bg-[#f3f4f6] min-h-screen p-4 font-sans text-slate-900 relative">
-            {creando && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {(pestanasLlegada.length > 0 || pestanasSalida.length > 0) && (
+                <div className={creando ? 'fixed inset-0 z-50 flex items-center justify-center p-4' : 'hidden'}>
                     <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => cerrarModal(false)}></div>
-                    <div className="relative z-10 w-full max-w-lg">
-                        {creando === 'llegada' ? (
-                            <FormLlegada nombreRol={nombreRol} moduloNombre={moduloNombre} alCerrar={() => cerrarModal(true)} />
-                        ) : (
-                            <FormSalida nombreRol={nombreRol} moduloNombre={moduloNombre} alCerrar={() => cerrarModal(true)} />
-                        )}
+                    <div className="relative z-10 w-full max-w-xl">
+                        <div className={creando === 'llegada' ? 'block' : 'hidden'}>
+                            <div className="overflow-hidden rounded-xl bg-white shadow-2xl">
+                                <nav className="flex items-center gap-1 overflow-x-auto border-b border-slate-200 bg-slate-100 p-2">
+                                    {pestanasLlegada.map(pestana => {
+                                        const estaActiva = pestanaLlegadaActiva === pestana.id;
+
+                                        return (
+                                            <div
+                                                key={pestana.id}
+                                                className={`flex shrink-0 items-center rounded-lg border transition-colors ${estaActiva
+                                                    ? 'border-emerald-300 bg-white text-emerald-700 shadow-sm'
+                                                    : 'border-transparent bg-slate-200/60 text-slate-500 hover:bg-white'
+                                                    }`}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPestanaLlegadaActiva(pestana.id)}
+                                                    className="px-3 py-2 text-[10px] font-black uppercase tracking-wider"
+                                                >
+                                                    {pestana.titulo}
+                                                </button>
+
+                                                {pestanasLlegada.length > 1 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => cerrarPestanaLlegada(pestana.id)}
+                                                        className="mr-1 rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                                                        aria-label={`Cerrar ${pestana.titulo}`}
+                                                        title={`Cerrar ${pestana.titulo}`}
+                                                    >
+                                                        <X size={12} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+
+                                    <button
+                                        type="button"
+                                        onClick={agregarPestanaLlegada}
+                                        className="shrink-0 rounded-lg border border-dashed border-emerald-400 bg-emerald-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-emerald-700 hover:bg-emerald-100"
+                                    >
+                                        + Otra llegada
+                                    </button>
+                                </nav>
+
+                                {pestanasLlegada.map(pestana => (
+                                    <div
+                                        key={pestana.id}
+                                        className={pestanaLlegadaActiva === pestana.id ? 'block' : 'hidden'}
+                                    >
+                                        <FormLlegada
+                                            nombreRol={nombreRol}
+                                            moduloNombre={moduloNombre}
+                                            borradorId={obtenerClaveBorrador('llegada', pestana.id)}
+                                            alCerrar={() => cerrarModal(false)}
+                                            alGuardar={() => cerrarPestanaLlegada(pestana.id, true)}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className={creando === 'salida' ? 'block' : 'hidden'}>
+                            <div className="overflow-hidden rounded-xl bg-white shadow-2xl">
+                                <nav className="flex items-center gap-1 overflow-x-auto border-b border-slate-200 bg-slate-100 p-2">
+                                    {pestanasSalida.map(pestana => {
+                                        const estaActiva = pestanaSalidaActiva === pestana.id;
+
+                                        return (
+                                            <div
+                                                key={pestana.id}
+                                                className={`flex shrink-0 items-center rounded-lg border transition-colors ${estaActiva
+                                                    ? 'border-red-300 bg-white text-red-700 shadow-sm'
+                                                    : 'border-transparent bg-slate-200/60 text-slate-500 hover:bg-white'
+                                                    }`}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPestanaSalidaActiva(pestana.id)}
+                                                    className="px-3 py-2 text-[10px] font-black uppercase tracking-wider"
+                                                >
+                                                    {pestana.titulo}
+                                                </button>
+
+                                                {pestanasSalida.length > 1 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => cerrarPestanaSalida(pestana.id)}
+                                                        className="mr-1 rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                                                        aria-label={`Cerrar ${pestana.titulo}`}
+                                                        title={`Cerrar ${pestana.titulo}`}
+                                                    >
+                                                        <X size={12} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+
+                                    <button
+                                        type="button"
+                                        onClick={agregarPestanaSalida}
+                                        className="shrink-0 rounded-lg border border-dashed border-red-400 bg-red-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-red-700 hover:bg-red-100"
+                                    >
+                                        + Otra salida
+                                    </button>
+                                </nav>
+
+                                {pestanasSalida.map(pestana => (
+                                    <div
+                                        key={pestana.id}
+                                        className={pestanaSalidaActiva === pestana.id ? 'block' : 'hidden'}
+                                    >
+                                        <FormSalida
+                                            nombreRol={nombreRol}
+                                            moduloNombre={moduloNombre}
+                                            borradorId={obtenerClaveBorrador('salida', pestana.id)}
+                                            alCerrar={() => cerrarModal(false)}
+                                            alGuardar={() => cerrarPestanaSalida(pestana.id, true)}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
@@ -266,10 +627,10 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                         </button>
                     )}
 
-                    <button onClick={() => setCreando('llegada')} className="bg-emerald-600 text-white text-[10px] font-black px-3 py-2 rounded shadow-md hover:bg-emerald-700 transition-all active:scale-95 uppercase tracking-wider">
+                    <button onClick={abrirFormularioLlegada} className="bg-emerald-600 text-white text-[10px] font-black px-3 py-2 rounded shadow-md hover:bg-emerald-700 transition-all active:scale-95 uppercase tracking-wider">
                         + <span className="hidden sm:inline">LLEGADA</span>
                     </button>
-                    <button onClick={() => setCreando('salida')} className="bg-red-500 text-white text-[10px] font-black px-3 py-2 rounded shadow-md hover:bg-red-600 transition-all active:scale-95 uppercase tracking-wider">
+                    <button onClick={abrirFormularioSalida} className="bg-red-500 text-white text-[10px] font-black px-3 py-2 rounded shadow-md hover:bg-red-600 transition-all active:scale-95 uppercase tracking-wider">
                         + <span className="hidden sm:inline">SALIDA</span>
                     </button>
                 </div>
@@ -489,11 +850,18 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                         </div>
                         <div className="p-4 space-y-4">
                             <div className="flex bg-slate-100 p-1 rounded-lg">
-                                {['dia', 'rango', 'mes', 'año'].map((modo) => (
+                                {(
+                                    ['dia', 'rango', 'mes', 'año'] as const
+                                ).map((modo) => (
                                     <button
+                                        type="button"
                                         key={modo}
-                                        onClick={() => setFiltrosEdicion({ ...filtrosEdicion, periodo: modo })}
-                                        className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all uppercase ${filtrosEdicion.periodo === modo ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                                        onClick={() => cambiarPeriodoFecha(modo)}
+                                        className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all uppercase ${
+                                            filtrosEdicion.periodo === modo
+                                                ? 'bg-white shadow-sm text-blue-600'
+                                                : 'text-slate-500 hover:text-slate-700'
+                                        }`}
                                     >
                                         {modo}
                                     </button>
@@ -516,18 +884,64 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                                     </div>
                                 )}
                                 {filtrosEdicion.periodo === 'mes' && (
-                                    <input type="month" className="w-full border border-slate-200 p-2 rounded-lg text-sm"
+                                    <input
+                                        type="month"
+                                        value={filtrosEdicion.fechaInicio.substring(0, 7)}
+                                        className="w-full border border-slate-200 p-2 rounded-lg text-sm"
                                         onChange={(e) => {
-                                            const val = e.target.value;
-                                            if (!val) return;
-                                            const [y, m] = val.split('-');
-                                            setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${y}-${m}-01`, fechaFin: `${y}-${m}-31` });
-                                        }} />
+                                            const valor = e.target.value;
+
+                                            if (!valor) {
+                                                setFiltrosEdicion({
+                                                    ...filtrosEdicion,
+                                                    fechaInicio: '',
+                                                    fechaFin: '',
+                                                });
+
+                                                return;
+                                            }
+
+                                            const [anioTexto, mesTexto] = valor.split('-');
+                                            const anio = Number(anioTexto);
+                                            const mes = Number(mesTexto);
+                                            const ultimoDia = new Date(anio, mes, 0).getDate();
+
+                                            setFiltrosEdicion({
+                                                ...filtrosEdicion,
+                                                fechaInicio: `${valor}-01`,
+                                                fechaFin: `${valor}-${String(
+                                                    ultimoDia,
+                                                ).padStart(2, '0')}`,
+                                            });
+                                        }}
+                                    />
                                 )}
                                 {filtrosEdicion.periodo === 'año' && (
-                                    <input type="number" min="2020" max="2030" placeholder="Año"
+                                    <input
+                                        type="number"
+                                        min="2020"
+                                        max="2100"
+                                        value={
+                                            filtrosEdicion.fechaInicio
+                                                ? filtrosEdicion.fechaInicio.split('-')[0]
+                                                : ''
+                                        }
+                                        placeholder="Año"
                                         className="w-full border border-slate-200 p-2 rounded-lg text-sm"
-                                        onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${e.target.value}-01-01`, fechaFin: `${e.target.value}-12-31` })} />
+                                        onChange={(e) => {
+                                            const anio = e.target.value;
+
+                                            setFiltrosEdicion({
+                                                ...filtrosEdicion,
+                                                fechaInicio: anio
+                                                    ? `${anio}-01-01`
+                                                    : '',
+                                                fechaFin: anio
+                                                    ? `${anio}-12-31`
+                                                    : '',
+                                            });
+                                        }}
+                                    />
                                 )}
                             </div>
                             <button

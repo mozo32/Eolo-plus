@@ -173,14 +173,14 @@ export default function MovimientoCSAEEntrada({
                                             type="date"
                                             name="fecha_entrada"
                                             value={data.fecha_entrada}
-                                            readOnly
-                                            tabIndex={-1}
-                                            className={`${inputStyle} cursor-not-allowed pl-10 text-slate-500`}
+                                            onChange={onChange}
+                                            required
+                                            className={`${inputStyle} pl-10`}
                                         />
                                     </div>
 
                                     <p className="ml-1 mt-1 text-[9px] font-bold text-slate-400">
-                                        Fecha automática de México
+                                        Puede modificar la fecha de entrada
                                     </p>
                                 </div>
 
@@ -428,7 +428,7 @@ export default function MovimientoCSAEEntrada({
                                         </h3>
 
                                         <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
-                                            Personal y firma de entrada
+                                            Personal y firma opcional de entrada
                                         </p>
                                     </div>
                                 </div>
@@ -469,16 +469,16 @@ export default function MovimientoCSAEEntrada({
                                             </p>
 
                                             <p className="mt-1 text-xs font-medium leading-relaxed text-blue-600">
-                                                La firma confirma la
+                                                La firma es opcional. Si
+                                                se captura, confirma la
                                                 recepción y el estado
-                                                registrado de la
-                                                aeronave.
+                                                registrado de la aeronave.
                                             </p>
                                         </div>
                                     </div>
 
                                     <FirmaBox
-                                        label="Firma autorizada"
+                                        label="Firma autorizada (opcional)"
                                         value={
                                             data.firma_entrada
                                         }

@@ -92,28 +92,57 @@ export async function obtenerPernoctasApi(
 
     return data;
 }
+export type AeronaveFueraHangar = {
+    matricula: string;
+    motivo: string;
+    ultima_operacion?: string | null;
+    fecha_hora_ultima_operacion?: string | null;
+};
 
-export async function guardarPernoctaDiaApi(form: any) {
+export type ErrorGuardarPernocta = Error & {
+    status?: number;
+    data?: {
+        message?: string;
+        codigo?: string;
+        aeronaves_fuera_hangar?: AeronaveFueraHangar[];
+        errors?: Record<string, string[]>;
+    };
+};
+export async function guardarPernoctaDiaApi(
+    form: any,
+) {
     const xsrf = getXsrfToken();
 
-    const response = await fetch("/api/PernoctaDia", {
-        method: "POST",
-        headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            "X-XSRF-TOKEN": xsrf,
+    const response = await fetch(
+        "/api/PernoctaDia",
+        {
+            method: "POST",
+            headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+                "X-Requested-With":
+                    "XMLHttpRequest",
+                "X-XSRF-TOKEN": xsrf,
+            },
+            body: JSON.stringify(form),
+            credentials: "same-origin",
         },
-        body: JSON.stringify(form),
-        credentials: "same-origin",
-    });
+    );
 
-    const data = await response.json().catch(() => ({}));
+    const data = await response
+        .json()
+        .catch(() => ({}));
 
     if (!response.ok) {
-        throw new Error(
+        const error = new Error(
             data?.message ||
                 "Error al guardar la pernocta del día",
-        );
+        ) as ErrorGuardarPernocta;
+
+        error.status = response.status;
+        error.data = data;
+
+        throw error;
     }
 
     return data;

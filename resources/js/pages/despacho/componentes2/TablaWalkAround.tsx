@@ -38,6 +38,16 @@ type PageProps = {
     };
 };
 
+interface PestanaWalkAround {
+    id: number;
+    titulo: string;
+}
+
+interface EstadoPestanasWalkAround {
+    pestanas: PestanaWalkAround[];
+    pestanaActiva: number | null;
+}
+
 const TablaWalkAround = () => {
     const { auth } = usePage<PageProps>().props;
     const user = auth.user;
@@ -54,6 +64,9 @@ const TablaWalkAround = () => {
     const [pdfId, setPdfId] = useState<number | null>(null);
     const [showForm, setShowForm] = useState(false);
     const [selectedId, setSelectedId] = useState<number | null>(null);
+    const [pestanasWalkAround, setPestanasWalkAround] = useState<PestanaWalkAround[]>([]);
+    const [pestanaWalkAroundActiva, setPestanaWalkAroundActiva] = useState<number | null>(null);
+    const [clavePestanasCargada, setClavePestanasCargada] = useState<string | null>(null);
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -69,6 +82,9 @@ const TablaWalkAround = () => {
 
     const nombreRol = user?.roles?.[0]?.slug;
     const idUser = user?.id;
+    const prefijoBorradoresWalkAround = `walkaround:borradores:${idUser ?? 'anonimo'}`;
+    const claveBorradorPrincipal = `${prefijoBorradoresWalkAround}:nuevo`;
+    const claveEstadoPestanas = `${prefijoBorradoresWalkAround}:pestanas`;
 
     const esAdminOFbo = nombreRol === 'admin' || nombreRol === 'fbo';
     const esJefe = nombreRol === 'jefe_area';
@@ -85,6 +101,72 @@ const TablaWalkAround = () => {
     });
 
     const [filtrosEdicion, setFiltrosEdicion] = useState({ ...filtros });
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        let pestanasGuardadas: PestanaWalkAround[] = [];
+        let pestanaActivaGuardada: number | null = null;
+
+        try {
+            const contenidoGuardado = window.localStorage.getItem(claveEstadoPestanas);
+
+            if (contenidoGuardado) {
+                const estadoGuardado = JSON.parse(contenidoGuardado) as Partial<EstadoPestanasWalkAround>;
+
+                pestanasGuardadas = Array.isArray(estadoGuardado.pestanas)
+                    ? estadoGuardado.pestanas.filter(
+                        pestana => Number.isInteger(pestana?.id) && pestana.id > 0 && typeof pestana?.titulo === 'string'
+                    )
+                    : [];
+
+                pestanaActivaGuardada = pestanasGuardadas.some(
+                    pestana => pestana.id === estadoGuardado.pestanaActiva
+                )
+                    ? estadoGuardado.pestanaActiva ?? null
+                    : pestanasGuardadas[0]?.id ?? null;
+            }
+
+            if (pestanasGuardadas.length === 0 && window.localStorage.getItem(claveBorradorPrincipal)) {
+                pestanasGuardadas = [{ id: 1, titulo: 'Walk Around 1' }];
+                pestanaActivaGuardada = 1;
+            }
+        } catch (error) {
+            console.error('No se pudieron restaurar las pestañas de Walk Around', error);
+            window.localStorage.removeItem(claveEstadoPestanas);
+        }
+
+        setShowForm(false);
+        setSelectedId(null);
+        setPestanasWalkAround(pestanasGuardadas);
+        setPestanaWalkAroundActiva(pestanaActivaGuardada);
+        setClavePestanasCargada(claveEstadoPestanas);
+    }, [claveBorradorPrincipal, claveEstadoPestanas]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || clavePestanasCargada !== claveEstadoPestanas) return;
+
+        if (pestanasWalkAround.length === 0) {
+            window.localStorage.removeItem(claveEstadoPestanas);
+            return;
+        }
+
+        const estadoPestanas: EstadoPestanasWalkAround = {
+            pestanas: pestanasWalkAround,
+            pestanaActiva: pestanaWalkAroundActiva
+        };
+
+        try {
+            window.localStorage.setItem(claveEstadoPestanas, JSON.stringify(estadoPestanas));
+        } catch (error) {
+            console.error('No se pudieron guardar las pestañas de Walk Around', error);
+        }
+    }, [
+        claveEstadoPestanas,
+        clavePestanasCargada,
+        pestanaWalkAroundActiva,
+        pestanasWalkAround
+    ]);
 
     useEffect(() => {
         if (mostrarModalFecha) setFiltrosEdicion({ ...filtros });
@@ -150,6 +232,48 @@ const TablaWalkAround = () => {
         setPagina(1);
     };
 
+    const cambiarPeriodoFecha = (
+        modo: 'dia' | 'rango' | 'mes' | 'año'
+    ) => {
+        setFiltrosEdicion((actual) => {
+            const ahora = new Date();
+            const anioActual = ahora.getFullYear();
+            const numeroMesActual = ahora.getMonth() + 1;
+            const mesActual = String(numeroMesActual).padStart(2, '0');
+
+            if (modo === 'mes') {
+                const ultimoDia = new Date(
+                    anioActual,
+                    numeroMesActual,
+                    0
+                ).getDate();
+
+                return {
+                    ...actual,
+                    periodo: modo,
+                    fechaInicio: `${anioActual}-${mesActual}-01`,
+                    fechaFin: `${anioActual}-${mesActual}-${String(
+                        ultimoDia
+                    ).padStart(2, '0')}`
+                };
+            }
+
+            if (modo === 'año') {
+                return {
+                    ...actual,
+                    periodo: modo,
+                    fechaInicio: `${anioActual}-01-01`,
+                    fechaFin: `${anioActual}-12-31`
+                };
+            }
+
+            return {
+                ...actual,
+                periodo: modo
+            };
+        });
+    };
+
     const limpiarFiltros = () => {
         setFiltros({
             q: '',
@@ -161,9 +285,92 @@ const TablaWalkAround = () => {
         });
     };
 
-    const handleEdit = (id: number) => { setSelectedId(id); setShowForm(true); };
-    const handleNew = () => { setSelectedId(null); setShowForm(true); };
-    const handleBack = () => { setShowForm(false); setSelectedId(null); loadData(pagina); };
+    const obtenerClaveBorradorWalkAround = (id: number) => {
+        return id === 1
+            ? claveBorradorPrincipal
+            : `${prefijoBorradoresWalkAround}:nuevo:${id}`;
+    };
+
+    const eliminarBorradorWalkAround = (id: number) => {
+        if (typeof window === 'undefined') return;
+        window.localStorage.removeItem(obtenerClaveBorradorWalkAround(id));
+    };
+
+    const handleEdit = (id: number) => {
+        setSelectedId(id);
+        setShowForm(true);
+    };
+
+    const handleNew = () => {
+        setSelectedId(null);
+
+        if (pestanasWalkAround.length === 0) {
+            const primeraPestana: PestanaWalkAround = {
+                id: 1,
+                titulo: 'Walk Around 1'
+            };
+
+            setPestanasWalkAround([primeraPestana]);
+            setPestanaWalkAroundActiva(primeraPestana.id);
+        } else if (!pestanasWalkAround.some(pestana => pestana.id === pestanaWalkAroundActiva)) {
+            setPestanaWalkAroundActiva(pestanasWalkAround[0].id);
+        }
+
+        setShowForm(true);
+    };
+
+    const agregarPestanaWalkAround = () => {
+        const siguienteId = pestanasWalkAround.reduce(
+            (mayor, pestana) => Math.max(mayor, pestana.id),
+            0
+        ) + 1;
+        const nuevaPestana: PestanaWalkAround = {
+            id: siguienteId,
+            titulo: `Walk Around ${siguienteId}`
+        };
+
+        setPestanasWalkAround(prev => [...prev, nuevaPestana]);
+        setPestanaWalkAroundActiva(nuevaPestana.id);
+    };
+
+    const cerrarPestanaWalkAround = (id: number, recargar = false) => {
+        const indiceActual = pestanasWalkAround.findIndex(pestana => pestana.id === id);
+        const pestanasRestantes = pestanasWalkAround.filter(pestana => pestana.id !== id);
+
+        eliminarBorradorWalkAround(id);
+
+        if (recargar) {
+            loadData(pagina);
+            loadPendientes();
+        }
+
+        setPestanasWalkAround(pestanasRestantes);
+
+        if (pestanasRestantes.length === 0) {
+            setPestanaWalkAroundActiva(null);
+            setShowForm(false);
+            setSelectedId(null);
+            return;
+        }
+
+        if (pestanaWalkAroundActiva === id) {
+            const siguienteIndice = Math.min(indiceActual, pestanasRestantes.length - 1);
+            setPestanaWalkAroundActiva(pestanasRestantes[siguienteIndice].id);
+        }
+    };
+
+    const handleBack = () => {
+        setShowForm(false);
+        setSelectedId(null);
+        loadData(pagina);
+    };
+
+    const handleSaved = () => {
+        setShowForm(false);
+        setSelectedId(null);
+        loadData(pagina);
+        loadPendientes();
+    };
 
     const handleDelete = async (id: any) => {
         const r = await Swal.fire({
@@ -400,16 +607,90 @@ const TablaWalkAround = () => {
                 {showForm && (
                     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
                         <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={handleBack}></div>
-                        <div className="relative z-10 w-full max-w-6xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-300">
-                            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                        <div className="relative z-10 flex max-h-[95vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
+                            <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
                                 <div>
-                                    <h3 className="text-lg font-black uppercase text-slate-800 tracking-tighter">{selectedId ? 'Editar Walkaround' : 'Nuevo Walkaround'}</h3>
+                                    <h3 className="text-lg font-black uppercase text-slate-800 tracking-tighter">{selectedId !== null ? 'Editar Walkaround' : 'Nuevos Walkaround'}</h3>
                                     <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Inspección de seguridad de aeronave</p>
                                 </div>
-                                <button onClick={handleBack} className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors"><X size={20} /></button>
+                                <button
+                                    type="button"
+                                    onClick={handleBack}
+                                    className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors"
+                                    aria-label="Cerrar y conservar borradores"
+                                    title="Cerrar y conservar borradores"
+                                >
+                                    <X size={20} />
+                                </button>
                             </div>
-                            <div className="p-6 max-h-[85vh] overflow-y-auto">
-                                <WalkAroundFormV2 id={selectedId} onCancel={handleBack} />
+
+                            {selectedId === null && (
+                                <nav className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-200 bg-slate-100 p-2">
+                                    {pestanasWalkAround.map(pestana => {
+                                        const estaActiva = pestanaWalkAroundActiva === pestana.id;
+
+                                        return (
+                                            <div
+                                                key={pestana.id}
+                                                className={`flex shrink-0 items-center rounded-lg border transition-colors ${estaActiva
+                                                    ? 'border-indigo-300 bg-white text-indigo-700 shadow-sm'
+                                                    : 'border-transparent bg-slate-200/60 text-slate-500 hover:bg-white'
+                                                    }`}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPestanaWalkAroundActiva(pestana.id)}
+                                                    className="px-3 py-2 text-[10px] font-black uppercase tracking-wider"
+                                                >
+                                                    {pestana.titulo}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => cerrarPestanaWalkAround(pestana.id)}
+                                                    className="mr-1 rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                                                    aria-label={`Descartar ${pestana.titulo}`}
+                                                    title={`Descartar ${pestana.titulo}`}
+                                                >
+                                                    <X size={12} />
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+
+                                    <button
+                                        type="button"
+                                        onClick={agregarPestanaWalkAround}
+                                        className="flex shrink-0 items-center gap-1 rounded-lg border border-dashed border-indigo-400 bg-indigo-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-indigo-700 hover:bg-indigo-100"
+                                    >
+                                        <Plus size={12} />
+                                        Otro Walk Around
+                                    </button>
+                                </nav>
+                            )}
+
+                            <div className="flex-1 overflow-y-auto p-6">
+                                {selectedId !== null ? (
+                                    <WalkAroundFormV2
+                                        key={`edicion-${selectedId}`}
+                                        id={selectedId}
+                                        onCancel={handleBack}
+                                        onSaved={handleSaved}
+                                    />
+                                ) : (
+                                    pestanasWalkAround.map(pestana => (
+                                        <div
+                                            key={pestana.id}
+                                            className={pestanaWalkAroundActiva === pestana.id ? 'block' : 'hidden'}
+                                        >
+                                            <WalkAroundFormV2
+                                                id={null}
+                                                onCancel={handleBack}
+                                                onSaved={() => cerrarPestanaWalkAround(pestana.id, true)}
+                                                borradorId={obtenerClaveBorradorWalkAround(pestana.id)}
+                                            />
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </div>
                     </div>
@@ -425,8 +706,8 @@ const TablaWalkAround = () => {
                             </div>
                             <div className="p-4 space-y-4">
                                 <div className="flex bg-slate-100 p-1 rounded-lg">
-                                    {['dia', 'rango', 'mes', 'año'].map((modo) => (
-                                        <button key={modo} onClick={() => setFiltrosEdicion({ ...filtrosEdicion, periodo: modo })} className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all uppercase ${filtrosEdicion.periodo === modo ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>{modo}</button>
+                                    {(['dia', 'rango', 'mes', 'año'] as const).map((modo) => (
+                                        <button type="button" key={modo} onClick={() => cambiarPeriodoFecha(modo)} className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all uppercase ${filtrosEdicion.periodo === modo ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>{modo}</button>
                                     ))}
                                 </div>
                                 <div className="space-y-3">
@@ -440,13 +721,40 @@ const TablaWalkAround = () => {
                                         </div>
                                     )}
                                     {filtrosEdicion.periodo === 'mes' && (
-                                        <input type="month" className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => {
-                                            const [y, m] = e.target.value.split('-');
-                                            setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${y}-${m}-01`, fechaFin: `${y}-${m}-31` });
+                                        <input type="month" value={filtrosEdicion.fechaInicio.substring(0, 7)} className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => {
+                                            const valor = e.target.value;
+
+                                            if (!valor) {
+                                                setFiltrosEdicion({
+                                                    ...filtrosEdicion,
+                                                    fechaInicio: '',
+                                                    fechaFin: ''
+                                                });
+                                                return;
+                                            }
+
+                                            const [anioTexto, mesTexto] = valor.split('-');
+                                            const anio = Number(anioTexto);
+                                            const mes = Number(mesTexto);
+                                            const ultimoDia = new Date(anio, mes, 0).getDate();
+
+                                            setFiltrosEdicion({
+                                                ...filtrosEdicion,
+                                                fechaInicio: `${valor}-01`,
+                                                fechaFin: `${valor}-${String(ultimoDia).padStart(2, '0')}`
+                                            });
                                         }} />
                                     )}
                                     {filtrosEdicion.periodo === 'año' && (
-                                        <input type="number" min="2020" max="2030" placeholder="Año" className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${e.target.value}-01-01`, fechaFin: `${e.target.value}-12-31` })} />
+                                        <input type="number" min="2020" max="2100" value={filtrosEdicion.fechaInicio ? filtrosEdicion.fechaInicio.split('-')[0] : ''} placeholder="Año" className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => {
+                                            const anio = e.target.value;
+
+                                            setFiltrosEdicion({
+                                                ...filtrosEdicion,
+                                                fechaInicio: anio ? `${anio}-01-01` : '',
+                                                fechaFin: anio ? `${anio}-12-31` : ''
+                                            });
+                                        }} />
                                     )}
                                 </div>
                                 <button onClick={aplicarFiltroFecha} className="w-full bg-slate-800 text-white py-3 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">Aplicar Filtro</button>

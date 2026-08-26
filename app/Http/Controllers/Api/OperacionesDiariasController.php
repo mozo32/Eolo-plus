@@ -223,114 +223,6 @@ class OperacionesDiariasController extends Controller
     public function obtenerExcel(Request $request)
     {
         $query = OperacionDiaria::query()
-            ->select(['id', 'tipo', 'matricula', 'equipo', 'fecha', 'hora', 'lugar', 'tipo_operacion', 'pax', 'equipaje', 'tipo_cliente',
-                DB::raw("
-                    DATE_FORMAT(
-                        STR_TO_DATE(CONCAT(fecha, ' ', hora), '%Y-%m-%d %H:%i:%s'),
-                        '%d/%m/%Y %H:%i:%s'
-                    ) as fecha_hora
-                ")
-            ]);
-
-        if ($request->filled('buscar')) {
-            $query->where('matricula', 'LIKE', '%' . $request->buscar . '%');
-        }
-
-        if ($request->filled('tipo')) {
-            $query->where('tipo', $request->tipo);
-        }
-
-        if ($request->filled('fechaInicio') && $request->filled('fechaFin')) {
-            $query->whereBetween('fecha', [$request->fechaInicio, $request->fechaFin]);
-        } elseif ($request->filled('fechaInicio')) {
-            $query->whereDate('fecha', $request->fechaInicio);
-        }
-
-        if ($request->filled('lugar')) {
-            $query->where('lugar', 'LIKE', '%' . $request->lugar . '%');
-        }
-
-        if ($request->filled('tipo_operacion')) {
-            $query->where('tipo_operacion', $request->tipo_operacion);
-        }
-
-        if ($request->filled('pax')) {
-            $query->where(function ($q) use ($request) {
-
-                $q->where('pax', $request->pax);
-
-                if ($request->pax == 0) {
-                    $q->orWhereNull('pax')
-                    ->orWhere('pax', '');
-                }
-            });
-        }
-
-        if ($request->filled('eqp')) {
-            $query->where(function ($q) use ($request) {
-
-                $q->where('equipaje', $request->eqp);
-
-                if ($request->eqp == 0) {
-                    $q->orWhereNull('equipaje')
-                    ->orWhere('equipaje', '');
-                }
-            });
-        }
-
-        if ($request->filled('cliente')) {
-            $query->where('tipo_cliente', $request->cliente);
-        }
-
-
-        $registros = $query
-            ->orderBy('fecha', 'asc')
-            ->orderBy('hora', 'asc')
-            ->get();
-
-
-        $matriculas = $registros
-            ->pluck('matricula')
-            ->filter()
-            ->unique()
-            ->values();
-
-        $movimientosCSAE = MovimientoCSAE::query()
-            ->whereIn('matricula', $matriculas)
-            ->whereNotNull('fecha_hora_entrada')
-            ->orderBy('fecha_hora_entrada', 'asc')
-            ->get();
-
-
-        $registros = $registros->map(function ($op) use ($movimientosCSAE) {
-
-            $fechaOperacion = Carbon::parse($op->fecha)
-                ->setTimeFromTimeString($op->hora);
-
-            $movimiento = $movimientosCSAE
-                ->where('matricula', $op->matricula)
-                ->first(function ($mov) use ($fechaOperacion) {
-
-                    return Carbon::parse($mov->fecha_hora_entrada)
-                        ->greaterThan($fechaOperacion);
-
-                });
-
-            $op->mantenimiento_csae = $movimiento ? true : false;
-
-            $op->fecha_hora_csae = $movimiento
-                ? Carbon::parse($movimiento->fecha_hora_entrada)
-                    ->format('d/m/Y H:i:s')
-                : null;
-
-            return $op;
-        });
-
-        return response()->json($registros);
-    }
-    public function obtenerPdf(Request $request)
-    {
-        $query = OperacionDiaria::query()
             ->select([
                 'id',
                 'tipo',
@@ -343,28 +235,57 @@ class OperacionesDiariasController extends Controller
                 'pax',
                 'equipaje',
                 'tipo_cliente',
+                DB::raw("
+                    DATE_FORMAT(
+                        STR_TO_DATE(
+                            CONCAT(fecha, ' ', hora),
+                            '%Y-%m-%d %H:%i:%s'
+                        ),
+                        '%d/%m/%Y %H:%i:%s'
+                    ) AS fecha_hora
+                "),
             ]);
 
         if ($request->filled('buscar')) {
-            $query->where('matricula', 'LIKE', '%' . $request->buscar . '%');
+            $query->where(
+                'matricula',
+                'LIKE',
+                '%' . $request->buscar . '%'
+            );
         }
 
         if ($request->filled('tipo')) {
             $query->where('tipo', $request->tipo);
         }
 
-        if ($request->filled('fechaInicio') && $request->filled('fechaFin')) {
-            $query->whereBetween('fecha', [$request->fechaInicio, $request->fechaFin]);
+        if (
+            $request->filled('fechaInicio') &&
+            $request->filled('fechaFin')
+        ) {
+            $query->whereBetween('fecha', [
+                $request->fechaInicio,
+                $request->fechaFin,
+            ]);
         } elseif ($request->filled('fechaInicio')) {
-            $query->whereDate('fecha', $request->fechaInicio);
+            $query->whereDate(
+                'fecha',
+                $request->fechaInicio
+            );
         }
 
         if ($request->filled('lugar')) {
-            $query->where('lugar', 'LIKE', '%' . $request->lugar . '%');
+            $query->where(
+                'lugar',
+                'LIKE',
+                '%' . $request->lugar . '%'
+            );
         }
 
         if ($request->filled('tipo_operacion')) {
-            $query->where('tipo_operacion', $request->tipo_operacion);
+            $query->where(
+                'tipo_operacion',
+                $request->tipo_operacion
+            );
         }
 
         if ($request->filled('pax')) {
@@ -380,7 +301,10 @@ class OperacionesDiariasController extends Controller
 
         if ($request->filled('eqp')) {
             $query->where(function ($q) use ($request) {
-                $q->where('equipaje', $request->eqp);
+                $q->where(
+                    'equipaje',
+                    $request->eqp
+                );
 
                 if ($request->eqp == 0) {
                     $q->orWhereNull('equipaje')
@@ -390,7 +314,10 @@ class OperacionesDiariasController extends Controller
         }
 
         if ($request->filled('cliente')) {
-            $query->where('tipo_cliente', $request->cliente);
+            $query->where(
+                'tipo_cliente',
+                $request->cliente
+            );
         }
 
         $registros = $query
@@ -398,83 +325,292 @@ class OperacionesDiariasController extends Controller
             ->orderBy('hora', 'asc')
             ->get();
 
-        $dias = [
-            'Monday' => 'LUNES',
-            'Tuesday' => 'MARTES',
-            'Wednesday' => 'MIERCOLES',
-            'Thursday' => 'JUEVES',
-            'Friday' => 'VIERNES',
-            'Saturday' => 'SABADO',
-            'Sunday' => 'DOMINGO',
-        ];
-
-        $normalizarCliente = function ($cliente) {
-            $valor = strtoupper(trim((string) $cliente));
-
-            $valor = str_replace(
-                ['Á', 'É', 'Í', 'Ó', 'Ú', 'Ü'],
-                ['A', 'E', 'I', 'O', 'U', 'U'],
-                $valor
-            );
-
-            return $valor;
+        $crearFechaHoraOperacion = static function (
+            $operacion
+        ): Carbon {
+            return Carbon::parse($operacion->fecha)
+                ->setTimeFromTimeString(
+                    (string) (
+                        $operacion->hora ?: '00:00:00'
+                    )
+                );
         };
 
-        $resumen = $registros
-            ->groupBy(function ($item) {
-                return Carbon::parse($item->fecha)->format('Y-m-d');
-            })
-            ->map(function ($items, $fecha) use ($dias, $normalizarCliente) {
-                $carbon = Carbon::parse($fecha);
-                $diaNombre = $dias[$carbon->format('l')] ?? strtoupper($carbon->locale('es')->dayName);
-
-                $fila = [
-                    'fecha' => $diaNombre . '-' . $carbon->format('d'),
-                    'fecha_original' => $carbon->format('Y-m-d'),
-                    'transito' => 0,
-                    'guarda' => 0,
-                    'aerotaxi' => 0,
-                    'handling' => 0,
-                    'mantenimiento' => 0,
-                    'total_pax_dia' => 0,
-                ];
-
-                foreach ($items as $item) {
-                    $cliente = $normalizarCliente($item->tipo_cliente);
-
-                    if ($cliente === 'TRANSITO') {
-                        $fila['transito']++;
-                    } elseif ($cliente === 'GUARDA') {
-                        $fila['guarda']++;
-                    } elseif ($cliente === 'AEROTAXI') {
-                        $fila['aerotaxi']++;
-                    } elseif ($cliente === 'HANDLING') {
-                        $fila['handling']++;
-                    }elseif ($cliente === 'MANTENIMIENTO') {
-                        $fila['mantenimiento']++;
-                    }
-
-                    $fila['total_pax_dia'] += is_numeric($item->pax) ? (int) $item->pax : 0;
-                }
-
-                return $fila;
-            })
+        $matriculas = $registros
+            ->pluck('matricula')
+            ->filter()
+            ->unique()
             ->values();
 
-        $totales = [
-            'transito' => $resumen->sum('transito'),
-            'guarda' => $resumen->sum('guarda'),
-            'aerotaxi' => $resumen->sum('aerotaxi'),
-            'handling' => $resumen->sum('handling'),
-            'mantenimiento' => $resumen->sum('mantenimiento'),
-            'total_pax_dia' => $resumen->sum('total_pax_dia'),
-        ];
+        $movimientosCSAE = MovimientoCSAE::query()
+            ->whereIn('matricula', $matriculas)
+            ->where('status', 'A')
+            ->whereNotNull('fecha_hora_entrada')
+            ->orderBy('fecha_hora_entrada', 'asc')
+            ->get([
+                'id',
+                'matricula',
+                'fecha_hora_entrada',
+                'fecha_hora_salida',
+            ]);
 
-        return response()->json([
-            'ok' => true,
-            'data' => $resumen,
-            'totales' => $totales,
-        ]);
+        $operacionesPorMatricula = $registros->groupBy(
+            function ($operacion) {
+                return mb_strtoupper(
+                    trim((string) $operacion->matricula)
+                );
+            }
+        );
+
+        $movimientosPorMatricula =
+            $movimientosCSAE->groupBy(
+                function ($movimiento) {
+                    return mb_strtoupper(
+                        trim(
+                            (string) $movimiento->matricula
+                        )
+                    );
+                }
+            );
+
+        $registros = $registros->map( function ($operacion) use (
+            $operacionesPorMatricula,
+            $movimientosPorMatricula,
+            $crearFechaHoraOperacion
+        ) {
+            $operacion->mantenimiento_csae = false;
+            $operacion->fecha_hora_csae = null;
+            $operacion->fecha_hora_salida_csae = null;
+            $operacion->movimientos_csae = [];
+            $operacion->cantidad_visitas_csae = 0;
+            $operacion->minutos_estancia_csae_total = 0;
+            $operacion->salidas_csae_pendientes = 0;
+
+            $tipoOperacion = mb_strtoupper(
+                trim((string) $operacion->tipo)
+            );
+
+            if (
+                !in_array(
+                    $tipoOperacion,
+                    ['LLEGADA', 'ENTRADA'],
+                    true
+                )
+            ) {
+                return $operacion;
+            }
+
+            $matricula = mb_strtoupper(
+                trim((string) $operacion->matricula)
+            );
+
+            $fechaLlegada =
+                $crearFechaHoraOperacion($operacion);
+
+            $operacionesMismaMatricula =
+                $operacionesPorMatricula->get(
+                    $matricula,
+                    collect()
+                );
+
+            $salidaOperacion =
+                $operacionesMismaMatricula->first(
+                    function ($posibleSalida) use (
+                        $fechaLlegada,
+                        $crearFechaHoraOperacion
+                    ) {
+                        $tipo = mb_strtoupper(
+                            trim(
+                                (string) $posibleSalida->tipo
+                            )
+                        );
+
+                        if ($tipo !== 'SALIDA') {
+                            return false;
+                        }
+
+                        $fechaSalida =
+                            $crearFechaHoraOperacion(
+                                $posibleSalida
+                            );
+
+                        return $fechaSalida->greaterThan(
+                            $fechaLlegada
+                        );
+                    }
+                );
+
+            $fechaSalidaOperacion =
+                $salidaOperacion
+                    ? $crearFechaHoraOperacion(
+                        $salidaOperacion
+                    )
+                    : null;
+
+            $movimientosMismaMatricula =
+                $movimientosPorMatricula->get(
+                    $matricula,
+                    collect()
+                );
+
+            $movimientosEncontrados =
+                $movimientosMismaMatricula
+                    ->filter(
+                        function ($movimiento) use (
+                            $fechaLlegada,
+                            $fechaSalidaOperacion
+                        ) {
+                            $entradaCSAE =
+                                $movimiento
+                                    ->fecha_hora_entrada
+                                    ->copy();
+
+                            if (
+                                $entradaCSAE->lessThan(
+                                    $fechaLlegada
+                                )
+                            ) {
+                                return false;
+                            }
+
+                            if (
+                                $fechaSalidaOperacion &&
+                                $entradaCSAE->greaterThan(
+                                    $fechaSalidaOperacion
+                                )
+                            ) {
+                                return false;
+                            }
+
+                            if (
+                                $fechaSalidaOperacion &&
+                                $movimiento
+                                    ->fecha_hora_salida
+                            ) {
+                                $salidaCSAE =
+                                    $movimiento
+                                        ->fecha_hora_salida
+                                        ->copy();
+
+                                if (
+                                    $salidaCSAE->greaterThan(
+                                        $fechaSalidaOperacion
+                                    )
+                                ) {
+                                    return false;
+                                }
+                            }
+
+                            return true;
+                        }
+                    )
+                    ->values();
+
+            if ($movimientosEncontrados->isEmpty()) {
+                return $operacion;
+            }
+
+            $visitasCSAE = $movimientosEncontrados
+                ->map(function ($movimiento) {
+                    $entrada =
+                        $movimiento
+                            ->fecha_hora_entrada
+                            ->copy();
+
+                    $salida =
+                        $movimiento->fecha_hora_salida
+                            ? $movimiento
+                                ->fecha_hora_salida
+                                ->copy()
+                            : null;
+
+                    $minutosEstancia = null;
+
+                    if (
+                        $salida &&
+                        $salida->greaterThanOrEqualTo(
+                            $entrada
+                        )
+                    ) {
+                        $minutosEstancia = (int) floor(
+                            $entrada->diffInSeconds(
+                                $salida
+                            ) / 60
+                        );
+                    }
+
+                    return [
+                        'id' => $movimiento->id,
+
+                        'fecha_hora_entrada' =>
+                            $entrada->format(
+                                'd/m/Y H:i:s'
+                            ),
+
+                        'fecha_hora_salida' =>
+                            $salida
+                                ? $salida->format(
+                                    'd/m/Y H:i:s'
+                                )
+                                : null,
+
+                        'minutos_estancia' =>
+                            $minutosEstancia,
+
+                        'pendiente' =>
+                            $salida === null,
+                    ];
+                })
+                ->values();
+
+            $primerMovimiento =
+                $visitasCSAE->first();
+
+            $totalMinutos = $visitasCSAE->sum(
+                function ($visita) {
+                    return $visita['minutos_estancia']
+                        ?? 0;
+                }
+            );
+
+            $salidasPendientes =
+                $visitasCSAE->filter(
+                    function ($visita) {
+                        return $visita['pendiente'];
+                    }
+                )->count();
+
+            $operacion->mantenimiento_csae = true;
+
+            $operacion->fecha_hora_csae =
+                $primerMovimiento[
+                    'fecha_hora_entrada'
+                ];
+
+            $operacion->fecha_hora_salida_csae =
+                $primerMovimiento[
+                    'fecha_hora_salida'
+                ];
+
+            $operacion->movimientos_csae =
+                $visitasCSAE->all();
+
+            $operacion->cantidad_visitas_csae =
+                $visitasCSAE->count();
+
+            $operacion->minutos_estancia_csae_total =
+                $totalMinutos;
+
+            $operacion->salidas_csae_pendientes =
+                $salidasPendientes;
+
+            return $operacion;
+        }
+    );
+
+        return response()->json(
+            $registros->values()
+        );
     }
 
     public function update(Request $request, $id)

@@ -2,9 +2,19 @@ import React, { useRef, useState, useEffect } from 'react';
 import { PenTool, Trash2, CheckCircle2, User, Save, X } from 'lucide-react';
 import { usePage } from '@inertiajs/react';
 
+export interface ExteriorData {
+    observaciones: string;
+    nombreResponsable: string;
+    firmaResponsable: string | null;
+    nombreJefe: string;
+    firmaJefe: string | null;
+    nombreFbo: string;
+    firmaFbo: string | null;
+}
+
 interface Props {
-    data: any;
-    onChange: (d: any) => void;
+    data: ExteriorData;
+    onChange: (d: Partial<ExteriorData>) => void;
 }
 
 const SignaturePad = ({

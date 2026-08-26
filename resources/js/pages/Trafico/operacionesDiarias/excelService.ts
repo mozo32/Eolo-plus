@@ -1,6 +1,14 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
+export type MovimientoCsaeOperacion = {
+    id: number;
+    fecha_hora_entrada: string;
+    fecha_hora_salida?: string | null;
+    minutos_estancia?: number | null;
+    pendiente?: boolean;
+};
+
 export type Operacion = {
     id: number;
     tipo?: string | null;
@@ -18,6 +26,10 @@ export type Operacion = {
     fecha_hora_csae?: string | null;
     fecha_hora_llegada_csae?: string | null;
     fecha_hora_salida_csae?: string | null;
+    movimientos_csae?: MovimientoCsaeOperacion[];
+    cantidad_visitas_csae?: number;
+    minutos_estancia_csae_total?: number;
+    salidas_csae_pendientes?: number;
 };
 
 export type GrupoColumnaReporteOperaciones =
@@ -57,10 +69,10 @@ export const COLUMNAS_REPORTE_OPERACIONES: readonly ColumnaReporteOperaciones[] 
     { titulo: 'EQP', ancho: 8, grupo: 'salida' },
     { titulo: 'TIPO DE CLIENTE', ancho: 17, grupo: 'base' },
     { titulo: 'ESTANCIA', ancho: 24, grupo: 'base' },
-    { titulo: 'MANTENIMIENTO CSAE', ancho: 18, grupo: 'csae' },
-    { titulo: 'FECHA-HORA LLEGADA CSAE', ancho: 22, grupo: 'csae', esFecha: true },
-    { titulo: 'FECHA-HORA SALIDA CSAE', ancho: 22, grupo: 'csae', esFecha: true },
-    { titulo: 'ESTANCIA CSAE', ancho: 22, grupo: 'csae' },
+    { titulo: 'MANTENIMIENTO CSAE', ancho: 19, grupo: 'csae' },
+    { titulo: 'FECHA-HORA LLEGADA CSAE', ancho: 25, grupo: 'csae' },
+    { titulo: 'FECHA-HORA SALIDA CSAE', ancho: 25, grupo: 'csae' },
+    { titulo: 'ESTANCIA CSAE', ancho: 24, grupo: 'csae' },
 ];
 
 export const GRUPOS_REPORTE_OPERACIONES = [
@@ -321,24 +333,137 @@ const formatearEstancia = (
     return `${textoPernoctas}, ${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')} hrs`;
 };
 
-const obtenerFechaCsaeEntrada = (fila: FilaOperacion): Date | null => {
-    const valor =
+const obtenerMovimientosCsae = (
+    fila: FilaOperacion
+): MovimientoCsaeOperacion[] => {
+    const movimientosLlegada = fila.llegada?.movimientos_csae;
+    const movimientosSalida = fila.salida?.movimientos_csae;
+
+    if (Array.isArray(movimientosLlegada) && movimientosLlegada.length > 0) {
+        return movimientosLlegada;
+    }
+
+    if (Array.isArray(movimientosSalida) && movimientosSalida.length > 0) {
+        return movimientosSalida;
+    }
+
+    const entrada =
         fila.llegada?.fecha_hora_llegada_csae ??
         fila.llegada?.fecha_hora_csae ??
         fila.salida?.fecha_hora_llegada_csae ??
         fila.salida?.fecha_hora_csae ??
         null;
 
-    return parseStringToDate(valor);
-};
-
-const obtenerFechaCsaeSalida = (fila: FilaOperacion): Date | null => {
-    const valor =
-        fila.salida?.fecha_hora_salida_csae ??
+    const salida =
         fila.llegada?.fecha_hora_salida_csae ??
+        fila.salida?.fecha_hora_salida_csae ??
         null;
 
-    return parseStringToDate(valor);
+    if (!entrada && !salida) {
+        return [];
+    }
+
+    return [
+        {
+            id: 0,
+            fecha_hora_entrada: entrada ?? '',
+            fecha_hora_salida: salida,
+            minutos_estancia: null,
+            pendiente: Boolean(entrada && !salida),
+        },
+    ];
+};
+
+const formatearFechaHoraTextoCsae = (valor?: string | null): string => {
+    if (!valor) return '';
+
+    const fecha = parseStringToDate(valor);
+
+    if (!fecha) {
+        return String(valor);
+    }
+
+    const dia = String(fecha.getDate()).padStart(2, '0');
+    const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+    const anio = fecha.getFullYear();
+    const hora = String(fecha.getHours()).padStart(2, '0');
+    const minuto = String(fecha.getMinutes()).padStart(2, '0');
+
+    return `${dia}/${mes}/${anio} ${hora}:${minuto}`;
+};
+
+const formatearEntradasCsae = (
+    movimientos: MovimientoCsaeOperacion[]
+): string => {
+    return movimientos
+        .map((movimiento, index) => {
+            const fecha = formatearFechaHoraTextoCsae(
+                movimiento.fecha_hora_entrada
+            );
+
+            return `${index + 1}. ${fecha || 'Sin fecha de entrada'}`;
+        })
+        .join('\n');
+};
+
+const formatearSalidasCsae = (
+    movimientos: MovimientoCsaeOperacion[]
+): string => {
+    return movimientos
+        .map((movimiento, index) => {
+            const fecha = formatearFechaHoraTextoCsae(
+                movimiento.fecha_hora_salida
+            );
+
+            return `${index + 1}. ${fecha || 'Salida pendiente'}`;
+        })
+        .join('\n');
+};
+
+const calcularMinutosEstanciaCsae = (
+    movimientos: MovimientoCsaeOperacion[]
+): number => {
+    return movimientos.reduce((total, movimiento) => {
+        if (
+            movimiento.minutos_estancia !== null &&
+            movimiento.minutos_estancia !== undefined &&
+            Number.isFinite(Number(movimiento.minutos_estancia))
+        ) {
+            return (
+                total +
+                Math.max(0, Math.floor(Number(movimiento.minutos_estancia)))
+            );
+        }
+
+        const entrada = parseStringToDate(movimiento.fecha_hora_entrada);
+        const salida = parseStringToDate(movimiento.fecha_hora_salida);
+
+        if (!entrada || !salida) {
+            return total;
+        }
+
+        const diferencia = salida.getTime() - entrada.getTime();
+
+        if (diferencia < 0) {
+            return total;
+        }
+
+        return total + Math.floor(diferencia / 60000);
+    }, 0);
+};
+
+const formatearDuracionMinutos = (minutosTotales: number): string => {
+    const minutosValidos = Math.max(0, Math.floor(minutosTotales));
+    const pernoctas = Math.floor(minutosValidos / 1440);
+    const minutosRestantes = minutosValidos % 1440;
+    const horas = Math.floor(minutosRestantes / 60);
+    const minutos = minutosRestantes % 60;
+    const textoPernoctas =
+        pernoctas === 1 ? '1 pernocta' : `${pernoctas} pernoctas`;
+
+    return `${textoPernoctas}, ${String(horas).padStart(2, '0')}:${String(
+        minutos
+    ).padStart(2, '0')} hrs`;
 };
 
 const valorNumero = (valor: number | string | null | undefined) => {
@@ -358,15 +483,46 @@ export const prepararFilasReporteOperaciones = (
         const salida = fila.salida;
         const fechaLlegada = obtenerFechaOperacion(llegada);
         const fechaSalida = obtenerFechaOperacion(salida);
-        const fechaCsaeEntrada = obtenerFechaCsaeEntrada(fila);
-        const fechaCsaeSalida = obtenerFechaCsaeSalida(fila);
+        const movimientosCsae = obtenerMovimientosCsae(fila);
+        const cantidadVisitasCsae = movimientosCsae.length;
+        const cantidadPendientesCsae = movimientosCsae.filter(
+            (movimiento) => !movimiento.fecha_hora_salida
+        ).length;
+        const cantidadCompletadasCsae =
+            cantidadVisitasCsae - cantidadPendientesCsae;
+        const minutosEstanciaCsae = calcularMinutosEstanciaCsae(
+            movimientosCsae
+        );
 
         const mantenimientoCsae = Boolean(
             llegada?.mantenimiento_csae ||
             salida?.mantenimiento_csae ||
-            fechaCsaeEntrada ||
-            fechaCsaeSalida
+            cantidadVisitasCsae > 0
         );
+
+        const textoMantenimientoCsae = mantenimientoCsae
+            ? cantidadVisitasCsae > 0
+                ? `SI (${cantidadVisitasCsae} ${
+                      cantidadVisitasCsae === 1 ? 'VISITA' : 'VISITAS'
+                  })`
+                : 'SI'
+            : 'NO';
+
+        const partesEstanciaCsae: string[] = [];
+
+        if (cantidadCompletadasCsae > 0) {
+            partesEstanciaCsae.push(
+                formatearDuracionMinutos(minutosEstanciaCsae)
+            );
+        }
+
+        if (cantidadPendientesCsae > 0) {
+            partesEstanciaCsae.push(
+                cantidadPendientesCsae === 1
+                    ? '1 salida pendiente'
+                    : `${cantidadPendientesCsae} salidas pendientes`
+            );
+        }
 
         return {
             valores: [
@@ -387,19 +543,15 @@ export const prepararFilasReporteOperaciones = (
                 salida ? valorNumero(salida.equipaje) : '',
                 llegada?.tipo_cliente ?? salida?.tipo_cliente ?? '',
                 formatearEstancia(fechaLlegada, fechaSalida),
-                mantenimientoCsae ? 'SI' : 'NO',
-                formatearFechaHoraExcel(fechaCsaeEntrada),
-                formatearFechaHoraExcel(fechaCsaeSalida),
-                mantenimientoCsae
-                    ? formatearEstancia(fechaCsaeEntrada, fechaCsaeSalida)
-                    : '',
+                textoMantenimientoCsae,
+                formatearEntradasCsae(movimientosCsae),
+                formatearSalidasCsae(movimientosCsae),
+                partesEstanciaCsae.join('\n'),
             ],
             estanciaPendiente: Boolean(
                 (!llegada && salida) || (llegada && !salida)
             ),
-            estanciaCsaePendiente: Boolean(
-                mantenimientoCsae && fechaCsaeEntrada && !fechaCsaeSalida
-            ),
+            estanciaCsaePendiente: cantidadPendientesCsae > 0,
         };
     });
 };
@@ -630,7 +782,20 @@ export const exportarOperacionesAExcel = async (
         const rowNumber = index + 6;
         const row = worksheet.getRow(rowNumber);
 
-        row.height = 25;
+        const cantidadLineasCsae = Math.max(
+            1,
+            ...[17, 18, 19, 20].map((indice) => {
+                const valor = fila.valores[indice];
+
+                if (valor === null || valor === undefined || valor === '') {
+                    return 1;
+                }
+
+                return String(valor).split('\n').length;
+            })
+        );
+
+        row.height = Math.max(25, cantidadLineasCsae * 17);
 
         fila.valores.forEach((value, valueIndex) => {
             const columnNumber = valueIndex + 1;

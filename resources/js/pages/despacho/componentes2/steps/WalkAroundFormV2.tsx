@@ -3,7 +3,7 @@ import Swal from 'sweetalert2';
 import { ChevronRight, ChevronLeft, Send, CheckCircle2, User, Car, Plane, ShieldAlert, Loader2, Box, Maximize2 } from 'lucide-react';
 import GeneralInfo from './GeneralInfo';
 import VehicleInspection, { SECTIONS_PLANE, ITEMS_HELICOPTER } from './DamageChecklist';
-import ExteriorObservaciones from './ExteriorObservaciones';
+import ExteriorObservaciones, { type ExteriorData } from './ExteriorObservaciones';
 import MapaDanios3D from '../../components/walkAround/MapaDanios3D';
 import { validateStepOne, validateStepTwo, validateStepThree } from '../formValidators';
 import { guardarWalkAroundApi, fetchWalkaroundDetalle, updateWalkaroundApi, obtenerInfoMatriculaApi } from '@/stores/apiWalkaround';
@@ -19,7 +19,7 @@ const INITIAL_INFO = {
     fecha: new Date().toLocaleDateString('en-CA')
 };
 
-const INITIAL_EXTERIOR = {
+const INITIAL_EXTERIOR: ExteriorData = {
     observaciones: '', nombreResponsable: '', firmaResponsable: null,
     nombreJefe: '', firmaJefe: null, nombreFbo: '', firmaFbo: null
 };
@@ -27,16 +27,94 @@ const INITIAL_EXTERIOR = {
 interface Props {
     id?: number | null;
     onCancel?: () => void;
+    onSaved?: () => void;
+    borradorId?: string;
 }
 
-const WalkAroundFormV2 = ({ id, onCancel }: Props) => {
+interface BorradorWalkAround {
+    version: number;
+    step: number;
+    infoData: any;
+    inspeccion: any;
+    exteriorData: ExteriorData;
+}
+
+const esObjeto = (valor: unknown): valor is Record<string, any> => {
+    return valor !== null && typeof valor === 'object' && !Array.isArray(valor);
+};
+
+const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId }: Props) => {
     const [step, setStep] = useState(1);
     const [infoData, setInfoData] = useState<any>(INITIAL_INFO);
     const [inspeccion, setInspeccion] = useState<any>({});
-    const [exteriorData, setExteriorData] = useState(INITIAL_EXTERIOR);
+    const [exteriorData, setExteriorData] = useState<ExteriorData>(INITIAL_EXTERIOR);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLoadingData, setIsLoadingData] = useState(false);
     const [isMapOpen, setIsMapOpen] = useState(false);
+    const [claveBorradorCargada, setClaveBorradorCargada] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (id || !borradorId || typeof window === 'undefined') {
+            setClaveBorradorCargada(borradorId ?? null);
+            return;
+        }
+
+        let stepRestaurado = 1;
+        let infoRestaurada = { ...INITIAL_INFO };
+        let inspeccionRestaurada: any = {};
+        let exteriorRestaurado: ExteriorData = { ...INITIAL_EXTERIOR };
+
+        try {
+            const contenidoGuardado = window.localStorage.getItem(borradorId);
+
+            if (contenidoGuardado) {
+                const borrador = JSON.parse(contenidoGuardado) as Partial<BorradorWalkAround>;
+
+                if (esObjeto(borrador)) {
+                    const stepGuardado = Number(borrador.step);
+                    stepRestaurado = Number.isInteger(stepGuardado) && stepGuardado >= 1 && stepGuardado <= STEPS.length
+                        ? stepGuardado
+                        : 1;
+                    infoRestaurada = esObjeto(borrador.infoData)
+                        ? { ...INITIAL_INFO, ...borrador.infoData }
+                        : { ...INITIAL_INFO };
+                    inspeccionRestaurada = esObjeto(borrador.inspeccion)
+                        ? borrador.inspeccion
+                        : {};
+                    exteriorRestaurado = esObjeto(borrador.exteriorData)
+                        ? { ...INITIAL_EXTERIOR, ...borrador.exteriorData }
+                        : { ...INITIAL_EXTERIOR };
+                }
+            }
+        } catch (error) {
+            console.error('No se pudo restaurar el borrador de Walk Around', error);
+            window.localStorage.removeItem(borradorId);
+        }
+
+        setStep(stepRestaurado);
+        setInfoData(infoRestaurada);
+        setInspeccion(inspeccionRestaurada);
+        setExteriorData(exteriorRestaurado);
+        setClaveBorradorCargada(borradorId);
+    }, [borradorId, id]);
+
+    useEffect(() => {
+        if (id || !borradorId || claveBorradorCargada !== borradorId || typeof window === 'undefined') return;
+
+        const borrador: BorradorWalkAround = {
+            version: 1,
+            step,
+            infoData,
+            inspeccion,
+            exteriorData
+        };
+
+        try {
+            window.localStorage.setItem(borradorId, JSON.stringify(borrador));
+        } catch (error) {
+            console.error('No se pudo guardar el borrador de Walk Around', error);
+        }
+    }, [borradorId, claveBorradorCargada, exteriorData, id, infoData, inspeccion, step]);
 
     useEffect(() => {
         if (id) {
@@ -54,7 +132,7 @@ const WalkAroundFormV2 = ({ id, onCancel }: Props) => {
                             destino: detalle.destino || '',
                             procedencia: detalle.procedensia || '',
                             fecha: detalle.fecha
-                                    ? new Date(detalle.fecha).toLocaleDateString('en-CA') // Retorna YYYY-MM-DD en hora local
+                                    ? new Date(detalle.fecha).toLocaleDateString('en-CA')
                                     : INITIAL_INFO.fecha
                         });
                         const checklistData = detalle.tipo === 'avion' ? detalle.checklists?.checklist_avion : detalle.checklists?.checklist_helicoptero;
@@ -139,8 +217,21 @@ const WalkAroundFormV2 = ({ id, onCancel }: Props) => {
                     fechaFinalizacion: new Date().toISOString()
                 };
                 id ? await updateWalkaroundApi(id, payload) : await guardarWalkAroundApi(payload);
+
+                if (!id && borradorId && typeof window !== 'undefined') {
+                    setClaveBorradorCargada(null);
+                    window.localStorage.removeItem(borradorId);
+                }
+
                 await Swal.fire('Éxito', 'Registro procesado correctamente', 'success');
-                window.location.reload();
+
+                if (onSaved) {
+                    onSaved();
+                } else if (onCancel) {
+                    onCancel();
+                } else {
+                    window.location.reload();
+                }
             } catch (error: any) {
                 Swal.fire('Error', error.message || 'Error al guardar', 'error');
             } finally { setIsSubmitting(false); }
@@ -225,7 +316,7 @@ const WalkAroundFormV2 = ({ id, onCancel }: Props) => {
                                     <ShieldAlert size={40} className="opacity-40" />
                                 </header>
                                 <div className="p-8">
-                                    <ExteriorObservaciones data={exteriorData} onChange={(d: any) => setExteriorData(p => ({ ...p, ...d }))} />
+                                    <ExteriorObservaciones data={exteriorData} onChange={(d) => setExteriorData((p) => ({ ...p, ...d }))} />
                                 </div>
                             </div>
                         )}

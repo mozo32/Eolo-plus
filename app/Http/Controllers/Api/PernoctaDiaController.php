@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\PernoctaDia;
 use Carbon\Carbon;
+use App\Models\OperacionDiaria;
+use Illuminate\Support\Facades\Validator;
 
 class PernoctaDiaController extends Controller
 {
@@ -271,72 +273,288 @@ class PernoctaDiaController extends Controller
     }
     public function store(Request $request)
     {
-        $data = $request->all();
+        $validator = Validator::make(
+            $request->all(),
+            [
+                '*.fecha' => 'required|date',
+                '*.hora' => 'nullable|string',
+                '*.matricula' => 'required|string|max:20',
+                '*.nombre' => 'required|string|max:255',
+                '*.observaciones' => 'nullable|string',
+                '*.ubicacion' => 'required|string|max:20',
+            ]
+        );
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'La información enviada no es válida.',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $normalizarMatricula = static function (
+            $matricula
+        ): string {
+            return mb_strtoupper(
+                trim((string) $matricula)
+            );
+        };
+
+        $data = collect($validator->validated())
+            ->map(function ($item) use (
+                $normalizarMatricula
+            ) {
+                $item['matricula'] =
+                    $normalizarMatricula(
+                        $item['matricula']
+                    );
+
+                return $item;
+            })
+            ->values()
+            ->all();
+
+        if (count($data) === 0) {
+            return response()->json([
+                'message' => 'No hay pernoctas para guardar.',
+            ], 422);
+        }
+
+        $matriculas = collect($data)
+            ->pluck('matricula')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $operaciones = OperacionDiaria::query()
+            ->whereIn('matricula', $matriculas)
+            ->orderBy('fecha', 'asc')
+            ->orderBy('hora', 'asc')
+            ->orderBy('id', 'asc')
+            ->get([
+                'id',
+                'tipo',
+                'matricula',
+                'fecha',
+                'hora',
+            ]);
+
+        $operacionesPorMatricula =
+            $operaciones->groupBy(
+                function ($operacion) use (
+                    $normalizarMatricula
+                ) {
+                    return $normalizarMatricula(
+                        $operacion->matricula
+                    );
+                }
+            );
+
+        $crearFechaHoraOperacion =
+            static function ($operacion): Carbon {
+                return Carbon::parse(
+                    $operacion->fecha
+                )->setTimeFromTimeString(
+                    (string) (
+                        $operacion->hora
+                        ?: '00:00:00'
+                    )
+                );
+            };
+
+        $aeronavesFueraHangar = [];
+
+        foreach ($data as $item) {
+            $matricula =
+                $normalizarMatricula(
+                    $item['matricula']
+                );
+
+            $fechaHoraPernocta = Carbon::parse(
+                $item['fecha']
+            )->setTimeFromTimeString(
+                (string) (
+                    $item['hora']
+                    ?? '23:59:59'
+                )
+            );
+
+            $operacionesMatricula =
+                $operacionesPorMatricula->get(
+                    $matricula,
+                    collect()
+                );
+
+            $ultimaOperacion =
+                $operacionesMatricula
+                    ->filter(
+                        function ($operacion) use (
+                            $fechaHoraPernocta,
+                            $crearFechaHoraOperacion
+                        ) {
+                            $fechaOperacion =
+                                $crearFechaHoraOperacion(
+                                    $operacion
+                                );
+
+                            return $fechaOperacion
+                                ->lessThanOrEqualTo(
+                                    $fechaHoraPernocta
+                                );
+                        }
+                    )
+                    ->last();
+
+            if (!$ultimaOperacion) {
+                $aeronavesFueraHangar[] = [
+                    'matricula' => $matricula,
+                    'motivo' =>
+                        'No tiene una llegada registrada antes de la pernocta.',
+                    'ultima_operacion' => null,
+                    'fecha_hora_ultima_operacion' => null,
+                ];
+
+                continue;
+            }
+
+            $tipoUltimaOperacion =
+                mb_strtoupper(
+                    trim(
+                        (string) $ultimaOperacion->tipo
+                    )
+                );
+
+            $estaDentro = in_array(
+                $tipoUltimaOperacion,
+                ['LLEGADA', 'ENTRADA'],
+                true
+            );
+
+            if (!$estaDentro) {
+                $fechaUltimaOperacion =
+                    $crearFechaHoraOperacion(
+                        $ultimaOperacion
+                    );
+
+                $aeronavesFueraHangar[] = [
+                    'matricula' => $matricula,
+                    'motivo' =>
+                        'La última operación registrada es una salida.',
+                    'ultima_operacion' =>
+                        $tipoUltimaOperacion,
+                    'fecha_hora_ultima_operacion' =>
+                        $fechaUltimaOperacion->format(
+                            'd/m/Y H:i:s'
+                        ),
+                ];
+            }
+        }
+
+        if (count($aeronavesFueraHangar) > 0) {
+            return response()->json([
+                'message' =>
+                    'No se guardaron las pernoctas porque una o más aeronaves no se encuentran dentro del hangar.',
+                'codigo' =>
+                    'AERONAVE_FUERA_HANGAR',
+                'aeronaves_fuera_hangar' =>
+                    $aeronavesFueraHangar,
+            ], 422);
+        }
 
         DB::beginTransaction();
 
         try {
             foreach ($data as $item) {
-
-                $infoMatricula = DB::connection('remota')
-                    ->table('tb_matricula as m')
-                    ->leftJoin('tb_estatus as e', 'e.id_estatus', '=', 'm.id_estatus')
-                    ->leftJoin('tb_tipo as t', 't.id_tipo', '=', 'm.id_tipo')
-                    ->leftJoin('tb_categoria as c', 'c.id_categoria', '=', 'm.id_categoria')
-                    ->where('m.matricula', $item['matricula'])
-                    ->select(
-                        'm.matricula',
-                        'e.estatus',
-                        't.tipo',
-                        'c.categoria'
-                    )
-                    ->first();
+                $infoMatricula =
+                    DB::connection('remota')
+                        ->table('tb_matricula as m')
+                        ->leftJoin(
+                            'tb_estatus as e',
+                            'e.id_estatus',
+                            '=',
+                            'm.id_estatus'
+                        )
+                        ->leftJoin(
+                            'tb_tipo as t',
+                            't.id_tipo',
+                            '=',
+                            'm.id_tipo'
+                        )
+                        ->leftJoin(
+                            'tb_categoria as c',
+                            'c.id_categoria',
+                            '=',
+                            'm.id_categoria'
+                        )
+                        ->where(
+                            'm.matricula',
+                            $item['matricula']
+                        )
+                        ->select(
+                            'm.matricula',
+                            'e.estatus',
+                            't.tipo',
+                            'c.categoria'
+                        )
+                        ->first();
 
                 if (!$infoMatricula) {
-                    DB::connection('remota')->table('tb_matricula')->insert([
-                        'matricula'      => $item['matricula'],
-                        'id_estatus'     => 1,
-                        'id_tipo'        => 0,
-                        'id_categoria'   => 0,
-                        'id_motor'       => 0,
-                        'id_aterrizaje'  => 0,
-                        'id_transito2h'  => 0,
-                        'id_transito12h' => 0,
-                        'id_pernocta'    => 0,
-                        'd_vuelos'       => 0,
-                    ]);
+                    DB::connection('remota')
+                        ->table('tb_matricula')
+                        ->insert([
+                            'matricula' =>
+                                $item['matricula'],
+                            'id_estatus' => 1,
+                            'id_tipo' => 0,
+                            'id_categoria' => 0,
+                            'id_motor' => 0,
+                            'id_aterrizaje' => 0,
+                            'id_transito2h' => 0,
+                            'id_transito12h' => 0,
+                            'id_pernocta' => 0,
+                            'd_vuelos' => 0,
+                        ]);
 
                     $infoMatricula = (object) [
-                        'tipo'      => '',
-                        'estatus'   => '',
-                        'categoria' => ''
+                        'tipo' => '',
+                        'estatus' => '',
+                        'categoria' => '',
                     ];
                 }
 
                 PernoctaDia::create([
-                    'fecha'         => $item['fecha'],
-                    'matricula'     => $item['matricula'],
-                    'nombre'        => $item['nombre'],
-                    'observaciones' => $item['observaciones'] ?? null,
-                    'ubicacion'     => $item['ubicacion'],
-                    'aeronave'      => $infoMatricula->tipo,
-                    'tipo_cliente'  => $infoMatricula->estatus,
-                    'categoria'     => $infoMatricula->categoria,
+                    'fecha' => $item['fecha'],
+                    'matricula' =>
+                        $item['matricula'],
+                    'nombre' => $item['nombre'],
+                    'observaciones' =>
+                        $item['observaciones']
+                        ?? null,
+                    'ubicacion' =>
+                        $item['ubicacion'],
+                    'aeronave' =>
+                        $infoMatricula->tipo,
+                    'tipo_cliente' =>
+                        $infoMatricula->estatus,
+                    'categoria' =>
+                        $infoMatricula->categoria,
                 ]);
             }
 
             DB::commit();
 
             return response()->json([
-                'message' => 'Pernoctas guardadas correctamente',
-                'total'   => count($data),
+                'message' =>
+                    'Pernoctas guardadas correctamente',
+                'total' => count($data),
             ], 201);
-
         } catch (\Throwable $e) {
             DB::rollBack();
 
             return response()->json([
-                'message' => $e->getMessage(),
+                'message' =>
+                    'No se pudieron guardar las pernoctas.',
+                'error' => $e->getMessage(),
             ], 422);
         }
     }

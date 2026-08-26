@@ -8,12 +8,14 @@ import {
 import InputMatricula from "@/pages/InputMatricula";
 import { useMatriculaAutocompleteStore } from "./useMatriculaAutocompleteStore";
 
-export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, soloLectura = false }: {
+export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datosEdicion, soloLectura = false, borradorId }: {
     alCerrar?: () => void,
+    alGuardar?: () => void,
     moduloNombre?: string,
     datosEdicion?: any,
     soloLectura?: boolean
     nombreRol?: string;
+    borradorId?: string;
 }) => {
     const { obtenerTipo } = useMatriculaAutocompleteStore();
     const [cargando, setCargando] = useState(false);
@@ -43,9 +45,62 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
     });
 
     const [formData, setFormData] = useState(getInitialState());
+    const [claveBorradorCargada, setClaveBorradorCargada] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!borradorId || datosEdicion || typeof window === 'undefined') {
+            setClaveBorradorCargada(borradorId ?? null);
+            return;
+        }
+
+        let datosRestaurados = getInitialState();
+
+        try {
+            const contenidoGuardado = window.localStorage.getItem(borradorId);
+
+            if (contenidoGuardado) {
+                const datosGuardados = JSON.parse(contenidoGuardado);
+
+                if (datosGuardados && typeof datosGuardados === 'object' && !Array.isArray(datosGuardados)) {
+                    datosRestaurados = {
+                        ...getInitialState(datosGuardados.fecha),
+                        ...datosGuardados,
+                        departamento: moduloNombre,
+                        movimiento: 'Llegada',
+                        nombreRol: nombreRol
+                    };
+                }
+            }
+        } catch (error) {
+            console.error('No se pudo restaurar el borrador de llegada', error);
+            window.localStorage.removeItem(borradorId);
+        }
+
+        setFormData(datosRestaurados);
+        setClaveBorradorCargada(borradorId);
+    }, [borradorId, datosEdicion, moduloNombre, nombreRol]);
+
+    useEffect(() => {
+        if (!borradorId || claveBorradorCargada !== borradorId || datosEdicion || typeof window === 'undefined') return;
+
+        try {
+            window.localStorage.setItem(borradorId, JSON.stringify(formData));
+        } catch (error) {
+            console.error('No se pudo guardar el borrador de llegada', error);
+        }
+    }, [borradorId, claveBorradorCargada, datosEdicion, formData]);
 
     const handleFieldChange = (name: string, value: any) => {
         setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const cambiarFecha = (fecha: string) => {
+        if (datosEdicion) {
+            handleFieldChange('fecha', fecha);
+            return;
+        }
+
+        setFormData(getInitialState(fecha));
     };
 
     const buscarNombres = async (busqueda: string) => {
@@ -155,7 +210,15 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
                 showConfirmButton: false
             });
 
-            if (alCerrar) alCerrar();
+            if (borradorId && !datosEdicion && typeof window !== 'undefined') {
+                window.localStorage.removeItem(borradorId);
+            }
+
+            if (alGuardar) {
+                alGuardar();
+            } else if (alCerrar) {
+                alCerrar();
+            }
         } catch (error) {
             let mensaje = 'Ocurrió un error inesperado';
             if (error instanceof Error) mensaje = error.message;
@@ -164,25 +227,6 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
             setCargando(false);
         }
     };
-
-    useEffect(() => {
-        if (!datosEdicion) {
-            setFormData(prev => ({
-                ...getInitialState(prev.fecha),
-                id: null,
-                matricula: '',
-                equipo: '',
-                hora: '',
-                procedencia: '',
-                pax: null,
-                equipaje: null,
-                tipo_cliente: '',
-                observaciones: '',
-                nombre: '',
-                impulso: ''
-            }));
-        }
-    }, [formData.fecha]);
 
     return (
         <form onSubmit={handleSubmit} className="bg-white p-4 md:p-6 rounded-xl border-t-8 border-emerald-600 shadow-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -208,7 +252,7 @@ export const FormLlegada = ({ alCerrar, nombreRol, moduloNombre, datosEdicion, s
                             <input
                                 type="date"
                                 value={formData.fecha}
-                                onChange={(e) => handleFieldChange("fecha", e.target.value)}
+                                onChange={(e) => cambiarFecha(e.target.value)}
                                 className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer block"
                             />
                         </div>

@@ -26,20 +26,51 @@ export async function guardarMovimientoCSAEApi(form: any) {
 
     return data;
 }
-export async function fetchMovimientoCSAE(params: {
+export type FiltrosMovimientoCSAE = {
     page?: number;
     search?: string;
     per_page?: number;
-}) {
-    const qs = new URLSearchParams(params as any).toString();
+    tipo_aeronave?: string;
+    entrada_inicio?: string;
+    entrada_fin?: string;
+    salida_inicio?: string;
+    salida_fin?: string;
+    estado?: '' | 'pendiente' | 'salio';
+};
 
-    const res = await fetch(`/api/MovimientosCSAE?${qs}`, {
-        headers: { Accept: "application/json" },
-        credentials: "same-origin",
+export async function fetchMovimientoCSAE(
+    params: FiltrosMovimientoCSAE,
+) {
+    const qs = new URLSearchParams();
+
+    Object.entries(params).forEach(([key, value]) => {
+        if (
+            value !== undefined &&
+            value !== null &&
+            String(value).trim() !== ''
+        ) {
+            qs.set(key, String(value));
+        }
     });
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.message);
+    const query = qs.toString();
+
+    const res = await fetch(
+        `/api/MovimientosCSAE${query ? `?${query}` : ''}`,
+        {
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
+        },
+    );
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+        throw new Error(data?.message || 'No se pudieron cargar los movimientos');
+    }
 
     return data;
 }

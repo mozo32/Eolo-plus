@@ -81,6 +81,48 @@ export default function CheckListEquipo() {
         setPagina(1);
     };
 
+    const cambiarPeriodoFecha = (
+        modo: 'dia' | 'rango' | 'mes' | 'año'
+    ) => {
+        setFiltrosEdicion((actual) => {
+            const ahora = new Date();
+            const anioActual = ahora.getFullYear();
+            const numeroMesActual = ahora.getMonth() + 1;
+            const mesActual = String(numeroMesActual).padStart(2, '0');
+
+            if (modo === 'mes') {
+                const ultimoDia = new Date(
+                    anioActual,
+                    numeroMesActual,
+                    0
+                ).getDate();
+
+                return {
+                    ...actual,
+                    periodo: modo,
+                    fechaInicio: `${anioActual}-${mesActual}-01`,
+                    fechaFin: `${anioActual}-${mesActual}-${String(
+                        ultimoDia
+                    ).padStart(2, '0')}`
+                };
+            }
+
+            if (modo === 'año') {
+                return {
+                    ...actual,
+                    periodo: modo,
+                    fechaInicio: `${anioActual}-01-01`,
+                    fechaFin: `${anioActual}-12-31`
+                };
+            }
+
+            return {
+                ...actual,
+                periodo: modo
+            };
+        });
+    };
+
     const limpiarFiltros = () => {
         setFiltros({
             buscar: '',
@@ -381,8 +423,8 @@ export default function CheckListEquipo() {
                             </div>
                             <div className="p-4 space-y-4">
                                 <div className="flex bg-slate-100 p-1 rounded-lg">
-                                    {['dia', 'rango', 'mes', 'año'].map((modo) => (
-                                        <button key={modo} onClick={() => setFiltrosEdicion({ ...filtrosEdicion, periodo: modo })} className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all uppercase ${filtrosEdicion.periodo === modo ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>{modo}</button>
+                                    {(['dia', 'rango', 'mes', 'año'] as const).map((modo) => (
+                                        <button type="button" key={modo} onClick={() => cambiarPeriodoFecha(modo)} className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all uppercase ${filtrosEdicion.periodo === modo ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>{modo}</button>
                                     ))}
                                 </div>
                                 <div className="space-y-3">
@@ -396,13 +438,40 @@ export default function CheckListEquipo() {
                                         </div>
                                     )}
                                     {filtrosEdicion.periodo === 'mes' && (
-                                        <input type="month" className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => {
-                                            const [y, m] = e.target.value.split('-');
-                                            setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${y}-${m}-01`, fechaFin: `${y}-${m}-31` });
+                                        <input type="month" value={filtrosEdicion.fechaInicio.substring(0, 7)} className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => {
+                                            const valor = e.target.value;
+
+                                            if (!valor) {
+                                                setFiltrosEdicion({
+                                                    ...filtrosEdicion,
+                                                    fechaInicio: '',
+                                                    fechaFin: ''
+                                                });
+                                                return;
+                                            }
+
+                                            const [anioTexto, mesTexto] = valor.split('-');
+                                            const anio = Number(anioTexto);
+                                            const mes = Number(mesTexto);
+                                            const ultimoDia = new Date(anio, mes, 0).getDate();
+
+                                            setFiltrosEdicion({
+                                                ...filtrosEdicion,
+                                                fechaInicio: `${valor}-01`,
+                                                fechaFin: `${valor}-${String(ultimoDia).padStart(2, '0')}`
+                                            });
                                         }} />
                                     )}
                                     {filtrosEdicion.periodo === 'año' && (
-                                        <input type="number" min="2020" max="2030" placeholder="Año" className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${e.target.value}-01-01`, fechaFin: `${e.target.value}-12-31` })} />
+                                        <input type="number" min="2020" max="2100" value={filtrosEdicion.fechaInicio ? filtrosEdicion.fechaInicio.split('-')[0] : ''} placeholder="Año" className="w-full border border-slate-200 p-2 rounded-lg text-sm" onChange={(e) => {
+                                            const anio = e.target.value;
+
+                                            setFiltrosEdicion({
+                                                ...filtrosEdicion,
+                                                fechaInicio: anio ? `${anio}-01-01` : '',
+                                                fechaFin: anio ? `${anio}-12-31` : ''
+                                            });
+                                        }} />
                                     )}
                                 </div>
                                 <button onClick={aplicarFiltroFecha} className="w-full bg-slate-800 text-white py-3 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">Aplicar Filtro</button>
