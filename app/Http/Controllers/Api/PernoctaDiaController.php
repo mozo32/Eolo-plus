@@ -287,36 +287,40 @@ class PernoctaDiaController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'La información enviada no es válida.',
-                'errors' => $validator->errors(),
+                'message' =>
+                    'La información enviada no es válida.',
+                'errors' =>
+                    $validator->errors(),
             ], 422);
         }
 
-        $normalizarMatricula = static function (
-            $matricula
-        ): string {
-            return mb_strtoupper(
-                trim((string) $matricula)
-            );
-        };
+        $normalizarMatricula =
+            static function ($matricula): string {
+                return mb_strtoupper(
+                    trim((string) $matricula)
+                );
+            };
 
         $data = collect($validator->validated())
-            ->map(function ($item) use (
-                $normalizarMatricula
-            ) {
-                $item['matricula'] =
-                    $normalizarMatricula(
-                        $item['matricula']
-                    );
+            ->map(
+                function ($item) use (
+                    $normalizarMatricula
+                ) {
+                    $item['matricula'] =
+                        $normalizarMatricula(
+                            $item['matricula']
+                        );
 
-                return $item;
-            })
+                    return $item;
+                }
+            )
             ->values()
             ->all();
 
         if (count($data) === 0) {
             return response()->json([
-                'message' => 'No hay pernoctas para guardar.',
+                'message' =>
+                    'No hay pernoctas para guardar.',
             ], 422);
         }
 
@@ -370,14 +374,10 @@ class PernoctaDiaController extends Controller
                     $item['matricula']
                 );
 
-            $fechaHoraPernocta = Carbon::parse(
-                $item['fecha']
-            )->setTimeFromTimeString(
-                (string) (
-                    $item['hora']
-                    ?? '23:59:59'
-                )
-            );
+            $fechaPernocta =
+                Carbon::parse(
+                    $item['fecha']
+                )->startOfDay();
 
             $operacionesMatricula =
                 $operacionesPorMatricula->get(
@@ -389,17 +389,16 @@ class PernoctaDiaController extends Controller
                 $operacionesMatricula
                     ->filter(
                         function ($operacion) use (
-                            $fechaHoraPernocta,
-                            $crearFechaHoraOperacion
+                            $fechaPernocta
                         ) {
                             $fechaOperacion =
-                                $crearFechaHoraOperacion(
-                                    $operacion
-                                );
+                                Carbon::parse(
+                                    $operacion->fecha
+                                )->startOfDay();
 
                             return $fechaOperacion
                                 ->lessThanOrEqualTo(
-                                    $fechaHoraPernocta
+                                    $fechaPernocta
                                 );
                         }
                     )
@@ -409,9 +408,10 @@ class PernoctaDiaController extends Controller
                 $aeronavesFueraHangar[] = [
                     'matricula' => $matricula,
                     'motivo' =>
-                        'No tiene una llegada registrada antes de la pernocta.',
+                        'No tiene operaciones registradas hasta la fecha de la pernocta.',
                     'ultima_operacion' => null,
-                    'fecha_hora_ultima_operacion' => null,
+                    'fecha_hora_ultima_operacion' =>
+                        null,
                 ];
 
                 continue;
@@ -420,13 +420,17 @@ class PernoctaDiaController extends Controller
             $tipoUltimaOperacion =
                 mb_strtoupper(
                     trim(
-                        (string) $ultimaOperacion->tipo
+                        (string)
+                            $ultimaOperacion->tipo
                     )
                 );
 
             $estaDentro = in_array(
                 $tipoUltimaOperacion,
-                ['LLEGADA', 'ENTRADA'],
+                [
+                    'LLEGADA',
+                    'ENTRADA',
+                ],
                 true
             );
 
@@ -450,7 +454,9 @@ class PernoctaDiaController extends Controller
             }
         }
 
-        if (count($aeronavesFueraHangar) > 0) {
+        if (
+            count($aeronavesFueraHangar) > 0
+        ) {
             return response()->json([
                 'message' =>
                     'No se guardaron las pernoctas porque una o más aeronaves no se encuentran dentro del hangar.',
@@ -467,7 +473,9 @@ class PernoctaDiaController extends Controller
             foreach ($data as $item) {
                 $infoMatricula =
                     DB::connection('remota')
-                        ->table('tb_matricula as m')
+                        ->table(
+                            'tb_matricula as m'
+                        )
                         ->leftJoin(
                             'tb_estatus as e',
                             'e.id_estatus',
@@ -523,10 +531,12 @@ class PernoctaDiaController extends Controller
                 }
 
                 PernoctaDia::create([
-                    'fecha' => $item['fecha'],
+                    'fecha' =>
+                        $item['fecha'],
                     'matricula' =>
                         $item['matricula'],
-                    'nombre' => $item['nombre'],
+                    'nombre' =>
+                        $item['nombre'],
                     'observaciones' =>
                         $item['observaciones']
                         ?? null,
@@ -546,7 +556,8 @@ class PernoctaDiaController extends Controller
             return response()->json([
                 'message' =>
                     'Pernoctas guardadas correctamente',
-                'total' => count($data),
+                'total' =>
+                    count($data),
             ], 201);
         } catch (\Throwable $e) {
             DB::rollBack();
@@ -554,11 +565,11 @@ class PernoctaDiaController extends Controller
             return response()->json([
                 'message' =>
                     'No se pudieron guardar las pernoctas.',
-                'error' => $e->getMessage(),
+                'error' =>
+                    $e->getMessage(),
             ], 422);
         }
     }
-
     public function buscar(Request $request)
     {
         $q = $request->get('q');

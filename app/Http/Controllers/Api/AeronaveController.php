@@ -9,7 +9,7 @@ use App\Models\Aeronave;
 use App\Models\WalkAround;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
-
+use Illuminate\Support\Facades\Log;
 class AeronaveController extends Controller
 {
     public function buscarPorMatricula(string $matricula): JsonResponse
@@ -56,6 +56,8 @@ class AeronaveController extends Controller
             if ($q === '') {
                 return response()->json([]);
             }
+            $configRemota = config('database.connections.remota');
+
 
             $matriculas = DB::connection('remota')
                 ->table('tb_matricula')
