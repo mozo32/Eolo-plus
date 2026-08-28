@@ -127,34 +127,121 @@ class RegistroVisitantesController extends Controller
     public function index(Request $request)
     {
         $validated = $request->validate([
-            'search' => 'nullable|string|max:255',
-            'fecha' => 'nullable|date',
-            'page' => 'nullable|integer|min:1',
-            'per_page' => 'nullable|integer|in:5,10,20,50,100',
+            'search' => ['nullable', 'string', 'max:255'],
+            'fecha' => ['nullable', 'date'],
+            'fechaInicio' => ['nullable', 'date'],
+            'fechaFin' => ['nullable', 'date'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => [
+                'nullable',
+                'integer',
+                'in:5,10,20,50,100',
+            ],
         ]);
 
         $search = trim($validated['search'] ?? '');
-        $fecha = $validated['fecha'] ?? today()->toDateString();
-        $perPage = (int) ($validated['per_page'] ?? 10);
+
+        $fechaInicio =
+            $validated['fechaInicio']
+            ?? $validated['fecha']
+            ?? null;
+
+        $fechaFin =
+            $validated['fechaFin']
+            ?? $validated['fecha']
+            ?? null;
+
+        $perPage = (int) (
+            $validated['per_page'] ?? 10
+        );
 
         $query = RegistroVisitante::query()
-            ->whereNull('hora_salida')
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where(function ($subquery) use ($search) {
-                    $subquery
-                        ->where('nombre', 'like', "%{$search}%")
-                        ->orWhere('gafete', 'like', "%{$search}%")
-                        ->orWhere('tipo_gafete', 'like', "%{$search}%")
-                        ->orWhere('procedencia', 'like', "%{$search}%");
-                });
-            })
-            ->whereDate('fecha_entrada', $fecha)
+            ->when(
+                $search !== '',
+                function ($query) use ($search) {
+                    $query->where(
+                        function ($subquery) use ($search) {
+                            $subquery
+                                ->where(
+                                    'nombre',
+                                    'like',
+                                    "%{$search}%"
+                                )
+                                ->orWhere(
+                                    'gafete',
+                                    'like',
+                                    "%{$search}%"
+                                )
+                                ->orWhere(
+                                    'tipo_gafete',
+                                    'like',
+                                    "%{$search}%"
+                                )
+                                ->orWhere(
+                                    'procedencia',
+                                    'like',
+                                    "%{$search}%"
+                                );
+                        }
+                    );
+                }
+            )
+            ->when(
+                $fechaInicio,
+                fn ($query, $fechaInicio) =>
+                    $query->whereDate(
+                        'fecha_entrada',
+                        '>=',
+                        $fechaInicio
+                    )
+            )
+            ->when(
+                $fechaFin,
+                fn ($query, $fechaFin) =>
+                    $query->whereDate(
+                        'fecha_entrada',
+                        '<=',
+                        $fechaFin
+                    )
+            )
             ->orderByDesc('fecha_entrada')
-            ->orderByDesc('hora_entrada');
+            ->orderByDesc('hora_entrada')
+            ->orderByDesc('id');
 
         return response()->json(
-            $query->paginate($perPage)->withQueryString(),
+            $query
+                ->paginate($perPage)
+                ->withQueryString()
         );
+    }
+
+    public function pendientes()
+    {
+        $registros = RegistroVisitante::query()
+            ->where(function ($query) {
+                $query
+                    ->whereNull('hora_salida')
+                    ->orWhere('hora_salida', '');
+            })
+            ->orderBy('fecha_entrada')
+            ->orderBy('hora_entrada')
+            ->orderBy('id')
+            ->get([
+                'id',
+                'nombre',
+                'procedencia',
+                'gafete',
+                'tipo_gafete',
+                'fecha_entrada',
+                'hora_entrada',
+                'fecha_salida',
+                'hora_salida',
+            ]);
+
+        return response()->json([
+            'data' => $registros,
+            'total' => $registros->count(),
+        ]);
     }
 
     private function guardarFirmaBase64(

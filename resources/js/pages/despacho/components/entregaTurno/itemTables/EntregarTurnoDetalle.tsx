@@ -77,6 +77,30 @@ export default function EntregarTurnoDetalle({ id, onClose, onSaved }: Props) {
         }
     };
 
+    const fondoDocumentacion = detalle.fondo_documentacion;
+
+    const fondosRegistrados = Array.isArray(
+        fondoDocumentacion?.montosAgregados
+    )
+        ? fondoDocumentacion.montosAgregados
+        : Number(
+            fondoDocumentacion?.dineroRecibidoContabilidad
+        ) > 0
+            ? [
+                {
+                    monto: Number(
+                        fondoDocumentacion?.dineroRecibidoContabilidad
+                    ),
+                    descripcion: "Monto registrado anteriormente",
+                },
+            ]
+            : [];
+
+    const totalFondosRegistrados = fondosRegistrados.reduce(
+        (total, fondo) => total + (Number(fondo.monto) || 0),
+        0
+    );
+
     return (
         <div className="space-y-6 text-sm text-slate-700 dark:text-slate-200">
 
@@ -191,6 +215,39 @@ export default function EntregarTurnoDetalle({ id, onClose, onSaved }: Props) {
                                 <p className="text-[10px] font-bold text-indigo-600 uppercase mb-1">Fondo Entregado</p>
                                 <p className="text-2xl font-black text-indigo-700">${detalle.fondo_documentacion?.fondoEntregado ?? 0}</p>
                             </div>
+                        </div>
+
+                        <div>
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                                    Fondos Registrados
+                                </p>
+                                <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700">
+                                    Total: ${totalFondosRegistrados}
+                                </span>
+                            </div>
+
+                            {fondosRegistrados.length > 0 ? (
+                                <div className="space-y-2">
+                                    {fondosRegistrados.map((fondo, i) => (
+                                        <div
+                                            key={i}
+                                            className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50/50 px-3 py-2 shadow-sm"
+                                        >
+                                            <span className="truncate text-xs font-bold uppercase text-slate-600">
+                                                {fondo.descripcion || `Fondo #${i + 1}`}
+                                            </span>
+                                            <span className="shrink-0 text-sm font-black text-emerald-600">
+                                                ${fondo.monto ?? 0}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-center text-xs italic text-slate-400">
+                                    No hubo fondos adicionales registrados.
+                                </p>
+                            )}
                         </div>
 
                         <div>

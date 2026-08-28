@@ -10,8 +10,15 @@ export interface GastoItem {
     descripcion: string;
 }
 
+export interface MontoAgregadoItem {
+    monto: NumeroVacio;
+    descripcion: string;
+}
+
 export interface FondoDocumentacionItem {
     fondoRecibido: NumeroVacio;
+    montosAgregados: MontoAgregadoItem[];
+    dineroRecibidoContabilidad?: NumeroVacio;
     gastos: GastoItem[];
     cantidadValesGasolina: NumeroVacio;
     folioValesGasolina: string[];
@@ -28,6 +35,7 @@ export type FondoDocumentacionState = FondoDocumentacionItem;
 
 export const FONDO_DOC_DEFAULT: FondoDocumentacionState = {
     fondoRecibido: "",
+    montosAgregados: [],
     gastos: [],
     cantidadValesGasolina: "",
     fondoEntregado: "",
@@ -54,13 +62,24 @@ const FondoDocumentacion: React.FC<FondoDocumentacionProps> = ({ value, onChange
         val: FondoDocumentacionState[K]
     ) => {
         const nextState = { ...value, [field]: val };
-        if (field === "fondoRecibido" || field === "gastos") {
+        if (
+            field === "fondoRecibido" ||
+            field === "montosAgregados" ||
+            field === "gastos"
+        ) {
             const recibido = Number(nextState.fondoRecibido) || 0;
+            const totalMontosAgregados = Array.isArray(nextState.montosAgregados)
+                ? nextState.montosAgregados.reduce<number>(
+                    (sum, monto) => sum + (Number(monto.monto) || 0),
+                    0
+                )
+                : Number(nextState.dineroRecibidoContabilidad) || 0;
             const totalGastos = (nextState.gastos || []).reduce<number>(
                 (sum, gasto) => sum + (Number(gasto.monto) || 0),
                 0
             );
-            nextState.fondoEntregado = recibido - totalGastos;
+            nextState.fondoEntregado =
+                recibido + totalMontosAgregados - totalGastos;
         }
         if (field === "cantidadValesGasolina") {
             const nuevaCantidad = Number(val) || 0;
@@ -85,6 +104,34 @@ const FondoDocumentacion: React.FC<FondoDocumentacionProps> = ({ value, onChange
     const handleAddGasto = () => {
         const nuevosGastos = [...(value.gastos || []), { monto: "", descripcion: "" } as GastoItem];
         update("gastos", nuevosGastos);
+    };
+
+    const handleAddMonto = () => {
+        const nuevosMontos = [
+            ...(value.montosAgregados || []),
+            { monto: "", descripcion: "" } as MontoAgregadoItem,
+        ];
+        update("montosAgregados", nuevosMontos);
+    };
+
+    const handleUpdateMonto = (
+        index: number,
+        campo: keyof MontoAgregadoItem,
+        val: string
+    ) => {
+        const nuevosMontos = [...(value.montosAgregados || [])];
+        nuevosMontos[index] = {
+            ...nuevosMontos[index],
+            [campo]: campo === "monto" ? toNumeroVacio(val) : val,
+        };
+        update("montosAgregados", nuevosMontos);
+    };
+
+    const handleRemoveMonto = (index: number) => {
+        const nuevosMontos = (value.montosAgregados || []).filter(
+            (_, i) => i !== index
+        );
+        update("montosAgregados", nuevosMontos);
     };
 
     const handleUpdateGasto = (index: number, campo: keyof GastoItem, val: string) => {
@@ -192,9 +239,90 @@ const FondoDocumentacion: React.FC<FondoDocumentacionProps> = ({ value, onChange
                             className="w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-600
                                 outline-none cursor-not-allowed
                                 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
-                            placeholder="Fondo - Gastos"
+                            placeholder="Fondo + Montos - Gastos"
                         />
                     </div>
+                </div>
+
+                <div className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                            Montos agregados
+                        </label>
+                        <button
+                            type="button"
+                            onClick={handleAddMonto}
+                            className="flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-900/50"
+                        >
+                            <span>+</span> Agregar monto
+                        </button>
+                    </div>
+
+                    {(!value.montosAgregados || value.montosAgregados.length === 0) ? (
+                        <div className="rounded-md border border-dashed border-gray-300 py-4 text-center dark:border-gray-600">
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                                Sin montos agregados
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                            {value.montosAgregados.map((monto, idx) => (
+                                <div
+                                    key={idx}
+                                    className="relative flex flex-col gap-2 rounded-md border border-emerald-200 bg-white p-2 shadow-sm dark:border-emerald-900/60 dark:bg-gray-900"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                                            Monto #{idx + 1}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveMonto(idx)}
+                                            className="rounded px-2 py-0.5 text-xs text-gray-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30"
+                                            title="Eliminar monto"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+
+                                    <div className="flex gap-2">
+                                        <div className="relative w-1/3">
+                                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-gray-500">
+                                                $
+                                            </span>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                value={monto.monto}
+                                                onChange={(e) =>
+                                                    handleUpdateMonto(
+                                                        idx,
+                                                        "monto",
+                                                        e.target.value
+                                                    )
+                                                }
+                                                className="w-full rounded border border-gray-200 bg-gray-50 py-1.5 pl-5 pr-2 text-sm outline-none transition focus:border-emerald-400 focus:bg-white dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                                                placeholder="0.00"
+                                            />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            value={monto.descripcion}
+                                            onChange={(e) =>
+                                                handleUpdateMonto(
+                                                    idx,
+                                                    "descripcion",
+                                                    e.target.value
+                                                )
+                                            }
+                                            className="w-2/3 rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm outline-none transition focus:border-emerald-400 focus:bg-white dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                                            placeholder="Concepto u origen"
+                                        />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Área exclusiva para los gastos en Grid */}

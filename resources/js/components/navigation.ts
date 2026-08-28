@@ -230,7 +230,6 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
             },
         ]
     }
-    console.log(user.departamentos);
 
     return (user.departamentos ?? [])
         .map((dep) => {

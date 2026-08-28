@@ -62,11 +62,7 @@ const ControlVehiculos = () => {
         formData.set('vehiculo_id', String(selectedVehiculo.id));
         formData.set('movimiento', tipoAccion);
 
-        // Puedes quitarlo después de comprobar la carga.
-        console.log(
-            'Fotografías enviadas:',
-            formData.getAll('evidencias[]')
-        );
+
 
         try {
             await apiVehiculoEolo.registrarMovimiento(formData);

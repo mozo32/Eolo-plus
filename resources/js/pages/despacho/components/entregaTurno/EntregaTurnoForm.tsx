@@ -74,19 +74,42 @@ export default function EntregaTurnoForm({ id, onClose, onSaved, initialData, is
 
     const [step, setStep] = useState<Step>(1);
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
-    const [form, setForm] = useState<SalidaFormData>(() => ({
-        fecha: localDate,
-        nombre: "",
-        nombreQuienEntrega: "",
-        nombreQuienRecibe: "",
-        nombreJefeTurnoDespacho: "",
-        checklistComunicacion: { items: {}, fallas: "" },
-        equipoOficina: EQUIPOS_OFICINA_DEFAULT,
-        copiadoras: { funciona: "", toner: "", paquetes: 0, fallas: "" },
-        fondoDocumentacion: FONDO_DOC_DEFAULT,
-        estadoCajaFuerte: "",
-        ...initialData,
-    }));
+    const [form, setForm] = useState<SalidaFormData>(() => {
+        const fondoInicial = {
+            ...(initialData?.fondoDocumentacion ?? {}),
+        };
+
+        const montosAgregados = Array.isArray(fondoInicial.montosAgregados)
+            ? fondoInicial.montosAgregados
+            : Number(fondoInicial.dineroRecibidoContabilidad) > 0
+                ? [
+                    {
+                        monto: Number(fondoInicial.dineroRecibidoContabilidad),
+                        descripcion: "Monto registrado anteriormente",
+                    },
+                ]
+                : [];
+
+        delete fondoInicial.dineroRecibidoContabilidad;
+
+        return {
+            fecha: localDate,
+            nombre: "",
+            nombreQuienEntrega: "",
+            nombreQuienRecibe: "",
+            nombreJefeTurnoDespacho: "",
+            checklistComunicacion: { items: {}, fallas: "" },
+            equipoOficina: EQUIPOS_OFICINA_DEFAULT,
+            copiadoras: { funciona: "", toner: "", paquetes: 0, fallas: "" },
+            estadoCajaFuerte: "",
+            ...initialData,
+            fondoDocumentacion: {
+                ...FONDO_DOC_DEFAULT,
+                ...fondoInicial,
+                montosAgregados,
+            },
+        };
+    });
 
     const handleChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>

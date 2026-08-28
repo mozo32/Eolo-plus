@@ -1,6 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import MovimientoCSAEForm from './MovimientoAvionesCSAE/MovimientoCSAEForm';
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -26,12 +26,16 @@ import {
     AlertCircle,
     LogOut,
     Eye,
+    Trash2,
 } from 'lucide-react';
 import PdfCsae from './MovimientoAvionesCSAE/PdfCsae';
 import Swal from 'sweetalert2';
 import AeronavesPendientesCSAE from './MovimientoAvionesCSAE/AeronavesPendientesCSAE';
 import VistaPreviaCsae from './MovimientoAvionesCSAE/VistaPreviaCsae';
 
+type Role = { slug: string; nombre: string; };
+export type AuthUser = { id: number; name: string; email: string; isAdmin: boolean; roles: Role[]; };
+type PageProps = { auth: { user: AuthUser | null; }; };
 type ModoPeriodoCSAE = 'dia' | 'rango' | 'mes' | 'año';
 
 type ValorPeriodoCSAE = {
@@ -84,9 +88,7 @@ function FiltroPeriodoCSAE({
     onChange,
 }: FiltroPeriodoCSAEProps) {
     const [abierto, setAbierto] = useState(false);
-    const [borrador, setBorrador] =
-        useState<ValorPeriodoCSAE>(crearPeriodoVacio);
-
+    const [borrador, setBorrador] = useState<ValorPeriodoCSAE>(crearPeriodoVacio);
     const abrir = () => {
         const hoy = obtenerFechaHoy();
 
@@ -465,6 +467,25 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function MovimientoAvionesCSAE() {
+    const { auth } = usePage<PageProps>().props;
+    const user = auth.user;
+    const rolesUsuario = new Set(
+        (user?.roles ?? []).map((role) => role.slug.trim().toLowerCase()),
+    );
+    const tieneRol = (...roles: string[]) =>
+        roles.some((role) => rolesUsuario.has(role));
+    const puedeGestionarTodo = tieneRol('admin', 'fbo');
+    const permisosAcciones = {
+        vistaPrevia:
+            puedeGestionarTodo ||
+            tieneRol('empleado', 'jefe_area', 'admin2', 'fac'),
+        registrarSalida:
+            puedeGestionarTodo || tieneRol('empleado', 'jefe_area'),
+        editar: puedeGestionarTodo,
+        pdf: puedeGestionarTodo || tieneRol('admin2', 'fac'),
+        eliminar: puedeGestionarTodo,
+    };
+
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [tipoAeronave, setTipoAeronave] = useState('');
@@ -741,8 +762,7 @@ export default function MovimientoAvionesCSAE() {
                                 </h2>
 
                                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                    Registro de entradas y
-                                    salidas CSAE
+                                    Registro de entradas y salidas CSAE
                                 </p>
                             </div>
 
@@ -1119,102 +1139,60 @@ export default function MovimientoAvionesCSAE() {
 
                                                     <td className="px-6 py-4">
                                                         <div className="flex items-center justify-end gap-1">
-                                                            <button
-                                                                type="button"
-                                                                className="rounded p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600"
-                                                                onClick={() =>
-                                                                    setPreviewId(
-                                                                        row.id,
-                                                                    )
-                                                                }
-                                                                title="Vista previa"
-                                                            >
-                                                                <Eye
-                                                                    size={
-                                                                        16
-                                                                    }
-                                                                />
-                                                            </button>
-
-                                                            {!salio && (
+                                                            {permisosAcciones.vistaPrevia && (
                                                                 <button
                                                                     type="button"
-                                                                    className="rounded p-2 text-slate-400 transition-colors hover:text-orange-600"
-                                                                    onClick={() =>
-                                                                        abrirSalida(
-                                                                            row.id,
-                                                                        )
-                                                                    }
-                                                                    title="Registrar salida"
+                                                                    className="rounded p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600"
+                                                                    onClick={() => setPreviewId(row.id)}
+                                                                    title="Vista previa"
                                                                 >
-                                                                    <LogOut
-                                                                        size={
-                                                                            16
-                                                                        }
-                                                                    />
+                                                                    <Eye size={16} />
                                                                 </button>
                                                             )}
 
-                                                            <button
-                                                                type="button"
-                                                                className="rounded p-2 text-slate-400 transition-colors hover:text-indigo-600"
-                                                                onClick={() =>
-                                                                    show(
-                                                                        row.id,
-                                                                    )
-                                                                }
-                                                                title={
-                                                                    salio
-                                                                        ? 'Ver o editar registro'
-                                                                        : 'Editar entrada'
-                                                                }
-                                                            >
-                                                                <Edit2
-                                                                    size={
-                                                                        16
-                                                                    }
-                                                                />
-                                                            </button>
-
-                                                            <button
-                                                                type="button"
-                                                                className="p-2 text-[10px] font-black text-slate-400 hover:text-amber-600"
-                                                                title="Descargar PDF"
-                                                                onClick={() =>
-                                                                    setPdfId(
-                                                                        row.id,
-                                                                    )
-                                                                }
-                                                            >
-                                                                PDF
-                                                            </button>
-
-                                                            <button
-                                                                type="button"
-                                                                className="p-2 text-slate-400 transition-colors hover:text-red-600"
-                                                                title="Eliminar"
-                                                                onClick={() =>
-                                                                    handleEliminar(
-                                                                        row.id,
-                                                                    )
-                                                                }
-                                                            >
-                                                                <svg
-                                                                    xmlns="http://www.w3.org/2000/svg"
-                                                                    width="16"
-                                                                    height="16"
-                                                                    viewBox="0 0 24 24"
-                                                                    fill="none"
-                                                                    stroke="currentColor"
-                                                                    strokeWidth="2"
-                                                                    strokeLinecap="round"
-                                                                    strokeLinejoin="round"
+                                                            {permisosAcciones.registrarSalida && !salio && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="rounded p-2 text-slate-400 transition-colors hover:text-orange-600"
+                                                                    onClick={() => abrirSalida(row.id)}
+                                                                    title="Registrar salida"
                                                                 >
-                                                                    <path d="M3 6h18" />
-                                                                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                                                                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                                                                </svg>
-                                                            </button>
+                                                                    <LogOut size={16} />
+                                                                </button>
+                                                            )}
+
+                                                            {permisosAcciones.editar && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="rounded p-2 text-slate-400 transition-colors hover:text-indigo-600"
+                                                                    onClick={() => show(row.id)}
+                                                                    title={salio ? 'Ver o editar registro' : 'Editar entrada'}
+                                                                >
+                                                                    <Edit2 size={16} />
+                                                                </button>
+                                                            )}
+
+                                                            {permisosAcciones.pdf && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="p-2 text-[10px] font-black text-slate-400 hover:text-amber-600"
+                                                                    title="Descargar PDF"
+                                                                    onClick={() => setPdfId(row.id)}
+                                                                >
+                                                                    PDF
+                                                                </button>
+                                                            )}
+
+                                                            {permisosAcciones.eliminar && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="p-2 text-slate-400 transition-colors hover:text-red-600"
+                                                                    title="Eliminar"
+                                                                    onClick={() => handleEliminar(row.id)}
+                                                                >
+                                                                    <Trash2 size={16} />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </td>
                                                 </tr>

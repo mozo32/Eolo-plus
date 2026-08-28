@@ -212,6 +212,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('VehiculoEolo')->group(functi
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('RegistroVisitantes')->group(function () {
     Route::post('/', [RegistroVisitantesController::class, 'store']);
+    Route::get('/pendientes', [RegistroVisitantesController::class,'pendientes']);
     Route::get('/', [RegistroVisitantesController::class, 'index']);
     Route::put('/{registroVisitante}', [RegistroVisitantesController::class, 'salida']);
 });

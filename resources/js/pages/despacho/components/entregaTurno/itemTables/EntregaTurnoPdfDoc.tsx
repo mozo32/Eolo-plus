@@ -244,6 +244,21 @@ export default function EntregaTurnoPdfDoc({ detalle }: { detalle: any }) {
 
     const fondo = detalle.fondo_documentacion ?? {};
     const gastos = Array.isArray(fondo.gastos) ? fondo.gastos : [];
+    const fondosRegistrados = Array.isArray(fondo.montosAgregados)
+        ? fondo.montosAgregados
+        : Number(fondo.dineroRecibidoContabilidad) > 0
+            ? [
+                {
+                    monto: Number(fondo.dineroRecibidoContabilidad),
+                    descripcion: "Monto registrado anteriormente",
+                },
+            ]
+            : [];
+    const totalFondosRegistrados = fondosRegistrados.reduce(
+        (total: number, fondoRegistrado: any) =>
+            total + (Number(fondoRegistrado.monto) || 0),
+        0
+    );
 
     const fecha = formatDateDMY(detalle.fecha);
     const fechaGenerado = formatDateDMY(detalle.created_at);
@@ -367,6 +382,59 @@ export default function EntregaTurnoPdfDoc({ detalle }: { detalle: any }) {
                             </Text>
                         </View>
                     </View>
+
+                    <Text style={[styles.boxTitle, { marginTop: 8 }]}>
+                        Fondos registrados
+                    </Text>
+
+                    <View style={styles.tableWrap}>
+                        <View style={styles.tableHeader}>
+                            <Text style={[styles.th, { width: "70%", textAlign: "left" }]}>
+                                Concepto
+                            </Text>
+                            <Text style={[styles.th, styles.thLast, { width: "30%" }]}>
+                                Monto
+                            </Text>
+                        </View>
+
+                        {fondosRegistrados.length > 0 ? (
+                            fondosRegistrados.map((fondoRegistrado: any, idx: number) => (
+                                <View
+                                    key={idx}
+                                    style={[
+                                        styles.tr,
+                                        idx === fondosRegistrados.length - 1
+                                            ? styles.trLast
+                                            : {},
+                                    ]}
+                                >
+                                    <Text style={[styles.td, styles.tdLeft, { width: "70%" }]}>
+                                        {fondoRegistrado.descripcion || `Fondo #${idx + 1}`}
+                                    </Text>
+                                    <Text style={[styles.td, styles.tdLast, { width: "30%" }]}>
+                                        {formatCurrency(fondoRegistrado.monto)}
+                                    </Text>
+                                </View>
+                            ))
+                        ) : (
+                            <View style={[styles.tr, styles.trLast]}>
+                                <Text style={[styles.td, styles.tdLast, { width: "100%" }]}>
+                                    Sin fondos adicionales registrados
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+
+                    <Text style={styles.muted}>
+                        Fondos registrados: {" "}
+                        <Text style={{ fontWeight: 900 as any }}>
+                            {fondosRegistrados.length}
+                        </Text>
+                        {"  ·  "}Total: {" "}
+                        <Text style={{ fontWeight: 900 as any }}>
+                            {formatCurrency(totalFondosRegistrados)}
+                        </Text>
+                    </Text>
 
                     <Text style={[styles.boxTitle, { marginTop: 8 }]}>
                         Detalle de gastos

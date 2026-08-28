@@ -9,6 +9,8 @@ function getXsrfToken(): string {
 export interface RegistroVisitantesFiltros {
     search?: string;
     fecha?: string;
+    fechaInicio?: string;
+    fechaFin?: string;
     page?: number;
     per_page?: number;
 }
@@ -55,25 +57,30 @@ export async function guardarRegistroVisitantes(form: any) {
 export async function listaRegistroVisitantes<T = any>(
     filtros: RegistroVisitantesFiltros = {},
 ): Promise<RespuestaPaginada<T>> {
-    const {
-        search = '',
-        fecha = '',
-        page = 1,
-        per_page = 10,
-    } = filtros;
+    const search = filtros.search?.trim() ?? '';
+    const fechaInicio =
+        filtros.fechaInicio || filtros.fecha || '';
+    const fechaFin =
+        filtros.fechaFin || filtros.fecha || '';
+    const page = filtros.page ?? 1;
+    const perPage = filtros.per_page ?? 10;
 
     const params = new URLSearchParams();
 
-    if (search.trim()) {
-        params.set('search', search.trim());
+    if (search) {
+        params.set('search', search);
     }
 
-    if (fecha) {
-        params.set('fecha', fecha);
+    if (fechaInicio) {
+        params.set('fechaInicio', fechaInicio);
+    }
+
+    if (fechaFin) {
+        params.set('fechaFin', fechaFin);
     }
 
     params.set('page', String(page));
-    params.set('per_page', String(per_page));
+    params.set('per_page', String(perPage));
 
     const res = await fetch(
         `/api/RegistroVisitantes?${params.toString()}`,
@@ -91,7 +98,8 @@ export async function listaRegistroVisitantes<T = any>(
 
     if (!res.ok) {
         throw new Error(
-            data?.message || 'Error al obtener los registros',
+            data?.message ||
+                'Error al obtener los registros',
         );
     }
 
@@ -118,4 +126,40 @@ export async function guardarSalida(id: number, form: any) {
     }
 
     return data;
+}
+
+export interface RespuestaVisitantesPendientes<T> {
+    data: T[];
+    total: number;
+}
+
+export async function listaVisitantesPendientes<T = any>(): Promise<
+    RespuestaVisitantesPendientes<T>
+> {
+    const res = await fetch(
+        '/api/RegistroVisitantes/pendientes',
+        {
+            method: 'GET',
+            headers: {
+                Accept: 'application/json',
+            },
+            credentials: 'same-origin',
+        },
+    );
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+        throw new Error(
+            data?.message ||
+                'No se pudieron consultar los visitantes pendientes',
+        );
+    }
+
+    return {
+        data: Array.isArray(data?.data)
+            ? data.data
+            : [],
+        total: Number(data?.total) || 0,
+    };
 }

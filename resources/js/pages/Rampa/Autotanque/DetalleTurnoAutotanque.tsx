@@ -187,7 +187,6 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
     const remision = source?.remision || [];
     const sumaAutotanque = source?.sumaAutotanque || [];
     const inspeccion = turno?.inspeccion || source?.inspeccion;
-    console.log(inspeccion);
 
     const formatNumber = (val: any) => {
         const num = Number(val);

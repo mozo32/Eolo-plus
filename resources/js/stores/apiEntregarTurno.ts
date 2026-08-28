@@ -1,4 +1,3 @@
-
 export type EntregarTurnoRow = {
     id: number;
     fecha: string;
@@ -9,6 +8,7 @@ export type EntregarTurnoRow = {
     nombre_quien_recibe: string;
     validacion: boolean;
 };
+
 export type ChecklistComunicacionItem = {
     entregado: boolean;
     cargado: "si" | "no";
@@ -25,60 +25,73 @@ export type EquipoOficinaItem = {
     entregadas: number;
     recibidas: number;
 };
+
 export type Copiadoras = {
     funciona: "si" | "no";
     toner: string;
     paquetes: number;
     fallas?: string | null;
 };
+
 export type NumeroVacio = number | "";
-export type FondoDocumentacion = {
-    fondoRecibido: number;
-    gastos: NumeroVacio[];
-    cantidadValesGasolina: number;
-    fondoEntregado: number;
-    folioValesGasolina: number;
-    reporteAterisaje: "si" | "no";
-    cantidadReporteAterisaje: number;
-    totalLlegadaOperacion: number;
-    totalSalidaOperacion: number;
-    cantidadOperacionesCordinadasEntregadas: number;
-    cuantosWalkArounds: number;
+
+export type GastoFondoDocumentacion = {
+    monto: NumeroVacio;
+    descripcion: string;
 };
+
+export type MontoAgregadoFondoDocumentacion = {
+    monto: NumeroVacio;
+    descripcion: string;
+};
+
+export type FondoDocumentacion = {
+    fondoRecibido: NumeroVacio;
+    montosAgregados?: MontoAgregadoFondoDocumentacion[];
+    dineroRecibidoContabilidad?: NumeroVacio;
+    gastos: GastoFondoDocumentacion[];
+    cantidadValesGasolina: NumeroVacio;
+    fondoEntregado: NumeroVacio;
+    folioValesGasolina: string[];
+    reporteAterisaje: "si" | "no" | "";
+    cantidadReporteAterisaje: NumeroVacio;
+    totalLlegadaOperacion: NumeroVacio;
+    totalSalidaOperacion: NumeroVacio;
+    cantidadOperacionesCordinadasEntregadas: NumeroVacio;
+    cuantosWalkArounds: NumeroVacio;
+};
+
 export type EntregaTurnoDetalle = EntregarTurnoRow & {
     fecha?: string | null;
     nombre?: string | null;
-
     nombre_jefe_turno_despacho: string | null;
     nombre_quien_entrega: string | null;
     nombre_quien_recibe: string | null;
-
     checklist_comunicacion: ChecklistComunicacion | null;
     equipo_oficina: EquipoOficinaItem[] | null;
-
     copiadoras: Copiadoras | null;
     fondo_documentacion: FondoDocumentacion | null;
-
     estado_caja_fuerte: string | null;
-
     created_at?: string;
     updated_at?: string;
 };
+
 function getXsrfToken(): string {
     const match = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('XSRF-TOKEN='));
+        .split("; ")
+        .find((row) => row.startsWith("XSRF-TOKEN="));
 
-    return match ? decodeURIComponent(match.split('=')[1]) : '';
+    return match ? decodeURIComponent(match.split("=")[1]) : "";
 }
+
 export async function guardarEntregarTurnoApi(form: any) {
     const xsrf = getXsrfToken();
     const res = await fetch("/api/EntregarTurno", {
         method: "POST",
         headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'X-XSRF-TOKEN': xsrf,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "X-XSRF-TOKEN": xsrf,
         },
         body: JSON.stringify(form),
         credentials: "same-origin",
@@ -87,14 +100,16 @@ export async function guardarEntregarTurnoApi(form: any) {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-        throw new Error(data?.message || "Error al guardar WalkAround");
+        throw new Error(
+            data?.message || "Error al guardar la entrega de turno",
+        );
     }
 
     return data;
 }
+
 export async function fetchEntregarTurno(params: any = {}) {
     const qs = new URLSearchParams(params);
-
     const res = await fetch(`/api/EntregarTurno?${qs.toString()}`, {
         headers: { Accept: "application/json" },
         credentials: "same-origin",
@@ -104,6 +119,7 @@ export async function fetchEntregarTurno(params: any = {}) {
     if (!res.ok) throw new Error(data?.message);
     return data;
 }
+
 export async function fetchEntregaTurnoDetalle(id: number) {
     const res = await fetch(`/api/EntregarTurno/${id}`, {
         headers: {
@@ -114,19 +130,22 @@ export async function fetchEntregaTurnoDetalle(id: number) {
     });
 
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.message || "No se pudo cargar el detalle");
+    if (!res.ok) {
+        throw new Error(data?.message || "No se pudo cargar el detalle");
+    }
 
     return data as EntregaTurnoDetalle;
 }
+
 export async function deleteEntregraTurno(id: number) {
     await fetch("/sanctum/csrf-cookie", { credentials: "same-origin" });
     const xsrf = getXsrfToken();
     const res = await fetch(`/api/EntregarTurno/${id}`, {
         method: "DELETE",
         headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'X-XSRF-TOKEN': xsrf,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "X-XSRF-TOKEN": xsrf,
         },
         credentials: "same-origin",
     });
@@ -135,16 +154,16 @@ export async function deleteEntregraTurno(id: number) {
     if (!res.ok) throw new Error(data?.message || "No se pudo eliminar");
     return data;
 }
-export async function actualizarEntregarTurnoApi(id: number, form: any) {
 
+export async function actualizarEntregarTurnoApi(id: number, form: any) {
     await fetch("/sanctum/csrf-cookie", { credentials: "same-origin" });
     const xsrf = getXsrfToken();
     const res = await fetch(`/api/EntregarTurno/${id}`, {
         method: "PUT",
         headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'X-XSRF-TOKEN': xsrf,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "X-XSRF-TOKEN": xsrf,
         },
         body: JSON.stringify(form),
         credentials: "same-origin",
@@ -154,16 +173,16 @@ export async function actualizarEntregarTurnoApi(id: number, form: any) {
     if (!res.ok) throw new Error(data?.message || "No se pudo actualizar");
     return data;
 }
-export async function validarEntregarTurnoApi(id: number, form: any) {
 
+export async function validarEntregarTurnoApi(id: number, form: any) {
     await fetch("/sanctum/csrf-cookie", { credentials: "same-origin" });
     const xsrf = getXsrfToken();
     const res = await fetch(`/api/EntregarTurno/validacion/${id}`, {
         method: "PUT",
         headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'X-XSRF-TOKEN': xsrf,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "X-XSRF-TOKEN": xsrf,
         },
         body: JSON.stringify(form),
         credentials: "same-origin",
@@ -175,8 +194,7 @@ export async function validarEntregarTurnoApi(id: number, form: any) {
 }
 
 export async function OperacionesDiarias() {
-
-    const res = await fetch(`/api/EntregarTurno/OperacionDiaria`, {
+    const res = await fetch("/api/EntregarTurno/OperacionDiaria", {
         headers: { Accept: "application/json" },
         credentials: "same-origin",
     });
@@ -185,9 +203,9 @@ export async function OperacionesDiarias() {
     if (!res.ok) throw new Error(data?.message);
     return data;
 }
-export async function WalkAround() {
 
-    const res = await fetch(`/api/EntregarTurno/WalkAround`, {
+export async function WalkAround() {
+    const res = await fetch("/api/EntregarTurno/WalkAround", {
         headers: { Accept: "application/json" },
         credentials: "same-origin",
     });
