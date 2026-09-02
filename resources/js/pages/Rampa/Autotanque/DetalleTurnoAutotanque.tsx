@@ -1,6 +1,5 @@
-import React, { useState, Suspense, useRef, useEffect, useMemo } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Calendar,
     User,
     Fuel,
     FileText,
@@ -380,33 +379,187 @@ export const DetalleTurnoAutotanque = ({ data }: Props) => {
                             </div>
 
                             <div className="bg-slate-50/50 p-4 rounded-xl border border-dashed border-slate-200">
-                                <div className="flex items-center gap-2 mb-3">
-                                    <ClipboardList size={14} className="text-slate-400" />
-                                    <span className="text-[10px] font-black text-slate-500 uppercase">
-                                        ASA (Cargas Autotanque)
-                                    </span>
+                                <div className="flex items-center justify-between gap-2 mb-3">
+                                    <div className="flex items-center gap-2">
+                                        <ClipboardList size={14} className="text-slate-400" />
+                                        <span className="text-[10px] font-black text-slate-500 uppercase">
+                                            ASA (Cargas Autotanque)
+                                        </span>
+                                    </div>
+
+                                    {sumaAutotanque.length > 0 && (
+                                        <span className="rounded-full bg-emerald-100 px-2 py-1 text-[9px] font-black text-emerald-700">
+                                            {sumaAutotanque.length}{' '}
+                                            {sumaAutotanque.length === 1 ? 'CARGA' : 'CARGAS'}
+                                        </span>
+                                    )}
                                 </div>
 
-                                <div className="space-y-2">
+                                <div className="space-y-3">
                                     {sumaAutotanque.length > 0 ? (
-                                        sumaAutotanque.map((s: any) => (
-                                            <div
-                                                key={s.id}
-                                                className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 text-[10px]"
-                                            >
-                                                <span className="font-bold text-slate-500">
-                                                    {s.created_at
-                                                        ? formatChronology(
-                                                            s.created_at.replace('T', ' ').substring(0, 19)
-                                                        ).split(' ')[0]
-                                                        : '---'}
-                                                </span>
-                                                <span className="font-black text-emerald-600">{s.folio}</span>
-                                                <span className="font-black">{formatNumber(s.litros)} LTS</span>
-                                            </div>
-                                        ))
+                                        sumaAutotanque.map((s: any) => {
+                                            const tieneTomaFisica =
+                                                s.toma_fisica_cm !== null &&
+                                                s.toma_fisica_cm !== undefined;
+
+                                            const tieneTomaFisicaLitros =
+                                                s.toma_fisica_litros !== null &&
+                                                s.toma_fisica_litros !== undefined;
+
+                                            const imagenes = Array.isArray(s.imagenes)
+                                                ? s.imagenes
+                                                    .filter((img: any) =>
+                                                        img.path &&
+                                                        (!img.pivot?.status || img.pivot?.status === 'A')
+                                                    )
+                                                    .map((img: any) => ({
+                                                        ...img,
+                                                        url: img.url || `/storage/${img.path}`
+                                                    }))
+                                                : [];
+
+                                            return (
+                                                <div
+                                                    key={s.id}
+                                                    className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+                                                >
+                                                    <div className="flex flex-col gap-3 border-b border-slate-100 p-3 sm:flex-row sm:items-center sm:justify-between">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                                                                <Fuel size={17} />
+                                                            </div>
+
+                                                            <div>
+                                                                <p className="text-[9px] font-black uppercase text-slate-400">
+                                                                    Remisión / Factura
+                                                                </p>
+                                                                <p className="text-xs font-black text-emerald-600">
+                                                                    {s.folio || '---'}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="text-left sm:text-right">
+                                                                <p className="text-[9px] font-black uppercase text-slate-400">
+                                                                    Litros comprados
+                                                                </p>
+                                                                <p className="text-sm font-black text-slate-800">
+                                                                    {formatNumber(s.litros)} LTS
+                                                                </p>
+                                                            </div>
+
+                                                            <div className="text-left sm:text-right">
+                                                                <p className="text-[9px] font-black uppercase text-slate-400">
+                                                                    Fecha
+                                                                </p>
+                                                                <p className="text-[10px] font-bold text-slate-600">
+                                                                    {s.created_at
+                                                                        ? formatChronology(
+                                                                            s.created_at
+                                                                                .replace('T', ' ')
+                                                                                .substring(0, 19)
+                                                                        )
+                                                                        : '---'}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
+                                                        <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+                                                            <div className="mb-2 flex items-center gap-2">
+                                                                <Gauge size={14} className="text-blue-500" />
+                                                                <p className="text-[9px] font-black uppercase text-blue-600">
+                                                                    Toma Física
+                                                                </p>
+                                                            </div>
+
+                                                            {tieneTomaFisica ? (
+                                                                <div className="space-y-1">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-[10px] font-bold text-slate-500">
+                                                                            Nivel
+                                                                        </span>
+                                                                        <span className="text-xs font-black text-slate-700">
+                                                                            {formatNumber(s.toma_fisica_cm)} CM
+                                                                        </span>
+                                                                    </div>
+
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-[10px] font-bold text-slate-500">
+                                                                            Litros
+                                                                        </span>
+                                                                        <span className="text-xs font-black text-blue-600">
+                                                                            {tieneTomaFisicaLitros
+                                                                                ? `${formatNumber(s.toma_fisica_litros)} LTS`
+                                                                                : '---'}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex min-h-[42px] items-center justify-center">
+                                                                    <span className="text-[10px] font-bold italic text-slate-400">
+                                                                        Sin toma física registrada
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="rounded-lg border border-violet-100 bg-violet-50/40 p-3">
+                                                            <div className="mb-2 flex items-center justify-between gap-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <ImageIcon size={14} className="text-violet-500" />
+                                                                    <p className="text-[9px] font-black uppercase text-violet-600">
+                                                                        Evidencias Fotográficas
+                                                                    </p>
+                                                                </div>
+
+                                                                {imagenes.length > 0 && (
+                                                                    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[8px] font-black text-violet-700">
+                                                                        {imagenes.length}{' '}
+                                                                        {imagenes.length === 1 ? 'FOTO' : 'FOTOS'}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+
+                                                            {imagenes.length > 0 ? (
+                                                                <div className="grid grid-cols-2 gap-2">
+                                                                    {imagenes.map((img: any, index: number) => (
+                                                                        <a
+                                                                            key={img.id}
+                                                                            href={img.url}
+                                                                            target="_blank"
+                                                                            rel="noreferrer"
+                                                                            className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-950"
+                                                                        >
+                                                                            <img
+                                                                                src={img.url}
+                                                                                alt={`Evidencia ${index + 1}`}
+                                                                                className="h-20 w-full object-cover transition duration-200 group-hover:scale-105"
+                                                                            />
+                                                                            <div className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1">
+                                                                                <p className="text-[8px] font-black text-white">
+                                                                                    FOTO {index + 1}
+                                                                                </p>
+                                                                            </div>
+                                                                        </a>
+                                                                    ))}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex min-h-[42px] items-center justify-center">
+                                                                    <span className="text-[10px] font-bold italic text-slate-400">
+                                                                        Sin evidencias fotográficas
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
                                     ) : (
-                                        <p className="text-[10px] text-slate-400 italic text-center py-2">
+                                        <p className="py-2 text-center text-[10px] italic text-slate-400">
                                             Sin registros ASA
                                         </p>
                                     )}

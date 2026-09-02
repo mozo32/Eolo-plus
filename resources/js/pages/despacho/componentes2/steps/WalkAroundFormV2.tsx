@@ -14,10 +14,19 @@ const STEPS = [
     { id: 3, label: 'Cierre', icon: ShieldAlert },
 ];
 
+const obtenerFechaHoyMexico = () => new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+}).format(new Date());
+
 const INITIAL_INFO = {
     matricula: '', movimiento: '', aeronave: '', tipo: '', hora: '', destino: '', procedencia: '',
-    fecha: new Date().toLocaleDateString('en-CA')
+    fecha: ''
 };
+
+const crearInitialInfo = () => ({ ...INITIAL_INFO, fecha: obtenerFechaHoyMexico() });
 
 const INITIAL_EXTERIOR: ExteriorData = {
     observaciones: '', nombreResponsable: '', firmaResponsable: null,
@@ -45,7 +54,7 @@ const esObjeto = (valor: unknown): valor is Record<string, any> => {
 
 const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId }: Props) => {
     const [step, setStep] = useState(1);
-    const [infoData, setInfoData] = useState<any>(INITIAL_INFO);
+    const [infoData, setInfoData] = useState<any>(() => crearInitialInfo());
     const [inspeccion, setInspeccion] = useState<any>({});
     const [exteriorData, setExteriorData] = useState<ExteriorData>(INITIAL_EXTERIOR);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,7 +69,7 @@ const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId }: Props) => {
         }
 
         let stepRestaurado = 1;
-        let infoRestaurada = { ...INITIAL_INFO };
+        let infoRestaurada = crearInitialInfo();
         let inspeccionRestaurada: any = {};
         let exteriorRestaurado: ExteriorData = { ...INITIAL_EXTERIOR };
 
@@ -76,8 +85,8 @@ const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId }: Props) => {
                         ? stepGuardado
                         : 1;
                     infoRestaurada = esObjeto(borrador.infoData)
-                        ? { ...INITIAL_INFO, ...borrador.infoData }
-                        : { ...INITIAL_INFO };
+                        ? { ...crearInitialInfo(), ...borrador.infoData, fecha: obtenerFechaHoyMexico() }
+                        : crearInitialInfo();
                     inspeccionRestaurada = esObjeto(borrador.inspeccion)
                         ? borrador.inspeccion
                         : {};
@@ -101,10 +110,13 @@ const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId }: Props) => {
     useEffect(() => {
         if (id || !borradorId || claveBorradorCargada !== borradorId || typeof window === 'undefined') return;
 
+        const infoDataSinFecha = { ...infoData };
+        delete infoDataSinFecha.fecha;
+
         const borrador: BorradorWalkAround = {
             version: 1,
             step,
-            infoData,
+            infoData: infoDataSinFecha,
             inspeccion,
             exteriorData
         };
@@ -133,7 +145,7 @@ const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId }: Props) => {
                             procedencia: detalle.procedensia || '',
                             fecha: detalle.fecha
                                     ? new Date(detalle.fecha).toLocaleDateString('en-CA')
-                                    : INITIAL_INFO.fecha
+                                    : obtenerFechaHoyMexico()
                         });
                         const checklistData = detalle.tipo === 'avion' ? detalle.checklists?.checklist_avion : detalle.checklists?.checklist_helicoptero;
                         setInspeccion({

@@ -21,6 +21,7 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
     const [cargando, setCargando] = useState(false);
     const [sugerenciasNombres, setSugerenciasNombres] = useState<string[]>([]);
     const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
+    const obtenerFechaHoy = () => new Date().toLocaleDateString('sv-SE');
 
     const getInitialState = (fecha?: string) => ({
         id: datosEdicion?.id || null,
@@ -34,9 +35,11 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
         departamento: moduloNombre,
         equipaje: datosEdicion?.equipaje ?? null,
         movimiento: 'Salida',
-        fecha: fecha || (datosEdicion?.fecha
-            ? new Date(datosEdicion.fecha).toISOString().split('T')[0]
-            : new Date().toLocaleDateString('sv-SE')),
+        fecha: fecha || (
+            datosEdicion?.fecha
+                ? new Date(datosEdicion.fecha).toISOString().split('T')[0]
+                : obtenerFechaHoy()
+        ),
         observaciones: datosEdicion?.observaciones || '',
         nombre: datosEdicion?.nombre || '',
         impulso: datosEdicion?.impulso || '',
@@ -61,9 +64,12 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
                 const datosGuardados = JSON.parse(contenidoGuardado);
 
                 if (datosGuardados && typeof datosGuardados === 'object' && !Array.isArray(datosGuardados)) {
+                    const { fecha, ...datosSinFecha } = datosGuardados;
+
                     datosRestaurados = {
-                        ...getInitialState(datosGuardados.fecha),
-                        ...datosGuardados,
+                        ...getInitialState(),
+                        ...datosSinFecha,
+                        fecha: obtenerFechaHoy(),
                         departamento: moduloNombre,
                         movimiento: 'Salida',
                         nombreRol: nombreRol
@@ -83,7 +89,8 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
         if (!borradorId || claveBorradorCargada !== borradorId || datosEdicion || typeof window === 'undefined') return;
 
         try {
-            window.localStorage.setItem(borradorId, JSON.stringify(formData));
+            const { fecha, ...datosSinFecha } = formData;
+            window.localStorage.setItem(borradorId, JSON.stringify(datosSinFecha));
         } catch (error) {
             console.error('No se pudo guardar el borrador de salida', error);
         }

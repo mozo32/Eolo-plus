@@ -22,7 +22,7 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
     const [sugerenciasNombres, setSugerenciasNombres] = useState<string[]>([]);
     const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
     const tienePermisoSeguridadFBO = moduloNombre === 'Seguridad' || nombreRol === 'FBO';
-
+    const obtenerFechaHoy = () => new Date().toLocaleDateString('sv-SE');
     const getInitialState = (fecha?: string) => ({
         id: datosEdicion?.id || null,
         matricula: datosEdicion?.matricula || '',
@@ -35,9 +35,11 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
         tipo_operacion: datosEdicion?.tipo_operacion || '',
         departamento: moduloNombre,
         movimiento: 'Llegada',
-        fecha: fecha || (datosEdicion?.fecha
-            ? new Date(datosEdicion.fecha).toISOString().split('T')[0]
-            : new Date().toLocaleDateString('sv-SE')),
+        fecha: fecha || (
+            datosEdicion?.fecha
+                ? new Date(datosEdicion.fecha).toISOString().split('T')[0]
+                : obtenerFechaHoy()
+        ),
         observaciones: datosEdicion?.observaciones || '',
         nombre: datosEdicion?.nombre || '',
         impulso: datosEdicion?.impulso || '',
@@ -62,9 +64,12 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
                 const datosGuardados = JSON.parse(contenidoGuardado);
 
                 if (datosGuardados && typeof datosGuardados === 'object' && !Array.isArray(datosGuardados)) {
+                    const { fecha, ...datosSinFecha } = datosGuardados;
+
                     datosRestaurados = {
-                        ...getInitialState(datosGuardados.fecha),
-                        ...datosGuardados,
+                        ...getInitialState(),
+                        ...datosSinFecha,
+                        fecha: obtenerFechaHoy(),
                         departamento: moduloNombre,
                         movimiento: 'Llegada',
                         nombreRol: nombreRol
@@ -84,7 +89,8 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
         if (!borradorId || claveBorradorCargada !== borradorId || datosEdicion || typeof window === 'undefined') return;
 
         try {
-            window.localStorage.setItem(borradorId, JSON.stringify(formData));
+            const { fecha, ...datosSinFecha } = formData;
+            window.localStorage.setItem(borradorId, JSON.stringify(datosSinFecha));
         } catch (error) {
             console.error('No se pudo guardar el borrador de llegada', error);
         }

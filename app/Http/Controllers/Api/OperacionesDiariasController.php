@@ -849,4 +849,190 @@ class OperacionesDiariasController extends Controller
 
         return response()->json($pendientes);
     }
+    public function obtenerPdf(Request $request)
+    {
+        $query = OperacionDiaria::query();
+
+        if ($request->filled('buscar')) {
+            $query->where(
+                'matricula',
+                'LIKE',
+                '%' . $request->buscar . '%'
+            );
+        }
+
+        if ($request->filled('tipo')) {
+            $query->where(
+                'tipo',
+                $request->tipo
+            );
+        }
+
+        if (
+            $request->filled('fechaInicio') &&
+            $request->filled('fechaFin')
+        ) {
+            $query->whereBetween('fecha', [
+                $request->fechaInicio,
+                $request->fechaFin,
+            ]);
+        } elseif ($request->filled('fechaInicio')) {
+            $query->whereDate(
+                'fecha',
+                $request->fechaInicio
+            );
+        }
+
+        if ($request->filled('equipo')) {
+            $query->where(
+                'equipo',
+                'LIKE',
+                '%' . $request->equipo . '%'
+            );
+        }
+
+        if ($request->filled('lugar')) {
+            $query->where(
+                'lugar',
+                'LIKE',
+                '%' . $request->lugar . '%'
+            );
+        }
+
+        if ($request->filled('tipo_operacion')) {
+            $query->where(
+                'tipo_operacion',
+                $request->tipo_operacion
+            );
+        }
+
+        if ($request->filled('pax')) {
+            $query->where(function ($q) use ($request) {
+                $q->where(
+                    'pax',
+                    $request->pax
+                );
+
+                if ($request->pax == 0) {
+                    $q->orWhereNull('pax')
+                        ->orWhere('pax', '');
+                }
+            });
+        }
+
+        if ($request->filled('eqp')) {
+            $query->where(function ($q) use ($request) {
+                $q->where(
+                    'equipaje',
+                    $request->eqp
+                );
+
+                if ($request->eqp == 0) {
+                    $q->orWhereNull('equipaje')
+                        ->orWhere('equipaje', '');
+                }
+            });
+        }
+
+        if ($request->filled('cliente')) {
+            $query->where(
+                'tipo_cliente',
+                $request->cliente
+            );
+        }
+
+        $operaciones = $query
+            ->orderBy('fecha', 'asc')
+            ->orderBy('hora', 'asc')
+            ->get();
+
+        $normalizarTipo = static function ($valor): string {
+            $valor = mb_strtoupper(
+                trim((string) $valor)
+            );
+
+            return str_replace(
+                ['Á', 'É', 'Í', 'Ó', 'Ú', 'Ü'],
+                ['A', 'E', 'I', 'O', 'U', 'U'],
+                $valor
+            );
+        };
+
+        $filas = $operaciones
+            ->groupBy(function ($operacion) {
+                return Carbon::parse(
+                    $operacion->fecha
+                )->format('Y-m-d');
+            })
+            ->map(function ($registros, $fecha) use ($normalizarTipo) {
+                $transito = 0;
+                $guarda = 0;
+                $aerotaxi = 0;
+                $handling = 0;
+                $mantenimiento = 0;
+                $totalPax = 0;
+
+                foreach ($registros as $operacion) {
+                    $tipoCliente = $normalizarTipo(
+                        $operacion->tipo_cliente
+                    );
+
+                    switch ($tipoCliente) {
+                        case 'TRANSITO':
+                            $transito++;
+                            break;
+
+                        case 'GUARDA':
+                            $guarda++;
+                            break;
+
+                        case 'AEROTAXI':
+                            $aerotaxi++;
+                            break;
+
+                        case 'HANDLING':
+                            $handling++;
+                            break;
+
+                        case 'MANTENIMIENTO':
+                            $mantenimiento++;
+                            break;
+                    }
+
+                    $totalPax += (int) (
+                        $operacion->pax ?? 0
+                    );
+                }
+
+                return [
+                    'fecha' => Carbon::parse(
+                        $fecha
+                    )->format('d/m/Y'),
+
+                    'fecha_original' => $fecha,
+
+                    'transito' => $transito,
+                    'guarda' => $guarda,
+                    'aerotaxi' => $aerotaxi,
+                    'handling' => $handling,
+                    'mantenimiento' => $mantenimiento,
+                    'total_pax_dia' => $totalPax,
+                ];
+            })
+            ->values();
+
+        $totales = [
+            'transito' => $filas->sum('transito'),
+            'guarda' => $filas->sum('guarda'),
+            'aerotaxi' => $filas->sum('aerotaxi'),
+            'handling' => $filas->sum('handling'),
+            'mantenimiento' => $filas->sum('mantenimiento'),
+            'total_pax_dia' => $filas->sum('total_pax_dia'),
+        ];
+
+        return response()->json([
+            'data' => $filas,
+            'totales' => $totales,
+        ]);
+    }
 }

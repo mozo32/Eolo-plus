@@ -559,7 +559,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                                 </span>
                             </button>
                         )}
-                        {(nombreRol === 'FBO' || nombreRol === 'Administrador' || nombreRol === 'Administrativo' || nombreRol === 'Facturacion') && (
+                        {(nombreRol === 'FBO' || nombreRol === 'Administrador' || nombreRol === 'Administrativo' || nombreRol === 'Facturacion' || nombreRol === 'Empleado') && (
                             <>
                                 <div className="w-[1px] bg-slate-200 mx-1"></div>
                                 <button
