@@ -559,7 +559,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                                 </span>
                             </button>
                         )}
-                        {(nombreRol === 'FBO' || nombreRol === 'Administrador' || nombreRol === 'Administrativo' || nombreRol === 'Facturacion' || nombreRol === 'Empleado') && (
+                        {(nombreRol === 'FBO' || nombreRol === 'Administrador' || nombreRol === 'Administrativo' || nombreRol === 'Facturacion' || moduloNombre === 'Trafico') && (
                             <>
                                 <div className="w-[1px] bg-slate-200 mx-1"></div>
                                 <button
@@ -596,7 +596,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                         <Filter size={14} />
                         <span className="hidden xs:inline">{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                     </button>
-                    {(nombreRol === 'FBO' || nombreRol === 'Administrador' || nombreRol === 'Administrativo' || nombreRol === 'Facturacion') && (
+                    {(nombreRol === 'FBO' || nombreRol === 'Administrador' || nombreRol === 'Administrativo' || nombreRol === 'Facturacion' || moduloNombre === 'Trafico') && (
                         <>
                             <div className="w-[1px] bg-slate-200 mx-1"></div>
                             <button

@@ -169,6 +169,10 @@ const esHora24Valida = (hora: string): boolean => {
 const VehiculosSection: React.FC<Props> = ({ vehiculos, onChange }) => {
     const optionsBienMal = ["Bien", "Mal"];
     const optionsLimpieza = ["Limpio", "Sucio"];
+    const nombresUnidades: Record<string, string> = {
+        suburbanTC84: "SUBURBAN TC-84",
+        urvanEP16: "URVAN EP-16",
+    };
 
     return (
         <div className="space-y-8">
@@ -220,7 +224,9 @@ const VehiculosSection: React.FC<Props> = ({ vehiculos, onChange }) => {
                 {Object.entries(vehiculos).map(([id, data]) => {
                     const isMantenimiento = data.estado === "Mantenimiento";
 
-                    const isNissan = id.toLowerCase().includes("nissan");
+                    const usaCamposNissan = ["nissan", "suburban", "urvan"].some(
+                        (tipo) => id.toLowerCase().includes(tipo),
+                    );
 
                     const isTractor = id.toLowerCase().includes("tractor");
 
@@ -256,9 +262,10 @@ const VehiculosSection: React.FC<Props> = ({ vehiculos, onChange }) => {
                                             className={`mt-0.5 truncate text-xl font-black md:text-2xl ${isMantenimiento ? "text-gray-400" : "text-gray-800"
                                                 }`}
                                         >
-                                            {id
-                                                .toUpperCase()
-                                                .replace(/([A-ZÁÉÍÓÚÑ]+)([0-9]+)/g, "$1 $2")}
+                                            {nombresUnidades[id] ??
+                                                id
+                                                    .toUpperCase()
+                                                    .replace(/([A-ZÁÉÍÓÚÑ]+)([0-9]+)/g, "$1 $2")}
                                         </h3>
                                     </div>
 
@@ -345,7 +352,7 @@ const VehiculosSection: React.FC<Props> = ({ vehiculos, onChange }) => {
                                             </select>
                                         </div>
 
-                                        {isNissan && (
+                                        {usaCamposNissan && (
                                             <div className="space-y-1">
                                                 <label className="ml-1 flex items-center gap-1.5 text-[10px] font-bold text-gray-400">
                                                     <Milestone size={12} />
@@ -421,7 +428,7 @@ const VehiculosSection: React.FC<Props> = ({ vehiculos, onChange }) => {
                                             </div>
                                         )}
 
-                                        {isNissan || isTractor ? (
+                                        {usaCamposNissan || isTractor ? (
                                             <div className="col-span-2 space-y-2 pt-2">
                                                 <label className="ml-1 flex items-center gap-1.5 text-[10px] font-bold text-gray-400">
                                                     <Gauge size={12} />

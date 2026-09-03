@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { X, Radio, Truck, Box, Zap, Layout, CheckCircle2, AlertCircle, Shield, UserCheck, Plane, Wrench } from 'lucide-react';
 
 interface DetalleProps {
@@ -8,6 +8,11 @@ interface DetalleProps {
 
 const DetalleReporteRampa: React.FC<DetalleProps> = ({ data, onClose }) => {
     if (!data) return null;
+
+    const nombresVehiculos: Record<string, string> = {
+        SUBURBANTC84: 'SUBURBAN TC-84',
+        URBANEP16: 'URBAN EP-16'
+    };
 
     const StatusBadge = ({ estado }: { estado: string }) => {
         const isOperativo = estado?.toLowerCase() === 'operativo' || estado?.toLowerCase() === 'bien';
@@ -145,7 +150,7 @@ const DetalleReporteRampa: React.FC<DetalleProps> = ({ data, onClose }) => {
                         ))}
                     </div>
 
-                    {/* Grid Principal: Flota de Vehículos (SIN CAMBIOS) */}
+                    {/* Grid Principal: Flota de Vehículos */}
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                         <div className="lg:col-span-12 space-y-6">
                             <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
@@ -156,14 +161,14 @@ const DetalleReporteRampa: React.FC<DetalleProps> = ({ data, onClose }) => {
 
                                 <div className="space-y-6">
                                     {Object.entries(data.vehiculos || {}).map(([key, val]: any) => {
-                                        const nombreVehiculo = key.toUpperCase();
-                                        const isNissan012 = nombreVehiculo === 'NISSAN012';
-                                        const isNissan015 = nombreVehiculo === 'NISSAN015';
-                                        const isTractor018 = nombreVehiculo === 'TRACTOR018';
-                                        const isLektro = nombreVehiculo.includes('LEKTRO');
-                                        const isAguasNegras = nombreVehiculo.includes('AGUASNEGRAS');
-                                        const isAguaPotable = nombreVehiculo.includes('AGUAPOTABLE');
-                                        const showVisualGauge = isNissan012 || isNissan015 || isTractor018;
+                                        const idVehiculo = key.toUpperCase();
+                                        const nombreVehiculo = nombresVehiculos[idVehiculo] ?? idVehiculo;
+                                        const usaCamposNissan = ['NISSAN012', 'NISSAN015', 'SUBURBANTC84', 'URBANEP16'].includes(idVehiculo);
+                                        const isTractor018 = idVehiculo === 'TRACTOR018';
+                                        const isLektro = idVehiculo.includes('LEKTRO');
+                                        const isAguasNegras = idVehiculo.includes('AGUASNEGRAS');
+                                        const isAguaPotable = idVehiculo.includes('AGUAPOTABLE');
+                                        const showVisualGauge = usaCamposNissan || isTractor018;
                                         const nivelTexto = `${val.nivelCombustible || val.nivelCarga || val.nivel || 0}%`;
 
                                         return (
@@ -183,7 +188,7 @@ const DetalleReporteRampa: React.FC<DetalleProps> = ({ data, onClose }) => {
                                                         <StatusBadge estado={val.estado} />
                                                     </div>
 
-                                                    {(isNissan012 || isNissan015) && (
+                                                    {usaCamposNissan && (
                                                         <QuickCheckRow items={[
                                                             { label: 'Limpieza', val: val.limpieza },
                                                             { label: 'Llantas', val: val.llantas },

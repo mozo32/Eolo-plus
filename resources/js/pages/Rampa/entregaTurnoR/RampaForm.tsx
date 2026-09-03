@@ -40,6 +40,18 @@ interface VehiculoData {
     suministros?: SuministroAgua[];
 }
 
+const crearVehiculosIniciales = (): Record<string, VehiculoData> => ({
+    nissan012: { limpieza: "", nivel: "0", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo", kilometraje: "" },
+    nissan015: { limpieza: "", nivel: "0", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo", kilometraje: "" },
+    suburbanTC84: { limpieza: "", nivel: "0", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo", kilometraje: "" },
+    urvanEP16: { limpieza: "", nivel: "0", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo", kilometraje: "" },
+    tractor018: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
+    lektro003: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
+    lektro007: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
+    aguasNegras008: { limpieza: "", llantas: "", obs: "", estado: "Operativo" },
+    aguaPotable: { limpieza: "", llantas: "", obs: "", estado: "Operativo", suministros: [] }
+});
+
 const RampaForm: React.FC<RampaFormProps> = ({ initialData, onCancel }) => {
     const [step, setStep] = useState(1);
     const [saving, setSaving] = useState(false);
@@ -61,15 +73,7 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData, onCancel }) => {
         }
     });
 
-    const [vehiculos, setVehiculos] = useState<Record<string, VehiculoData>>({
-        nissan012: { limpieza: "", nivel: "0", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo", kilometraje: "" },
-        nissan015: { limpieza: "", nivel: "0", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo", kilometraje: "" },
-        tractor018: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
-        lektro003: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
-        lektro007: { limpieza: "", nivel: "", llantas: "", frenos: "", luces: "", obs: "", estado: "Operativo" },
-        aguasNegras008: { limpieza: "", llantas: "", obs: "", estado: "Operativo" },
-        aguaPotable: { limpieza: "", llantas: "", obs: "", estado: "Operativo", suministros: [] }
-    });
+    const [vehiculos, setVehiculos] = useState<Record<string, VehiculoData>>(crearVehiculosIniciales);
 
     const [barrasRemolque, setBarrasRemolque] = useState({
         total: "", limpieza: "", estado: "", cabezales: "", cabezalesEstado: "",
@@ -142,7 +146,12 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData, onCancel }) => {
             }));
         }
 
-        if (initialData.vehiculos) setVehiculos(initialData.vehiculos);
+        if (initialData.vehiculos) {
+            setVehiculos({
+                ...crearVehiculosIniciales(),
+                ...initialData.vehiculos
+            });
+        }
         if (initialData.barras_remolque) setBarrasRemolque(initialData.barras_remolque);
         if (initialData.gpus) setGpus(initialData.gpus);
         if (initialData.carrito_golf) setCarritoGolf(initialData.carrito_golf);
