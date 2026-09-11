@@ -1,5 +1,6 @@
 import type {
     ModuloConsumidor,
+    OperacionPantalla,
     OperacionProgramada,
     OperacionProgramadaPayload,
     TipoOperacion,
@@ -76,6 +77,42 @@ export async function eliminarOperacionProgramadaApi(id: number): Promise<{ mess
 }
 
 /**
+ * Finalización manual desde el tablero: solo cambia el estado, no crea registro
+ * diario. Si otro usuario se adelantó, el backend responde 409 con
+ * codigo 'ya_no_pendiente'.
+ */
+export async function finalizarOperacionProgramadaApi(
+    id: number,
+): Promise<{ message: string; operacion: OperacionProgramada }> {
+    return pedir(`${BASE}/${id}/finalizar`, { method: 'POST' });
+}
+
+export type ListadoPantalla = {
+    fecha: string;
+    salidas: OperacionPantalla[];
+    llegadas: OperacionPantalla[];
+};
+
+/**
+ * Lectura pública para la televisión. Sin sesión: no manda token ni depende de
+ * cookies. Siempre devuelve el día local de hoy, calculado en el servidor.
+ */
+export async function obtenerPantallaProgramadasApi(): Promise<ListadoPantalla> {
+    const res = await fetch('/api/pantalla/operaciones-programadas', {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+        throw new ErrorApi(data?.message || 'No se pudo cargar la pantalla', data?.codigo ?? null);
+    }
+
+    return data;
+}
+
+/**
  * Operaciones programadas que el módulo indicado todavía no ha utilizado.
  * El estado es independiente por módulo.
  */
@@ -90,6 +127,28 @@ export async function obtenerProgramadasPendientesApi(params: {
     if (params.tipo) query.append('tipo', params.tipo);
 
     return pedir(`${BASE}/pendientes?${query.toString()}`, { method: 'GET' });
+}
+
+/**
+ * Programadas que coinciden con lo que el usuario captura a mano: misma
+ * matrícula, mismo día, mismo tipo y disponibles para su módulo. Devuelve
+ * además cuántas hay del tipo contrario, para el aviso discreto.
+ */
+export async function obtenerCoincidenciasProgramadasApi(params: {
+    matricula: string;
+    tipo: string;
+    modulo: ModuloConsumidor;
+    fecha?: string;
+}): Promise<{ coincidencias: OperacionProgramada[]; del_otro_tipo: number }> {
+    const query = new URLSearchParams({
+        matricula: params.matricula,
+        tipo: params.tipo,
+        modulo: params.modulo,
+    });
+
+    if (params.fecha) query.append('fecha', params.fecha);
+
+    return pedir(`${BASE}/coincidencias?${query.toString()}`, { method: 'GET' });
 }
 
 /**

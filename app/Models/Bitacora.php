@@ -21,6 +21,7 @@ class Bitacora extends Model
     public const ACCION_ACTIVAR = 'ACTIVAR';
     public const ACCION_DESACTIVAR = 'DESACTIVAR';
     public const ACCION_FIRMAR = 'FIRMAR';
+    public const ACCION_FINALIZAR = 'FINALIZAR';
     public const ACCION_EXPORTAR = 'EXPORTAR';
     public const ACCION_CONSULTAR = 'CONSULTAR';
 

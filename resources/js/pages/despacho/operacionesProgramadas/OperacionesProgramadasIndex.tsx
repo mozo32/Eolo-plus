@@ -22,7 +22,7 @@ const TABS: { key: TabProgramadas; label: string }[] = [
 ];
 
 export default function OperacionesProgramadasIndex() {
-    const { fecha, setFecha, tab, setTab, salidas, llegadas, cargando, error, cargar, eliminar } =
+    const { fecha, setFecha, tab, setTab, salidas, llegadas, cargando, error, cargar, eliminar, finalizar, finalizando } =
         useOperacionesProgramadas();
 
     const [modalAbierto, setModalAbierto] = useState(false);
@@ -150,6 +150,8 @@ export default function OperacionesProgramadasIndex() {
                         cargando={cargando}
                         onEditar={abrirEdicion}
                         onEliminar={eliminar}
+                        onFinalizar={finalizar}
+                        finalizando={finalizando}
                     />
                 )}
 
@@ -160,6 +162,8 @@ export default function OperacionesProgramadasIndex() {
                         cargando={cargando}
                         onEditar={abrirEdicion}
                         onEliminar={eliminar}
+                        onFinalizar={finalizar}
+                        finalizando={finalizando}
                     />
                 )}
             </div>

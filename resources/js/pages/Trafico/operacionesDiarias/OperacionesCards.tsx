@@ -12,6 +12,7 @@ import BadgeProgramadas from '@/pages/despacho/operacionesProgramadas/BadgeProgr
 import Swal from 'sweetalert2';
 import { useProgramadasPendientes } from '@/pages/despacho/operacionesProgramadas/useProgramadasPendientes';
 import type { PrecargaProgramada } from '@/pages/despacho/operacionesProgramadas/types';
+import { avisarProgramadaEnOtraPestana } from '@/pages/despacho/operacionesProgramadas/coincidenciasProgramadas';
 import BitacoraModal from '@/pages/BitacoraModal';
 
 interface OperacionesCardsProps {
@@ -35,7 +36,30 @@ interface EstadoPestanasBorrador {
     pestanaLlegadaActiva: number | null;
     pestanasSalida: PestanaSalida[];
     pestanaSalidaActiva: number | null;
+    /**
+     * Programadas vinculadas a cada pestaña. Se persisten para que el vínculo
+     * sobreviva a una recarga; si mientras tanto alguien la usó, el backend lo
+     * rechaza al guardar y el evento en tiempo real la libera en vivo.
+     */
+    precargasLlegada?: Record<number, PrecargaProgramada>;
+    precargasSalida?: Record<number, PrecargaProgramada>;
 }
+
+/** Solo se restauran precargas que apunten a una pestaña que sigue existiendo. */
+const precargasValidas = (
+    guardadas: unknown,
+    pestanas: { id: number }[]
+): Record<number, PrecargaProgramada> => {
+    if (!guardadas || typeof guardadas !== 'object') return {};
+
+    const ids = new Set(pestanas.map(p => p.id));
+
+    return Object.fromEntries(
+        Object.entries(guardadas as Record<string, PrecargaProgramada>)
+            .filter(([id, precarga]) => ids.has(Number(id)) && Number.isInteger(precarga?.operacionProgramadaId))
+            .map(([id, precarga]) => [Number(id), precarga])
+    );
+};
 
 const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsProps) => {
     const [registros, setRegistros] = useState<any[]>([]);
@@ -147,6 +171,8 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
         let pestanaLlegadaActivaGuardada: number | null = null;
         let pestanasSalidaGuardadas: PestanaSalida[] = [];
         let pestanaSalidaActivaGuardada: number | null = null;
+        let precargasLlegadaGuardadas: Record<number, PrecargaProgramada> = {};
+        let precargasSalidaGuardadas: Record<number, PrecargaProgramada> = {};
 
         try {
             const contenidoGuardado = window.localStorage.getItem(claveEstadoPestanas);
@@ -169,6 +195,9 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                 pestanaSalidaActivaGuardada = pestanasSalidaGuardadas.some(pestana => pestana.id === estadoGuardado.pestanaSalidaActiva)
                     ? estadoGuardado.pestanaSalidaActiva ?? null
                     : pestanasSalidaGuardadas[0]?.id ?? null;
+
+                precargasLlegadaGuardadas = precargasValidas(estadoGuardado.precargasLlegada, pestanasLlegadaGuardadas);
+                precargasSalidaGuardadas = precargasValidas(estadoGuardado.precargasSalida, pestanasSalidaGuardadas);
             }
         } catch (error) {
             console.error('No se pudieron restaurar las pestañas guardadas', error);
@@ -180,6 +209,9 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
         setPestanaLlegadaActiva(pestanaLlegadaActivaGuardada);
         setPestanasSalida(pestanasSalidaGuardadas);
         setPestanaSalidaActiva(pestanaSalidaActivaGuardada);
+        // Antes de que se monten los formularios, para que reciban datosProgramados.
+        setPrecargasLlegada(precargasLlegadaGuardadas);
+        setPrecargasSalida(precargasSalidaGuardadas);
         setClaveCacheCargada(claveEstadoPestanas);
     }, [claveEstadoPestanas]);
 
@@ -195,7 +227,9 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
             pestanasLlegada,
             pestanaLlegadaActiva,
             pestanasSalida,
-            pestanaSalidaActiva
+            pestanaSalidaActiva,
+            precargasLlegada,
+            precargasSalida
         };
 
         try {
@@ -209,7 +243,9 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
         pestanasLlegada,
         pestanaLlegadaActiva,
         pestanasSalida,
-        pestanaSalidaActiva
+        pestanaSalidaActiva,
+        precargasLlegada,
+        precargasSalida
     ]);
 
     useEffect(() => {
@@ -408,8 +444,75 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
      * programada. El registro manual sigue disponible con los botones de
      * siempre; esta es solo la vía principal.
      */
+    /**
+     * ¿Alguna otra pestaña ya tiene vinculada esta programación? Si sí, avisa,
+     * la trae al frente y devuelve true: una programación nunca se abre dos veces.
+     */
+    const yaAbiertaEnOtraPestana = (
+        idProgramada: number,
+        exceptuar?: { tipo: 'llegada' | 'salida'; id: number }
+    ): boolean => {
+        const buscar = (
+            precargas: Record<number, PrecargaProgramada>,
+            pestanas: { id: number; titulo: string }[],
+            tipo: 'llegada' | 'salida'
+        ) => {
+            const entrada = Object.entries(precargas).find(
+                ([id, precarga]) =>
+                    precarga.operacionProgramadaId === idProgramada &&
+                    !(exceptuar && exceptuar.tipo === tipo && Number(id) === exceptuar.id)
+            );
+
+            if (!entrada) return false;
+
+            const idPestana = Number(entrada[0]);
+            const pestana = pestanas.find(p => p.id === idPestana);
+
+            avisarProgramadaEnOtraPestana(pestana?.titulo ?? `${tipo} ${idPestana}`);
+
+            if (tipo === 'llegada') {
+                setPestanaLlegadaActiva(idPestana);
+                setCreando('llegada');
+            } else {
+                setPestanaSalidaActiva(idPestana);
+                setCreando('salida');
+            }
+
+            return true;
+        };
+
+        return (
+            buscar(precargasLlegada, pestanasLlegada, 'llegada') ||
+            buscar(precargasSalida, pestanasSalida, 'salida')
+        );
+    };
+
+    /**
+     * El formulario de una pestaña detectó una programada al capturar la
+     * matrícula. El padre decide: si otra pestaña ya la tiene, no; si no, la
+     * vincula a esta pestaña.
+     */
+    const vincularEnPestana = (tipo: 'llegada' | 'salida', idPestana: number) => (precarga: PrecargaProgramada): boolean => {
+        if (yaAbiertaEnOtraPestana(precarga.operacionProgramadaId, { tipo, id: idPestana })) return false;
+
+        if (tipo === 'llegada') {
+            setPrecargasLlegada(prev => ({ ...prev, [idPestana]: precarga }));
+        } else {
+            setPrecargasSalida(prev => ({ ...prev, [idPestana]: precarga }));
+        }
+
+        return true;
+    };
+
+    const desvincularEnPestana = (tipo: 'llegada' | 'salida', idPestana: number) => () =>
+        olvidarPrecarga(tipo, idPestana);
+
     const abrirDesdeProgramada = (precarga: PrecargaProgramada) => {
         setMostrarProgramadas(false);
+
+        // Mismo guardia que la detección: una programación abierta en otra
+        // pestaña no se vuelve a abrir.
+        if (yaAbiertaEnOtraPestana(precarga.operacionProgramadaId)) return;
 
         if (precarga.tipo === 'llegada') {
             const siguienteId = siguienteIdPestana(pestanasLlegada, precargasLlegada);
@@ -567,6 +670,8 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                                             moduloNombre={moduloNombre}
                                             borradorId={obtenerClaveBorrador('llegada', pestana.id)}
                                             datosProgramados={precargasLlegada[pestana.id] ?? null}
+                                            onVincularProgramada={vincularEnPestana('llegada', pestana.id)}
+                                            onDesvincularProgramada={desvincularEnPestana('llegada', pestana.id)}
                                             alCerrar={() => cerrarModal(false)}
                                             alGuardar={() => cerrarPestanaLlegada(pestana.id, true)}
                                         />
@@ -631,6 +736,8 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                                             moduloNombre={moduloNombre}
                                             borradorId={obtenerClaveBorrador('salida', pestana.id)}
                                             datosProgramados={precargasSalida[pestana.id] ?? null}
+                                            onVincularProgramada={vincularEnPestana('salida', pestana.id)}
+                                            onDesvincularProgramada={desvincularEnPestana('salida', pestana.id)}
                                             alCerrar={() => cerrarModal(false)}
                                             alGuardar={() => cerrarPestanaSalida(pestana.id, true)}
                                         />

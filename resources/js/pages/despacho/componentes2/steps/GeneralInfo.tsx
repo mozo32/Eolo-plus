@@ -17,9 +17,13 @@ interface InfoData {
 interface Props {
     data: InfoData;
     onChange: (newData: Partial<InfoData>) => void;
+    /** El padre quiere saber cuándo el usuario termina con la matrícula. */
+    onMatriculaBlur?: () => void;
+    /** Aviso discreto: hay una programada del movimiento contrario. No bloquea. */
+    avisoProgramada?: string | null;
 }
 
-const GeneralInfo = ({ data, onChange }: Props) => {
+const GeneralInfo = ({ data, onChange, onMatriculaBlur, avisoProgramada }: Props) => {
 
     const handleAeronaveData = (aeronave: AeronaveApiData) => {
         let sugerirMovimiento = data.movimiento;
@@ -76,7 +80,12 @@ const GeneralInfo = ({ data, onChange }: Props) => {
                             onMatriculaChange={(val) => onChange({ matricula: val })}
                             onAeronaveData={handleAeronaveData}
                             onNuevaMatricula={() => console.log("Matrícula nueva")}
+                            onBlur={() => onMatriculaBlur?.()}
+                            onEnter={() => onMatriculaBlur?.()}
                         />
+                        {avisoProgramada && (
+                            <p className="mt-1.5 text-[11px] font-semibold text-amber-600">{avisoProgramada}</p>
+                        )}
                     </div>
                     <div>
                         <label className={subLabelStyle}>Tipo</label>

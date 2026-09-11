@@ -1,19 +1,28 @@
-import { ArrowDownLeft, ArrowUpRight, Edit2, Loader2, Plane, Trash2 } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, CircleCheck, Edit2, Loader2, Plane, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import type { OperacionProgramada, TipoOperacion } from './types';
+import type { OperacionPantalla, OperacionProgramada, TipoOperacion } from './types';
 
-interface Props {
+interface Props<T extends OperacionPantalla> {
     tipo: TipoOperacion;
-    operaciones: OperacionProgramada[];
+    /** La televisión recibe el subconjunto público; el tablero, la operación completa. */
+    operaciones: T[];
     cargando: boolean;
     /**
      * Variante de solo lectura para la televisión: sin ID ni Opciones, con
      * tipografía y filas grandes, encabezado fijo y sin paginación.
      */
     modoPantalla?: boolean;
-    onEditar?: (operacion: OperacionProgramada) => void;
-    onEliminar?: (operacion: OperacionProgramada) => void;
+    onEditar?: (operacion: T) => void;
+    onEliminar?: (operacion: T) => void;
+    /** Finalización manual. Solo se ofrece fuera del modo pantalla. */
+    onFinalizar?: (operacion: T) => void;
+    /** Ids con una finalización en vuelo: su botón queda deshabilitado. */
+    finalizando?: number[];
 }
+
+/** Solo el tablero administrativo trae la operación completa. */
+const esCompleta = (operacion: OperacionPantalla): operacion is OperacionProgramada =>
+    'modulos_usados' in operacion;
 
 const ETIQUETA_MODULO: Record<string, string> = {
     operaciones_diarias: 'Op. Diarias',
@@ -69,14 +78,16 @@ const ESTILOS = {
  * Operaciones Diarias, con paginación y columna de opciones. En modo pantalla es
  * de solo lectura y está pensada para leerse a distancia.
  */
-export default function TablaOperacionesProgramadas({
+export default function TablaOperacionesProgramadas<T extends OperacionPantalla>({
     tipo,
     operaciones,
     cargando,
     modoPantalla = false,
     onEditar,
     onEliminar,
-}: Props) {
+    onFinalizar,
+    finalizando = [],
+}: Props<T>) {
     const esSalida = tipo === 'salida';
     const titulo = esSalida ? 'Salidas' : 'Llegadas';
     const Icono = esSalida ? ArrowUpRight : ArrowDownLeft;
@@ -204,7 +215,7 @@ export default function TablaOperacionesProgramadas({
                                                 )}
                                                 <div>
                                                     <p className={e.matricula}>{operacion.matricula}</p>
-                                                    {!modoPantalla && operacion.modulos_usados.length > 0 && (
+                                                    {!modoPantalla && esCompleta(operacion) && operacion.modulos_usados.length > 0 && (
                                                         <p className="mt-1 text-[9px] font-bold uppercase text-sky-600">
                                                             Usada en{' '}
                                                             {operacion.modulos_usados
@@ -243,6 +254,21 @@ export default function TablaOperacionesProgramadas({
                                         {!modoPantalla && (
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center justify-end gap-1">
+                                                    {onFinalizar && (
+                                                        <button
+                                                            type="button"
+                                                            disabled={finalizando.includes(operacion.id)}
+                                                            onClick={() => onFinalizar(operacion)}
+                                                            title="Finalizar (marcar como realizada sin registro diario)"
+                                                            className="p-2 text-slate-400 transition-colors hover:text-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                                        >
+                                                            {finalizando.includes(operacion.id) ? (
+                                                                <Loader2 size={16} className="animate-spin" />
+                                                            ) : (
+                                                                <CircleCheck size={16} />
+                                                            )}
+                                                        </button>
+                                                    )}
                                                     <button
                                                         type="button"
                                                         onClick={() => onEditar?.(operacion)}

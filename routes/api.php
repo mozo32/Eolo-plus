@@ -31,6 +31,7 @@ use App\Http\Controllers\Api\InspeccioAutotanqueController;
 use App\Http\Controllers\Api\NotaOperacionalController;
 use App\Http\Controllers\Api\OperacionProgramadaController;
 use App\Http\Controllers\Api\MatriculaRestringidaController;
+use App\Http\Controllers\Api\PantallaProgramadasController;
 
 Route::post('/despacho', [DespachoController::class, 'store']);
 Route::get('/aeronaves/autocomplete', [AeronaveController::class, 'autocomplete']);
@@ -250,6 +251,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('InspeccionAutoTanque')->grou
 */
 Route::middleware(['api', 'auth:sanctum'])->prefix('OperacionesProgramadas')->group(function () {
     Route::get('/pendientes', [OperacionProgramadaController::class, 'pendientes']);
+    Route::get('/coincidencias', [OperacionProgramadaController::class, 'coincidencias']);
     Route::post('/validar-movimiento', [OperacionProgramadaController::class, 'validarMovimiento']);
     Route::get('/', [OperacionProgramadaController::class, 'index']);
     Route::get('/{operacionProgramada}', [OperacionProgramadaController::class, 'show'])->whereNumber('operacionProgramada');
@@ -257,9 +259,21 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('OperacionesProgramadas')->gr
     Route::middleware('subdep:operacionesProgramadas')->group(function () {
         Route::post('/', [OperacionProgramadaController::class, 'store']);
         Route::put('/{operacionProgramada}', [OperacionProgramadaController::class, 'update'])->whereNumber('operacionProgramada');
+        Route::post('/{operacionProgramada}/finalizar', [OperacionProgramadaController::class, 'finalizar'])->whereNumber('operacionProgramada');
         Route::delete('/{operacionProgramada}', [OperacionProgramadaController::class, 'destroy'])->whereNumber('operacionProgramada');
     });
 });
+
+/*
+|--------------------------------------------------------------------------
+| Pantalla pública de Operaciones Programadas (televisión)
+|--------------------------------------------------------------------------
+| Sin autenticación a propósito: la televisión no inicia sesión. Es solo
+| lectura, devuelve únicamente los campos que se muestran y vive en un
+| controlador aparte para no aflojar nada del administrativo.
+*/
+Route::middleware(['api', 'throttle:60,1'])
+    ->get('/pantalla/operaciones-programadas', [PantallaProgramadasController::class, 'index']);
 
 /*
 |--------------------------------------------------------------------------

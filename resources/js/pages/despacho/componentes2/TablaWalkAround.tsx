@@ -8,6 +8,7 @@ import ProgramadasPendientesPanel from '@/pages/despacho/operacionesProgramadas/
 import BadgeProgramadas from '@/pages/despacho/operacionesProgramadas/BadgeProgramadas';
 import { useProgramadasPendientes } from '@/pages/despacho/operacionesProgramadas/useProgramadasPendientes';
 import type { PrecargaProgramada } from '@/pages/despacho/operacionesProgramadas/types';
+import { avisarProgramadaEnOtraPestana } from '@/pages/despacho/operacionesProgramadas/coincidenciasProgramadas';
 import WalkAroundPdfExporter from '../components/walkAround/ItemTable/WalkAroundPdfExporter';
 import BitacoraModal from '@/pages/BitacoraModal';
 import AppLayout from '@/layouts/app-layout';
@@ -50,6 +51,8 @@ interface PestanaWalkAround {
 interface EstadoPestanasWalkAround {
     pestanas: PestanaWalkAround[];
     pestanaActiva: number | null;
+    /** Programadas vinculadas a cada pestaña; sobreviven a una recarga. */
+    precargas?: Record<number, PrecargaProgramada>;
 }
 
 const TablaWalkAround = () => {
@@ -155,6 +158,7 @@ const TablaWalkAround = () => {
 
         let pestanasGuardadas: PestanaWalkAround[] = [];
         let pestanaActivaGuardada: number | null = null;
+        let precargasGuardadas: Record<number, PrecargaProgramada> = {};
 
         try {
             const contenidoGuardado = window.localStorage.getItem(claveEstadoPestanas);
@@ -173,6 +177,14 @@ const TablaWalkAround = () => {
                 )
                     ? estadoGuardado.pestanaActiva ?? null
                     : pestanasGuardadas[0]?.id ?? null;
+
+                // Solo precargas de pestañas que siguen existiendo.
+                const ids = new Set(pestanasGuardadas.map(p => p.id));
+                precargasGuardadas = Object.fromEntries(
+                    Object.entries(estadoGuardado.precargas ?? {})
+                        .filter(([id, precarga]) => ids.has(Number(id)) && Number.isInteger(precarga?.operacionProgramadaId))
+                        .map(([id, precarga]) => [Number(id), precarga])
+                );
             }
 
             if (pestanasGuardadas.length === 0 && window.localStorage.getItem(claveBorradorPrincipal)) {
@@ -188,6 +200,7 @@ const TablaWalkAround = () => {
         setSelectedId(null);
         setPestanasWalkAround(pestanasGuardadas);
         setPestanaWalkAroundActiva(pestanaActivaGuardada);
+        setPrecargasProgramadas(precargasGuardadas);
         setClavePestanasCargada(claveEstadoPestanas);
     }, [claveBorradorPrincipal, claveEstadoPestanas]);
 
@@ -201,7 +214,8 @@ const TablaWalkAround = () => {
 
         const estadoPestanas: EstadoPestanasWalkAround = {
             pestanas: pestanasWalkAround,
-            pestanaActiva: pestanaWalkAroundActiva
+            pestanaActiva: pestanaWalkAroundActiva,
+            precargas: precargasProgramadas
         };
 
         try {
@@ -213,7 +227,8 @@ const TablaWalkAround = () => {
         claveEstadoPestanas,
         clavePestanasCargada,
         pestanaWalkAroundActiva,
-        pestanasWalkAround
+        pestanasWalkAround,
+        precargasProgramadas
     ]);
 
     useEffect(() => {
@@ -371,8 +386,51 @@ const TablaWalkAround = () => {
      * Abre una pestaña nueva precargada con una operación programada.
      * El alta manual sigue disponible en "+ NUEVO REGISTRO".
      */
+    /**
+     * ¿Otra pestaña ya tiene vinculada esta programación? Si sí, avisa, la trae
+     * al frente y devuelve true: una programación nunca se abre dos veces.
+     */
+    const yaAbiertaEnOtraPestana = (idProgramada: number, exceptuarPestana?: number): boolean => {
+        const entrada = Object.entries(precargasProgramadas).find(
+            ([id, precarga]) =>
+                precarga.operacionProgramadaId === idProgramada && Number(id) !== exceptuarPestana
+        );
+
+        if (!entrada) return false;
+
+        const idPestana = Number(entrada[0]);
+        const pestana = pestanasWalkAround.find(p => p.id === idPestana);
+
+        avisarProgramadaEnOtraPestana(pestana?.titulo ?? `Walk Around ${idPestana}`);
+        setSelectedId(null);
+        setPestanaWalkAroundActiva(idPestana);
+        setShowForm(true);
+
+        return true;
+    };
+
+    /** El formulario de una pestaña detectó una programada; el padre decide si la vincula. */
+    const vincularEnPestana = (idPestana: number) => (precarga: PrecargaProgramada): boolean => {
+        if (yaAbiertaEnOtraPestana(precarga.operacionProgramadaId, idPestana)) return false;
+
+        setPrecargasProgramadas(prev => ({ ...prev, [idPestana]: precarga }));
+        return true;
+    };
+
+    const desvincularEnPestana = (idPestana: number) => () =>
+        setPrecargasProgramadas(prev => {
+            if (!(idPestana in prev)) return prev;
+
+            const { [idPestana]: soltada, ...resto } = prev;
+            return resto;
+        });
+
     const abrirDesdeProgramada = (precarga: PrecargaProgramada) => {
         setMostrarProgramadas(false);
+
+        // Mismo guardia que la detección al capturar.
+        if (yaAbiertaEnOtraPestana(precarga.operacionProgramadaId)) return;
+
         setSelectedId(null);
 
         const siguienteId = pestanasWalkAround.reduce(
@@ -783,6 +841,8 @@ const TablaWalkAround = () => {
                                                 onSaved={() => cerrarPestanaWalkAround(pestana.id, true)}
                                                 borradorId={obtenerClaveBorradorWalkAround(pestana.id)}
                                                 datosProgramados={precargasProgramadas[pestana.id] ?? null}
+                                                onVincularProgramada={vincularEnPestana(pestana.id)}
+                                                onDesvincularProgramada={desvincularEnPestana(pestana.id)}
                                             />
                                         </div>
                                     ))

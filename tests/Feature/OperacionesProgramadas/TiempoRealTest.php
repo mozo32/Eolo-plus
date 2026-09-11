@@ -59,7 +59,10 @@ test('el evento viaja por el canal publico de operaciones programadas', function
         tipo: 'salida',
     );
 
-    expect($evento->broadcastOn()->name)->toBe('operaciones-programadas')
+    $canales = array_map(fn ($c) => $c->name, $evento->broadcastOn());
+
+    // Viaja al canal interno y al público de la televisión, con la misma carga.
+    expect($canales)->toBe(['operaciones-programadas', 'pantalla-programadas'])
         ->and($evento->broadcastWith())->toBe([
             'id' => 7,
             'accion' => 'creada',

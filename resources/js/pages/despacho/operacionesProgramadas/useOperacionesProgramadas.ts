@@ -1,5 +1,7 @@
 import {
+    ErrorApi,
     eliminarOperacionProgramadaApi,
+    finalizarOperacionProgramadaApi,
     obtenerOperacionesProgramadasApi,
 } from '@/stores/apiOperacionesProgramadas';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -18,6 +20,8 @@ export function useOperacionesProgramadas() {
     const [llegadas, setLlegadas] = useState<OperacionProgramada[]>([]);
     const [cargando, setCargando] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    /** Ids con una finalización en vuelo: su botón queda deshabilitado. */
+    const [finalizando, setFinalizando] = useState<number[]>([]);
 
     // La fecha vigente se lee desde una ref dentro del listener del canal, para
     // no volver a suscribirse cada vez que el usuario cambia de día.
@@ -100,6 +104,64 @@ export function useOperacionesProgramadas() {
         [cargar],
     );
 
+    /**
+     * Finalización manual: solo cambia el estado a realizada, sin registro en
+     * Operaciones Diarias. La decisión definitiva es del backend, que responde
+     * 409 si otro usuario se adelantó; en ese caso también se refresca para que
+     * la fila desaparezca.
+     */
+    const finalizar = useCallback(
+        async (operacion: OperacionProgramada) => {
+            if (finalizando.includes(operacion.id)) return;
+
+            const confirmacion = await Swal.fire({
+                title: 'Finalizar operación',
+                html:
+                    `¿Deseas marcar como realizada la <b>${operacion.tipo}</b> de la matrícula <b>${operacion.matricula}</b>, programada para las <b>${operacion.hora}</b>?` +
+                    `<p class="mt-3 text-sm text-slate-500">Esta acción solamente finalizará la operación programada y no creará un registro en Operaciones Diarias.</p>`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#059669',
+                confirmButtonText: 'Sí, finalizar',
+                cancelButtonText: 'Cancelar',
+                reverseButtons: true,
+            });
+
+            if (!confirmacion.isConfirmed) return;
+
+            setFinalizando(previos => [...previos, operacion.id]);
+
+            try {
+                const respuesta = await finalizarOperacionProgramadaApi(operacion.id);
+                await cargar(true);
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Operación finalizada',
+                    text: respuesta.message,
+                    timer: 1800,
+                    showConfirmButton: false,
+                });
+            } catch (e) {
+                if (e instanceof ErrorApi && e.codigo === 'ya_no_pendiente') {
+                    // Otro usuario se adelantó: la fila ya no debe estar aquí.
+                    await cargar(true);
+                    Swal.fire({ icon: 'info', title: 'Ya no estaba pendiente', text: e.message });
+                    return;
+                }
+
+                // La fila se queda y el botón vuelve a habilitarse.
+                Swal.fire({
+                    icon: 'error',
+                    title: 'No se pudo finalizar',
+                    text: e instanceof Error ? e.message : 'Error al finalizar la operación',
+                });
+            } finally {
+                setFinalizando(previos => previos.filter(id => id !== operacion.id));
+            }
+        },
+        [cargar, finalizando],
+    );
+
     const cambiarFecha = useCallback((nuevaFecha: string) => {
         siguiendoHoy.current = nuevaFecha === fechaHoy();
         setFecha(nuevaFecha);
@@ -116,5 +178,7 @@ export function useOperacionesProgramadas() {
         error,
         cargar,
         eliminar,
+        finalizar,
+        finalizando,
     };
 }

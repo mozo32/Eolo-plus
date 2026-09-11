@@ -8,8 +8,10 @@ import {
     obtenerNombresHistoricosApi
 } from "@/stores/apiOperacionesDiarias";
 import type { PrecargaProgramada } from "@/pages/despacho/operacionesProgramadas/types";
+import { useDeteccionProgramada } from "@/pages/despacho/operacionesProgramadas/useDeteccionProgramada";
+import { CalendarClock } from "lucide-react";
 
-export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datosEdicion, soloLectura = false, borradorId, datosProgramados }: {
+export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datosEdicion, soloLectura = false, borradorId, datosProgramados, onVincularProgramada, onDesvincularProgramada }: {
     alCerrar?: () => void;
     alGuardar?: () => void;
     moduloNombre?: string;
@@ -19,6 +21,14 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
     borradorId?: string;
     /** Precarga proveniente de una operación programada. No convierte el alta en edición. */
     datosProgramados?: PrecargaProgramada | null;
+    /**
+     * El formulario detectó una programada al capturar la matrícula y pide al
+     * padre vincularla a esta pestaña. El padre devuelve false si otra pestaña
+     * ya la tiene; entonces no se carga nada.
+     */
+    onVincularProgramada?: (precarga: PrecargaProgramada) => boolean | Promise<boolean>;
+    /** La pestaña deja de estar vinculada: cambió la matrícula o la fecha. */
+    onDesvincularProgramada?: () => void;
 }) => {
     const { obtenerTipo } = useMatriculaAutocompleteStore();
     const [cargando, setCargando] = useState(false);
@@ -48,7 +58,10 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
         impulso: datosEdicion?.impulso || '',
         nombreRol: nombreRol,
         // Trazabilidad con la operación programada que originó el registro.
-        operacion_programada_id: datosProgramados?.operacionProgramadaId ?? null
+        operacion_programada_id: datosProgramados?.operacionProgramadaId ?? null,
+        // El usuario decidió seguir como registro imprevisto aunque exista una
+        // programada: el backend no vinculará nada aunque el id viaje.
+        continuar_manual: false
     });
 
     const [formData, setFormData] = useState(getInitialState());
@@ -114,6 +127,49 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
                 : { ...prev, operacion_programada_id: idProgramada }
         ));
     }, [datosProgramados?.operacionProgramadaId]);
+
+    /**
+     * Carga solo los campos que pertenecen a la programación y conserva lo que
+     * el usuario ya haya escrito en los demás (nombre, tipo de cliente, etc.).
+     */
+    const aplicarPrecarga = (precarga: PrecargaProgramada) => {
+        setFormData(prev => ({
+            ...prev,
+            matricula: precarga.matricula,
+            equipo: precarga.equipo || prev.equipo,
+            hora: precarga.hora || prev.hora,
+            destino: precarga.lugar || prev.destino,
+            pax: precarga.pax ?? prev.pax,
+            observaciones: precarga.observaciones || prev.observaciones,
+            fecha: precarga.fecha || prev.fecha,
+            operacion_programada_id: precarga.operacionProgramadaId,
+            continuar_manual: false
+        }));
+
+        if (precarga.matricula) buscarNombres(precarga.matricula);
+    };
+
+    // Detección de programadas al capturar la matrícula a mano. El dueño del
+    // vínculo sigue siendo el padre (la pestaña); aquí solo se detecta y se
+    // rellenan los campos cuando el padre acepta.
+    const { buscarAhora: buscarProgramada, avisoOtroTipo } = useDeteccionProgramada({
+        modulo: 'operaciones_diarias',
+        tipo: 'salida',
+        matricula: formData.matricula,
+        fecha: formData.fecha,
+        activo: !datosEdicion && !soloLectura,
+        vinculadaId: formData.operacion_programada_id ?? null,
+        onVincular: async (precarga) => {
+            const aceptada = onVincularProgramada ? await onVincularProgramada(precarga) : true;
+            if (aceptada) aplicarPrecarga(precarga);
+            return aceptada;
+        },
+        onDesvincular: () => {
+            setFormData(prev => ({ ...prev, operacion_programada_id: null }));
+            onDesvincularProgramada?.();
+        },
+        onContinuarManual: () => setFormData(prev => ({ ...prev, continuar_manual: true })),
+    });
 
     const estaBloqueado = (moduloRequerido: string) => {
         if (soloLectura) return true;
@@ -183,7 +239,8 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
                         nombre: op.nombre || '',
                         impulso: op.impulso || '',
                         nombreRol: nombreRol,
-                        operacion_programada_id: formData.operacion_programada_id
+                        operacion_programada_id: formData.operacion_programada_id,
+                        continuar_manual: formData.continuar_manual
                     });
                     if (op.nombre) buscarNombres(op.nombre);
                     Swal.mixin({
@@ -280,13 +337,23 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
 
             <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                    <InputMatricula
-                        label="Matrícula"
-                        value={formData.matricula}
-                        onSelect={handleMatriculaSelect}
-                        required
-                        disabled={soloLectura}
-                    />
+                    <div className="relative">
+                        <InputMatricula
+                            label="Matrícula"
+                            value={formData.matricula}
+                            onSelect={handleMatriculaSelect}
+                            onBlur={() => buscarProgramada()}
+                            onEnter={() => buscarProgramada()}
+                            required
+                            disabled={soloLectura}
+                        />
+                        {avisoOtroTipo && (
+                            <p className="mt-1 flex items-start gap-1 text-[10px] font-semibold text-amber-600">
+                                <CalendarClock size={12} className="mt-0.5 shrink-0" />
+                                {avisoOtroTipo}
+                            </p>
+                        )}
+                    </div>
                     <div>
                         <label className="block text-[10px] font-bold text-slate-500 mb-1">Equipo</label>
                         <input

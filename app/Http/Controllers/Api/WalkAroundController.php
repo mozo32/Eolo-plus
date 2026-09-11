@@ -364,8 +364,10 @@ class WalkAroundController extends Controller
             // El estado es independiente del de Operaciones Diarias: la misma
             // programación puede usarse una vez en cada módulo, nunca dos veces
             // en el mismo.
+            // Si el usuario eligió continuar como registro imprevisto, no se
+            // vincula ninguna programación aunque el id haya viajado.
             $usoProgramada = OperacionProgramada::vincular(
-                $request->input('operacion_programada_id'),
+                $request->boolean('continuar_manual') ? null : $request->input('operacion_programada_id'),
                 $walkAround,
                 auth()->id()
             );

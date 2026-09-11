@@ -3,12 +3,13 @@
 use Inertia\Testing\AssertableInertia as Assert;
 
 /*
- * La vista para televisión es de solo lectura y no tiene navegación, pero sigue
- * siendo una pantalla protegida: quitar el menú no la vuelve pública.
+ * La vista para televisión es de solo lectura, sin navegación y pública. Lo que
+ * sigue protegido es todo lo administrativo, cubierto en PantallaPublicaTest.
  */
 
-test('un invitado no puede abrir la vista para pantalla', function () {
-    $this->get(route('pantallaProgramadas'))->assertRedirect(route('login'));
+test('un invitado puede abrir la vista para pantalla: ahora es publica', function () {
+    // La cobertura completa de la vista pública vive en PantallaPublicaTest.
+    $this->get(route('pantallaProgramadas'))->assertOk();
 });
 
 test('la vista para pantalla renderiza su propio componente, sin el administrativo', function () {

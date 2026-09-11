@@ -8,6 +8,7 @@ import MapaDanios3D from '../../components/walkAround/MapaDanios3D';
 import { validateStepOne, validateStepTwo, validateStepThree } from '../formValidators';
 import { guardarWalkAroundApi, fetchWalkaroundDetalle, updateWalkaroundApi, obtenerInfoMatriculaApi } from '@/stores/apiWalkaround';
 import type { PrecargaProgramada } from '@/pages/despacho/operacionesProgramadas/types';
+import { useDeteccionProgramada } from '@/pages/despacho/operacionesProgramadas/useDeteccionProgramada';
 
 const STEPS = [
     { id: 1, label: 'Información', icon: User },
@@ -41,6 +42,13 @@ interface Props {
     borradorId?: string;
     /** Precarga proveniente de una operación programada. */
     datosProgramados?: PrecargaProgramada | null;
+    /**
+     * El formulario detectó una programada al capturar la matrícula y pide al
+     * padre vincularla a esta pestaña. Devuelve false si otra pestaña ya la tiene.
+     */
+    onVincularProgramada?: (precarga: PrecargaProgramada) => boolean | Promise<boolean>;
+    /** La pestaña deja de estar vinculada: cambió matrícula, movimiento o fecha. */
+    onDesvincularProgramada?: () => void;
 }
 
 /**
@@ -73,11 +81,56 @@ const esObjeto = (valor: unknown): valor is Record<string, any> => {
     return valor !== null && typeof valor === 'object' && !Array.isArray(valor);
 };
 
-const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId, datosProgramados }: Props) => {
+const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId, datosProgramados, onVincularProgramada, onDesvincularProgramada }: Props) => {
     const [step, setStep] = useState(1);
     const [infoData, setInfoData] = useState<any>(() =>
         datosProgramados ? infoDesdeProgramada(datosProgramados) : crearInitialInfo()
     );
+
+    // Vínculo con la operación programada. Un 0 desde el padre significa que se
+    // liberó porque otro usuario la tomó: se guarda como captura manual.
+    const [programadaId, setProgramadaId] = useState<number | null>(datosProgramados?.operacionProgramadaId || null);
+    const [continuarManual, setContinuarManual] = useState(false);
+
+    useEffect(() => {
+        setProgramadaId(datosProgramados?.operacionProgramadaId || null);
+    }, [datosProgramados?.operacionProgramadaId]);
+
+    /** Carga solo los campos de la programación; la aeronave la sigue eligiendo el usuario. */
+    const aplicarPrecarga = (precarga: PrecargaProgramada) => {
+        setInfoData((prev: any) => ({
+            ...prev,
+            matricula: precarga.matricula,
+            movimiento: precarga.movimientoWalkAround,
+            tipo: precarga.equipo || prev.tipo,
+            hora: precarga.hora || prev.hora,
+            destino: precarga.tipo === 'salida' ? precarga.lugar : '',
+            procedencia: precarga.tipo === 'llegada' ? precarga.lugar : '',
+            fecha: precarga.fecha || prev.fecha,
+        }));
+        setProgramadaId(precarga.operacionProgramadaId);
+        setContinuarManual(false);
+    };
+
+    // Detección de programadas al capturar la matrícula a mano, solo en altas.
+    const { buscarAhora: buscarProgramada, avisoOtroTipo } = useDeteccionProgramada({
+        modulo: 'walkaround',
+        tipo: infoData.movimiento ?? '',
+        matricula: infoData.matricula ?? '',
+        fecha: infoData.fecha ?? '',
+        activo: !id,
+        vinculadaId: programadaId,
+        onVincular: async (precarga) => {
+            const aceptada = onVincularProgramada ? await onVincularProgramada(precarga) : true;
+            if (aceptada) aplicarPrecarga(precarga);
+            return aceptada;
+        },
+        onDesvincular: () => {
+            setProgramadaId(null);
+            onDesvincularProgramada?.();
+        },
+        onContinuarManual: () => setContinuarManual(true),
+    });
     const [inspeccion, setInspeccion] = useState<any>({});
     const [exteriorData, setExteriorData] = useState<ExteriorData>(INITIAL_EXTERIOR);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -247,9 +300,9 @@ const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId, datosProgramados 
                 const payload = {
                     id: id || null,
                     // Trazabilidad con la operación programada que originó el registro.
-                    // Un 0 significa que el padre liberó el vínculo porque otro
-                    // usuario tomó la programación: se guarda como captura manual.
-                    operacion_programada_id: datosProgramados?.operacionProgramadaId || null,
+                    operacion_programada_id: programadaId,
+                    // Con esta bandera el backend ignora el id aunque viaje.
+                    continuar_manual: continuarManual,
                     metadata: infoData,
                     inspeccionTecnica: { checklist, numeroEstaticas, fotos: fotos?.map((f: any) => f.base64 || f) || [], puntos3D: puntos3D || [] },
                     cierreYFirmas: exteriorData,
@@ -315,7 +368,12 @@ const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId, datosProgramados 
                                     <User size={40} className="opacity-40" />
                                 </header>
                                 <div className="p-8">
-                                    <GeneralInfo data={infoData} onChange={(d: any) => setInfoData((p: any) => ({ ...p, ...d }))} />
+                                    <GeneralInfo
+                                        data={infoData}
+                                        onChange={(d: any) => setInfoData((p: any) => ({ ...p, ...d }))}
+                                        onMatriculaBlur={buscarProgramada}
+                                        avisoProgramada={avisoOtroTipo}
+                                    />
                                 </div>
                             </div>
                         )}

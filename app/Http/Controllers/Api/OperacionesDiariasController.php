@@ -36,7 +36,14 @@ class OperacionesDiariasController extends Controller
             'nombre' => ['nullable', 'string', 'max:100'],
             'impulso' => ['nullable', 'string', 'max:100'],
             'operacion_programada_id' => ['nullable', 'integer', 'exists:operaciones_programadas,id'],
+            'continuar_manual' => ['nullable', 'boolean'],
         ]);
+
+        // Si el usuario eligió continuar como registro imprevisto, no se vincula
+        // ninguna programación aunque el id haya viajado en el payload.
+        if ($request->boolean('continuar_manual')) {
+            $validated['operacion_programada_id'] = null;
+        }
 
         // Se captura fuera de la transacción para avisar a los demás usuarios
         // solo después de que el registro quedó confirmado.

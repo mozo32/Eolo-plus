@@ -10,6 +10,13 @@ Route::get('/', function () {
     ]);
 })->name('home');
 
+// Vista pública para televisión: sin sesión, sin layout y de solo lectura.
+// Sus datos salen de un endpoint público propio que expone únicamente lo que
+// se muestra; todo lo administrativo sigue detrás de auth.
+Route::get('operacionesProgramadas/pantalla', function () {
+    return Inertia::render('despacho/PantallaOperacionesProgramadas');
+})->name('pantallaProgramadas');
+
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', function () {
         return Inertia::render('dashboard');
@@ -28,13 +35,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('operacionesProgramadas', function () {
         return Inertia::render('despacho/OperacionesProgramadas');
     })->name('operacionesProgramadas');
-
-    // Vista de solo lectura para televisión: sin layout ni navegación, pero
-    // igual de protegida. La consultan Rampa y Tráfico, que no tienen el
-    // subdepartamento de Despacho, así que basta con estar autenticado.
-    Route::get('operacionesProgramadas/pantalla', function () {
-        return Inertia::render('despacho/PantallaOperacionesProgramadas');
-    })->name('pantallaProgramadas');
 
     Route::get('gestionarAeronaves', function () {
         return Inertia::render('despacho/GestionAeronaves');

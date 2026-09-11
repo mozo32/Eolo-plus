@@ -37,10 +37,12 @@ export const puedeAdministrarProgramadas = (usuario?: UsuarioAutenticado | null)
     );
 };
 
-/** Operación programada tal como la devuelve el backend. */
-export interface OperacionProgramada {
+/**
+ * Lo único que la televisión pública ve de una operación: el subconjunto que
+ * devuelve OperacionPantallaResource. Sin estado, usos ni nada administrativo.
+ */
+export interface OperacionPantalla {
     id: number;
-    fecha: string;
     tipo: TipoOperacion;
     matricula: string;
     equipo: string;
@@ -50,6 +52,11 @@ export interface OperacionProgramada {
     /** Texto libre y opcional del plan de vuelo. Solo aplica a salidas. */
     fp: string | null;
     observaciones: string | null;
+}
+
+/** Operación programada completa, como la devuelve el backend administrativo. */
+export interface OperacionProgramada extends OperacionPantalla {
+    fecha: string;
     status: string;
     modulos_usados: ModuloConsumidor[];
 }
@@ -117,6 +124,19 @@ export const esHoraFutura = (fecha: string, hora: string): boolean => {
     if (!horaValida(hora)) return false;
 
     return hora > horaAhora();
+};
+
+/** Normaliza igual que el resto del sistema: sin espacios, mayúsculas, guiones intactos. */
+export const normalizarMatricula = (matricula: string): string => matricula.trim().toUpperCase();
+
+/**
+ * ¿La matrícula ya está completa como para consultarla? Mismas expresiones que
+ * valida InputMatricula: XA-ABC (prefijo-guion-sufijo) o N12345 (formato USA).
+ */
+export const esMatriculaCompleta = (matricula: string): boolean => {
+    const valor = normalizarMatricula(matricula);
+
+    return /^[A-Z0-9]{1,3}-[A-Z0-9]{1,5}$/.test(valor) || /^N[1-9][0-9A-Z]{0,4}$/.test(valor);
 };
 
 export const formularioVacio = (fecha: string): OperacionProgramadaForm => ({

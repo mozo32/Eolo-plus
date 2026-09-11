@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef } from 'react';
 import { fechaHoy, type ModuloConsumidor, type TipoOperacion } from './types';
 
 export const CANAL_PROGRAMADAS = 'operaciones-programadas';
+/** Canal público de la televisión: solo lleva cambios de operaciones, nunca restricciones. */
+export const CANAL_PANTALLA = 'pantalla-programadas';
 export const EVENTO_PROGRAMADAS = 'OperacionProgramadaCambio';
 export const EVENTO_RESTRICCIONES = 'MatriculaRestringidaCambio';
 
@@ -25,6 +27,8 @@ const MS_COALESCENCIA = 250;
 const MS_RELOJ = 60_000;
 
 interface Opciones<T> {
+    /** Canal que se escucha. Por omisión el interno; la televisión pasa el suyo. */
+    canal?: string;
     /**
      * Evento del canal que se escucha. Por omisión, el de operaciones
      * programadas; las restricciones de matrícula pasan el suyo y así reutilizan
@@ -58,6 +62,7 @@ interface Opciones<T> {
  *   fecha local; la consulta se dispara únicamente cuando el día cambia.
  */
 export function useCanalProgramadas<T = EventoProgramada>({
+    canal: nombreCanal = CANAL_PROGRAMADAS,
     evento: nombreEvento = EVENTO_PROGRAMADAS,
     leInteresa,
     recargar,
@@ -93,7 +98,7 @@ export function useCanalProgramadas<T = EventoProgramada>({
     // El callback no lleva dependencias: la lógica vive en refs para no
     // resuscribirse en cada render ni duplicar listeners.
     useEchoPublic<T>(
-        CANAL_PROGRAMADAS,
+        nombreCanal,
         nombreEvento,
         evento => {
             if (!evento) return;

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Services\SecuenciaMovimientoService;
 
 class OperacionProgramada extends Model
 {
@@ -79,17 +80,22 @@ class OperacionProgramada extends Model
     }
 
     /**
-     * Programadas que todavía no han sido usadas por el módulo indicado.
+     * Programadas que todavía están pendientes para el módulo indicado.
      *
-     * Se aceptan las activas y las ya realizadas: que Operaciones Diarias la
-     * registre la saca del tablero de Despacho, pero WalkAround la sigue viendo
-     * pendiente hasta que también la use. Solo las canceladas quedan fuera.
+     * Para Operaciones Diarias, "realizada" significa que ya no le hace falta,
+     * haya llegado por su propio registro o por la mano de Despacho: solo cuentan
+     * las activas. Para WalkAround, una realizada sigue pendiente hasta que él
+     * mismo la use. Las canceladas quedan fuera para ambos.
      */
     public function scopePendientesPara(Builder $query, string $modulo): Builder
     {
         $clase = self::claseDeModulo($modulo);
 
-        return $query->whereIn('status', [self::STATUS_ACTIVA, self::STATUS_REALIZADA])
+        $estados = $clase === OperacionDiaria::class
+            ? [self::STATUS_ACTIVA]
+            : [self::STATUS_ACTIVA, self::STATUS_REALIZADA];
+
+        return $query->whereIn('status', $estados)
             ->whereDoesntHave('usos', function ($usos) use ($clase) {
                 $usos->where('usable_type', $clase);
             });
@@ -131,6 +137,15 @@ class OperacionProgramada extends Model
             abort(422, 'La operación programada indicada fue cancelada.');
         }
 
+        // Una realizada ya no le sirve a Operaciones Diarias, la haya cerrado su
+        // propio registro o Despacho a mano. WalkAround sí puede seguir usándola.
+        if (
+            $programada->status === self::STATUS_REALIZADA
+            && $registro->getMorphClass() === OperacionDiaria::class
+        ) {
+            abort(422, 'La operación programada indicada ya fue finalizada.');
+        }
+
         $yaUsada = $programada->usos()
             ->where('usable_type', $registro->getMorphClass())
             ->exists();
@@ -138,6 +153,10 @@ class OperacionProgramada extends Model
         if ($yaUsada) {
             abort(422, 'Esta operación programada ya fue utilizada en este módulo.');
         }
+
+        // Solo se vincula por ID explícito, y ese ID tiene que corresponder al
+        // registro que se está guardando. Nunca se relaciona por coincidencia.
+        self::exigirCoherencia($programada, $registro);
 
         $uso = $programada->usos()->create([
             'usable_type' => $registro->getMorphClass(),
@@ -153,6 +172,48 @@ class OperacionProgramada extends Model
         }
 
         return $uso;
+    }
+
+    /**
+     * La programada debe describir la misma operación que el registro final:
+     * misma matrícula, mismo movimiento y mismo día. Entiende el vocabulario de
+     * WalkAround (entrada) y el de Operaciones Diarias (llegada).
+     */
+    private static function exigirCoherencia(self $programada, Model $registro): void
+    {
+        $matriculaRegistro = strtoupper(trim((string) $registro->getAttribute('matricula')));
+
+        if (strtoupper(trim((string) $programada->matricula)) !== $matriculaRegistro) {
+            abort(422, "La operación programada corresponde a la matrícula {$programada->matricula}, no a {$matriculaRegistro}.");
+        }
+
+        // En WalkAround "tipo" es avión/helicóptero; el movimiento va en otra
+        // columna. En Operaciones Diarias el movimiento sí se llama "tipo".
+        $columnaMovimiento = $registro instanceof WalkAround ? 'movimiento' : 'tipo';
+
+        $movimientoRegistro = SecuenciaMovimientoService::normalizar(
+            (string) $registro->getAttribute($columnaMovimiento)
+        );
+
+        if (SecuenciaMovimientoService::normalizar($programada->tipo) !== $movimientoRegistro) {
+            abort(422, "La operación programada es una {$programada->tipo}; no coincide con el movimiento que se está registrando.");
+        }
+
+        $fechaProgramada = self::soloDia($programada->fecha);
+        $fechaRegistro = self::soloDia($registro->getAttribute('fecha'));
+
+        if ($fechaProgramada !== $fechaRegistro) {
+            abort(422, "La operación programada es del {$fechaProgramada} y el registro es del {$fechaRegistro}.");
+        }
+    }
+
+    private static function soloDia($fecha): string
+    {
+        if ($fecha instanceof \DateTimeInterface) {
+            return $fecha->format('Y-m-d');
+        }
+
+        return substr(str_replace('T', ' ', (string) $fecha), 0, 10);
     }
 
     /**

@@ -84,6 +84,52 @@ class OperacionProgramadaController extends Controller
     }
 
     /**
+     * Operaciones programadas que coinciden con lo que el usuario está
+     * capturando a mano en Operaciones Diarias o WalkAround: misma matrícula,
+     * mismo día, mismo tipo y todavía disponibles para ese módulo.
+     *
+     * Devuelve también cuántas hay del tipo contrario, para que el formulario
+     * pueda avisarlo de forma discreta sin cargarlas ni bloquear nada.
+     */
+    public function coincidencias(Request $request): JsonResponse
+    {
+        $datos = $request->validate([
+            'matricula' => ['required', 'string', 'max:20'],
+            'tipo' => ['required', 'string'],
+            'modulo' => ['required', 'string'],
+            'fecha' => ['nullable', 'date'],
+        ]);
+
+        $modulo = strtolower(trim($datos['modulo']));
+
+        if (! OperacionProgramada::claseDeModulo($modulo)) {
+            return response()->json(['message' => 'El módulo indicado no es válido.'], 422);
+        }
+
+        $matricula = strtoupper(trim($datos['matricula']));
+        // Entiende el vocabulario de WalkAround (Entrada) y el de Operaciones Diarias.
+        $tipo = \App\Services\SecuenciaMovimientoService::normalizar($datos['tipo']);
+        $fecha = $this->fechaSolicitada($request);
+
+        $delDia = OperacionProgramada::query()
+            ->pendientesPara($modulo)
+            ->with('usos')
+            ->where('matricula', $matricula)
+            ->whereDate('fecha', $fecha)
+            ->orderBy('hora')
+            ->orderBy('id')
+            ->get();
+
+        return response()->json([
+            'coincidencias' => $delDia
+                ->where('tipo', $tipo)
+                ->map(fn ($operacion) => $this->serializar($operacion))
+                ->values(),
+            'del_otro_tipo' => $delDia->where('tipo', '!=', $tipo)->count(),
+        ]);
+    }
+
+    /**
      * Vista previa para el formulario: adelanta si el movimiento está restringido.
      * La validación que manda sigue siendo la del backend en store/update.
      */
@@ -220,6 +266,63 @@ class OperacionProgramadaController extends Controller
 
         return response()->json([
             'message' => 'Operación programada actualizada',
+            'operacion' => $this->serializar($operacionProgramada->fresh()->load('usos')),
+        ]);
+    }
+
+    /**
+     * Finalización manual desde el tablero de Despacho.
+     *
+     * No crea registro en Operaciones Diarias ni intenta relacionarse con él:
+     * solo cambia el estado. La atomicidad la da la propia sentencia: se
+     * actualiza únicamente si la fila sigue activa, así que de dos peticiones
+     * concurrentes solo una afecta la fila; la otra recibe 409 y no emite nada.
+     */
+    public function finalizar(OperacionProgramada $operacionProgramada): JsonResponse
+    {
+        $anteriores = $this->datosBitacora($operacionProgramada);
+
+        $afectadas = DB::transaction(function () use ($operacionProgramada, $anteriores) {
+            $afectadas = OperacionProgramada::query()
+                ->whereKey($operacionProgramada->id)
+                ->where('status', OperacionProgramada::STATUS_ACTIVA)
+                ->update(['status' => OperacionProgramada::STATUS_REALIZADA]);
+
+            if ($afectadas !== 1) {
+                return $afectadas;
+            }
+
+            Bitacora::log(
+                modulo: Bitacora::MODULO_OPERACIONES_PROGRAMADAS,
+                accion: Bitacora::ACCION_FINALIZAR,
+                descripcion: "Se finalizó manualmente la operación programada #{$operacionProgramada->id} de la matrícula {$operacionProgramada->matricula}, sin registro en Operaciones Diarias.",
+                registroId: $operacionProgramada->id,
+                datosAnteriores: ['datos_principales' => $anteriores],
+                datosNuevos: ['datos_principales' => $anteriores + ['status' => OperacionProgramada::STATUS_REALIZADA]],
+            );
+
+            return $afectadas;
+        });
+
+        if ($afectadas !== 1) {
+            $vigente = $operacionProgramada->fresh();
+
+            return response()->json([
+                'message' => $vigente?->status === OperacionProgramada::STATUS_REALIZADA
+                    ? 'La operación ya había sido finalizada por otro usuario.'
+                    : 'La operación ya no está pendiente.',
+                'codigo' => 'ya_no_pendiente',
+                'status' => $vigente?->status,
+            ], 409);
+        }
+
+        OperacionProgramadaCambio::emitir(
+            $operacionProgramada->fresh(),
+            OperacionProgramadaCambio::ACCION_FINALIZADA,
+        );
+
+        return response()->json([
+            'message' => 'Operación finalizada',
             'operacion' => $this->serializar($operacionProgramada->fresh()->load('usos')),
         ]);
     }

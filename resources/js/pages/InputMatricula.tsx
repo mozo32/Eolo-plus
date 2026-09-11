@@ -8,6 +8,13 @@ interface Props {
     required?: boolean;
     value: string;
     onSelect: (matricula: string) => void;
+    /** Se avisa al perder el foco, con el valor vigente ya normalizado. */
+    onBlur?: (matricula: string) => void;
+    /**
+     * Enter confirma la matrícula en lugar de enviar el formulario completo:
+     * dispara la misma consulta que el blur.
+     */
+    onEnter?: (matricula: string) => void;
 }
 
 export default function InputMatricula({
@@ -17,6 +24,8 @@ export default function InputMatricula({
     required = false,
     value,
     onSelect,
+    onBlur,
+    onEnter,
 }: Props) {
     const { buscar, obtenerTipo } = useMatriculaAutocompleteStore();
 
@@ -85,6 +94,8 @@ export default function InputMatricula({
         setTimeout(() => {
             setLocalSuggestions([]);
         }, 200);
+
+        onBlur?.(value.trim().toUpperCase());
     };
 
     return (
@@ -103,6 +114,12 @@ export default function InputMatricula({
                     value={value}
                     onChange={handleInputChange}
                     onBlur={handleBlur}
+                    onKeyDown={(e) => {
+                        if (e.key !== 'Enter' || !onEnter) return;
+                        e.preventDefault();
+                        setLocalSuggestions([]);
+                        onEnter(value.trim().toUpperCase());
+                    }}
                     disabled={disabled}
                     required={required}
                     placeholder={placeholder}

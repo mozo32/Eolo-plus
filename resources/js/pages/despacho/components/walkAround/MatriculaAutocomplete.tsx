@@ -17,6 +17,10 @@ interface MatriculaAutocompleteProps {
     onMatriculaChange: (value: string) => void;
     onAeronaveData?: (data: AeronaveApiData) => void;
     onNuevaMatricula?: () => void;
+    /** Se avisa al perder el foco, con el valor vigente. */
+    onBlur?: (matricula: string) => void;
+    /** Enter confirma la matrícula en lugar de enviar el formulario. */
+    onEnter?: (matricula: string) => void;
 }
 
 export default function MatriculaAutocomplete({
@@ -24,6 +28,8 @@ export default function MatriculaAutocomplete({
     onMatriculaChange,
     onAeronaveData,
     onNuevaMatricula,
+    onBlur,
+    onEnter,
 }: MatriculaAutocompleteProps) {
     const {
         suggestions,
@@ -94,6 +100,8 @@ export default function MatriculaAutocomplete({
         setTimeout(() => {
             clearSuggestions();
         }, 200);
+
+        onBlur?.(matricula.trim().toUpperCase());
     };
 
     return (
@@ -105,6 +113,12 @@ export default function MatriculaAutocomplete({
                     value={matricula}
                     onChange={handleInputChange}
                     onBlur={handleBlur}
+                    onKeyDown={(e) => {
+                        if (e.key !== 'Enter' || !onEnter) return;
+                        e.preventDefault();
+                        clearSuggestions();
+                        onEnter(matricula.trim().toUpperCase());
+                    }}
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-slate-700 font-medium focus:border-cyan-600 focus:ring-1 focus:ring-cyan-600 outline-none transition-all placeholder:text-slate-300 shadow-sm text-sm uppercase"
                     placeholder="XA-ABC"
                     autoComplete="off"

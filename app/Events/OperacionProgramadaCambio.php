@@ -22,11 +22,19 @@ class OperacionProgramadaCambio implements ShouldBroadcastNow
     use Dispatchable, SerializesModels;
 
     public const CANAL = 'operaciones-programadas';
+    /**
+     * Canal público de la televisión. Solo recibe este evento, cuya carga ya es
+     * segura: sin usuarios, sin restricciones, sin nada administrativo. Las
+     * restricciones de matrícula no se emiten aquí.
+     */
+    public const CANAL_PANTALLA = 'pantalla-programadas';
 
     public const ACCION_CREADA = 'creada';
     public const ACCION_ACTUALIZADA = 'actualizada';
     public const ACCION_ELIMINADA = 'eliminada';
     public const ACCION_UTILIZADA = 'utilizada';
+    /** Finalizada a mano desde el tablero de Despacho, sin registro diario. */
+    public const ACCION_FINALIZADA = 'finalizada';
 
     public function __construct(
         public int $id,
@@ -38,9 +46,15 @@ class OperacionProgramadaCambio implements ShouldBroadcastNow
     ) {
     }
 
-    public function broadcastOn(): Channel
+    /**
+     * @return array<int, Channel>
+     */
+    public function broadcastOn(): array
     {
-        return new Channel(self::CANAL);
+        return [
+            new Channel(self::CANAL),
+            new Channel(self::CANAL_PANTALLA),
+        ];
     }
 
     public function broadcastWith(): array

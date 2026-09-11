@@ -1,9 +1,8 @@
 import { obtenerProgramadasPendientesApi } from '@/stores/apiOperacionesProgramadas';
 import { CalendarClock, ChevronRight, Clock, Loader2, Plane, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import Swal from 'sweetalert2';
+import { confirmarHoraFutura } from './coincidenciasProgramadas';
 import {
-    esHoraFutura,
     fechaHoy,
     precargaDesde,
     type ModuloConsumidor,
@@ -86,20 +85,8 @@ export default function ProgramadasPendientesPanel({
      * informativa, que el usuario puede aceptar para continuar igualmente.
      */
     const seleccionar = async (operacion: OperacionProgramada) => {
-        if (esHoraFutura(operacion.fecha, operacion.hora)) {
-            const respuesta = await Swal.fire({
-                title: 'Aún no es la hora programada',
-                text: `Esta operación está programada para las ${operacion.hora}. Aún no es la hora programada. ¿Deseas continuar de todos modos?`,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'Sí, continuar',
-                cancelButtonText: 'Cancelar',
-                reverseButtons: true,
-            });
-
-            // Al cancelar no se selecciona nada y el formulario queda intacto.
-            if (!respuesta.isConfirmed) return;
-        }
+        // Al cancelar no se selecciona nada y el formulario queda intacto.
+        if (!(await confirmarHoraFutura(operacion))) return;
 
         onSeleccionar(precargaDesde(operacion));
     };

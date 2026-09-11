@@ -2,8 +2,7 @@ import { Head } from '@inertiajs/react';
 import { AlertCircle, Plane } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import TablaOperacionesProgramadas from './operacionesProgramadas/TablaOperacionesProgramadas';
-import { useOperacionesProgramadas } from './operacionesProgramadas/useOperacionesProgramadas';
-import { useSesionViva } from './operacionesProgramadas/useSesionViva';
+import { usePantallaProgramadas } from './operacionesProgramadas/usePantallaProgramadas';
 
 /** Fecha larga en español, con la zona horaria del proyecto. */
 const fechaLarga = (): string =>
@@ -26,17 +25,16 @@ const horaLarga = (): string =>
     }).format(new Date());
 
 /**
- * Vista de solo lectura para televisión.
+ * Vista pública de solo lectura para televisión.
  *
- * Sin AppLayout, sin sidebar y sin ningún control que modifique información.
- * Reutiliza el mismo hook que la pantalla administrativa, así que hereda gratis
- * el tiempo real, el filtro por operaciones activas —una realizada o cancelada
- * desaparece sola— y el cambio de día a medianoche.
+ * Sin sesión, sin AppLayout, sin sidebar y sin ningún control que modifique
+ * información. Sus datos salen del endpoint público, que expone únicamente lo
+ * que se muestra, y llegan en tiempo real por el canal público de la pantalla.
+ * Una operación realizada o cancelada desaparece sola: el endpoint solo
+ * devuelve las activas de hoy.
  */
 export default function PantallaOperacionesProgramadas() {
-    // Sin selector de fecha: el hook se queda en el día local y avanza solo a
-    // medianoche, porque nadie cambia la fecha a mano.
-    const { salidas, llegadas, cargando, error, cargar } = useOperacionesProgramadas();
+    const { salidas, llegadas, cargando, error } = usePantallaProgramadas();
 
     const [reloj, setReloj] = useState(() => horaLarga());
     const [fecha, setFecha] = useState(() => fechaLarga());
@@ -49,9 +47,6 @@ export default function PantallaOperacionesProgramadas() {
 
         return () => clearInterval(intervalo);
     }, []);
-
-    // La televisión queda encendida todo el día: sin esto la sesión expira.
-    useSesionViva(15, () => cargar(true));
 
     return (
         <div className="flex min-h-screen flex-col bg-slate-950 p-6 text-white lg:p-8">
