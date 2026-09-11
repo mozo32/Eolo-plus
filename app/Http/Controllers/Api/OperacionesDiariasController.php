@@ -5,7 +5,10 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\OperacionDiaria;
+use App\Models\OperacionProgramada;
+use App\Events\OperacionProgramadaCambio;
 use App\Models\MovimientoCSAE;
+use App\Services\SecuenciaMovimientoService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
@@ -32,34 +35,30 @@ class OperacionesDiariasController extends Controller
             'tipo_operacion' => ['nullable', 'string', 'max:100'],
             'nombre' => ['nullable', 'string', 'max:100'],
             'impulso' => ['nullable', 'string', 'max:100'],
+            'operacion_programada_id' => ['nullable', 'integer', 'exists:operaciones_programadas,id'],
         ]);
 
-        return DB::transaction(function () use ($validated) {
+        // Se captura fuera de la transacción para avisar a los demás usuarios
+        // solo después de que el registro quedó confirmado.
+        $programadaUsada = null;
+
+        $respuesta = DB::transaction(function () use ($validated, &$programadaUsada) {
             $matricula = strtoupper(trim($validated['matricula']));
-            $movimiento = strtolower(trim($validated['movimiento']));
+            $movimiento = SecuenciaMovimientoService::normalizar($validated['movimiento']);
 
-            $ultimoRegistro = OperacionDiaria::query()
-                ->where('matricula', $matricula)
-                ->orderByDesc('fecha')
-                ->orderByDesc('hora')
-                ->orderByDesc('id')
-                ->first();
+            // La regla de secuencia vive en SecuenciaMovimientoService y se vuelve
+            // a ejecutar aquí contra los registros reales, venga o no de una
+            // operación programada.
+            $secuencia = SecuenciaMovimientoService::validarFinal(
+                $matricula,
+                $validated['movimiento'],
+                SecuenciaMovimientoService::FUENTE_OPERACIONES_DIARIAS
+            );
 
-            if (
-                $ultimoRegistro &&
-                strtolower($ultimoRegistro->tipo) === $movimiento
-            ) {
-                $movimientoRequerido =
-                    $movimiento === 'llegada'
-                        ? 'Salida'
-                        : 'Llegada';
-
+            if (! $secuencia['valido']) {
                 return response()->json([
-                    'message' =>
-                        "La matrícula ya cuenta con un registro de " .
-                        "{$validated['movimiento']}. Debe registrar una " .
-                        "{$movimientoRequerido} primero.",
-                    'data' => null,
+                    'message' => $secuencia['message'],
+                    'data' => $secuencia['data'],
                 ], 422);
             }
 
@@ -123,6 +122,19 @@ class OperacionesDiariasController extends Controller
                 'tipo_operacion' => $validated['tipo_operacion'] ?? null,
             ]);
 
+            // Trazabilidad con la operación programada que originó el registro.
+            // Si esa programación ya se usó en este módulo, aborta con 422 y la
+            // transacción hace rollback: nunca se duplica un registro.
+            $uso = OperacionProgramada::vincular(
+                $validated['operacion_programada_id'] ?? null,
+                $operacion,
+                Auth::id()
+            );
+
+            if ($uso) {
+                $programadaUsada = $uso->operacionProgramada;
+            }
+
             $datosNuevos = [
                 'tipo' => $operacion->tipo,
                 'matricula' => $operacion->matricula,
@@ -160,6 +172,16 @@ class OperacionesDiariasController extends Controller
                 'operacion' => $operacion,
             ], 201);
         });
+
+        if ($programadaUsada) {
+            OperacionProgramadaCambio::emitir(
+                $programadaUsada,
+                OperacionProgramadaCambio::ACCION_UTILIZADA,
+                modulo: OperacionProgramada::MODULO_OPERACIONES_DIARIAS,
+            );
+        }
+
+        return $respuesta;
     }
 
     public function index(Request $request)

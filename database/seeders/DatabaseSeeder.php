@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             AdminUserSeeder::class,
             tipoiAeronaveSeeder::class,
             DepartamentosSubdepartamentosSeeder::class,
+            OperacionesProgramadasSubdepartamentoSeeder::class,
         ]);
     }
 }

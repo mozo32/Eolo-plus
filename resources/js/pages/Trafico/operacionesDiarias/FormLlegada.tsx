@@ -7,8 +7,9 @@ import {
 } from "@/stores/apiOperacionesDiarias";
 import InputMatricula from "@/pages/InputMatricula";
 import { useMatriculaAutocompleteStore } from "./useMatriculaAutocompleteStore";
+import type { PrecargaProgramada } from "@/pages/despacho/operacionesProgramadas/types";
 
-export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datosEdicion, soloLectura = false, borradorId }: {
+export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datosEdicion, soloLectura = false, borradorId, datosProgramados }: {
     alCerrar?: () => void,
     alGuardar?: () => void,
     moduloNombre?: string,
@@ -16,6 +17,8 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
     soloLectura?: boolean
     nombreRol?: string;
     borradorId?: string;
+    /** Precarga proveniente de una operación programada. No convierte el alta en edición. */
+    datosProgramados?: PrecargaProgramada | null;
 }) => {
     const { obtenerTipo } = useMatriculaAutocompleteStore();
     const [cargando, setCargando] = useState(false);
@@ -25,11 +28,11 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
     const obtenerFechaHoy = () => new Date().toLocaleDateString('sv-SE');
     const getInitialState = (fecha?: string) => ({
         id: datosEdicion?.id || null,
-        matricula: datosEdicion?.matricula || '',
-        equipo: datosEdicion?.equipo || '',
-        hora: datosEdicion?.hora?.substring(0, 5) || '',
-        procedencia: datosEdicion?.lugar || '',
-        pax: datosEdicion?.pax ?? null,
+        matricula: datosEdicion?.matricula || datosProgramados?.matricula || '',
+        equipo: datosEdicion?.equipo || datosProgramados?.equipo || '',
+        hora: datosEdicion?.hora?.substring(0, 5) || datosProgramados?.hora || '',
+        procedencia: datosEdicion?.lugar || datosProgramados?.lugar || '',
+        pax: datosEdicion?.pax ?? datosProgramados?.pax ?? null,
         equipaje: datosEdicion?.equipaje ?? null,
         tipo_cliente: datosEdicion?.tipo_cliente || '',
         tipo_operacion: datosEdicion?.tipo_operacion || '',
@@ -38,19 +41,21 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
         fecha: fecha || (
             datosEdicion?.fecha
                 ? new Date(datosEdicion.fecha).toISOString().split('T')[0]
-                : obtenerFechaHoy()
+                : (datosProgramados?.fecha || obtenerFechaHoy())
         ),
-        observaciones: datosEdicion?.observaciones || '',
+        observaciones: datosEdicion?.observaciones || datosProgramados?.observaciones || '',
         nombre: datosEdicion?.nombre || '',
         impulso: datosEdicion?.impulso || '',
-        nombreRol: nombreRol
+        nombreRol: nombreRol,
+        // Trazabilidad con la operación programada que originó el registro.
+        operacion_programada_id: datosProgramados?.operacionProgramadaId ?? null
     });
 
     const [formData, setFormData] = useState(getInitialState());
     const [claveBorradorCargada, setClaveBorradorCargada] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!borradorId || datosEdicion || typeof window === 'undefined') {
+        if (!borradorId || datosEdicion || datosProgramados || typeof window === 'undefined') {
             setClaveBorradorCargada(borradorId ?? null);
             return;
         }
@@ -95,6 +100,20 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
             console.error('No se pudo guardar el borrador de llegada', error);
         }
     }, [borradorId, claveBorradorCargada, datosEdicion, formData]);
+
+
+    // Si otro usuario se adelanta y toma esta operación programada, el padre
+    // libera el vínculo (id 0). Lo capturado se conserva y el registro pasa a
+    // guardarse como captura manual, sin intentar crear un duplicado.
+    useEffect(() => {
+        const idProgramada = datosProgramados?.operacionProgramadaId || null;
+
+        setFormData(prev => (
+            prev.operacion_programada_id === idProgramada
+                ? prev
+                : { ...prev, operacion_programada_id: idProgramada }
+        ));
+    }, [datosProgramados?.operacionProgramadaId]);
 
     const handleFieldChange = (name: string, value: any) => {
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -157,7 +176,8 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
                         observaciones: op.observaciones || '',
                         nombre: op.nombre || '',
                         impulso: op.impulso || '',
-                        nombreRol: nombreRol
+                        nombreRol: nombreRol,
+                        operacion_programada_id: formData.operacion_programada_id
                     });
 
                     if (op.nombre) buscarNombres(op.nombre);

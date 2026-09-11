@@ -2,7 +2,14 @@
 
 use App\Models\User;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Laravel\Fortify\Features;
+
+/*
+ * El sistema no inicia sesión con el correo: config/fortify.php define
+ * 'username' => 'name' y FortifyServiceProvider::authenticateUsing acepta el
+ * nombre o las iniciales del usuario. Estas pruebas usan ese contrato.
+ */
 
 test('login screen can be rendered', function () {
     $response = $this->get(route('login'));
@@ -14,7 +21,7 @@ test('users can authenticate using the login screen', function () {
     $user = User::factory()->withoutTwoFactor()->create();
 
     $response = $this->post(route('login.store'), [
-        'email' => $user->email,
+        'name' => $user->name,
         'password' => 'password',
     ]);
 
@@ -41,7 +48,7 @@ test('users with two factor enabled are redirected to two factor challenge', fun
     ])->save();
 
     $response = $this->post(route('login'), [
-        'email' => $user->email,
+        'name' => $user->name,
         'password' => 'password',
     ]);
 
@@ -54,7 +61,7 @@ test('users can not authenticate with invalid password', function () {
     $user = User::factory()->create();
 
     $this->post(route('login.store'), [
-        'email' => $user->email,
+        'name' => $user->name,
         'password' => 'wrong-password',
     ]);
 
@@ -73,10 +80,13 @@ test('users can logout', function () {
 test('users are rate limited', function () {
     $user = User::factory()->create();
 
-    RateLimiter::increment(md5('login'.implode('|', [$user->email, '127.0.0.1'])), amount: 5);
+    // Misma llave que arma FortifyServiceProvider::configureRateLimiting.
+    $llave = Str::transliterate(Str::lower($user->name).'|127.0.0.1');
+
+    RateLimiter::increment(md5('login'.$llave), amount: 5);
 
     $response = $this->post(route('login.store'), [
-        'email' => $user->email,
+        'name' => $user->name,
         'password' => 'wrong-password',
     ]);
 

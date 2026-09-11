@@ -14,6 +14,10 @@ use App\Models\Aeronave;
 use App\Models\Departamento;
 use App\Models\Personal;
 use App\Models\Bitacora;
+use App\Models\OperacionProgramada;
+use App\Events\OperacionProgramadaCambio;
+use App\Services\SecuenciaMovimientoService;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -289,27 +293,22 @@ class WalkAroundController extends Controller
      */
     public function store(Request $request)
     {
-        $ultimoRegistro = WalkAround::where('matricula', $request->metadata['matricula'])
-            ->orderByDesc('fecha')
-            ->orderByDesc('hora')
-            ->orderByDesc('id')
-            ->first();
+        // La regla de secuencia vive en SecuenciaMovimientoService y se vuelve a
+        // ejecutar aquí contra los registros reales de WalkAround, venga o no de
+        // una operación programada.
+        $secuencia = SecuenciaMovimientoService::validarFinal(
+            $request->metadata['matricula'],
+            $request->metadata['movimiento'],
+            SecuenciaMovimientoService::FUENTE_WALKAROUND
+        );
 
-        if ($ultimoRegistro) {
-            $movimientoAnterior = strtolower($ultimoRegistro->movimiento);
-            $movimientoNuevo = strtolower($request->metadata['movimiento']);
-            if ($movimientoAnterior === $movimientoNuevo) {
-                $debeSer = ($movimientoNuevo === 'entrada') ? 'Salida' : 'Entrada';
-                return response()->json([
-                    'message' => "La matrícula {$request->metadata['matricula']} ya cuenta con un registro de {$request->metadata['movimiento']}. Debe registrar una {$debeSer} primero.",
-                    'data' => [
-                        'ultimo_movimiento' => $ultimoRegistro->movimiento,
-                        'fecha' => $ultimoRegistro->fecha,
-                        'hora' => $ultimoRegistro->hora
-                    ],
-                ], 422);
-            }
+        if (! $secuencia['valido']) {
+            return response()->json([
+                'message' => $secuencia['message'],
+                'data' => $secuencia['data'],
+            ], 422);
         }
+
         DB::beginTransaction();
         try {
             $tipoExistente = DB::connection('remota')
@@ -360,6 +359,16 @@ class WalkAroundController extends Controller
                 'elabora_personal_id'      => auth()->id(),
                 'tipo_aeronave_id'         => $idTipo,
             ]);
+
+            // Trazabilidad con la operación programada que originó el registro.
+            // El estado es independiente del de Operaciones Diarias: la misma
+            // programación puede usarse una vez en cada módulo, nunca dos veces
+            // en el mismo.
+            $usoProgramada = OperacionProgramada::vincular(
+                $request->input('operacion_programada_id'),
+                $walkAround,
+                auth()->id()
+            );
 
             $esAvion = ($request->metadata['aeronave'] === 'Avión');
             $checklistPuro = $request->inspeccionTecnica['checklist'] ?? [];
@@ -412,7 +421,25 @@ class WalkAroundController extends Controller
                 "Se creó el WalkAround #{$walkAround->id} de la matrícula {$walkAround->matricula}."
             );
             DB::commit();
+
+            // Ya confirmado en base de datos: recién ahora se avisa a los demás.
+            if ($usoProgramada) {
+                OperacionProgramadaCambio::emitir(
+                    $usoProgramada->operacionProgramada,
+                    OperacionProgramadaCambio::ACCION_UTILIZADA,
+                    modulo: OperacionProgramada::MODULO_WALKAROUND,
+                );
+            }
+
             return response()->json(['message' => 'WalkAround guardado correctamente', 'id' => $walkAround->id], 201);
+
+        } catch (HttpException $e) {
+            // Reglas de negocio que abortan con un código propio (por ejemplo una
+            // operación programada ya utilizada) no deben convertirse en un 500.
+            DB::rollBack();
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
 
         } catch (\Throwable $e) {
             DB::rollBack();

@@ -29,6 +29,8 @@ use App\Http\Controllers\Api\RemisionController;
 use App\Http\Controllers\Api\TurnoAutotanqueController;
 use App\Http\Controllers\Api\InspeccioAutotanqueController;
 use App\Http\Controllers\Api\NotaOperacionalController;
+use App\Http\Controllers\Api\OperacionProgramadaController;
+use App\Http\Controllers\Api\MatriculaRestringidaController;
 
 Route::post('/despacho', [DespachoController::class, 'store']);
 Route::get('/aeronaves/autocomplete', [AeronaveController::class, 'autocomplete']);
@@ -40,24 +42,6 @@ Route::post('/nuevo-tipo-aeronaves', [TipoAeronaveController::class, 'newTipoAer
 Route::middleware(['auth:sanctum'])->get(
     '/usuarios/buscar',[UsuarioController::class, 'buscar']
 );
-Route::get('/debug-broadcast', function () {
-    return response()->json([
-        'default' => config('broadcasting.default'),
-        'driver' => config('broadcasting.connections.' . config('broadcasting.default') . '.driver'),
-        'connection' => config('broadcasting.connections.' . config('broadcasting.default')),
-        'env_broadcast_connection' => env('BROADCAST_CONNECTION'),
-        'env_broadcast_driver' => env('BROADCAST_DRIVER'),
-    ]);
-});
-Route::get('/test-broadcast', function () {
-    event(new \App\Events\RemisionCreada(777));
-
-    return response()->json([
-        'ok' => true,
-        'default' => config('broadcasting.default'),
-        'driver' => config('broadcasting.connections.' . config('broadcasting.default') . '.driver'),
-    ]);
-});
 Route::middleware('auth:sanctum')
     ->prefix('bitacoras')
     ->name('bitacoras.')
@@ -254,3 +238,46 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('InspeccionAutoTanque')->grou
 });
 
 
+
+/*
+|--------------------------------------------------------------------------
+| Operaciones Programadas (Despacho)
+|--------------------------------------------------------------------------
+| Consultar es abierto a cualquier área autenticada, porque Operaciones
+| Diarias y WalkAround necesitan leer las programadas pendientes.
+| Crear, editar y eliminar queda restringido a Despacho y admin mediante el
+| middleware subdep:operacionesProgramadas.
+*/
+Route::middleware(['api', 'auth:sanctum'])->prefix('OperacionesProgramadas')->group(function () {
+    Route::get('/pendientes', [OperacionProgramadaController::class, 'pendientes']);
+    Route::post('/validar-movimiento', [OperacionProgramadaController::class, 'validarMovimiento']);
+    Route::get('/', [OperacionProgramadaController::class, 'index']);
+    Route::get('/{operacionProgramada}', [OperacionProgramadaController::class, 'show'])->whereNumber('operacionProgramada');
+
+    Route::middleware('subdep:operacionesProgramadas')->group(function () {
+        Route::post('/', [OperacionProgramadaController::class, 'store']);
+        Route::put('/{operacionProgramada}', [OperacionProgramadaController::class, 'update'])->whereNumber('operacionProgramada');
+        Route::delete('/{operacionProgramada}', [OperacionProgramadaController::class, 'destroy'])->whereNumber('operacionProgramada');
+    });
+});
+
+/*
+|--------------------------------------------------------------------------
+| Matrículas restringidas (Despacho)
+|--------------------------------------------------------------------------
+| El único consumidor es el modal de Operaciones Programadas, así que todo el
+| grupo queda detrás de los permisos de Despacho, incluida la lectura.
+*/
+Route::middleware(['api', 'auth:sanctum'])
+    ->prefix('MatriculasRestringidas')
+    ->group(function () {
+        // Consultar quién está restringido lo puede cualquiera que abra la
+        // pantalla; cambiarlo sigue siendo de Despacho.
+        Route::get('/', [MatriculaRestringidaController::class, 'index']);
+
+        Route::middleware('subdep:operacionesProgramadas')->group(function () {
+            Route::post('/', [MatriculaRestringidaController::class, 'store']);
+            Route::put('/{matricula}', [MatriculaRestringidaController::class, 'update']);
+            Route::delete('/{matricula}', [MatriculaRestringidaController::class, 'destroy']);
+        });
+    });

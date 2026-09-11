@@ -25,6 +25,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('despacho/EntregaTurno');
     })->name('entregaTurno');
 
+    Route::get('operacionesProgramadas', function () {
+        return Inertia::render('despacho/OperacionesProgramadas');
+    })->name('operacionesProgramadas');
+
+    // Vista de solo lectura para televisión: sin layout ni navegación, pero
+    // igual de protegida. La consultan Rampa y Tráfico, que no tienen el
+    // subdepartamento de Despacho, así que basta con estar autenticado.
+    Route::get('operacionesProgramadas/pantalla', function () {
+        return Inertia::render('despacho/PantallaOperacionesProgramadas');
+    })->name('pantallaProgramadas');
+
     Route::get('gestionarAeronaves', function () {
         return Inertia::render('despacho/GestionAeronaves');
     })->name('gestionarAeronaves');

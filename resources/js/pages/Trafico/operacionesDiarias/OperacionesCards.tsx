@@ -1,12 +1,17 @@
 import { DetalleOperacion } from './DetalleOperacion';
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FormLlegada } from './FormLlegada';
 import { FormSalida } from './FormSalida';
-import { Filter, Calendar, ArrowDownLeft, ArrowUpRight, X, ChevronDown, Info, Download, History} from 'lucide-react';
+import { Filter, Calendar, CalendarClock, ArrowDownLeft, ArrowUpRight, X, ChevronDown, Info, Download, History} from 'lucide-react';
 import { obtenerOperacionesDiariasApi, obtenerPendientesApi } from '@/stores/apiOperacionesDiarias';
 import ReporteRapidoOperacionesModal from './ReporteRapidoOperacionesModal';
 import ExcelOperacionesModal from './ExcelOperacionesModal';
 import MatriculasPendientes from './MatriculasPendientes';
+import ProgramadasPendientesPanel from '@/pages/despacho/operacionesProgramadas/ProgramadasPendientesPanel';
+import BadgeProgramadas from '@/pages/despacho/operacionesProgramadas/BadgeProgramadas';
+import Swal from 'sweetalert2';
+import { useProgramadasPendientes } from '@/pages/despacho/operacionesProgramadas/useProgramadasPendientes';
+import type { PrecargaProgramada } from '@/pages/despacho/operacionesProgramadas/types';
 import BitacoraModal from '@/pages/BitacoraModal';
 
 interface OperacionesCardsProps {
@@ -49,6 +54,62 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
     const [mostrarBitacora, setMostrarBitacora] = useState(false);
     const [pendientes, setPendientes] = useState<any[]>([]);
     const [mostrarModal, setMostrarModal] = useState(false);
+    const [mostrarProgramadas, setMostrarProgramadas] = useState(false);
+    const [precargasLlegada, setPrecargasLlegada] = useState<Record<number, PrecargaProgramada>>({});
+    const [precargasSalida, setPrecargasSalida] = useState<Record<number, PrecargaProgramada>>({});
+
+    // Las precargas abiertas se leen desde refs dentro del listener del canal.
+    const precargasLlegadaRef = useRef(precargasLlegada);
+    const precargasSalidaRef = useRef(precargasSalida);
+    precargasLlegadaRef.current = precargasLlegada;
+    precargasSalidaRef.current = precargasSalida;
+
+    /**
+     * Alguien más acaba de usar una programación en ESTE módulo. Si la tenemos
+     * abierta en una pestaña, se avisa y se libera el vínculo: el usuario
+     * conserva lo capturado y al guardar entra como registro manual, de modo que
+     * no se intenta crear un duplicado.
+     */
+    const liberarProgramadaTomada = useCallback((idProgramada: number) => {
+        let estabaAbierta = false;
+
+        const liberar = (previas: Record<number, PrecargaProgramada>) => {
+            const entradas = Object.entries(previas);
+            const afectadas = entradas.filter(
+                ([, precarga]) => precarga.operacionProgramadaId === idProgramada
+            );
+
+            if (afectadas.length === 0) return previas;
+
+            estabaAbierta = true;
+
+            return Object.fromEntries(
+                entradas.map(([id, precarga]) => [
+                    Number(id),
+                    precarga.operacionProgramadaId === idProgramada
+                        ? { ...precarga, operacionProgramadaId: 0 }
+                        : precarga
+                ])
+            );
+        };
+
+        setPrecargasLlegada(liberar);
+        setPrecargasSalida(liberar);
+
+        if (!estabaAbierta) return;
+
+        Swal.fire({
+            icon: 'warning',
+            title: 'Operación ya utilizada',
+            text: 'Otro usuario acaba de registrar esta operación programada. Tu captura se conserva y, al guardar, quedará como registro manual.',
+        });
+    }, []);
+
+    // Pendientes de hoy para Operaciones Diarias. La misma consulta alimenta el
+    // contador del botón y la lista del panel.
+    const programadas = useProgramadasPendientes('operaciones_diarias', {
+        alUtilizarEnEsteModulo: evento => liberarProgramadaTomada(evento.id),
+    });
     const [mostrarReporteRapido, setMostrarReporteRapido] = useState(false);
     const [mostrarVistaPreviaExcel, setMostrarVistaPreviaExcel] = useState(false);
     const [claveCacheCargada, setClaveCacheCargada] = useState<string | null>(null);
@@ -257,6 +318,39 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
         window.localStorage.removeItem(obtenerClaveBorrador(tipo, id));
     };
 
+    /** Suelta la precarga de una pestaña cerrada, sin tocar las demás. */
+    const olvidarPrecarga = (tipo: 'llegada' | 'salida', id: number) => {
+        const soltar = (previas: Record<number, PrecargaProgramada>) => {
+            if (!(id in previas)) return previas;
+
+            const { [id]: usada, ...resto } = previas;
+            return resto;
+        };
+
+        if (tipo === 'llegada') {
+            setPrecargasLlegada(soltar);
+            return;
+        }
+
+        setPrecargasSalida(soltar);
+    };
+
+    /**
+     * Siguiente id de pestaña. Considera también las precargas vivas para que un
+     * id reciclado nunca herede los datos de una operación programada anterior.
+     */
+    const siguienteIdPestana = (
+        pestanas: { id: number }[],
+        precargas: Record<number, PrecargaProgramada>
+    ) => {
+        const ids = [
+            ...pestanas.map(pestana => pestana.id),
+            ...Object.keys(precargas).map(Number)
+        ];
+
+        return ids.reduce((mayor, id) => Math.max(mayor, id), 0) + 1;
+    };
+
     const abrirFormularioLlegada = () => {
         if (pestanasLlegada.length === 0) {
             const primeraPestana = { id: 1, titulo: 'Llegada 1' };
@@ -269,10 +363,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
     };
 
     const agregarPestanaLlegada = () => {
-        const siguienteId = pestanasLlegada.reduce(
-            (mayor, pestana) => Math.max(mayor, pestana.id),
-            0
-        ) + 1;
+        const siguienteId = siguienteIdPestana(pestanasLlegada, precargasLlegada);
         const nuevaPestana = {
             id: siguienteId,
             titulo: `Llegada ${siguienteId}`
@@ -287,8 +378,15 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
         const pestanasRestantes = pestanasLlegada.filter(pestana => pestana.id !== id);
 
         eliminarBorrador('llegada', id);
+        olvidarPrecarga('llegada', id);
 
-        if (recargar) cargarDatos();
+        if (recargar) {
+            cargarDatos();
+            // La programada que acaba de usarse ya no debe ofrecerse otra vez.
+            // El evento en tiempo real hace lo mismo; el hook descarta la
+            // consulta repetida si llega en el mismo instante.
+            programadas.recargar();
+        }
 
         if (pestanasRestantes.length === 0) {
             setPestanasLlegada([]);
@@ -305,6 +403,32 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
         }
     };
 
+    /**
+     * Abre una pestaña nueva ya precargada con los datos de una operación
+     * programada. El registro manual sigue disponible con los botones de
+     * siempre; esta es solo la vía principal.
+     */
+    const abrirDesdeProgramada = (precarga: PrecargaProgramada) => {
+        setMostrarProgramadas(false);
+
+        if (precarga.tipo === 'llegada') {
+            const siguienteId = siguienteIdPestana(pestanasLlegada, precargasLlegada);
+
+            setPestanasLlegada(prev => [...prev, { id: siguienteId, titulo: `${precarga.matricula} (prog.)` }]);
+            setPrecargasLlegada(prev => ({ ...prev, [siguienteId]: precarga }));
+            setPestanaLlegadaActiva(siguienteId);
+            setCreando('llegada');
+            return;
+        }
+
+        const siguienteId = siguienteIdPestana(pestanasSalida, precargasSalida);
+
+        setPestanasSalida(prev => [...prev, { id: siguienteId, titulo: `${precarga.matricula} (prog.)` }]);
+        setPrecargasSalida(prev => ({ ...prev, [siguienteId]: precarga }));
+        setPestanaSalidaActiva(siguienteId);
+        setCreando('salida');
+    };
+
     const abrirFormularioSalida = () => {
         if (pestanasSalida.length === 0) {
             const primeraPestana = { id: 1, titulo: 'Salida 1' };
@@ -317,10 +441,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
     };
 
     const agregarPestanaSalida = () => {
-        const siguienteId = pestanasSalida.reduce(
-            (mayor, pestana) => Math.max(mayor, pestana.id),
-            0
-        ) + 1;
+        const siguienteId = siguienteIdPestana(pestanasSalida, precargasSalida);
         const nuevaPestana = {
             id: siguienteId,
             titulo: `Salida ${siguienteId}`
@@ -335,8 +456,15 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
         const pestanasRestantes = pestanasSalida.filter(pestana => pestana.id !== id);
 
         eliminarBorrador('salida', id);
+        olvidarPrecarga('salida', id);
 
-        if (recargar) cargarDatos();
+        if (recargar) {
+            cargarDatos();
+            // La programada que acaba de usarse ya no debe ofrecerse otra vez.
+            // El evento en tiempo real hace lo mismo; el hook descarta la
+            // consulta repetida si llega en el mismo instante.
+            programadas.recargar();
+        }
 
         if (pestanasRestantes.length === 0) {
             setPestanasSalida([]);
@@ -438,6 +566,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                                             nombreRol={nombreRol}
                                             moduloNombre={moduloNombre}
                                             borradorId={obtenerClaveBorrador('llegada', pestana.id)}
+                                            datosProgramados={precargasLlegada[pestana.id] ?? null}
                                             alCerrar={() => cerrarModal(false)}
                                             alGuardar={() => cerrarPestanaLlegada(pestana.id, true)}
                                         />
@@ -501,6 +630,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                                             nombreRol={nombreRol}
                                             moduloNombre={moduloNombre}
                                             borradorId={obtenerClaveBorrador('salida', pestana.id)}
+                                            datosProgramados={precargasSalida[pestana.id] ?? null}
                                             alCerrar={() => cerrarModal(false)}
                                             alGuardar={() => cerrarPestanaSalida(pestana.id, true)}
                                         />
@@ -627,12 +757,34 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                         </button>
                     )}
 
+                    <button
+                        type="button"
+                        onClick={() => setMostrarProgramadas(true)}
+                        title="Iniciar desde una operación programada"
+                        className="relative flex items-center gap-2 rounded bg-[#00677F] px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white shadow-md transition-all hover:bg-[#00586D] active:scale-95"
+                    >
+                        <CalendarClock size={14} />
+                        <span className="hidden sm:inline">PROGRAMADAS</span>
+                        <BadgeProgramadas total={programadas.total} />
+                    </button>
+
                     <button onClick={abrirFormularioLlegada} className="bg-emerald-600 text-white text-[10px] font-black px-3 py-2 rounded shadow-md hover:bg-emerald-700 transition-all active:scale-95 uppercase tracking-wider">
                         + <span className="hidden sm:inline">LLEGADA</span>
                     </button>
                     <button onClick={abrirFormularioSalida} className="bg-red-500 text-white text-[10px] font-black px-3 py-2 rounded shadow-md hover:bg-red-600 transition-all active:scale-95 uppercase tracking-wider">
                         + <span className="hidden sm:inline">SALIDA</span>
                     </button>
+
+                    {mostrarProgramadas && (
+                        <ProgramadasPendientesPanel
+                            modulo="operaciones_diarias"
+                            operacionesHoy={programadas.operaciones}
+                            cargandoHoy={programadas.cargando}
+                            errorHoy={programadas.error}
+                            onCerrar={() => setMostrarProgramadas(false)}
+                            onSeleccionar={abrirDesdeProgramada}
+                        />
+                    )}
                 </div>
             </div>
 

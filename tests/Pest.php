@@ -45,3 +45,53 @@ function something()
 {
     // ..
 }
+
+/**
+ * Usuario con rol admin: pasa cualquier verificación de subdepartamento.
+ */
+function usuarioAdmin(): App\Models\User
+{
+    $usuario = App\Models\User::factory()->create();
+    $rol = App\Models\Role::firstOrCreate(
+        ['slug' => 'admin'],
+        ['nombre' => 'Administrador']
+    );
+    $usuario->roles()->attach($rol->id);
+
+    return $usuario;
+}
+
+/**
+ * Usuario de Despacho con acceso al subdepartamento indicado.
+ */
+function usuarioConSubdepartamento(
+    string $subdepartamento = 'operacionesProgramadas',
+    string $departamento = 'Despacho',
+    string $rol = 'empleado'
+): App\Models\User {
+    $usuario = App\Models\User::factory()->create();
+
+    $rolModelo = App\Models\Role::firstOrCreate(
+        ['slug' => $rol],
+        ['nombre' => ucfirst($rol)]
+    );
+    $usuario->roles()->attach($rolModelo->id);
+
+    $departamentoModelo = App\Models\Departamento::firstOrCreate(['nombre' => $departamento]);
+    $subdepartamentoModelo = App\Models\SubDepartamento::firstOrCreate([
+        'departamento_id' => $departamentoModelo->id,
+        'nombre' => $subdepartamento,
+    ]);
+
+    $usuario->subdepartamentos()->attach($subdepartamentoModelo->id);
+
+    return $usuario;
+}
+
+/**
+ * Usuario de otra área, sin el subdepartamento de Operaciones Programadas.
+ */
+function usuarioSinAcceso(): App\Models\User
+{
+    return usuarioConSubdepartamento('entregaTurno', 'Rampa', 'empleado');
+}

@@ -4,6 +4,10 @@ import axios from 'axios';
 import WalkAroundFirmaModal from '../components/walkAround/ItemTable/WalkAroundFirmaModal';
 import WalkAroundPendientesPanel from '../components/walkAround/ItemTable/WalkAroundPendientesPanel';
 import WalkAroundFormV2 from './steps/WalkAroundFormV2';
+import ProgramadasPendientesPanel from '@/pages/despacho/operacionesProgramadas/ProgramadasPendientesPanel';
+import BadgeProgramadas from '@/pages/despacho/operacionesProgramadas/BadgeProgramadas';
+import { useProgramadasPendientes } from '@/pages/despacho/operacionesProgramadas/useProgramadasPendientes';
+import type { PrecargaProgramada } from '@/pages/despacho/operacionesProgramadas/types';
 import WalkAroundPdfExporter from '../components/walkAround/ItemTable/WalkAroundPdfExporter';
 import BitacoraModal from '@/pages/BitacoraModal';
 import AppLayout from '@/layouts/app-layout';
@@ -14,7 +18,7 @@ import {
     Search, Loader2, Plane, ChevronLeft,
     ChevronRight, ArrowUpRight,
     ArrowDownLeft, Plus, X, Filter, Edit2,
-    Calendar, MapPin, Trash2, ChevronDown, Bell, History
+    Calendar, CalendarClock, MapPin, Trash2, ChevronDown, Bell, History
 } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Walkaround' }];
@@ -65,6 +69,50 @@ const TablaWalkAround = () => {
     const [showForm, setShowForm] = useState(false);
     const [selectedId, setSelectedId] = useState<number | null>(null);
     const [pestanasWalkAround, setPestanasWalkAround] = useState<PestanaWalkAround[]>([]);
+    const [mostrarProgramadas, setMostrarProgramadas] = useState(false);
+    const [precargasProgramadas, setPrecargasProgramadas] = useState<Record<number, PrecargaProgramada>>({});
+
+    /**
+     * Alguien más acaba de usar una programación en WalkAround. Si la tenemos
+     * abierta, se avisa y se libera el vínculo: lo capturado se conserva y al
+     * guardar entra como registro manual, sin intentar un duplicado.
+     */
+    const liberarProgramadaTomada = useCallback((idProgramada: number) => {
+        let estabaAbierta = false;
+
+        setPrecargasProgramadas(previas => {
+            const entradas = Object.entries(previas);
+
+            if (!entradas.some(([, precarga]) => precarga.operacionProgramadaId === idProgramada)) {
+                return previas;
+            }
+
+            estabaAbierta = true;
+
+            return Object.fromEntries(
+                entradas.map(([id, precarga]) => [
+                    Number(id),
+                    precarga.operacionProgramadaId === idProgramada
+                        ? { ...precarga, operacionProgramadaId: 0 }
+                        : precarga
+                ])
+            );
+        });
+
+        if (!estabaAbierta) return;
+
+        Swal.fire({
+            icon: 'warning',
+            title: 'Operación ya utilizada',
+            text: 'Otro usuario acaba de registrar esta operación programada. Tu captura se conserva y, al guardar, quedará como registro manual.',
+        });
+    }, []);
+
+    // Pendientes de hoy para WalkAround. Contador independiente del de
+    // Operaciones Diarias: aquí solo bajan las que se usaron en este módulo.
+    const programadas = useProgramadasPendientes('walkaround', {
+        alUtilizarEnEsteModulo: evento => liberarProgramadaTomada(evento.id),
+    });
     const [pestanaWalkAroundActiva, setPestanaWalkAroundActiva] = useState<number | null>(null);
     const [clavePestanasCargada, setClavePestanasCargada] = useState<string | null>(null);
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
@@ -319,6 +367,28 @@ const TablaWalkAround = () => {
         setShowForm(true);
     };
 
+    /**
+     * Abre una pestaña nueva precargada con una operación programada.
+     * El alta manual sigue disponible en "+ NUEVO REGISTRO".
+     */
+    const abrirDesdeProgramada = (precarga: PrecargaProgramada) => {
+        setMostrarProgramadas(false);
+        setSelectedId(null);
+
+        const siguienteId = pestanasWalkAround.reduce(
+            (mayor, pestana) => Math.max(mayor, pestana.id),
+            0
+        ) + 1;
+
+        setPestanasWalkAround(prev => [...prev, {
+            id: siguienteId,
+            titulo: `${precarga.matricula} (prog.)`
+        }]);
+        setPrecargasProgramadas(prev => ({ ...prev, [siguienteId]: precarga }));
+        setPestanaWalkAroundActiva(siguienteId);
+        setShowForm(true);
+    };
+
     const agregarPestanaWalkAround = () => {
         const siguienteId = pestanasWalkAround.reduce(
             (mayor, pestana) => Math.max(mayor, pestana.id),
@@ -339,9 +409,21 @@ const TablaWalkAround = () => {
 
         eliminarBorradorWalkAround(id);
 
+        // La precarga muere con la pestaña: un id reciclado no puede heredar
+        // los datos de una operación programada anterior.
+        setPrecargasProgramadas(previas => {
+            if (!(id in previas)) return previas;
+
+            const { [id]: usada, ...resto } = previas;
+            return resto;
+        });
+
         if (recargar) {
             loadData(pagina);
             loadPendientes();
+            // La programada recién usada deja de ofrecerse. El evento en tiempo
+            // real hace lo mismo; el hook descarta la consulta repetida.
+            programadas.recargar();
         }
 
         setPestanasWalkAround(pestanasRestantes);
@@ -440,6 +522,19 @@ const TablaWalkAround = () => {
                                 <Filter size={14} />
                                 <span>{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                             </button>
+
+                            {!esAdministrtivo && (
+                                <button
+                                    type="button"
+                                    onClick={() => setMostrarProgramadas(true)}
+                                    title="Iniciar desde una operación programada"
+                                    className="relative flex items-center gap-2 rounded bg-[#00677F] px-4 py-2 text-[10px] font-black uppercase tracking-wider text-white shadow-md transition-all hover:bg-[#00586D] active:scale-95"
+                                >
+                                    <CalendarClock size={14} />
+                                    PROGRAMADAS
+                                    <BadgeProgramadas total={programadas.total} />
+                                </button>
+                            )}
 
                             {!esAdministrtivo && (
                                 <button
@@ -687,6 +782,7 @@ const TablaWalkAround = () => {
                                                 onCancel={handleBack}
                                                 onSaved={() => cerrarPestanaWalkAround(pestana.id, true)}
                                                 borradorId={obtenerClaveBorradorWalkAround(pestana.id)}
+                                                datosProgramados={precargasProgramadas[pestana.id] ?? null}
                                             />
                                         </div>
                                     ))
@@ -694,6 +790,17 @@ const TablaWalkAround = () => {
                             </div>
                         </div>
                     </div>
+                )}
+
+                {mostrarProgramadas && (
+                    <ProgramadasPendientesPanel
+                        modulo="walkaround"
+                        operacionesHoy={programadas.operaciones}
+                        cargandoHoy={programadas.cargando}
+                        errorHoy={programadas.error}
+                        onCerrar={() => setMostrarProgramadas(false)}
+                        onSeleccionar={abrirDesdeProgramada}
+                    />
                 )}
 
                 {mostrarModalFecha && (

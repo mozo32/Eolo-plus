@@ -7,8 +7,9 @@ import {
     verificarOperacionExistenteApi,
     obtenerNombresHistoricosApi
 } from "@/stores/apiOperacionesDiarias";
+import type { PrecargaProgramada } from "@/pages/despacho/operacionesProgramadas/types";
 
-export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datosEdicion, soloLectura = false, borradorId }: {
+export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datosEdicion, soloLectura = false, borradorId, datosProgramados }: {
     alCerrar?: () => void;
     alGuardar?: () => void;
     moduloNombre?: string;
@@ -16,6 +17,8 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
     soloLectura?: boolean
     nombreRol?: string;
     borradorId?: string;
+    /** Precarga proveniente de una operación programada. No convierte el alta en edición. */
+    datosProgramados?: PrecargaProgramada | null;
 }) => {
     const { obtenerTipo } = useMatriculaAutocompleteStore();
     const [cargando, setCargando] = useState(false);
@@ -25,11 +28,11 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
 
     const getInitialState = (fecha?: string) => ({
         id: datosEdicion?.id || null,
-        matricula: datosEdicion?.matricula || '',
-        equipo: datosEdicion?.equipo || '',
-        hora: datosEdicion?.hora?.substring(0, 5) || '',
-        destino: datosEdicion?.lugar || '',
-        pax: datosEdicion?.pax ?? null,
+        matricula: datosEdicion?.matricula || datosProgramados?.matricula || '',
+        equipo: datosEdicion?.equipo || datosProgramados?.equipo || '',
+        hora: datosEdicion?.hora?.substring(0, 5) || datosProgramados?.hora || '',
+        destino: datosEdicion?.lugar || datosProgramados?.lugar || '',
+        pax: datosEdicion?.pax ?? datosProgramados?.pax ?? null,
         tipo_cliente: datosEdicion?.tipo_cliente || '',
         tipo_operacion: datosEdicion?.tipo_operacion || '',
         departamento: moduloNombre,
@@ -38,19 +41,21 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
         fecha: fecha || (
             datosEdicion?.fecha
                 ? new Date(datosEdicion.fecha).toISOString().split('T')[0]
-                : obtenerFechaHoy()
+                : (datosProgramados?.fecha || obtenerFechaHoy())
         ),
-        observaciones: datosEdicion?.observaciones || '',
+        observaciones: datosEdicion?.observaciones || datosProgramados?.observaciones || '',
         nombre: datosEdicion?.nombre || '',
         impulso: datosEdicion?.impulso || '',
-        nombreRol: nombreRol
+        nombreRol: nombreRol,
+        // Trazabilidad con la operación programada que originó el registro.
+        operacion_programada_id: datosProgramados?.operacionProgramadaId ?? null
     });
 
     const [formData, setFormData] = useState(getInitialState());
     const [claveBorradorCargada, setClaveBorradorCargada] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!borradorId || datosEdicion || typeof window === 'undefined') {
+        if (!borradorId || datosEdicion || datosProgramados || typeof window === 'undefined') {
             setClaveBorradorCargada(borradorId ?? null);
             return;
         }
@@ -95,6 +100,20 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
             console.error('No se pudo guardar el borrador de salida', error);
         }
     }, [borradorId, claveBorradorCargada, datosEdicion, formData]);
+
+
+    // Si otro usuario se adelanta y toma esta operación programada, el padre
+    // libera el vínculo (id 0). Lo capturado se conserva y el registro pasa a
+    // guardarse como captura manual, sin intentar crear un duplicado.
+    useEffect(() => {
+        const idProgramada = datosProgramados?.operacionProgramadaId || null;
+
+        setFormData(prev => (
+            prev.operacion_programada_id === idProgramada
+                ? prev
+                : { ...prev, operacion_programada_id: idProgramada }
+        ));
+    }, [datosProgramados?.operacionProgramadaId]);
 
     const estaBloqueado = (moduloRequerido: string) => {
         if (soloLectura) return true;
@@ -163,7 +182,8 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
                         observaciones: op.observaciones || '',
                         nombre: op.nombre || '',
                         impulso: op.impulso || '',
-                        nombreRol: nombreRol
+                        nombreRol: nombreRol,
+                        operacion_programada_id: formData.operacion_programada_id
                     });
                     if (op.nombre) buscarNombres(op.nombre);
                     Swal.mixin({

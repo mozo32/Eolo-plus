@@ -20,7 +20,8 @@ import {
     verificacionEstadoAutotanque,
     remision,
     inspeccionCombustible,
-    registroVisitantes
+    registroVisitantes,
+    operacionesProgramadas
 } from '@/routes'
 import { LayoutGrid } from 'lucide-react'
 
@@ -143,6 +144,10 @@ const ROUTE_CONFIG: Record<
         href: inspeccionCombustible,
         title: 'Inspección Combustible',
     },
+    operacionesprogramadas: {
+        href: operacionesProgramadas,
+        title: 'Operaciones Programadas',
+    },
 }
 
 
@@ -155,6 +160,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                 module: 'Despacho',
                 key: 1,
                 items: [
+                    { id: 'despacho-programadas', title: 'Operaciones Programadas', href: operacionesProgramadas(), icon: LayoutGrid },
                     { id: 'despacho-around', title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
                     { id: 'despacho-turno', title: 'Entrega de Turno', href: entregaTurno(), icon: LayoutGrid },
                     { id: 'despacho-operaciones', title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },

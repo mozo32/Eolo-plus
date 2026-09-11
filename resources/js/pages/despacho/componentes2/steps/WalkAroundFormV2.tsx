@@ -7,6 +7,7 @@ import ExteriorObservaciones, { type ExteriorData } from './ExteriorObservacione
 import MapaDanios3D from '../../components/walkAround/MapaDanios3D';
 import { validateStepOne, validateStepTwo, validateStepThree } from '../formValidators';
 import { guardarWalkAroundApi, fetchWalkaroundDetalle, updateWalkaroundApi, obtenerInfoMatriculaApi } from '@/stores/apiWalkaround';
+import type { PrecargaProgramada } from '@/pages/despacho/operacionesProgramadas/types';
 
 const STEPS = [
     { id: 1, label: 'Información', icon: User },
@@ -38,7 +39,27 @@ interface Props {
     onCancel?: () => void;
     onSaved?: () => void;
     borradorId?: string;
+    /** Precarga proveniente de una operación programada. */
+    datosProgramados?: PrecargaProgramada | null;
 }
+
+/**
+ * Traduce una operación programada al vocabulario de Walk Around: llegada pasa
+ * a ser Entrada, y el lugar se coloca en destino o procedencia según el tipo.
+ * El campo Aeronave (Avión / Helicóptero) no existe en la programación y lo
+ * sigue eligiendo el usuario.
+ */
+const infoDesdeProgramada = (precarga: PrecargaProgramada) => ({
+    ...INITIAL_INFO,
+    matricula: precarga.matricula,
+    movimiento: precarga.movimientoWalkAround,
+    aeronave: '',
+    tipo: precarga.equipo,
+    hora: precarga.hora,
+    destino: precarga.tipo === 'salida' ? precarga.lugar : '',
+    procedencia: precarga.tipo === 'llegada' ? precarga.lugar : '',
+    fecha: precarga.fecha || obtenerFechaHoyMexico(),
+});
 
 interface BorradorWalkAround {
     version: number;
@@ -52,9 +73,11 @@ const esObjeto = (valor: unknown): valor is Record<string, any> => {
     return valor !== null && typeof valor === 'object' && !Array.isArray(valor);
 };
 
-const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId }: Props) => {
+const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId, datosProgramados }: Props) => {
     const [step, setStep] = useState(1);
-    const [infoData, setInfoData] = useState<any>(() => crearInitialInfo());
+    const [infoData, setInfoData] = useState<any>(() =>
+        datosProgramados ? infoDesdeProgramada(datosProgramados) : crearInitialInfo()
+    );
     const [inspeccion, setInspeccion] = useState<any>({});
     const [exteriorData, setExteriorData] = useState<ExteriorData>(INITIAL_EXTERIOR);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -63,7 +86,7 @@ const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId }: Props) => {
     const [claveBorradorCargada, setClaveBorradorCargada] = useState<string | null>(null);
 
     useEffect(() => {
-        if (id || !borradorId || typeof window === 'undefined') {
+        if (id || !borradorId || datosProgramados || typeof window === 'undefined') {
             setClaveBorradorCargada(borradorId ?? null);
             return;
         }
@@ -223,6 +246,10 @@ const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId }: Props) => {
                 const { fotos, puntos3D, numeroEstaticas, ...checklist } = inspeccion;
                 const payload = {
                     id: id || null,
+                    // Trazabilidad con la operación programada que originó el registro.
+                    // Un 0 significa que el padre liberó el vínculo porque otro
+                    // usuario tomó la programación: se guarda como captura manual.
+                    operacion_programada_id: datosProgramados?.operacionProgramadaId || null,
                     metadata: infoData,
                     inspeccionTecnica: { checklist, numeroEstaticas, fotos: fotos?.map((f: any) => f.base64 || f) || [], puntos3D: puntos3D || [] },
                     cierreYFirmas: exteriorData,
