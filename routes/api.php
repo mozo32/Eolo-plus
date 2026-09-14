@@ -180,6 +180,8 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('OperacionesDiarias')->group(
     Route::get('/verificar', [OperacionesDiariasController::class, 'verificarExistente']);
     Route::get('/nombres/{matricula}', [OperacionesDiariasController::class, 'obtenerNombresPorMatricula']);
     Route::get('/pendientes', [OperacionesDiariasController::class, 'obtenerPendientes']);
+    // Solo FBO: la verificación de rol vive en el controlador y responde 403.
+    Route::patch('/{id}/cancelar', [OperacionesDiariasController::class, 'cancelar'])->whereNumber('id');
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('MovimientosCSAE')->group(function () {
     Route::get('/pendientes-salida',[MovimientoCSAEController::class, 'pendientesSalida']);

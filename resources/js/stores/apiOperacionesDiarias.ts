@@ -177,3 +177,37 @@ export async function obtenerPendientesApi(modulo: string) {
 
     return data;
 }
+
+/** Error con el código HTTP, para distinguir un 409 (ya cancelada) de un fallo real. */
+export class ErrorOperacionDiaria extends Error {
+    constructor(message: string, public readonly status: number, public readonly codigo?: string) {
+        super(message);
+        this.name = 'ErrorOperacionDiaria';
+    }
+}
+
+/**
+ * Cancela una operación diaria (solo FBO). No la elimina: el backend cambia
+ * únicamente status a false y responde 409 si ya estaba cancelada.
+ */
+export async function cancelarOperacionDiariaApi(id: number) {
+    const xsrf = getXsrfToken();
+
+    const res = await fetch(`/api/OperacionesDiarias/${id}/cancelar`, {
+        method: 'PATCH',
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-XSRF-TOKEN': xsrf,
+        },
+        credentials: 'same-origin',
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+        throw new ErrorOperacionDiaria(data?.message || 'No se pudo cancelar la operación', res.status, data?.codigo);
+    }
+
+    return data as { message: string; operacion: Record<string, unknown> };
+}

@@ -33,6 +33,7 @@ class OperacionDiaria extends Model
         'tipo_cliente',
         'tipo_operacion',
         'validaciones',
+        'status',
     ];
 
     /**
@@ -41,6 +42,7 @@ class OperacionDiaria extends Model
     protected $casts = [
         'validaciones' => 'array',
         'fecha' => 'date',
+        'status' => 'boolean',
     ];
 
     /**
@@ -49,6 +51,17 @@ class OperacionDiaria extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Scope: solo operaciones activas (no canceladas).
+     *
+     * Es el filtro que usan las consultas operativas: último movimiento,
+     * pernocta, conteos y pendientes. El historial no lo aplica.
+     */
+    public function scopeActivas($query)
+    {
+        return $query->where('status', true);
     }
 
     /**

@@ -193,7 +193,9 @@ class OperacionesDiariasController extends Controller
 
     public function index(Request $request)
     {
-        $query = OperacionDiaria::with('user');
+        // Las canceladas se conservan en la base de datos y en la bitácora,
+        // pero no se muestran en el listado de Operaciones Diarias.
+        $query = OperacionDiaria::activas()->with('user');
 
         if ($request->filled('buscar')) {
             $query->where('matricula', 'LIKE', '%' . $request->buscar . '%');
@@ -767,6 +769,59 @@ class OperacionesDiariasController extends Controller
             ]);
         });
     }
+    /**
+     * Cancela una operación diaria: solo cambia status a false.
+     *
+     * El registro se conserva en el historial y deja de contar como movimiento
+     * operativo. No toca la operación programada que la originó ni WalkAround.
+     * Exclusivo del rol FBO; ocultar el botón en el frontend no basta.
+     */
+    public function cancelar(Request $request, int $id): JsonResponse
+    {
+        if (! $request->user()?->hasRole('fbo')) {
+            return response()->json([
+                'message' => 'Solo el personal FBO puede cancelar operaciones.',
+            ], 403);
+        }
+
+        $operacion = OperacionDiaria::findOrFail($id);
+
+        // Atómico: si dos usuarios cancelan a la vez, solo uno afecta una fila.
+        $afectadas = OperacionDiaria::query()
+            ->whereKey($operacion->id)
+            ->where('status', true)
+            ->update([
+                'status' => false,
+                'updated_at' => now(),
+            ]);
+
+        if ($afectadas === 0) {
+            return response()->json([
+                'message' => 'La operación ya se encuentra cancelada.',
+                'codigo' => 'ya_cancelada',
+            ], 409);
+        }
+
+        $operacion->refresh();
+
+        Bitacora::log(
+            modulo: Bitacora::MODULO_OPERACIONES_DIARIAS,
+            accion: Bitacora::ACCION_DESACTIVAR,
+            descripcion:
+                "Se canceló la {$operacion->tipo} " .
+                "en Operaciones Diarias #{$operacion->id} " .
+                "de la matrícula {$operacion->matricula}.",
+            registroId: $operacion->id,
+            datosAnteriores: ['status' => true],
+            datosNuevos: ['status' => false],
+        );
+
+        return response()->json([
+            'message' => 'La operación fue cancelada correctamente.',
+            'operacion' => $operacion,
+        ]);
+    }
+
     public function buscarPorMatricula(string $matricula): JsonResponse
     {
         try {
@@ -833,7 +888,9 @@ class OperacionesDiariasController extends Controller
             'modulo' => 'required|string'
         ]);
 
-        $operacion = OperacionDiaria::where('matricula', $request->matricula)
+        // Una operación cancelada no cuenta como existente: se permite crear otra.
+        $operacion = OperacionDiaria::activas()
+            ->where('matricula', $request->matricula)
             ->where('fecha', $request->fecha)
             ->where('tipo', $request->tipo)
             ->first();
@@ -869,7 +926,8 @@ class OperacionesDiariasController extends Controller
         if (!$modulo) {
             return response()->json(['error' => 'El módulo es requerido'], 400);
         }
-        $pendientes = OperacionDiaria::where(function ($query) use ($modulo) {
+        $pendientes = OperacionDiaria::activas()
+            ->where(function ($query) use ($modulo) {
                 $query->whereJsonDoesntContain('validaciones', $modulo)
                     ->orWhereNull('validaciones');
             })

@@ -389,7 +389,8 @@ class RemisionController extends Controller
     }
 
     public function matriculaHora($matricula){
-        $op = OperacionDiaria::where('matricula', $matricula)
+        $op = OperacionDiaria::activas()
+                            ->where('matricula', $matricula)
                             ->where('tipo', 'llegada')
                             ->selectRaw("DATE_FORMAT(hora, '%H:%i') as hora")
                             ->orderBy('fecha', 'desc')

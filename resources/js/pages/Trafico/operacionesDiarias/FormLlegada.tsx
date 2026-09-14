@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Swal from "sweetalert2";
 import {
     guardarOperacionesDiariasApi,
-    verificarOperacionExistenteApi,
-    obtenerNombresHistoricosApi
+    verificarOperacionExistenteApi
 } from "@/stores/apiOperacionesDiarias";
+import { useResponsablesPorMatricula } from "./useResponsablesPorMatricula";
 import InputMatricula from "@/pages/InputMatricula";
 import { useMatriculaAutocompleteStore } from "./useMatriculaAutocompleteStore";
 import type { PrecargaProgramada } from "@/pages/despacho/operacionesProgramadas/types";
@@ -32,7 +32,6 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
 }) => {
     const { obtenerTipo } = useMatriculaAutocompleteStore();
     const [cargando, setCargando] = useState(false);
-    const [sugerenciasNombres, setSugerenciasNombres] = useState<string[]>([]);
     const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
     const tienePermisoSeguridadFBO = moduloNombre === 'Seguridad' || nombreRol === 'FBO';
     const obtenerFechaHoy = () => new Date().toLocaleDateString('sv-SE');
@@ -65,6 +64,27 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
     });
 
     const [formData, setFormData] = useState(getInitialState());
+
+    /** true cuando el nombre actual se eligió de la lista de responsables. */
+    const nombreDeListaRef = useRef(false);
+
+    // Responsables de la matrícula efectiva del formulario, venga de donde
+    // venga (tecleo, autocompletado, programada o caché). Es independiente de
+    // la detección de programadas: no toca matrícula ni operacion_programada_id.
+    const { sugerenciasNombres, recargarResponsables } = useResponsablesPorMatricula(formData.matricula, {
+        alCambiarDeMatricula: nuevosNombres => {
+            if (!nombreDeListaRef.current) return;
+
+            // El nombre venía de la lista de otra matrícula: si ya no está en
+            // la nueva, se limpia. Uno escrito a mano se respeta.
+            setFormData(prev => {
+                const limpio = prev.nombre.replace(/^CAPITAN\.\s/, "");
+                if (nuevosNombres.includes(limpio)) return prev;
+                nombreDeListaRef.current = false;
+                return { ...prev, nombre: '' };
+            });
+        },
+    });
     const [claveBorradorCargada, setClaveBorradorCargada] = useState<string | null>(null);
 
     useEffect(() => {
@@ -146,7 +166,8 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
             continuar_manual: false
         }));
 
-        if (precarga.matricula) buscarNombres(precarga.matricula);
+        // Con la matrícula del objeto: el setState de arriba aún no se aplica.
+        recargarResponsables(precarga.matricula);
     };
 
     // Detección de programadas al capturar la matrícula a mano. El dueño del
@@ -184,24 +205,9 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
         setFormData(getInitialState(fecha));
     };
 
-    const buscarNombres = async (busqueda: string) => {
-        if (busqueda.length < 2) {
-            setSugerenciasNombres([]);
-            return;
-        }
-        try {
-            const nombres = await obtenerNombresHistoricosApi(busqueda);
-            setSugerenciasNombres(nombres);
-            setMostrarSugerencias(true);
-        } catch (error) {
-            console.error(error);
-        }
-    };
-
     const handleMatriculaSelect = async (matricula: string) => {
         const upperMat = matricula.toUpperCase();
         handleFieldChange("matricula", upperMat);
-        buscarNombres(upperMat);
 
         if (upperMat.length > 2) {
             try {
@@ -237,7 +243,6 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
                         continuar_manual: formData.continuar_manual
                     });
 
-                    if (op.nombre) buscarNombres(op.nombre);
 
                     Swal.mixin({
                         toast: true,
@@ -587,13 +592,14 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
                                 disabled={soloLectura || !tienePermisoSeguridadFBO}
                                 onFocus={() => {
                                     const valorLimpio = formData.nombre.replace(/^CAPITAN\.\s/, "");
-                                    if (valorLimpio.length >= 2) setMostrarSugerencias(true);
+                                    if (sugerenciasNombres.length > 0 || valorLimpio.length >= 2) setMostrarSugerencias(true);
                                 }}
                                 onBlur={() => setTimeout(() => setMostrarSugerencias(false), 200)}
                                 onChange={(e) => {
                                     const nuevoValor = e.target.value.toUpperCase();
                                     const tienePrefijo = formData.nombre.startsWith("CAPITAN. ");
                                     const prefijo = tienePrefijo ? "CAPITAN. " : "";
+                                    nombreDeListaRef.current = false;
                                     handleFieldChange("nombre", `${prefijo}${nuevoValor}`);
                                 }}
                             />
@@ -606,6 +612,7 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
                                         key={index}
                                         onMouseDown={(e) => {
                                             e.preventDefault();
+                                            nombreDeListaRef.current = true;
                                             handleFieldChange("nombre", nombreSug.toUpperCase());
                                             setMostrarSugerencias(false);
                                         }}

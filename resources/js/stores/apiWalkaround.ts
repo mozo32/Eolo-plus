@@ -8,6 +8,7 @@ function getXsrfToken(): string {
 
 export async function guardarWalkAroundApi(form: any) {
     const xsrf = getXsrfToken();
+    console.log(form);
     const res = await fetch("/api/walkarounds", {
         method: "POST",
         headers: {

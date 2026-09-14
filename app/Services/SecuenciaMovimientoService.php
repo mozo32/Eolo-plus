@@ -66,7 +66,8 @@ class SecuenciaMovimientoService
 
     public static function ultimoMovimientoOperacionDiaria(string $matricula): ?OperacionDiaria
     {
-        return OperacionDiaria::query()
+        // Una operación cancelada no es un movimiento: no cuenta en la secuencia.
+        return OperacionDiaria::activas()
             ->where('matricula', $matricula)
             ->orderByDesc('fecha')
             ->orderByDesc('hora')

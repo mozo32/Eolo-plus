@@ -2,8 +2,8 @@ import { DetalleOperacion } from './DetalleOperacion';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FormLlegada } from './FormLlegada';
 import { FormSalida } from './FormSalida';
-import { Filter, Calendar, CalendarClock, ArrowDownLeft, ArrowUpRight, X, ChevronDown, Info, Download, History} from 'lucide-react';
-import { obtenerOperacionesDiariasApi, obtenerPendientesApi } from '@/stores/apiOperacionesDiarias';
+import { Filter, Calendar, CalendarClock, ArrowDownLeft, ArrowUpRight, X, ChevronDown, Info, Download, History, Ban } from 'lucide-react';
+import { cancelarOperacionDiariaApi, ErrorOperacionDiaria, obtenerOperacionesDiariasApi, obtenerPendientesApi } from '@/stores/apiOperacionesDiarias';
 import ReporteRapidoOperacionesModal from './ReporteRapidoOperacionesModal';
 import ExcelOperacionesModal from './ExcelOperacionesModal';
 import MatriculasPendientes from './MatriculasPendientes';
@@ -81,6 +81,12 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
     const [mostrarProgramadas, setMostrarProgramadas] = useState(false);
     const [precargasLlegada, setPrecargasLlegada] = useState<Record<number, PrecargaProgramada>>({});
     const [precargasSalida, setPrecargasSalida] = useState<Record<number, PrecargaProgramada>>({});
+    /** Id de la operación cuya cancelación está en curso; bloquea el botón mientras tanto. */
+    const [cancelando, setCancelando] = useState<number | null>(null);
+
+    // Misma convención que el resto del archivo. El backend vuelve a verificar
+    // el rol en la sesión: ocultar el botón no es la protección.
+    const esFbo = nombreRol === 'FBO';
 
     // Las precargas abiertas se leen desde refs dentro del listener del canal.
     const precargasLlegadaRef = useRef(precargasLlegada);
@@ -588,6 +594,51 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
         setStripExpandida(stripExpandida === id ? null : id);
     };
 
+    /** Quita la operación cancelada del listado sin recargar; el registro sigue en la base de datos. */
+    const quitarDelListado = (id: number) => {
+        setRegistros(previos => previos.filter(op => op.id !== id));
+        setMeta((previo: { total?: number } | null) => (previo ? { ...previo, total: Math.max(0, (previo.total ?? 1) - 1) } : previo));
+    };
+
+    const cancelarOperacion = async (op: { id: number; tipo: string; matricula: string; status?: boolean }) => {
+        if (cancelando !== null) return;
+
+        const confirmacion = await Swal.fire({
+            title: 'Cancelar operación',
+            text: `¿Deseas cancelar la ${op.tipo === 'llegada' ? 'llegada' : 'salida'} de la matrícula ${op.matricula}? El registro se conservará, pero quedará marcado como inactivo.`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, cancelar',
+            cancelButtonText: 'No, regresar',
+            confirmButtonColor: '#dc2626',
+            reverseButtons: true,
+        });
+
+        if (!confirmacion.isConfirmed) return;
+
+        setCancelando(op.id);
+
+        try {
+            const { message } = await cancelarOperacionDiariaApi(op.id);
+            if (stripExpandida === op.id) setStripExpandida(null);
+            quitarDelListado(op.id);
+            Swal.fire({ icon: 'success', title: 'Operación cancelada', text: message, timer: 2500, showConfirmButton: false });
+        } catch (error) {
+            const mensaje = error instanceof Error ? error.message : 'No se pudo cancelar la operación';
+
+            // 409: otro usuario la canceló antes. Ya no debe verse; en cualquier
+            // otro fallo el estado no cambia.
+            if (error instanceof ErrorOperacionDiaria && error.status === 409) {
+                if (stripExpandida === op.id) setStripExpandida(null);
+                quitarDelListado(op.id);
+            }
+
+            Swal.fire({ icon: 'error', title: 'No se pudo cancelar', text: mensaje });
+        } finally {
+            setCancelando(null);
+        }
+    };
+
     const limpiarFiltros = () => {
         setFiltros({
             buscar: '',
@@ -1042,10 +1093,25 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                                                 <div className="col-span-1 text-center font-bold">{op.pax}</div>
                                                 <div className="col-span-1 text-center font-bold text-slate-400">{op.equipaje || 0}</div>
                                                 <div className="col-span-2 text-center text-[9px] font-bold uppercase text-slate-500">{op.tipo_cliente}</div>
-                                                <div className="col-span-1 flex justify-end gap-1.5">
+                                                <div className="col-span-1 flex items-center justify-end gap-1.5">
                                                     {op.validaciones?.map((v: string) => (
                                                         <span key={v} title={v} className={`w-3 h-3 rounded-full shadow-sm border border-white/50 ${COLORES_DEPARTAMENTOS[v] || 'bg-slate-300'}`}></span>
                                                     ))}
+                                                    {esFbo && (
+                                                        <button
+                                                            type="button"
+                                                            title="Cancelar operación"
+                                                            aria-label="Cancelar operación"
+                                                            disabled={cancelando !== null}
+                                                            onClick={e => {
+                                                                e.stopPropagation();
+                                                                cancelarOperacion(op);
+                                                            }}
+                                                            className="ml-1 rounded-lg p-1.5 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                                        >
+                                                            <Ban size={16} strokeWidth={2.5} className={cancelando === op.id ? 'animate-pulse' : ''} />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                             {stripExpandida === op.id && (

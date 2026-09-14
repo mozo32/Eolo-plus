@@ -648,7 +648,7 @@ class ChecklistTurnoController extends Controller
     {
         $fecha = $request->query('fecha', now()->toDateString());
 
-        $operaciones = OperacionDiaria::query()
+        $operaciones = OperacionDiaria::activas()
             ->whereDate('fecha', $fecha)
             ->get([
                 'id',

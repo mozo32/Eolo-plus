@@ -330,7 +330,8 @@ class PernoctaDiaController extends Controller
             ->unique()
             ->values();
 
-        $operaciones = OperacionDiaria::query()
+        // Solo operaciones activas: una cancelada no mueve la aeronave.
+        $operaciones = OperacionDiaria::activas()
             ->whereIn('matricula', $matriculas)
             ->orderBy('fecha', 'asc')
             ->orderBy('hora', 'asc')

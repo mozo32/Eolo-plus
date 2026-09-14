@@ -220,7 +220,7 @@ class EntregaTurnoController extends Controller
         }
     }
     public function OperacionDiaria(){
-        $OPD = OperacionDiaria::whereDate('fecha', now()->toDateString())->get();
+        $OPD = OperacionDiaria::activas()->whereDate('fecha', now()->toDateString())->get();
 
         $totalSalidas = $OPD->where('tipo', 'salida')->count();
         $totalLlegadas = $OPD->where('tipo', 'llegada')->count();
