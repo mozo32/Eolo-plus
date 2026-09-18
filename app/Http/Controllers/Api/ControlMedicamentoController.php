@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ControlMedicamento;
-use App\Models\medicamento;
+use App\Models\Medicamento;
 use App\Models\EntregaMedicamento;
 use App\Models\MovimientoMedicamento;
 use App\Models\User;
@@ -328,7 +328,7 @@ class ControlMedicamentoController extends Controller
 
     public function medicamentos()
     {
-        $data = medicamento::withSum(['entregas as total_entregado' => function ($query) {
+        $data = Medicamento::withSum(['entregas as total_entregado' => function ($query) {
                 $query->where('status', 'A');
             }], 'cantidad')
             ->where('status', 'A')
@@ -651,7 +651,7 @@ class ControlMedicamentoController extends Controller
 
         try {
             return DB::transaction(function () use ($validated) {
-                $medicamento = medicamento::where('status', 'A')
+                $medicamento = Medicamento::where('status', 'A')
                     ->findOrFail($validated['medicamentoId']);
 
                 if ($medicamento->cantidad < $validated['cantidad']) {
@@ -704,7 +704,7 @@ class ControlMedicamentoController extends Controller
 
         try {
             return DB::transaction(function () use ($validated, $id) {
-                $medicamento = medicamento::where('status', 'A')
+                $medicamento = Medicamento::where('status', 'A')
                     ->findOrFail($id);
 
                 $medicamento->increment('cantidad', $validated['cantidad']);
@@ -757,7 +757,7 @@ class ControlMedicamentoController extends Controller
     {
         try {
             return DB::transaction(function () use ($id) {
-                $medicamento = medicamento::where('status', 'A')
+                $medicamento = Medicamento::where('status', 'A')
                     ->findOrFail($id);
 
                 $medicamento->status = 'N';
@@ -817,7 +817,7 @@ class ControlMedicamentoController extends Controller
             ]);
 
             return DB::transaction(function () use ($validated) {
-                $medicamento = medicamento::create([
+                $medicamento = Medicamento::create([
                     'nombre' => trim($validated['nombre']),
                     'cantidad' => $validated['stockInicial'],
                     'status' => 'A',

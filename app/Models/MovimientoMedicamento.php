@@ -26,7 +26,7 @@ class MovimientoMedicamento extends Model
 
     public function medicamento(): BelongsTo
     {
-        return $this->belongsTo(medicamento::class, 'medicamento_id');
+        return $this->belongsTo(Medicamento::class, 'medicamento_id');
     }
 
     public function usuario(): BelongsTo

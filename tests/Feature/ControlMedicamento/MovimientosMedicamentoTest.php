@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\EntregaMedicamento;
-use App\Models\medicamento;
+use App\Models\Medicamento;
 use App\Models\MovimientoMedicamento;
 use App\Models\Role;
 use App\Models\User;
@@ -20,9 +20,9 @@ function usuarioMedicamentos(string $slug = 'empleado', string $nombre = 'Emplea
     return $usuario;
 }
 
-function medicamentoActivo(array $extra = []): medicamento
+function medicamentoActivo(array $extra = []): Medicamento
 {
-    return medicamento::create(array_merge(['nombre' => 'PARACETAMOL', 'cantidad' => 10, 'status' => 'A'], $extra));
+    return Medicamento::create(array_merge(['nombre' => 'PARACETAMOL', 'cantidad' => 10, 'status' => 'A'], $extra));
 }
 
 test('agregar un medicamento deja un movimiento NUEVO con la cantidad inicial y el usuario', function () {
