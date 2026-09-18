@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Swal from "sweetalert2";
+import { Download, FileText, Loader2, X } from "lucide-react";
 import {
     Document,
     Page,
@@ -13,6 +14,7 @@ import {
     Path,
 } from "@react-pdf/renderer";
 import { fetchCierresMedicamento } from "@/stores/apiControlMedicamento";
+import type { EntregaCierre } from "./types";
 
 const GREEN = "#003E51";
 const BORDER = "#111111";
@@ -178,6 +180,32 @@ const styles = StyleSheet.create({
         fontSize: 9,
         fontWeight: "bold" as any,
     },
+    colEntregaReceptor: {
+        width: "30%",
+    },
+    colEntregaMedicamento: {
+        width: "24%",
+    },
+    colEntregaCantidad: {
+        width: "10%",
+        textAlign: "center",
+    },
+    colEntregaEntrego: {
+        width: "20%",
+    },
+    colEntregaFecha: {
+        width: "16%",
+        textAlign: "center",
+    },
+    sinEntregas: {
+        borderWidth: 1,
+        borderColor: BORDER,
+        padding: 8,
+        fontSize: 8,
+        color: GRAY_TEXT,
+        textAlign: "center",
+        textTransform: "uppercase",
+    },
     emptyBox: {
         padding: 20,
         borderWidth: 1,
@@ -287,6 +315,23 @@ const obtenerEstatus = (stock: number) => {
     };
 };
 
+/** "2026-09-18T17:56:30.000000Z" (o "2026-09-18 17:56:30") → "18/09/2026 17:56" en hora local. */
+function formatearFechaHora(valor?: string | null): string {
+    if (!valor) return "-";
+    const fecha = new Date(valor);
+    if (Number.isNaN(fecha.getTime())) return String(valor);
+
+    return fecha.toLocaleString("es-MX", {
+        timeZone: "America/Mexico_City",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+    });
+}
+
 function CierreMedicamentoPdfDoc({
     cierres,
     fechaInicio,
@@ -332,6 +377,7 @@ function CierreMedicamentoPdfDoc({
                 {cierres.map((cierre) => {
                     const medicamentos = normalizarJson(cierre.medicamentos);
                     const aparatos = normalizarJson(cierre.aparatos);
+                    const entregas: EntregaCierre[] = Array.isArray(cierre.entregas) ? cierre.entregas : [];
 
                     return (
                         <View key={cierre.id} style={styles.cierreBox} wrap={false}>
@@ -411,6 +457,45 @@ function CierreMedicamentoPdfDoc({
                                     <Text style={styles.value}>{aparatos.estetoscopio ? "Sí" : "No"}</Text>
                                 </View>
                             </View>
+
+                            {/* Entregas finalizadas por este cierre (control_medicamento_id = cierre.id). */}
+                            <Text style={styles.sectionTitle}>Entregas de medicamentos del turno</Text>
+
+                            {entregas.length === 0 ? (
+                                <Text style={styles.sinEntregas}>
+                                    No se registraron entregas de medicamentos durante este turno
+                                </Text>
+                            ) : (
+                                <View style={styles.table}>
+                                    <View style={styles.tableRow}>
+                                        <Text style={[styles.th, styles.colEntregaReceptor]}>Recibió</Text>
+                                        <Text style={[styles.th, styles.colEntregaMedicamento]}>Medicamento</Text>
+                                        <Text style={[styles.th, styles.colEntregaCantidad]}>Cant.</Text>
+                                        <Text style={[styles.th, styles.colEntregaEntrego]}>Entregó</Text>
+                                        <Text style={[styles.th, styles.colEntregaFecha]}>Fecha y hora</Text>
+                                    </View>
+
+                                    {entregas.map((entrega) => (
+                                        <View key={entrega.id} style={styles.tableRow}>
+                                            <Text style={[styles.td, styles.colEntregaReceptor]}>
+                                                {String(entrega.receptor || "-").toUpperCase()}
+                                            </Text>
+                                            <Text style={[styles.td, styles.colEntregaMedicamento]}>
+                                                {String(entrega.medicamento?.nombre || "-").toUpperCase()}
+                                            </Text>
+                                            <Text style={[styles.td, styles.colEntregaCantidad]}>
+                                                {entrega.cantidad}
+                                            </Text>
+                                            <Text style={[styles.td, styles.colEntregaEntrego]}>
+                                                {String(entrega.entregado_por?.name || entrega.capturado_por?.name || "-").toUpperCase()}
+                                            </Text>
+                                            <Text style={[styles.td, styles.colEntregaFecha]}>
+                                                {formatearFechaHora(entrega.created_at)}
+                                            </Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
                         </View>
                     );
                 })}
@@ -440,16 +525,25 @@ export default function PdfExporterControlMedicamento({
     fechaFin: string | null;
     onDone: () => void;
 }) {
+    const [blob, setBlob] = useState<Blob | null>(null);
+    const [urlVistaPrevia, setUrlVistaPrevia] = useState<string | null>(null);
+    const [cargando, setCargando] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const abierto = Boolean(fechaInicio && fechaFin);
+
+    // Se genera el PDF una sola vez; la vista previa y la descarga usan el
+    // mismo blob, así el archivo descargado es idéntico a lo que se ve.
     useEffect(() => {
         if (!fechaInicio || !fechaFin) return;
 
-        const generarPdf = async () => {
-            Swal.fire({
-                title: "Generando PDF",
-                text: "Preparando reporte de cierres...",
-                allowOutsideClick: false,
-                didOpen: () => Swal.showLoading(),
-            });
+        let cancelado = false;
+        let url: string | null = null;
+
+        const generar = async () => {
+            setCargando(true);
+            setError(null);
+            setBlob(null);
 
             try {
                 const response = await fetchCierresMedicamento({
@@ -459,7 +553,7 @@ export default function PdfExporterControlMedicamento({
 
                 const cierres = Array.isArray(response) ? response : [];
 
-                const blob = await pdf(
+                const generado = await pdf(
                     <CierreMedicamentoPdfDoc
                         cierres={cierres}
                         fechaInicio={fechaInicio}
@@ -467,36 +561,137 @@ export default function PdfExporterControlMedicamento({
                     />
                 ).toBlob();
 
-                const url = URL.createObjectURL(blob);
+                if (cancelado) return;
 
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `Cierres_Medicamento_${fechaInicio}_${fechaFin}.pdf`;
-                a.click();
-
-                URL.revokeObjectURL(url);
-
-                Swal.fire({
-                    icon: "success",
-                    title: "PDF descargado",
-                    timer: 1500,
-                    showConfirmButton: false,
-                });
-            } catch (error) {
-                console.error(error);
-
-                Swal.fire({
-                    icon: "error",
-                    title: "Error",
-                    text: "No se pudo generar el PDF",
-                });
+                url = URL.createObjectURL(generado);
+                setBlob(generado);
+                setUrlVistaPrevia(url);
+            } catch (e) {
+                console.error(e);
+                if (!cancelado) setError("No se pudo generar el PDF");
             } finally {
-                onDone();
+                if (!cancelado) setCargando(false);
             }
         };
 
-        generarPdf();
+        void generar();
+
+        return () => {
+            cancelado = true;
+            if (url) URL.revokeObjectURL(url);
+            setUrlVistaPrevia(null);
+            setBlob(null);
+        };
     }, [fechaInicio, fechaFin]);
 
-    return null;
+    useEffect(() => {
+        if (!abierto) return;
+
+        const cerrarConEscape = (event: KeyboardEvent) => {
+            if (event.key === "Escape") onDone();
+        };
+
+        window.addEventListener("keydown", cerrarConEscape);
+        return () => window.removeEventListener("keydown", cerrarConEscape);
+    }, [abierto, onDone]);
+
+    if (!abierto) return null;
+
+    const descargar = () => {
+        if (!blob || !urlVistaPrevia) return;
+
+        const a = document.createElement("a");
+        a.href = urlVistaPrevia;
+        a.download = `Cierres_Medicamento_${fechaInicio}_${fechaFin}.pdf`;
+        a.click();
+
+        Swal.fire({
+            icon: "success",
+            title: "PDF descargado",
+            timer: 1500,
+            showConfirmButton: false,
+        });
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5">
+            <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onClick={onDone} />
+
+            <div className="relative z-10 flex h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600">
+                            <FileText size={20} />
+                        </div>
+
+                        <div className="min-w-0">
+                            <h2 className="truncate text-sm font-black uppercase tracking-wide text-slate-800">
+                                Vista previa del reporte de cierres
+                            </h2>
+                            <p className="truncate text-xs text-slate-500">
+                                Control Médico · {formatearFecha(fechaInicio!)} al {formatearFecha(fechaFin!)}
+                            </p>
+                        </div>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={onDone}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                        title="Cerrar"
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <div className="min-h-0 flex-1 bg-slate-100 p-3 sm:p-4">
+                    {cargando && (
+                        <div className="flex h-full flex-col items-center justify-center rounded-xl border border-slate-200 bg-white">
+                            <Loader2 size={36} className="mb-3 animate-spin text-red-600" />
+                            <p className="text-sm font-black uppercase tracking-wide text-slate-700">Generando vista previa</p>
+                            <p className="mt-1 text-xs text-slate-400">Preparando reporte de cierres...</p>
+                        </div>
+                    )}
+
+                    {!cargando && error && (
+                        <div className="flex h-full flex-col items-center justify-center rounded-xl border border-red-200 bg-white px-6 text-center">
+                            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-600">
+                                <FileText size={28} />
+                            </div>
+                            <p className="text-sm font-black uppercase text-slate-800">Sin vista previa</p>
+                            <p className="mt-2 max-w-md text-sm text-slate-500">{error}</p>
+                        </div>
+                    )}
+
+                    {!cargando && !error && urlVistaPrevia && (
+                        <iframe
+                            title="Vista previa del reporte de cierres de medicamento"
+                            src={`${urlVistaPrevia}#toolbar=0&navpanes=0&scrollbar=1`}
+                            className="h-full w-full rounded-xl border border-slate-300 bg-white shadow-sm"
+                        />
+                    )}
+                </div>
+
+                <div className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
+                    <button
+                        type="button"
+                        onClick={onDone}
+                        className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-xs font-black uppercase tracking-wide text-slate-600 transition-colors hover:bg-slate-50"
+                    >
+                        Cerrar
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={descargar}
+                        disabled={!blob || cargando}
+                        className="flex items-center justify-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 text-xs font-black uppercase tracking-wide text-white shadow-sm transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <Download size={16} />
+                        Descargar PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
 }

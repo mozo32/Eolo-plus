@@ -22,6 +22,12 @@ class ControlMedicamento extends Model
         'fecha' => 'date',
         'medicamentos' => 'array',
     ];
+    /** Entregas de medicamento que este cierre finalizó. */
+    public function entregas()
+    {
+        return $this->hasMany(EntregaMedicamento::class, 'control_medicamento_id');
+    }
+
     public function firmas()
     {
         return $this->morphToMany(

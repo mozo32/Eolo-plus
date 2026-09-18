@@ -1,6 +1,7 @@
 import { ArrowDownLeft, ArrowUpRight, CircleCheck, Edit2, Loader2, Plane, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { OperacionPantalla, OperacionProgramada, TipoOperacion } from './types';
+import type { TemaPantalla } from './usePantallaTema';
 
 interface Props<T extends OperacionPantalla> {
     tipo: TipoOperacion;
@@ -12,6 +13,8 @@ interface Props<T extends OperacionPantalla> {
      * tipografía y filas grandes, encabezado fijo y sin paginación.
      */
     modoPantalla?: boolean;
+    /** Solo en modo pantalla: oscuro (predeterminado) o claro. El tablero no lo usa. */
+    temaPantalla?: TemaPantalla;
     onEditar?: (operacion: T) => void;
     onEliminar?: (operacion: T) => void;
     /** Finalización manual. Solo se ofrece fuera del modo pantalla. */
@@ -68,6 +71,44 @@ const ESTILOS = {
         vacio: 'text-3xl font-black uppercase tracking-wide text-slate-500',
         vacioIcono: 72,
     },
+    // Mismas medidas que `pantalla`, con colores para fondo claro y contraste
+    // suficiente para leerse a distancia.
+    pantallaClara: {
+        seccion: 'flex min-h-0 flex-1 flex-col gap-3',
+        caja: 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-xl',
+        scroll: 'min-h-0 flex-1 overflow-auto',
+        tabla: 'w-full border-collapse text-left',
+        cabeceraFila: 'border-b-2 border-slate-300 bg-slate-100',
+        th: 'sticky top-0 z-10 bg-slate-100 px-6 py-4 text-lg font-black uppercase tracking-wide text-slate-600',
+        fila: 'border-b border-slate-200',
+        celda: 'px-6 py-6',
+        matricula: 'text-4xl font-black uppercase leading-none tracking-tight text-slate-900',
+        texto: 'text-2xl font-bold uppercase text-slate-700',
+        hora: 'text-3xl font-black text-slate-900',
+        observaciones: 'text-xl text-slate-500',
+        vacio: 'text-3xl font-black uppercase tracking-wide text-slate-400',
+        vacioIcono: 72,
+    },
+} as const;
+
+/** Colores de los elementos de pantalla que no viven en ESTILOS (cabecera, spinner, vacío). */
+const ACENTOS_PANTALLA = {
+    oscuro: {
+        iconoSalida: 'bg-red-500/20 text-red-400',
+        iconoLlegada: 'bg-emerald-500/20 text-emerald-400',
+        titulo: 'text-3xl font-black uppercase tracking-wide text-white',
+        contador: 'rounded-lg bg-slate-700 px-3 py-1 font-mono text-2xl font-bold text-slate-200',
+        spinner: 'text-sky-400',
+        vacioIcono: 'text-slate-700',
+    },
+    claro: {
+        iconoSalida: 'bg-red-100 text-red-600',
+        iconoLlegada: 'bg-emerald-100 text-emerald-600',
+        titulo: 'text-3xl font-black uppercase tracking-wide text-slate-900',
+        contador: 'rounded-lg bg-slate-200 px-3 py-1 font-mono text-2xl font-bold text-slate-800',
+        spinner: 'text-sky-600',
+        vacioIcono: 'text-slate-300',
+    },
 } as const;
 
 /**
@@ -83,6 +124,7 @@ export default function TablaOperacionesProgramadas<T extends OperacionPantalla>
     operaciones,
     cargando,
     modoPantalla = false,
+    temaPantalla = 'oscuro',
     onEditar,
     onEliminar,
     onFinalizar,
@@ -92,7 +134,8 @@ export default function TablaOperacionesProgramadas<T extends OperacionPantalla>
     const titulo = esSalida ? 'Salidas' : 'Llegadas';
     const Icono = esSalida ? ArrowUpRight : ArrowDownLeft;
 
-    const e = modoPantalla ? ESTILOS.pantalla : ESTILOS.admin;
+    const e = modoPantalla ? (temaPantalla === 'claro' ? ESTILOS.pantallaClara : ESTILOS.pantalla) : ESTILOS.admin;
+    const acento = ACENTOS_PANTALLA[temaPantalla];
 
     // En pantalla no hay ID ni Opciones.
     const columnas = (esSalida ? 9 : 8) - (modoPantalla ? 2 : 0);
@@ -121,8 +164,8 @@ export default function TablaOperacionesProgramadas<T extends OperacionPantalla>
                         className={`rounded-lg ${modoPantalla ? 'p-2.5' : 'p-1.5'} ${
                             modoPantalla
                                 ? esSalida
-                                    ? 'bg-red-500/20 text-red-400'
-                                    : 'bg-emerald-500/20 text-emerald-400'
+                                    ? acento.iconoSalida
+                                    : acento.iconoLlegada
                                 : esSalida
                                   ? 'bg-red-100/50 text-red-700'
                                   : 'bg-emerald-50 text-emerald-600'
@@ -134,7 +177,7 @@ export default function TablaOperacionesProgramadas<T extends OperacionPantalla>
                     <h2
                         className={
                             modoPantalla
-                                ? 'text-3xl font-black uppercase tracking-wide text-white'
+                                ? acento.titulo
                                 : 'text-[11px] font-black uppercase tracking-tighter text-slate-700'
                         }
                     >
@@ -144,7 +187,7 @@ export default function TablaOperacionesProgramadas<T extends OperacionPantalla>
                     <span
                         className={
                             modoPantalla
-                                ? 'rounded-lg bg-slate-700 px-3 py-1 font-mono text-2xl font-bold text-slate-200'
+                                ? acento.contador
                                 : 'rounded bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-500'
                         }
                     >
@@ -175,7 +218,7 @@ export default function TablaOperacionesProgramadas<T extends OperacionPantalla>
                                 <tr>
                                     <td colSpan={columnas} className="py-20 text-center">
                                         <Loader2
-                                            className={`mx-auto animate-spin ${modoPantalla ? 'text-sky-400' : 'text-indigo-500'}`}
+                                            className={`mx-auto animate-spin ${modoPantalla ? acento.spinner : 'text-indigo-500'}`}
                                             size={modoPantalla ? 64 : 32}
                                         />
                                     </td>
@@ -184,7 +227,7 @@ export default function TablaOperacionesProgramadas<T extends OperacionPantalla>
                                 <tr>
                                     <td colSpan={columnas} className="py-20 text-center">
                                         <Plane
-                                            className={`mx-auto mb-4 ${modoPantalla ? 'text-slate-700' : 'text-slate-200'}`}
+                                            className={`mx-auto mb-4 ${modoPantalla ? acento.vacioIcono : 'text-slate-200'}`}
                                             size={e.vacioIcono}
                                         />
                                         <p className={e.vacio}>

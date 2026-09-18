@@ -247,7 +247,6 @@ const InventoryTable: React.FC<Props> = ({ medicamentos, cierres, onBuscarCierre
                             <tr className="text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">
                                 <th className="px-6 py-4">Medicamento</th>
                                 <th className="px-6 py-4">Inicio</th>
-                                <th className="px-6 py-4">Entregados</th>
                                 <th className="px-6 py-4">
                                     {cierreSeleccionado ? 'Final del Cierre' : 'Stock Actual'}
                                 </th>
@@ -258,7 +257,7 @@ const InventoryTable: React.FC<Props> = ({ medicamentos, cierres, onBuscarCierre
                         <tbody className="divide-y divide-slate-50">
                             {filasFiltradas.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-10 text-center text-slate-400 text-xs font-black uppercase">
+                                    <td colSpan={4} className="px-6 py-10 text-center text-slate-400 text-xs font-black uppercase">
                                         Sin registros
                                     </td>
                                 </tr>
@@ -272,10 +271,6 @@ const InventoryTable: React.FC<Props> = ({ medicamentos, cierres, onBuscarCierre
 
                                     <td className="px-6 py-4 font-bold text-slate-400">
                                         {m.inicio}
-                                    </td>
-
-                                    <td className="px-6 py-4 font-bold text-red-500 text-sm">
-                                        -{m.entregados}
                                     </td>
 
                                     <td className="px-6 py-4 font-black text-slate-800 text-md">

@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { usePage } from '@inertiajs/react';
 import {
     Archive,
     CalendarDays,
@@ -14,7 +15,7 @@ import {
     UserPlus,
     X,
 } from 'lucide-react';
-import { ViewType, Medicamento } from './types';
+import { ViewType, Medicamento, AuthUser, puedeReabastecerStock } from './types';
 import InventoryTable from './InventoryTable';
 import ActionForms from './ActionForms';
 import {
@@ -24,17 +25,26 @@ import {
 } from '@/stores/apiControlMedicamento';
 
 type PeriodoMovimiento = 'todos' | 'dia' | 'rango' | 'mes' | 'anio';
-type TipoMovimiento = 'todos' | 'ENTREGA' | 'CIERRE';
+type TipoMovimiento = 'todos' | 'ENTREGA' | 'CIERRE' | 'NUEVO' | 'REABASTECIMIENTO';
 
 interface Movimiento {
     id: string;
-    tipo: 'ENTREGA' | 'CIERRE';
+    tipo: 'ENTREGA' | 'CIERRE' | 'NUEVO' | 'REABASTECIMIENTO';
     titulo: string;
     detalle: string;
     cantidad: string;
     fecha: string;
     estado: string;
+    /** Usuario que realizó la acción (quien entregó, capturó o cerró). */
+    usuario: string | null;
 }
+
+const ETIQUETA_TIPO: Record<Exclude<TipoMovimiento, 'todos'>, string> = {
+    ENTREGA: 'Entrega',
+    CIERRE: 'Corte de turno',
+    NUEVO: 'Nuevo medicamento',
+    REABASTECIMIENTO: 'Reabastecimiento',
+};
 
 interface FiltrosMovimientos {
     periodo: PeriodoMovimiento;
@@ -66,6 +76,10 @@ const crearFiltrosIniciales = (): FiltrosMovimientos => ({
 });
 
 const MedicamentosModule = () => {
+    const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
+    // Mismo criterio que el backend: solo admin, jefe de área y FBO reabastecen.
+    const puedeReabastecer = useMemo(() => puedeReabastecerStock(auth?.user), [auth?.user]);
+
     const [view, setView] = useState<ViewType>('entrega');
     const [medicamentos, setMedicamentos] = useState<Medicamento[]>([]);
     const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
@@ -95,10 +109,15 @@ const MedicamentosModule = () => {
 
     const tabs: { key: ViewType; label: string }[] = [
         { key: 'entrega', label: 'Entrega' },
-        { key: 'inventario', label: 'Reabastecer' },
+        ...(puedeReabastecer ? [{ key: 'inventario' as ViewType, label: 'Reabastecer' }] : []),
         { key: 'medicamentos', label: 'Medicamentos' },
         { key: 'cierre', label: 'Corte/Cierre' },
     ];
+
+    // Si el usuario pierde el permiso (o llega sin él), la vista no puede quedarse en Reabastecer.
+    useEffect(() => {
+        if (!puedeReabastecer && view === 'inventario') setView('entrega');
+    }, [puedeReabastecer, view]);
 
     const cantidadFiltrosActivos =
         (filtrosAplicados.periodo !== 'todos' ? 1 : 0) +
@@ -444,10 +463,7 @@ const MedicamentosModule = () => {
                                     {filtrosAplicados.tipo !==
                                         'todos' && (
                                         <span className="rounded-lg bg-white/10 px-2 py-1 text-[9px] font-bold uppercase text-slate-300">
-                                            {filtrosAplicados.tipo ===
-                                            'ENTREGA'
-                                                ? 'Recibe'
-                                                : 'Corte'}
+                                            {ETIQUETA_TIPO[filtrosAplicados.tipo]}
                                         </span>
                                     )}
 
@@ -490,23 +506,25 @@ const MedicamentosModule = () => {
                                             <div className="flex min-w-0 items-center gap-3">
                                                 <div
                                                     className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-                                                        movimiento.tipo ===
-                                                        'CIERRE'
+                                                        movimiento.tipo === 'CIERRE'
                                                             ? 'bg-orange-500/20 text-orange-400'
-                                                            : movimiento.estado ===
-                                                                'Activo'
-                                                              ? 'bg-emerald-500/20 text-emerald-400'
-                                                              : 'bg-blue-600/20 text-blue-400'
+                                                            : movimiento.tipo === 'NUEVO'
+                                                              ? 'bg-violet-500/20 text-violet-300'
+                                                              : movimiento.tipo === 'REABASTECIMIENTO'
+                                                                ? 'bg-emerald-500/20 text-emerald-400'
+                                                                : movimiento.estado === 'Activo'
+                                                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                                                  : 'bg-blue-600/20 text-blue-400'
                                                     }`}
                                                 >
-                                                    {movimiento.tipo ===
-                                                    'CIERRE' ? (
+                                                    {movimiento.tipo === 'CIERRE' ? (
                                                         <Archive size={20} />
-                                                    ) : movimiento.estado ===
-                                                      'Activo' ? (
-                                                        <PackagePlus
-                                                            size={20}
-                                                        />
+                                                    ) : movimiento.tipo === 'NUEVO' ? (
+                                                        <Pill size={20} />
+                                                    ) : movimiento.tipo === 'REABASTECIMIENTO' ? (
+                                                        <PackagePlus size={20} />
+                                                    ) : movimiento.estado === 'Activo' ? (
+                                                        <PackagePlus size={20} />
                                                     ) : (
                                                         <UserPlus size={20} />
                                                     )}
@@ -514,30 +532,31 @@ const MedicamentosModule = () => {
 
                                                 <div className="min-w-0">
                                                     <p className="truncate text-xs font-black uppercase tracking-tight">
-                                                        {movimiento.tipo ===
-                                                        'CIERRE'
+                                                        {movimiento.tipo === 'CIERRE'
                                                             ? movimiento.titulo
-                                                            : `${movimiento.detalle} (${movimiento.titulo})`}
+                                                            : movimiento.tipo === 'ENTREGA'
+                                                              ? `${movimiento.detalle} (${movimiento.titulo})`
+                                                              : `${ETIQUETA_TIPO[movimiento.tipo]}: ${movimiento.titulo}`}
                                                     </p>
 
                                                     <p className="text-[10px] font-bold italic text-slate-400">
                                                         {movimiento.fecha} •{' '}
-                                                        {movimiento.tipo ===
-                                                        'CIERRE' ? (
-                                                            <span className="text-orange-400">
-                                                                Turno cerrado
-                                                            </span>
+                                                        {movimiento.tipo === 'CIERRE' ? (
+                                                            <span className="text-orange-400">Turno cerrado</span>
                                                         ) : (
                                                             movimiento.estado
                                                         )}
                                                     </p>
 
-                                                    {movimiento.tipo ===
-                                                        'CIERRE' && (
+                                                    {movimiento.tipo === 'CIERRE' && (
                                                         <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500">
-                                                            {
-                                                                movimiento.detalle
-                                                            }
+                                                            {movimiento.detalle}
+                                                        </p>
+                                                    )}
+
+                                                    {movimiento.usuario && (
+                                                        <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500">
+                                                            {movimiento.tipo === 'ENTREGA' ? 'Entregó' : 'Por'}: {movimiento.usuario}
                                                         </p>
                                                     )}
                                                 </div>
@@ -545,10 +564,11 @@ const MedicamentosModule = () => {
 
                                             <span
                                                 className={`shrink-0 rounded-lg px-3 py-1 text-xs font-black ${
-                                                    movimiento.tipo ===
-                                                    'CIERRE'
+                                                    movimiento.tipo === 'CIERRE'
                                                         ? 'bg-orange-500 text-white'
-                                                        : 'bg-white/10'
+                                                        : movimiento.tipo === 'NUEVO' || movimiento.tipo === 'REABASTECIMIENTO'
+                                                          ? 'bg-emerald-500/20 text-emerald-300'
+                                                          : 'bg-white/10'
                                                 }`}
                                             >
                                                 {movimiento.cantidad}
@@ -745,7 +765,13 @@ const MedicamentosModule = () => {
                                             Todos los movimientos
                                         </option>
                                         <option value="ENTREGA">
-                                            Recibe medicamento
+                                            Entrega de medicamento
+                                        </option>
+                                        <option value="NUEVO">
+                                            Nuevo medicamento
+                                        </option>
+                                        <option value="REABASTECIMIENTO">
+                                            Reabastecimiento
                                         </option>
                                         <option value="CIERRE">
                                             Corte de turno

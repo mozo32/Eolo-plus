@@ -250,6 +250,22 @@ export async function movimientos(
     return data;
 }
 
+/** Usuarios para el selector "Quién entrega". */
+export async function fetchPersonalMedicamentos(): Promise<{ id: number; name: string }[]> {
+    const res = await fetch('/api/ControlMedicamento/personal', {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+    });
+
+    const data = await res.json().catch(() => []);
+
+    if (!res.ok) {
+        throw new Error(data?.message || 'No se pudo cargar el personal');
+    }
+
+    return Array.isArray(data) ? data : [];
+}
+
 export async function fetchCierresMedicamento(params: any = {}) {
     const qs = new URLSearchParams();
 

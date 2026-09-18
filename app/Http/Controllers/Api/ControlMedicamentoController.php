@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\ControlMedicamento;
 use App\Models\medicamento;
 use App\Models\EntregaMedicamento;
+use App\Models\MovimientoMedicamento;
+use App\Models\User;
 use App\Models\Firma;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -57,8 +59,13 @@ class ControlMedicamentoController extends Controller
 
             $this->guardarFirmaBase64($validated['firma'], 'firma_responsable', $control);
 
+            // Las entregas abiertas quedan cerradas y ligadas a este cierre:
+            // así el PDF sabe qué se entregó durante el turno.
             EntregaMedicamento::where('status', 'A')
-                ->update(['status' => 'N']);
+                ->update([
+                    'status' => 'N',
+                    'control_medicamento_id' => $control->id,
+                ]);
 
             DB::commit();
 
@@ -139,14 +146,19 @@ class ControlMedicamentoController extends Controller
 
     public function index(Request $request)
     {
-        $query = ControlMedicamento::with('firmas')
+        $query = ControlMedicamento::with([
+            'firmas',
+            'entregas' => fn ($q) => $q->orderBy('created_at'),
+            'entregas.medicamento:id,nombre',
+            'entregas.entregadoPor:id,name',
+            'entregas.capturadoPor:id,name',
+        ])
             ->orderBy('fecha', 'desc')
             ->orderBy('created_at', 'desc');
         if ($request->filled('fecha_inicio') && $request->filled('fecha_fin')) {
-            $query->whereBetween('fecha', [
-                Carbon::parse($request->fecha_inicio)->toDateString(),
-                Carbon::parse($request->fecha_fin)->toDateString(),
-            ]);
+            // Comparación por fecha (no por texto) para que funcione igual en MySQL y sqlite.
+            $query->whereDate('fecha', '>=', Carbon::parse($request->fecha_inicio)->toDateString())
+                ->whereDate('fecha', '<=', Carbon::parse($request->fecha_fin)->toDateString());
         }
 
         if ($request->filled('fecha') && !$request->filled('fecha_inicio') && !$request->filled('fecha_fin')) {
@@ -335,7 +347,7 @@ class ControlMedicamentoController extends Controller
             ],
             'tipo' => [
                 'nullable',
-                'in:todos,ENTREGA,CIERRE',
+                'in:todos,ENTREGA,CIERRE,NUEVO,REABASTECIMIENTO',
             ],
             'fecha' => [
                 'nullable',
@@ -387,6 +399,8 @@ class ControlMedicamentoController extends Controller
             $tablaEntregas = (new EntregaMedicamento())->getTable();
             $tablaMedicamentos = (new Medicamento())->getTable();
             $tablaControles = (new ControlMedicamento())->getTable();
+            $tablaMovimientos = (new MovimientoMedicamento())->getTable();
+            $tablaUsuarios = (new User())->getTable();
 
             $aplicarPeriodo = function (
                 $query,
@@ -437,10 +451,10 @@ class ControlMedicamentoController extends Controller
                 return $query;
             };
 
-            $consultaEntregas = null;
-            $consultaCierres = null;
+            $consultas = [];
 
-            if ($tipo !== 'CIERRE') {
+            if ($tipo === 'todos' || $tipo === 'ENTREGA') {
+                // Quien entregó: la persona elegida o, en registros viejos, quien capturó.
                 $consultaEntregas = DB::table(
                     "{$tablaEntregas} as entregas"
                 )
@@ -450,6 +464,8 @@ class ControlMedicamentoController extends Controller
                         '=',
                         'entregas.medicamento_id'
                     )
+                    ->leftJoin("{$tablaUsuarios} as entregadores", 'entregadores.id', '=', 'entregas.entregado_por_user_id')
+                    ->leftJoin("{$tablaUsuarios} as capturistas", 'capturistas.id', '=', 'entregas.user_id')
                     ->where('medicamentos.status', 'A')
                     ->select([
                         DB::raw("'ENTREGA' as tipo"),
@@ -459,41 +475,80 @@ class ControlMedicamentoController extends Controller
                         'entregas.cantidad as cantidad',
                         'entregas.created_at as fecha_raw',
                         'entregas.status as estado_raw',
+                        DB::raw('COALESCE(entregadores.name, capturistas.name) as usuario'),
                     ]);
 
                 $aplicarPeriodo(
                     $consultaEntregas,
                     'entregas.created_at'
                 );
+
+                $consultas[] = $consultaEntregas;
             }
 
-            if ($tipo !== 'ENTREGA') {
+            if ($tipo === 'todos' || $tipo === 'CIERRE') {
                 $consultaCierres = DB::table(
                     "{$tablaControles} as controles"
-                )->select([
-                    DB::raw("'CIERRE' as tipo"),
-                    'controles.id as registro_id',
-                    DB::raw("'Corte de Turno' as titulo"),
-                    'controles.responsable as responsable',
-                    DB::raw('NULL as cantidad'),
-                    'controles.created_at as fecha_raw',
-                    DB::raw("'Finalizado' as estado_raw"),
-                ]);
+                )
+                    ->leftJoin("{$tablaUsuarios} as usuarios", 'usuarios.id', '=', 'controles.user_id')
+                    ->select([
+                        DB::raw("'CIERRE' as tipo"),
+                        'controles.id as registro_id',
+                        DB::raw("'Corte de Turno' as titulo"),
+                        'controles.responsable as responsable',
+                        DB::raw('NULL as cantidad'),
+                        'controles.created_at as fecha_raw',
+                        DB::raw("'Finalizado' as estado_raw"),
+                        'usuarios.name as usuario',
+                    ]);
 
                 $aplicarPeriodo(
                     $consultaCierres,
                     'controles.created_at'
                 );
+
+                $consultas[] = $consultaCierres;
             }
 
-            if ($consultaEntregas && $consultaCierres) {
-                $consultaUnificada =
-                    $consultaEntregas->unionAll(
-                        $consultaCierres
-                    );
-            } else {
-                $consultaUnificada =
-                    $consultaEntregas ?? $consultaCierres;
+            if (in_array($tipo, ['todos', 'NUEVO', 'REABASTECIMIENTO'], true)) {
+                // Altas y reabastecimientos: se persisten en movimientos_medicamentos.
+                $consultaMovimientos = DB::table(
+                    "{$tablaMovimientos} as movimientos"
+                )
+                    ->join(
+                        "{$tablaMedicamentos} as medicamentos",
+                        'medicamentos.id',
+                        '=',
+                        'movimientos.medicamento_id'
+                    )
+                    ->leftJoin("{$tablaUsuarios} as usuarios", 'usuarios.id', '=', 'movimientos.user_id')
+                    ->select([
+                        'movimientos.tipo as tipo',
+                        'movimientos.id as registro_id',
+                        'medicamentos.nombre as titulo',
+                        DB::raw('NULL as responsable'),
+                        'movimientos.cantidad as cantidad',
+                        'movimientos.created_at as fecha_raw',
+                        DB::raw("'Registrado' as estado_raw"),
+                        'usuarios.name as usuario',
+                    ]);
+
+                if ($tipo !== 'todos') {
+                    $consultaMovimientos->where('movimientos.tipo', $tipo);
+                }
+
+                $aplicarPeriodo(
+                    $consultaMovimientos,
+                    'movimientos.created_at'
+                );
+
+                $consultas[] = $consultaMovimientos;
+            }
+
+            $consultaUnificada = array_shift($consultas);
+
+            foreach ($consultas as $consulta) {
+                $consultaUnificada->unionAll($consulta);
             }
 
             $movimientos = DB::query()
@@ -513,34 +568,48 @@ class ControlMedicamentoController extends Controller
                 $movimientos
                     ->getCollection()
                     ->map(function ($movimiento) {
-                        $esEntrega =
-                            $movimiento->tipo === 'ENTREGA';
+                        $tipo = $movimiento->tipo;
+                        $fecha = Carbon::parse($movimiento->fecha_raw)->format('d/m/Y H:i');
+                        $usuario = $movimiento->usuario ?? null;
 
+                        if ($tipo === 'ENTREGA') {
+                            return [
+                                'id' => 'ent-'.$movimiento->registro_id,
+                                'tipo' => 'ENTREGA',
+                                'titulo' => $movimiento->titulo,
+                                'detalle' => "Recibe: {$movimiento->responsable}",
+                                'cantidad' => '-'.$movimiento->cantidad,
+                                'fecha' => $fecha,
+                                'estado' => $movimiento->estado_raw === 'A' ? 'Activo' : 'Cerrado',
+                                'usuario' => $usuario,
+                            ];
+                        }
+
+                        if ($tipo === 'CIERRE') {
+                            return [
+                                'id' => 'cie-'.$movimiento->registro_id,
+                                'tipo' => 'CIERRE',
+                                'titulo' => $movimiento->titulo,
+                                'detalle' => "Resp: {$movimiento->responsable}",
+                                'cantidad' => 'OK',
+                                'fecha' => $fecha,
+                                'estado' => 'Finalizado',
+                                'usuario' => $usuario,
+                            ];
+                        }
+
+                        // NUEVO o REABASTECIMIENTO
                         return [
-                            'id' => $esEntrega
-                                ? 'ent-' .
-                                    $movimiento->registro_id
-                                : 'cie-' .
-                                    $movimiento->registro_id,
-                            'tipo' => $movimiento->tipo,
+                            'id' => 'mov-'.$movimiento->registro_id,
+                            'tipo' => $tipo,
                             'titulo' => $movimiento->titulo,
-                            'detalle' => $esEntrega
-                                ? "Recibe: {$movimiento->responsable}"
-                                : "Resp: {$movimiento->responsable}",
-                            'cantidad' => $esEntrega
-                                ? '-' . $movimiento->cantidad
-                                : 'OK',
-                            'fecha' => Carbon::parse(
-                                $movimiento->fecha_raw
-                            )->format('d/m/Y H:i'),
-                            'estado' => $esEntrega
-                                ? (
-                                    $movimiento->estado_raw ===
-                                    'A'
-                                        ? 'Activo'
-                                        : 'Cerrado'
-                                )
-                                : 'Finalizado',
+                            'detalle' => $tipo === MovimientoMedicamento::TIPO_NUEVO
+                                ? 'Nuevo medicamento'
+                                : 'Reabastecimiento',
+                            'cantidad' => '+'.$movimiento->cantidad,
+                            'fecha' => $fecha,
+                            'estado' => 'Registrado',
+                            'usuario' => $usuario,
                         ];
                     })
             );
@@ -566,6 +635,18 @@ class ControlMedicamentoController extends Controller
             ],
             'recibe' => 'required|string|max:255',
             'cantidad' => 'required|integer|min:1',
+            // Quien entrega se elige (solo personal de Tráfico); quien captura
+            // sigue siendo el autenticado.
+            'entregaUserId' => [
+                'required',
+                'integer',
+                Rule::exists('users', 'id'),
+                function (string $attribute, mixed $value, \Closure $fail) {
+                    if (! $this->usuariosDeTrafico()->whereKey($value)->exists()) {
+                        $fail('La persona seleccionada no pertenece al área de Tráfico.');
+                    }
+                },
+            ],
         ]);
 
         try {
@@ -585,6 +666,7 @@ class ControlMedicamentoController extends Controller
                     'receptor' => $validated['recibe'],
                     'cantidad' => $validated['cantidad'],
                     'user_id' => Auth::id(),
+                    'entregado_por_user_id' => $validated['entregaUserId'],
                     'status' => 'A',
                 ]);
 
@@ -608,6 +690,14 @@ class ControlMedicamentoController extends Controller
 
     public function reabastecer(Request $request, $id)
     {
+        // Solo jefe de área, FBO y administrador; ocultar el botón no basta.
+        if (! $request->user()?->hasAnyRole(['admin', 'jefe_area', 'fbo'])) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No tienes permiso para reabastecer stock.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'cantidad' => 'required|integer|min:1',
         ]);
@@ -618,6 +708,13 @@ class ControlMedicamentoController extends Controller
                     ->findOrFail($id);
 
                 $medicamento->increment('cantidad', $validated['cantidad']);
+
+                MovimientoMedicamento::create([
+                    'medicamento_id' => $medicamento->id,
+                    'tipo' => MovimientoMedicamento::TIPO_REABASTECIMIENTO,
+                    'cantidad' => $validated['cantidad'],
+                    'user_id' => Auth::id(),
+                ]);
 
                 return response()->json([
                     'status' => 'success',
@@ -726,6 +823,13 @@ class ControlMedicamentoController extends Controller
                     'status' => 'A',
                 ]);
 
+                MovimientoMedicamento::create([
+                    'medicamento_id' => $medicamento->id,
+                    'tipo' => MovimientoMedicamento::TIPO_NUEVO,
+                    'cantidad' => $validated['stockInicial'],
+                    'user_id' => Auth::id(),
+                ]);
+
                 return response()->json([
                     'status' => 'success',
                     'message' => 'Medicamento agregado correctamente',
@@ -740,6 +844,30 @@ class ControlMedicamentoController extends Controller
             ], 500);
         }
     }
+    /**
+     * Usuarios que pueden figurar como "Quién entrega": los del área de
+     * Tráfico con vínculo activo. El filtro se hace en la consulta; el
+     * historial no pasa por aquí, así que quien salió del área conserva
+     * su nombre en las entregas anteriores.
+     */
+    private function usuariosDeTrafico()
+    {
+        return User::query()->whereHas('departamentos', function ($q) {
+            // Con y sin acento, por si el nombre se corrige en el catálogo.
+            $q->whereIn('departamentos.nombre', ['Trafico', 'Tráfico'])
+                ->where('departamentos.status', 'A')
+                ->where('user_departamentos.status', 'A');
+        });
+    }
+
+    /** Usuarios para el selector "Quién entrega": solo personal de Tráfico, id y nombre. */
+    public function personal()
+    {
+        return response()->json(
+            $this->usuariosDeTrafico()->orderBy('name')->get(['id', 'name'])
+        );
+    }
+
     public function exportarPdf(Request $request)
     {
         $validated = $request->validate([

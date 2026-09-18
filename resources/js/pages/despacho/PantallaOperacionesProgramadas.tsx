@@ -1,8 +1,40 @@
 import { Head } from '@inertiajs/react';
-import { AlertCircle, Plane } from 'lucide-react';
+import { AlertCircle, Moon, Plane, Sun } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import TablaOperacionesProgramadas from './operacionesProgramadas/TablaOperacionesProgramadas';
 import { usePantallaProgramadas } from './operacionesProgramadas/usePantallaProgramadas';
+import { usePantallaTema } from './operacionesProgramadas/usePantallaTema';
+
+/**
+ * Clases de la página por tema. El JSX es uno solo; aquí solo cambian colores.
+ * Rojo/verde de las tablas y el cian del reloj se conservan en ambos.
+ */
+const TEMA = {
+    oscuro: {
+        pagina: 'bg-slate-950 text-white',
+        encabezado: 'border-slate-800',
+        iconoTitulo: 'bg-sky-500/20 text-sky-400',
+        titulo: 'text-white',
+        fecha: 'text-slate-400',
+        reloj: 'text-sky-400',
+        botonTema: 'border-slate-700 bg-slate-900 text-slate-200 hover:border-sky-400 hover:text-sky-400',
+        error: 'border-red-500/40 bg-red-500/10',
+        errorIcono: 'text-red-400',
+        errorTexto: 'text-red-300',
+    },
+    claro: {
+        pagina: 'bg-slate-100 text-slate-900',
+        encabezado: 'border-slate-300',
+        iconoTitulo: 'bg-sky-100 text-sky-700',
+        titulo: 'text-slate-900',
+        fecha: 'text-slate-600',
+        reloj: 'text-sky-700',
+        botonTema: 'border-slate-300 bg-white text-slate-700 hover:border-sky-600 hover:text-sky-700',
+        error: 'border-red-300 bg-red-50',
+        errorIcono: 'text-red-600',
+        errorTexto: 'text-red-700',
+    },
+} as const;
 
 /** Fecha larga en español, con la zona horaria del proyecto. */
 const fechaLarga = (): string =>
@@ -35,6 +67,8 @@ const horaLarga = (): string =>
  */
 export default function PantallaOperacionesProgramadas() {
     const { salidas, llegadas, cargando, error } = usePantallaProgramadas();
+    const { tema, alternar, esClaro } = usePantallaTema();
+    const t = TEMA[tema];
 
     const [reloj, setReloj] = useState(() => horaLarga());
     const [fecha, setFecha] = useState(() => fechaLarga());
@@ -49,31 +83,44 @@ export default function PantallaOperacionesProgramadas() {
     }, []);
 
     return (
-        <div className="flex min-h-screen flex-col bg-slate-950 p-6 text-white lg:p-8">
+        <div className={`flex min-h-screen flex-col p-6 transition-colors duration-300 lg:p-8 ${t.pagina}`}>
             <Head title="Operaciones Programadas · Pantalla" />
 
-            <header className="mb-6 flex flex-col items-start justify-between gap-3 border-b-2 border-slate-800 pb-5 lg:flex-row lg:items-center">
+            <header className={`mb-6 flex flex-col items-start justify-between gap-3 border-b-2 pb-5 lg:flex-row lg:items-center ${t.encabezado}`}>
                 <div className="flex items-center gap-4">
-                    <span className="rounded-2xl bg-sky-500/20 p-3 text-sky-400">
+                    <span className={`rounded-2xl p-3 ${t.iconoTitulo}`}>
                         <Plane size={40} />
                     </span>
                     <div>
-                        <h1 className="text-4xl font-black uppercase tracking-tight lg:text-5xl">
+                        <h1 className={`text-4xl font-black uppercase tracking-tight lg:text-5xl ${t.titulo}`}>
                             Operaciones Programadas
                         </h1>
-                        <p className="text-xl font-semibold capitalize text-slate-400 lg:text-2xl">{fecha}</p>
+                        <p className={`text-xl font-semibold capitalize lg:text-2xl ${t.fecha}`}>{fecha}</p>
                     </div>
                 </div>
 
-                <span className="font-mono text-5xl font-black tabular-nums text-sky-400 lg:text-6xl">
-                    {reloj}
-                </span>
+                <div className="flex items-center gap-4">
+                    <span className={`font-mono text-5xl font-black tabular-nums lg:text-6xl ${t.reloj}`}>
+                        {reloj}
+                    </span>
+
+                    {/* Preferencia local de la televisión; no toca el tema del resto del sistema. */}
+                    <button
+                        type="button"
+                        onClick={alternar}
+                        title={esClaro ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro'}
+                        aria-label={esClaro ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro'}
+                        className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border-2 shadow-sm transition-colors ${t.botonTema}`}
+                    >
+                        {esClaro ? <Moon size={28} /> : <Sun size={28} />}
+                    </button>
+                </div>
             </header>
 
             {error && (
-                <div className="mb-6 flex items-center gap-4 rounded-2xl border-2 border-red-500/40 bg-red-500/10 p-5">
-                    <AlertCircle className="shrink-0 text-red-400" size={32} />
-                    <p className="text-2xl font-bold text-red-300">{error}</p>
+                <div className={`mb-6 flex items-center gap-4 rounded-2xl border-2 p-5 ${t.error}`}>
+                    <AlertCircle className={`shrink-0 ${t.errorIcono}`} size={32} />
+                    <p className={`text-2xl font-bold ${t.errorTexto}`}>{error}</p>
                 </div>
             )}
 
@@ -84,6 +131,7 @@ export default function PantallaOperacionesProgramadas() {
                     operaciones={salidas}
                     cargando={cargando}
                     modoPantalla
+                    temaPantalla={tema}
                 />
 
                 <TablaOperacionesProgramadas
@@ -91,6 +139,7 @@ export default function PantallaOperacionesProgramadas() {
                     operaciones={llegadas}
                     cargando={cargando}
                     modoPantalla
+                    temaPantalla={tema}
                 />
             </main>
         </div>

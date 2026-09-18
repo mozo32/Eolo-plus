@@ -13,7 +13,7 @@ import {
     CheckCircle2,
     LoaderCircle,
 } from 'lucide-react';
-import { ViewType, Medicamento, AuthUser } from './types';
+import { ViewType, Medicamento, AuthUser, UsuarioPersonal } from './types';
 import {
     guardarEntregaMedicamentoApi,
     revastecimientoMedicamentos,
@@ -21,6 +21,7 @@ import {
     deshabilitarMedicamento,
     agregarMedicamento,
     fetchMedicamentosDeshabilitados,
+    fetchPersonalMedicamentos,
     habilitarMedicamento,
 } from '@/stores/apiControlMedicamento';
 import Swal from 'sweetalert2';
@@ -43,7 +44,44 @@ const ActionForms: React.FC<Props> = ({
         medicamentoId: '',
         recibe: '',
         cantidad: '1',
+        // Quien entrega: se preselecciona al usuario autenticado solo si es de Tráfico.
+        entregaUserId: '',
     });
+
+    // Solo personal del área de Tráfico (lo filtra el backend).
+    const [personal, setPersonal] = useState<UsuarioPersonal[]>([]);
+
+    const idUsuarioActual = auth?.user?.id ?? null;
+
+    /** Id del usuario autenticado si aparece en la lista de Tráfico; si no, vacío. */
+    const entregaPredeterminada = (lista: UsuarioPersonal[]) =>
+        idUsuarioActual !== null && lista.some((persona) => persona.id === idUsuarioActual)
+            ? String(idUsuarioActual)
+            : '';
+
+    useEffect(() => {
+        let cancelado = false;
+
+        fetchPersonalMedicamentos()
+            .then((lista) => {
+                if (cancelado) return;
+                setPersonal(lista);
+                // Solo se rellena si el usuario todavía no eligió a nadie.
+                setEntregaData((actual) =>
+                    actual.entregaUserId === ''
+                        ? { ...actual, entregaUserId: entregaPredeterminada(lista) }
+                        : actual
+                );
+            })
+            .catch(() => {
+                if (!cancelado) setPersonal([]);
+            });
+
+        return () => {
+            cancelado = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [idUsuarioActual]);
 
     const [inventarioData, setInventarioData] = useState({
         medicamentoId: '',
@@ -195,6 +233,16 @@ const ActionForms: React.FC<Props> = ({
             return;
         }
 
+        if (!entregaData.entregaUserId) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Atención',
+                text: 'Selecciona quién entrega el medicamento',
+            });
+
+            return;
+        }
+
         if (
             !entregaData.cantidad ||
             Number(entregaData.cantidad) < 1
@@ -220,6 +268,7 @@ const ActionForms: React.FC<Props> = ({
                     entregaData.medicamentoId,
                 recibe: entregaData.recibe.trim(),
                 cantidad: Number(entregaData.cantidad),
+                entregaUserId: Number(entregaData.entregaUserId),
             });
 
             await Swal.fire({
@@ -233,6 +282,7 @@ const ActionForms: React.FC<Props> = ({
                 medicamentoId: '',
                 recibe: '',
                 cantidad: '1',
+                entregaUserId: entregaPredeterminada(personal),
             });
 
             onSuccess();
@@ -930,15 +980,24 @@ const ActionForms: React.FC<Props> = ({
                                     Quien entrega
                                 </label>
 
-                                <input
-                                    type="text"
-                                    readOnly
-                                    value={
-                                        auth?.user?.name ??
-                                        ''
+                                <select
+                                    className="w-full rounded-2xl border-2 border-transparent bg-slate-50 px-4 py-4 font-bold outline-none transition-all focus:border-blue-600"
+                                    value={entregaData.entregaUserId}
+                                    onChange={(event) =>
+                                        setEntregaData({
+                                            ...entregaData,
+                                            entregaUserId: event.target.value,
+                                        })
                                     }
-                                    className="w-full rounded-2xl border-2 border-transparent bg-slate-100 px-4 py-4 font-bold text-slate-500"
-                                />
+                                    required
+                                >
+                                    <option value="">Seleccionar...</option>
+                                    {personal.map((persona) => (
+                                        <option key={persona.id} value={String(persona.id)}>
+                                            {persona.name}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
 
