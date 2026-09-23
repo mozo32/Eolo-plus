@@ -852,12 +852,7 @@ class ControlMedicamentoController extends Controller
      */
     private function usuariosDeTrafico()
     {
-        return User::query()->whereHas('departamentos', function ($q) {
-            // Con y sin acento, por si el nombre se corrige en el catálogo.
-            $q->whereIn('departamentos.nombre', ['Trafico', 'Tráfico'])
-                ->where('departamentos.status', 'A')
-                ->where('user_departamentos.status', 'A');
-        });
+        return User::query()->delAreaDeTrafico();
     }
 
     /** Usuarios para el selector "Quién entrega": solo personal de Tráfico, id y nombre. */

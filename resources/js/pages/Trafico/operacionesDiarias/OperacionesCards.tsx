@@ -800,8 +800,8 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                 </div>
             )}
 
-            <div className="max-w-8xl mx-auto mb-4 flex items-center justify-between bg-white p-4 rounded-lg shadow-sm border border-slate-200">
-                <div className="flex items-center gap-4">
+            <div className="mx-auto mb-4 flex w-full max-w-full flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex min-w-0 flex-wrap items-center gap-4">
                     <h1 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Panel Operativo</h1>
                     <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-500 border border-slate-200">{moduloNombre}</span>
 
@@ -832,7 +832,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                             </>
                         )}
                     </div>
-                    <div className="flex items-center gap-3 p-4">
+                    <div className="flex flex-wrap items-center gap-3">
                         {pendientes.length > 0 && (
                             <button
                                 onClick={() => setMostrarModal(true)}
@@ -849,7 +849,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                         )}
                         {(nombreRol === 'FBO' || nombreRol === 'Administrador' || nombreRol === 'Administrativo' || nombreRol === 'Facturacion' || moduloNombre === 'Trafico') && (
                             <>
-                                <div className="w-[1px] bg-slate-200 mx-1"></div>
+                                <div className="mx-1 hidden w-[1px] self-stretch bg-slate-200 sm:block"></div>
                                 <button
                                     onClick={abrirVistaPreviaReporteRapido}
                                     disabled={loading}
@@ -876,17 +876,17 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                     </div>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
                     <button
                         onClick={() => setMostrarFiltros(!mostrarFiltros)}
                         className={`flex items-center gap-2 text-[10px] font-black px-4 py-2 rounded border transition-all ${mostrarFiltros ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                     >
                         <Filter size={14} />
-                        <span className="hidden xs:inline">{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
+                        <span className="hidden sm:inline">{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
                     </button>
                     {(nombreRol === 'FBO' || nombreRol === 'Administrador' || nombreRol === 'Administrativo' || nombreRol === 'Facturacion' || moduloNombre === 'Trafico') && (
                         <>
-                            <div className="w-[1px] bg-slate-200 mx-1"></div>
+                            <div className="mx-1 hidden w-[1px] self-stretch bg-slate-200 sm:block"></div>
                             <button
                                 type="button"
                                 onClick={abrirVistaPreviaExcel}
@@ -899,7 +899,7 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
                             </button>
                         </>
                     )}
-                    <div className="w-[1px] bg-slate-200 mx-1"></div>
+                    <div className="mx-1 hidden w-[1px] self-stretch bg-slate-200 sm:block"></div>
                     {[1, 44, 42, 15].includes(Number(idUser)) && (
                         <button
                             type="button"

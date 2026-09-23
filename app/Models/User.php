@@ -36,10 +36,12 @@ class User extends Authenticatable
         'two_factor_recovery_codes',
         'remember_token',
     ];
+
     public function departamento()
     {
         return $this->belongsTo(Departamento::class);
     }
+
     /**
      * Get the attributes that should be cast.
      *
@@ -53,6 +55,7 @@ class User extends Authenticatable
             'two_factor_confirmed_at' => 'datetime',
         ];
     }
+
     public function departamentos()
     {
         return $this->belongsToMany(
@@ -72,6 +75,23 @@ class User extends Authenticatable
             'subdepartamento_id'
         );
     }
+
+    /**
+     * Usuarios del área de Tráfico con vínculo activo.
+     *
+     * Lo usan el selector "Quién entrega" de Control de Medicamentos y el de
+     * Préstamo de chalecos. Se acepta el nombre con y sin acento por si el
+     * catálogo se corrige más adelante.
+     */
+    public function scopeDelAreaDeTrafico($query)
+    {
+        return $query->whereHas('departamentos', function ($q) {
+            $q->whereIn('departamentos.nombre', ['Trafico', 'Tráfico'])
+                ->where('departamentos.status', 'A')
+                ->where('user_departamentos.status', 'A');
+        });
+    }
+
     public function roles()
     {
         return $this->belongsToMany(Role::class);

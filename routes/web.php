@@ -84,6 +84,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('Trafico/ServicioComisariato');
     })->name('servicioComisariato');
 
+    // Prototipo solo frontend (Tráfico): renderiza la vista con datos simulados,
+    // sin tocar la base de datos. El backend se agregará al aprobar el diseño.
+    Route::get('prestamoChalecos', function () {
+        return Inertia::render('Trafico/PrestamoChalecos');
+    })->name('prestamoChalecos');
+
     Route::get('movimientoAvionesCSAE', function () {
         return Inertia::render('seguridad/MovimientoAvionesCSAE');
     })->name('movimientoAvionesCSAE');
@@ -103,6 +109,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('remision', function () {
         return Inertia::render('Rampa/Remision');
     })->name('remision');
+
+    Route::get('relacionPlanta', function () {
+        return Inertia::render('Rampa/RelacionPlanta');
+    })->name('relacionPlanta');
 
     Route::get('registroVisitantes', function () {
         return Inertia::render('seguridad/RegistroVisitantes');

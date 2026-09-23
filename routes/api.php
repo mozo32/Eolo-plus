@@ -32,6 +32,8 @@ use App\Http\Controllers\Api\NotaOperacionalController;
 use App\Http\Controllers\Api\OperacionProgramadaController;
 use App\Http\Controllers\Api\MatriculaRestringidaController;
 use App\Http\Controllers\Api\PantallaProgramadasController;
+use App\Http\Controllers\Api\RelacionPlantaController;
+use App\Http\Controllers\Api\PrestamoChalecoController;
 
 Route::post('/despacho', [DespachoController::class, 'store']);
 Route::get('/aeronaves/autocomplete', [AeronaveController::class, 'autocomplete']);
@@ -298,3 +300,40 @@ Route::middleware(['api', 'auth:sanctum'])
             Route::delete('/{matricula}', [MatriculaRestringidaController::class, 'destroy']);
         });
     });
+
+/*
+|--------------------------------------------------------------------------
+| Relación de planta (Rampa) — préstamo de la GPU N.115
+|--------------------------------------------------------------------------
+| Consultar es abierto a cualquier usuario autenticado. Prestar y finalizar
+| exigen el subdepartamento relacionPlanta (admin siempre pasa).
+*/
+Route::middleware(['api', 'auth:sanctum'])->prefix('RelacionPlanta')->group(function () {
+    Route::get('/actual', [RelacionPlantaController::class, 'actual']);
+    Route::get('/historico', [RelacionPlantaController::class, 'historico']);
+    Route::get('/empresas', [RelacionPlantaController::class, 'empresas']);
+
+    Route::middleware('subdep:relacionPlanta')->group(function () {
+        Route::post('/prestar', [RelacionPlantaController::class, 'prestar']);
+        Route::patch('/{id}/finalizar', [RelacionPlantaController::class, 'finalizar'])->whereNumber('id');
+    });
+});
+
+/*
+|--------------------------------------------------------------------------
+| Préstamo de chalecos (Tráfico)
+|--------------------------------------------------------------------------
+| Consultar el histórico y la foto de la INE es para cualquier usuario con
+| sesión; registrar y devolver exigen el subdepartamento prestamoChalecos.
+| La INE vive en disco privado: nunca se sirve como archivo público.
+*/
+Route::middleware(['api', 'auth:sanctum'])->prefix('PrestamoChalecos')->group(function () {
+    Route::get('/personal', [PrestamoChalecoController::class, 'personal']);
+    Route::get('/', [PrestamoChalecoController::class, 'index']);
+    Route::get('/{id}/ine', [PrestamoChalecoController::class, 'ine'])->whereNumber('id');
+
+    Route::middleware('subdep:prestamoChalecos')->group(function () {
+        Route::post('/', [PrestamoChalecoController::class, 'store']);
+        Route::patch('/{id}/devolver', [PrestamoChalecoController::class, 'devolver'])->whereNumber('id');
+    });
+});

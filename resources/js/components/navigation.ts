@@ -19,6 +19,8 @@ import {
     reporteEntregaTurno,
     verificacionEstadoAutotanque,
     remision,
+    relacionPlanta,
+    prestamoChalecos,
     inspeccionCombustible,
     registroVisitantes,
     operacionesProgramadas
@@ -140,6 +142,14 @@ const ROUTE_CONFIG: Record<
         href: verificacionEstadoAutotanque,
         title: 'Verificacion Estado Autotanque',
     },
+    relacionplanta: {
+        href: relacionPlanta,
+        title: 'Relación de planta',
+    },
+    prestamochalecos: {
+        href: prestamoChalecos,
+        title: 'Préstamo de chalecos',
+    },
     inspeccioncombustible: {
         href: inspeccionCombustible,
         title: 'Inspección Combustible',
@@ -221,6 +231,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                     },
 
                     { id: 'rampa-around', title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
+                    { id: 'rampa-planta', title: 'Relación de planta', href: relacionPlanta(), icon: LayoutGrid },
                 ],
             },
             {
@@ -232,6 +243,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                     { id: 'trafico-operaciones', title: 'Operaciones Diarias', href: operacionesDiarias(), icon: LayoutGrid },
                     { id: 'trafico-comisariato', title: 'Servicio de Comisariato', href: servicioComisariato(), icon: LayoutGrid },
                     { id: 'trafico-around', title: 'Walk Around', href: walkAround(), icon: LayoutGrid },
+                    { id: 'trafico-chalecos', title: 'Préstamo de chalecos', href: prestamoChalecos(), icon: LayoutGrid },
                 ],
             },
         ]

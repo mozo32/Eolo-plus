@@ -19,6 +19,8 @@ class DatabaseSeeder extends Seeder
             tipoiAeronaveSeeder::class,
             DepartamentosSubdepartamentosSeeder::class,
             OperacionesProgramadasSubdepartamentoSeeder::class,
+            RelacionPlantaSubdepartamentoSeeder::class,
+            PrestamoChalecosSubdepartamentoSeeder::class,
         ]);
     }
 }
