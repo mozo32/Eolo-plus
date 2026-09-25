@@ -20,4 +20,18 @@ class Departamento extends Model
     {
         return $this->hasMany(SubDepartamento::class);
     }
+
+    /**
+     * Usuarios vinculados al departamento. La usa Gestion de usuarios para
+     * contar cuantas personas hay en cada area.
+     */
+    public function users()
+    {
+        return $this->belongsToMany(
+            User::class,
+            'user_departamentos',
+            'departamento_id',
+            'user_id'
+        );
+    }
 }

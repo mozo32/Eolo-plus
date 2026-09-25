@@ -79,6 +79,10 @@ Route::prefix('walkarounds')->group(function () {
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('administracion')->group(function () {
     Route::get('/users', [AdministracionController::class, 'index']);
+    // Solo los IDs del grupo filtrado, para seleccionar todo un departamento.
+    Route::get('/users/ids', [AdministracionController::class, 'ids']);
+    // Catalogo de departamentos con conteo de usuarios y sus subdepartamentos.
+    Route::get('/departamentos', [AdministracionController::class, 'departamentos']);
     Route::get('/users/{user}/departamentos', [UserDepartamentoController::class, 'index']);
 
     Route::post('/users/departamentos-masivo', [UserDepartamentoController::class, 'storeMasivo']);

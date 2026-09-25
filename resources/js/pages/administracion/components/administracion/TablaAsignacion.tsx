@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     fetchDepartamentosUsuario,
     saveDepartamentosUsuario,
+    type ModoAsignacion,
 } from '@/stores/apiGestionUsuario';
 
 type SubDepartamento = {
@@ -24,15 +25,23 @@ type Role = {
 
 type Props = {
     userIds: number[];
+    /**
+     * 'agregar' (masivo): arranca en blanco y suma lo marcado a lo que cada
+     * usuario ya tiene. 'reemplazar' (individual): precarga sus permisos y
+     * destildar los quita.
+     */
+    modo: ModoAsignacion;
     onSaved: () => void;
     onCancel?: () => void;
 };
 
 export default function TablaAsignacion({
     userIds,
+    modo,
     onSaved,
     onCancel,
 }: Props) {
+    const esAgregar = modo === 'agregar';
     const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
     const [selectedDepId, setSelectedDepId] = useState<number | null>(null);
     const [loading, setLoading] = useState(false);
@@ -41,34 +50,40 @@ export default function TablaAsignacion({
     const [roles, setRoles] = useState<Role[]>([]);
     const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
 
-    async function fetchData() {
+    const fetchData = useCallback(async () => {
         try {
             setLoading(true);
             const idToFetch = userIds[0];
             const data = await fetchDepartamentosUsuario(idToFetch);
 
-            setDepartamentos(Array.isArray(data.departamentos) ? data.departamentos : []);
-            setRoles(Array.isArray(data.roles) ? data.roles : []);
+            const catalogo = Array.isArray(data.departamentos) ? data.departamentos : [];
 
-            if (userIds.length === 1) {
-                setSelectedRoleId(data.userRoleId ?? null);
-            } else {
-                setSelectedRoleId(null);
-            }
+            // En modo agregar el formulario arranca en blanco: lo que se marque
+            // se suma, así que precargar los permisos de un usuario confundiría.
+            setDepartamentos(
+                esAgregar
+                    ? catalogo.map((dep) => ({
+                          ...dep,
+                          subdepartamentos: dep.subdepartamentos.map((s) => ({ ...s, activo: false })),
+                      }))
+                    : catalogo,
+            );
+            setRoles(Array.isArray(data.roles) ? data.roles : []);
+            setSelectedRoleId(esAgregar ? null : (data.userRoleId ?? null));
 
             setSelectedDepId(data.departamentos?.[0]?.id ?? null);
-        } catch (err: any) {
-            setError(err.message);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Error al cargar la configuración');
         } finally {
             setLoading(false);
         }
-    }
+    }, [userIds, esAgregar]);
 
     useEffect(() => {
         if (userIds.length > 0) {
             fetchData();
         }
-    }, [userIds]);
+    }, [userIds, fetchData]);
 
     const selectedDep = departamentos.find((d) => d.id === selectedDepId);
 
@@ -104,14 +119,22 @@ export default function TablaAsignacion({
     }
 
     async function guardarCambios() {
-        if (!selectedRoleId) {
+        if (!esAgregar && !selectedRoleId) {
             alert('Debes seleccionar un rol');
+            return;
+        }
+
+        const marcados = departamentos.flatMap((dep) => dep.subdepartamentos.filter((s) => s.activo));
+
+        if (esAgregar && marcados.length === 0 && !selectedRoleId) {
+            alert('Selecciona al menos un módulo o un rol para aplicar.');
             return;
         }
 
         try {
             setSaving(true);
             const payload = {
+                modo,
                 role_id: selectedRoleId,
                 asignaciones: departamentos.map((dep) => ({
                     departamento_id: dep.id,
@@ -124,8 +147,8 @@ export default function TablaAsignacion({
 
             await saveDepartamentosUsuario(payload);
             onSaved();
-        } catch (err: any) {
-            alert(err.message);
+        } catch (err) {
+            alert(err instanceof Error ? err.message : 'Error al guardar');
         } finally {
             setSaving(false);
         }
@@ -136,18 +159,30 @@ export default function TablaAsignacion({
 
     return (
         <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 space-y-6">
+            {esAgregar && (
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800 dark:border-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-200">
+                    Los módulos que marques se <strong>agregarán</strong> a los {userIds.length} usuarios
+                    seleccionados, sin quitarles los que ya tenían. Para retirarle un módulo a alguien, usa el
+                    botón Gestionar de ese usuario.
+                </div>
+            )}
+
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
                 <div className="w-full md:w-1/3">
                     <label className="block text-sm font-semibold mb-1">
-                        Rol para los usuarios seleccionados
+                        {esAgregar ? 'Rol (opcional)' : 'Rol para los usuarios seleccionados'}
                     </label>
                     <select
                         disabled={saving}
                         value={selectedRoleId ?? ''}
-                        onChange={(e) => setSelectedRoleId(Number(e.target.value))}
+                        onChange={(e) => setSelectedRoleId(e.target.value ? Number(e.target.value) : null)}
                         className="w-full rounded-lg border px-3 py-2 text-sm dark:bg-gray-900 dark:border-gray-700"
                     >
-                        <option value="" disabled>Selecciona un rol</option>
+                        {esAgregar ? (
+                            <option value="">Mantener el rol actual de cada usuario</option>
+                        ) : (
+                            <option value="" disabled>Selecciona un rol</option>
+                        )}
                         {roles.map((role) => (
                             <option key={role.id} value={role.id}>{role.nombre}</option>
                         ))}
@@ -224,7 +259,11 @@ export default function TablaAsignacion({
                     onClick={guardarCambios}
                     className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-indigo-700"
                 >
-                    {saving ? 'Guardando…' : `Aplicar a ${userIds.length} usuarios`}
+                    {saving
+                        ? 'Guardando…'
+                        : esAgregar
+                          ? `Agregar a ${userIds.length} usuarios`
+                          : `Aplicar a ${userIds.length} usuarios`}
                 </button>
             </div>
         </div>

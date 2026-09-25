@@ -16,13 +16,33 @@ export type RoleApi = {
     nombre: string;
 };
 
+/** Cómo se aplica la asignación: sumando módulos o dejando solo los marcados. */
+export type ModoAsignacion = 'agregar' | 'reemplazar';
+
 export type SaveDepartamentosUsuarioPayload = {
-    role_id: number;
+    modo: ModoAsignacion;
+    /** En modo 'agregar' puede ir null: cada usuario conserva su rol. */
+    role_id: number | null;
     user_ids: number[];
     asignaciones: {
         departamento_id: number;
         subdepartamentos: number[];
     }[];
+};
+
+export type DepartamentoCatalogo = {
+    id: number;
+    nombre: string;
+    usuarios: number;
+    subdepartamentos: { id: number; nombre: string }[];
+};
+
+/** Filtro del listado: un departamento, los que no tienen ninguno, o todos. */
+export type FiltroUsuarios = {
+    page?: number;
+    search?: string;
+    departamento_id?: number | null;
+    sin_departamento?: boolean;
 };
 
 async function handleResponse(res: Response) {
@@ -33,13 +53,54 @@ async function handleResponse(res: Response) {
     return data;
 }
 
-export async function fetchUsers(params: any = {}) {
-    const qs = new URLSearchParams(params);
-    const res = await fetch(`/api/administracion/users?${qs.toString()}`, {
+function queryDeFiltro(filtro: FiltroUsuarios): string {
+    const qs = new URLSearchParams();
+
+    if (filtro.page) qs.set('page', String(filtro.page));
+    if (filtro.search) qs.set('search', filtro.search);
+    if (filtro.sin_departamento) qs.set('sin_departamento', '1');
+    else if (filtro.departamento_id) qs.set('departamento_id', String(filtro.departamento_id));
+
+    return qs.toString();
+}
+
+export async function fetchUsers(filtro: FiltroUsuarios = {}) {
+    const res = await fetch(`/api/administracion/users?${queryDeFiltro(filtro)}`, {
         headers: { Accept: 'application/json' },
         credentials: 'include',
     });
     return handleResponse(res);
+}
+
+/**
+ * Catálogo de departamentos con su conteo de usuarios. Llena el selector del
+ * filtro y, en la asignación masiva, la lista de módulos en blanco.
+ */
+export async function fetchDepartamentosCatalogo(): Promise<{
+    departamentos: DepartamentoCatalogo[];
+    sin_departamento: number;
+}> {
+    const res = await fetch('/api/administracion/departamentos', {
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+    });
+    return handleResponse(res);
+}
+
+/**
+ * IDs de todos los usuarios del grupo filtrado, incluidos los de otras
+ * páginas. Es lo que permite seleccionar un departamento completo.
+ */
+export async function fetchIdsDelGrupo(filtro: FiltroUsuarios): Promise<number[]> {
+    const { page, ...sinPagina } = filtro;
+    void page;
+
+    const res = await fetch(`/api/administracion/users/ids?${queryDeFiltro(sinPagina)}`, {
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+    });
+    const data = await handleResponse(res);
+    return Array.isArray(data?.ids) ? data.ids : [];
 }
 
 export type FetchDepartamentosUsuarioResponse = {
