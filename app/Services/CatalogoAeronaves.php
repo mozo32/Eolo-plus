@@ -56,7 +56,13 @@ class CatalogoAeronaves
             }
 
             // Una aeronave dada de alta antes de este módulo no tiene satélite.
-            FactAeronave::firstOrCreate(['aeronave_id' => $aeronave->id]);
+            // Solo se intenta crear si falta: createOrFirst inserta primero, así
+            // que llamarlo siempre provocaría una violación del índice único de
+            // fact_aeronaves.aeronave_id en cada consulta. Si dos peticiones
+            // llegan a la vez, createOrFirst absorbe la violación y relee.
+            if (! FactAeronave::where('aeronave_id', $aeronave->id)->exists()) {
+                FactAeronave::createOrFirst(['aeronave_id' => $aeronave->id]);
+            }
 
             return $aeronave->load(['tipoAeronave', 'facturacion']);
         });

@@ -113,3 +113,21 @@ test('autocompletar busca por coincidencia parcial y respeta el limite', functio
         ->and(catalogo()->autocompletar(''))->toBe([])
         ->and(catalogo()->autocompletar('   '))->toBe([]);
 });
+
+test('buscarOCrear sobre una aeronave vieja deja un solo satelite y la segunda llamada no intenta crear otro', function () {
+    Aeronave::create(['matricula' => 'XA-BCD']);
+
+    catalogo()->buscarOCrear('XA-BCD');
+
+    // El evento creating salta antes del INSERT, aunque este fallara por el
+    // indice unico; QueryExecuted no lo veria.
+    $intentos = 0;
+    FactAeronave::creating(function () use (&$intentos) {
+        $intentos++;
+    });
+
+    catalogo()->buscarOCrear('XA-BCD');
+
+    expect($intentos)->toBe(0)
+        ->and(FactAeronave::count())->toBe(1);
+});
