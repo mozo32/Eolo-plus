@@ -46,3 +46,16 @@ test('sin precios registrados, vigente devuelve null', function () {
 test('la configuracion devuelve el valor por omision si la clave no existe', function () {
     expect(FactConfiguracion::valor('inexistente', 'respaldo'))->toBe('respaldo');
 });
+
+test('el precio Eolo sugerido lee el margen de la tabla de configuracion', function () {
+    // Los defaults del codigo coinciden con la siembra; sin cambiar la fila
+    // no se distingue leer la tabla de caer al default.
+    FactConfiguracion::where('clave', 'combustible_margen')->update(['valor' => '1.20']);
+
+    expect(FactConfiguracion::precioEoloSugerido(22.50))->toBe(27.60);
+});
+
+test('la migracion siembra las claves de la formula del combustible', function () {
+    expect(FactConfiguracion::where('clave', 'combustible_ajuste')->value('valor'))->toBe('0.50')
+        ->and(FactConfiguracion::where('clave', 'combustible_margen')->value('valor'))->toBe('1.15');
+});
