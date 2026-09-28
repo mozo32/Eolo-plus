@@ -1,11 +1,25 @@
-# Migración de Prefacturas — Bloque 1: catálogos e importador
+# Migración de Prefacturas — Bloque 1b: catálogos de facturación
 
 **Fecha:** 2026-09-28 · **Área:** Facturación (nueva) · **Estado:** aprobado
 
 El sistema de Prefacturas (`C:\xampp\htdocs\EOLO\Prefectura`, PHP plano sobre
-MySQL `fact-fbo`) se migra a Eolo-plus. Este documento cubre **solo el primer
-bloque**: los catálogos y el importador de datos históricos. El flujo de
-prefactura, el cálculo de estancia, el PDF y el cierre son bloques posteriores.
+MySQL `fact-fbo`) se migra a Eolo-plus. El flujo de prefactura, el cálculo de
+estancia, el PDF y el cierre son bloques posteriores.
+
+> **Este documento se partió en dos.** Al escribir el plan de implementación se
+> descubrió que Eolo-plus ya depende de la base de Prefacturas: nueve
+> controladores leen y escriben `tb_matricula`, `tb_tipo` y `tb_combustible` por
+> la conexión `remota`. Todo lo relacionado con la matrícula se movió al bloque
+> **1a**, en `2026-09-28-facturacion-1a-matriculas-design.md`, que va primero
+> porque es el que puede romper producción.
+>
+> **Este documento es ahora el bloque 1b** y cubre solo los catálogos que no
+> tocan nada existente: clientes, servicios y sus categorías, formas de pago y
+> proveedores. Las secciones sobre categorías de aeronave, tipos de motor,
+> combustible y `fact_aeronaves` quedan **sustituidas** por las del bloque 1a,
+> igual que la decisión de un solo subdepartamento `catalogosFacturacion`: el
+> menú se construye desde los subdepartamentos, así que cada pantalla lleva el
+> suyo.
 
 ## Por qué este bloque va primero
 
