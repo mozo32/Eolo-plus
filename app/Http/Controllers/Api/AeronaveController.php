@@ -7,11 +7,14 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Models\Aeronave;
 use App\Models\WalkAround;
+use App\Services\CatalogoAeronaves;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 class AeronaveController extends Controller
 {
+    public function __construct(private readonly CatalogoAeronaves $catalogo) {}
+
     public function buscarPorMatricula(string $matricula): JsonResponse
     {
         try {
@@ -22,16 +25,8 @@ class AeronaveController extends Controller
                 ->orderByDesc('hora')
                 ->first();
 
-            $infoMatricula = DB::connection('remota')
-                ->table('tb_matricula as m')
-                ->leftJoin('tb_estatus as e', 'e.id_estatus', '=', 'm.id_estatus')
-                ->leftJoin('tb_tipo as t', 't.id_tipo', '=', 'm.id_tipo')
-                ->leftJoin('tb_categoria as c', 'c.id_categoria', '=', 'm.id_categoria')
-                ->where('m.matricula', $matricula)
-                ->select(
-                    't.tipo',
-                )
-                ->first();
+            $datos = $this->catalogo->buscar($matricula);
+
             return response()->json([
                 'matricula'      => $aeronave->matricula ?? $matricula,
                 'destino'        => $ultimoWalk->destino ?? null,
@@ -39,7 +34,8 @@ class AeronaveController extends Controller
                 'idTipoAeronave' => $aeronave->aeronave_id ?? ($ultimoWalk->tipo_aeronave_id ?? null),
                 'movimiento'     => $ultimoWalk->movimiento ?? null,
                 'tipo_aeronave'  => $aeronave->tipo_aeronave ?? ($ultimoWalk->tipo ?? null),
-                'tipo'  => $infoMatricula->tipo ?? null,
+                'tipo'           => $datos?->tipo,
+                'categoria'      => $datos?->categoria,
             ]);
 
         } catch (\Throwable $e) {
@@ -56,15 +52,8 @@ class AeronaveController extends Controller
             if ($q === '') {
                 return response()->json([]);
             }
-            $configRemota = config('database.connections.remota');
 
-
-            $matriculas = DB::connection('remota')
-                ->table('tb_matricula')
-                ->where('matricula', 'like', '%' . strtoupper($q) . '%')
-                ->limit(10)
-                ->pluck('matricula')
-                ->toArray();
+            $matriculas = $this->catalogo->autocompletar($q);
 
             if (empty($matriculas)) {
                 return response()->json([]);
@@ -120,15 +109,10 @@ class AeronaveController extends Controller
         return response()->json($aeronave, 201);
     }
 
-    public function tipoAeronave(string $matricula){
-        $tipoAeronaveDb = DB::connection('remota')
-            ->table('tb_matricula as m')
-            ->leftJoin('tb_tipo as t', 't.id_tipo', '=', 'm.id_tipo')
-            ->where('m.matricula', $matricula)
-            ->select(
-                't.tipo',
-            )
-            ->first();
-        return response()->json($tipoAeronaveDb);
+    public function tipoAeronave(string $matricula)
+    {
+        $datos = $this->catalogo->buscar($matricula);
+
+        return response()->json($datos ? ['tipo' => $datos->tipo] : null);
     }
 }
