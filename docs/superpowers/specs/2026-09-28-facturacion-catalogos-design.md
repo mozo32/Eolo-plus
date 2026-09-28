@@ -26,7 +26,7 @@ nada encima.
 | Reglas de negocio | Las fórmulas de estancia y los montos se replican **idénticos** (ningún cobro cambia). Lo que cambia es dónde viven: los precios pasan de código a catálogo editable. |
 | Llegada y salida | La prefactura (bloque 2) precargará fecha, hora y lugar desde `operaciones_diarias` y permitirá corregirlos. Nacional/Internacional se sigue preguntando porque hoy no se registra. |
 | Área | Departamento nuevo `Facturacion`. Subdepartamento `catalogosFacturacion` para este bloque. |
-| Nombres de tabla | Sin prefijo, siguiendo la convención del proyecto (`operaciones_diarias`, `prestamos_chalecos`). |
+| Nombres de tabla | Prefijo `fact_` en todas las tablas del módulo. Se aparta de la convención del proyecto (`operaciones_diarias`, `prestamos_chalecos`) a propósito: los nombres genéricos (`clientes`, `servicios`, `proveedores`) chocarían con otros módulos y el prefijo deja claro qué pertenece a Facturación. |
 | Aeronaves | Tabla satélite colgada de `aeronaves`, no se duplican matrículas ni se modifica la tabla existente. |
 
 ## El hallazgo que define el modelo
@@ -63,7 +63,7 @@ de continuar.
 
 ### Tarifas
 
-Tabla `categorias_aeronave`:
+Tabla `fact_categorias_aeronave`:
 
 | Columna | Tipo | Notas |
 |---|---|---|
@@ -75,7 +75,7 @@ Tabla `categorias_aeronave`:
 | status | char(1) | `A`/`N`, baja lógica |
 | timestamps | | |
 
-Tabla `tipos_motor`:
+Tabla `fact_tipos_motor`:
 
 | Columna | Tipo | Notas |
 |---|---|---|
@@ -85,7 +85,7 @@ Tabla `tipos_motor`:
 | status | char(1) | |
 | timestamps | | |
 
-Tabla `precios_combustible`:
+Tabla `fact_precios_combustible`:
 
 | Columna | Tipo | Notas |
 |---|---|---|
@@ -101,7 +101,7 @@ el anterior con la fecha del día anterior, dentro de una transacción.
 
 ### Catálogos
 
-Tabla `clientes`:
+Tabla `fact_clientes`:
 
 | Columna | Tipo | Notas |
 |---|---|---|
@@ -116,7 +116,7 @@ Tabla `clientes`:
 `tb_clientes` arrastra hoy un `fol_prefactura`, lo que crea un cliente nuevo por
 cada prefactura. Aquí el cliente existe una vez y la prefactura lo referencia.
 
-Tabla `categorias_servicio`:
+Tabla `fact_categorias_servicio`:
 
 | Columna | Tipo | Notas |
 |---|---|---|
@@ -125,12 +125,12 @@ Tabla `categorias_servicio`:
 | status | char(1) | |
 | timestamps | | |
 
-Tabla `servicios`:
+Tabla `fact_servicios`:
 
 | Columna | Tipo | Notas |
 |---|---|---|
 | id | bigint | |
-| categoria_servicio_id | FK categorias_servicio | |
+| categoria_servicio_id | FK fact_categorias_servicio | |
 | nombre | string(120) | index |
 | precio_unitario | decimal(10,2) | |
 | es_de_tercero | boolean | default false |
@@ -139,7 +139,7 @@ Tabla `servicios`:
 | status | char(1) | |
 | timestamps | | |
 
-Tabla `formas_pago`:
+Tabla `fact_formas_pago`:
 
 | Columna | Tipo | Notas |
 |---|---|---|
@@ -148,7 +148,7 @@ Tabla `formas_pago`:
 | status | char(1) | |
 | timestamps | | |
 
-Tabla `proveedores`:
+Tabla `fact_proveedores`:
 
 | Columna | Tipo | Notas |
 |---|---|---|
@@ -159,14 +159,14 @@ Tabla `proveedores`:
 
 ### Enlace con las aeronaves existentes
 
-Tabla `aeronaves_facturacion` (satélite 1-1 de `aeronaves`):
+Tabla `fact_aeronaves` (satélite 1-1 de `aeronaves`):
 
 | Columna | Tipo | Notas |
 |---|---|---|
 | id | bigint | |
 | aeronave_id | FK aeronaves | único, `cascadeOnDelete` |
-| categoria_aeronave_id | FK categorias_aeronave | determina pernocta y tránsitos |
-| tipo_motor_id | FK tipos_motor | determina aterrizaje |
+| categoria_aeronave_id | FK fact_categorias_aeronave | determina pernocta y tránsitos |
+| tipo_motor_id | FK fact_tipos_motor | determina aterrizaje |
 | estatus | string(10) | `guarda` \| `transito` |
 | cobra_derecho_vuelos | boolean | default true |
 | timestamps | | |
@@ -212,15 +212,42 @@ igual que hoy.
 
 ## Pantallas
 
-Cuatro entradas de menú bajo el área Facturación, todas con
-`subdep:catalogosFacturacion`:
+Cada catálogo tiene su propia pantalla, sin pestañas. Todas bajo el área
+Facturación con `subdep:catalogosFacturacion`:
 
 | Pantalla | Ruta Inertia | Contenido |
 |---|---|---|
 | Clientes | `Facturacion/Clientes` | Tabla con buscador (nombre/RFC) y paginación; alta y edición en modal. |
-| Servicios | `Facturacion/Servicios` | Tabla con filtro por categoría; alta y edición en modal, incluida la administración de categorías. |
-| Tarifas | `Facturacion/Tarifas` | Pestañas: *Categorías de aeronave* · *Tipos de motor* · *Combustible* · *Formas de pago*. |
+| Servicios | `Facturacion/Servicios` | Tabla con filtro por categoría, precio, margen y ajuste. Las categorías de servicio se administran desde un modal de esta misma pantalla: son una clasificación de los servicios, no un catálogo que se consulte por sí solo. |
+| Categorías de aeronave | `Facturacion/CategoriasAeronave` | Categoría y sus tres tarifas: pernocta, tránsito 2h y tránsito 12h. |
+| Tipos de motor | `Facturacion/TiposMotor` | Tipo de motor y su tarifa de aterrizaje. |
+| Combustible | `Facturacion/Combustible` | Precio vigente e historial de vigencias. |
+| Formas de pago | `Facturacion/FormasPago` | Catálogo corto: efectivo, tarjeta, transferencia. |
+| Proveedores | `Facturacion/Proveedores` | Catálogo de proveedores. |
 | Aeronaves facturables | `Facturacion/AeronavesFacturacion` | Asigna categoría, motor, estatus y derecho de vuelos por matrícula. Reutiliza el autocompletado de matrícula existente. |
+
+### Menú
+
+Ocho entradas sueltas saturarían la barra lateral, así que el área Facturación
+agrupa las seis de catálogo puro bajo un nodo **Catálogos** usando el mecanismo
+`children` que `navigation.ts` ya emplea en Rampa → Combustible. Quedan en el
+primer nivel **Clientes** y **Aeronaves facturables**, que son las de uso diario:
+
+```
+Facturacion
+ ├─ Clientes
+ ├─ Aeronaves facturables
+ └─ Catálogos
+     ├─ Servicios
+     ├─ Categorías de aeronave
+     ├─ Tipos de motor
+     ├─ Combustible
+     ├─ Formas de pago
+     └─ Proveedores
+```
+
+Son pantallas independientes con su propia ruta; el agrupamiento es solo del
+menú.
 
 ### Regla común
 
@@ -234,7 +261,8 @@ es como funciona hoy y debe conservarse.
 Prefijo `api/facturacion`, middleware `auth:sanctum`. Consultar requiere sesión;
 escribir requiere `subdep:catalogosFacturacion`. Admin siempre pasa.
 
-Por cada catálogo (`clientes`, `servicios`, `categorias-servicio`,
+Las rutas van en kebab-case y **sin** el prefijo `fact_`, que es solo de las
+tablas. Por cada catálogo (`clientes`, `servicios`, `categorias-servicio`,
 `categorias-aeronave`, `tipos-motor`, `formas-pago`, `proveedores`,
 `precios-combustible`, `aeronaves-facturacion`):
 
@@ -263,11 +291,11 @@ como conexión `prefactura_legacy` y configurada por `.env`
 Orden de importación, que respeta las dependencias:
 
 ```
-categorias_aeronave + tipos_motor (con sus tarifas)
-  → aeronaves_facturacion
-  → clientes
-  → categorias_servicio → servicios
-  → precios_combustible → formas_pago → proveedores
+fact_categorias_aeronave + fact_tipos_motor (con sus tarifas)
+  → fact_aeronaves
+  → fact_clientes
+  → fact_categorias_servicio → fact_servicios
+  → fact_precios_combustible → fact_formas_pago → fact_proveedores
 ```
 
 **Idempotente**: empata por llave natural (matrícula, RFC o nombre del cliente,
@@ -310,13 +338,13 @@ detalle en `storage/logs/facturacion-importacion-AAAA-MM-DD.log`.
 
 ## Entregables
 
-- Migraciones de las 8 tablas de catálogo + `aeronaves_facturacion` (9 en total)
+- Migraciones de las 8 tablas de catálogo + `fact_aeronaves` (9 en total)
 - Modelos, controladores, Form Requests y rutas
 - Seeder del departamento `Facturacion` y el subdepartamento
   `catalogosFacturacion`
 - Constante `Bitacora::MODULO_FACTURACION_CATALOGOS`
 - Comando `facturacion:importar` con simulación y reporte
-- 4 pantallas con sus stores tipados y componentes
+- 8 pantallas independientes con sus stores tipados y componentes, agrupadas en el menú
 - Suite de pruebas
 - Entrada de menú por área en `navigation.ts`
 
