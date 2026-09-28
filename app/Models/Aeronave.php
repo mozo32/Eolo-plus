@@ -19,7 +19,13 @@ class Aeronave extends Model
 
     public function tipoAeronave()
     {
-        return $this->belongsTo(TipoAeronave::class, 'tipo_aeronave_id');
+        return $this->belongsTo(TipoAeronave::class, 'aeronave_id');
+    }
+
+    /** Atributos de cobro de esta matrícula; null si nunca se ha facturado. */
+    public function facturacion()
+    {
+        return $this->hasOne(FactAeronave::class, 'aeronave_id');
     }
 }
 

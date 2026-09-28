@@ -17,7 +17,7 @@ class TipoAeronave extends Model
 
     public function aeronaves()
     {
-        return $this->hasMany(Aeronave::class, 'tipo_aeronave_id');
+        return $this->hasMany(Aeronave::class, 'aeronave_id');
     }
 
 }
