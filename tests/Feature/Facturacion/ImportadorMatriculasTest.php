@@ -331,11 +331,14 @@ test('d_vuelos 0 cobra derecho de vuelos y d_vuelos 1 no', function () {
 });
 
 /*
- * Una tarifa colgante (un id que no existe en el origen) solo puede cambiar un
- * cobro cuando tiene contra que caer: la categoria, para la estancia, o el
- * motor, para el aterrizaje. Ese caso lleva su renglon y su conteo. Las
- * matriculas sin categoria ni motor, con todos los ids en 0, no heredan nada:
- * el origen no les cobra y Eolo-plus tampoco, asi que solo se cuentan.
+ * El sistema viejo (insert22.php) resuelve las cuatro tarifas con un INNER JOIN
+ * a las cuatro tablas: si falta CUALQUIERA, la consulta devuelve cero filas y
+ * la matricula no factura ningun concepto de estancia. En Eolo-plus cada tarifa
+ * se resuelve por su cuenta, asi que una matricula con alguna tarifa (o con
+ * categoria o motor de donde heredarla) facturaria lo que el origen no. Ese
+ * caso lleva renglon y conteo propios. Solo cuando en Eolo-plus tampoco resuelve
+ * nada (las cuatro faltan y no hay categoria ni motor) ningun cobro cambia y
+ * basta con contarlas.
  */
 test('una tarifa colgante con categoria o motor donde caer lleva renglon propio y cuenta', function () {
     sembrarLegacy([
@@ -379,7 +382,11 @@ test('una matricula sin categoria ni motor con tarifas en 0 no genera renglon in
         ->and(array_values(array_filter($resultado->hallazgos, fn ($h) => str_contains($h, '2 matrículas'))))->toHaveCount(1);
 });
 
-test('un aterrizaje colgante en una matricula sin motor no tiene donde caer y no lleva renglon', function () {
+test('con categoria, estancia resuelta y aterrizaje colgante sin motor, la matricula no era facturable en el origen y lleva renglon', function () {
+    // El caso que la regla vieja dejaba pasar sin decir nada: las tres tarifas
+    // de estancia resuelven, el aterrizaje cuelga y no hay motor donde caer. El
+    // INNER JOIN del origen devuelve cero filas: no facturaba nada. Aqui
+    // facturaria las tres de estancia.
     sembrarLegacy([
         matriculaLegacy('XA-AAA'),
         array_merge(matriculaLegacy('XA-SM'), ['id_motor' => 0, 'id_aterrizaje' => 77]),
@@ -387,9 +394,44 @@ test('un aterrizaje colgante en una matricula sin motor no tiene donde caer y no
 
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
 
+    $renglones = array_values(array_filter($resultado->hallazgos, fn ($h) => str_contains($h, 'XA-SM')));
+
+    expect($resultado->conteos['matriculas_con_tarifa_huerfana'])->toBe(1)
+        ->and($resultado->conteos['matriculas_con_tarifa_huerfana_sin_destino'])->toBe(0)
+        ->and($renglones)->toHaveCount(1)
+        ->and($renglones[0])->toContain('no era facturable en el origen')
+        ->and($renglones[0])->toContain('INNER JOIN')
+        // Lo que falta, y lo que Eolo-plus si cobraria.
+        ->and($renglones[0])->toContain('le faltan aterrizaje')
+        ->and($renglones[0])->toContain('pernocta, tránsito de 2h, tránsito de 12h con su tarifa del origen')
+        ->and($renglones[0])->toContain('puede cobrar distinto')
+        // Sin motor, no promete herencia del motor.
+        ->and($renglones[0])->not->toContain('heredado del motor')
+        // Y no se dice que ningun cobro cambia: no es verdad para esta.
+        ->and(implode(' ', $resultado->hallazgos))->not->toContain('ningún cobro cambia');
+});
+
+test('sin categoria ni motor, con estancia resuelta y aterrizaje colgante, tambien lleva renglon', function () {
+    sembrarLegacy([
+        matriculaLegacy('XA-AAA'),
+        array_merge(matriculaLegacy('XA-SC', idCategoria: 0), ['id_motor' => 0, 'id_aterrizaje' => 77]),
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
+
+    expect($resultado->conteos['matriculas_con_tarifa_huerfana'])->toBe(1)
+        ->and($resultado->conteos['matriculas_con_tarifa_huerfana_sin_destino'])->toBe(0)
+        ->and(implode(' ', $resultado->hallazgos))->toContain('XA-SC');
+});
+
+test('con las cuatro tarifas completas no lleva renglon de facturabilidad', function () {
+    sembrarLegacy([matriculaLegacy('XA-AAA'), matriculaLegacy('XA-BBB')]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
+
     expect($resultado->conteos['matriculas_con_tarifa_huerfana'])->toBe(0)
-        ->and($resultado->conteos['matriculas_con_tarifa_huerfana_sin_destino'])->toBe(1)
-        ->and(implode(' ', $resultado->hallazgos))->not->toContain('XA-SM');
+        ->and($resultado->conteos['matriculas_con_tarifa_huerfana_sin_destino'])->toBe(0)
+        ->and(implode(' ', $resultado->hallazgos))->not->toContain('no era facturable');
 });
 
 test('la simulacion cuenta lo que traeria pero no escribe nada', function () {
@@ -732,4 +774,108 @@ test('el comando falla limpio si fact_aeronaves no existe', function () {
     $this->artisan('facturacion:importar-matriculas')
         ->expectsOutputToContain('No se pudo completar')
         ->assertFailed();
+});
+
+/*
+ * updateOrCreate(['nombre' => ...]) sobre una columna unica con collation
+ * utf8mb4_unicode_ci funde dos categorias (o motores) del origen que se llamen
+ * igual o solo difieran en caja o acentos: la segunda pisaria las tarifas de la
+ * primera y las matriculas de la primera heredarian las de la segunda. Cobro
+ * distinto sin un solo hallazgo. Se reporta, igual que con los tipos.
+ */
+function sembrarOrigenBase(): void
+{
+    $remota = DB::connection('remota');
+    $remota->table('tb_tipo')->insert(['id_tipo' => 1, 'tipo' => 'Learjet 45']);
+    $remota->table('tb_pernocta')->insert([['id_pernocta' => 1, 'pernocta' => 100], ['id_pernocta' => 2, 'pernocta' => 200]]);
+    $remota->table('tb_transito2h')->insert(['id_transito2h' => 1, 'transito' => 10]);
+    $remota->table('tb_transito12h')->insert(['id_transito12h' => 1, 'transito12' => 20]);
+    $remota->table('tb_aterrisaje')->insert([['id_aterrizaje' => 1, 'aterrizaje' => 30], ['id_aterrizaje' => 2, 'aterrizaje' => 40]]);
+}
+
+test('dos categorias del origen con el mismo nombre, o que solo difieren en caja o acentos, se reportan', function () {
+    sembrarOrigenBase();
+    $remota = DB::connection('remota');
+    $remota->table('tb_categoria')->insert([
+        ['id_categoria' => 1, 'categoria' => 'Ejecutiva'],
+        ['id_categoria' => 2, 'categoria' => 'ejecutiva'],
+        ['id_categoria' => 3, 'categoria' => 'Ligera'],
+        ['id_categoria' => 4, 'categoria' => 'Ligéra'],
+        ['id_categoria' => 5, 'categoria' => 'Pesada'],
+        ['id_categoria' => 6, 'categoria' => 'Ejecutiva'],
+    ]);
+    $remota->table('tb_motor')->insert(['id_motor' => 1, 'motor' => 'Jet']);
+    $remota->table('tb_matricula')->insert([
+        matriculaConTarifas('XA-E1', 1, 1, 1, 1, 1, 1),
+        matriculaConTarifas('XA-E2', 2, 1, 2, 1, 1, 1),
+        matriculaConTarifas('XA-L1', 3, 1, 1, 1, 1, 1),
+        matriculaConTarifas('XA-L2', 4, 1, 2, 1, 1, 1),
+        matriculaConTarifas('XA-P1', 5, 1, 1, 1, 1, 1),
+        matriculaConTarifas('XA-E3', 6, 1, 1, 1, 1, 1),
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
+
+    $texto = implode("\n", $resultado->hallazgos);
+
+    expect($texto)->toContain("Categoría duplicada con distinta escritura: 'Ejecutiva' y 'ejecutiva'")
+        // Con acentos: solo lo detecta la llave que ignora acentos.
+        ->and($texto)->toContain("Categoría duplicada con distinta escritura: 'Ligera' y 'Ligéra'")
+        // Una tercera con el mismo nombre exacto tambien se reporta.
+        ->and($texto)->toContain("Categoría duplicada con distinta escritura: 'ejecutiva' y 'Ejecutiva'")
+        ->and($texto)->not->toContain("'Pesada' y")
+        ->and($texto)->not->toContain("y 'Pesada'");
+});
+
+test('una categoria duplicada sin matriculas no se importa y por tanto no se reporta como duplicada', function () {
+    sembrarOrigenBase();
+    $remota = DB::connection('remota');
+    $remota->table('tb_categoria')->insert([
+        ['id_categoria' => 1, 'categoria' => 'Ejecutiva'],
+        ['id_categoria' => 2, 'categoria' => 'EJECUTIVA'],
+    ]);
+    $remota->table('tb_motor')->insert(['id_motor' => 1, 'motor' => 'Jet']);
+    $remota->table('tb_matricula')->insert([matriculaConTarifas('XA-E1', 1, 1, 1, 1, 1, 1)]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
+
+    // La segunda ni se importa (no tiene matriculas), asi que no se funde con nada.
+    expect(implode(' ', $resultado->hallazgos))->not->toContain('Categoría duplicada');
+});
+
+test('dos motores del origen con el mismo nombre, o que solo difieren en caja o acentos, se reportan', function () {
+    sembrarOrigenBase();
+    $remota = DB::connection('remota');
+    $remota->table('tb_categoria')->insert(['id_categoria' => 1, 'categoria' => 'Ejecutiva']);
+    $remota->table('tb_motor')->insert([
+        ['id_motor' => 1, 'motor' => 'Jet'],
+        ['id_motor' => 2, 'motor' => 'JET'],
+        ['id_motor' => 3, 'motor' => 'Turbohélice'],
+        ['id_motor' => 4, 'motor' => 'Turbohelice'],
+        ['id_motor' => 5, 'motor' => 'Piston'],
+    ]);
+    $remota->table('tb_matricula')->insert([
+        matriculaConTarifas('XA-M1', 1, 1, 1, 1, 1, 1),
+        matriculaConTarifas('XA-M2', 1, 2, 1, 1, 1, 2),
+        matriculaConTarifas('XA-M3', 1, 3, 1, 1, 1, 1),
+        matriculaConTarifas('XA-M4', 1, 4, 1, 1, 1, 2),
+        matriculaConTarifas('XA-M5', 1, 5, 1, 1, 1, 1),
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
+
+    $texto = implode("\n", $resultado->hallazgos);
+
+    expect($texto)->toContain("Motor duplicado con distinta escritura: 'Jet' y 'JET'")
+        ->and($texto)->toContain("Motor duplicado con distinta escritura: 'Turbohélice' y 'Turbohelice'")
+        ->and($texto)->not->toContain("'Piston' y")
+        ->and($texto)->not->toContain("y 'Piston'");
+});
+
+test('categorias y motores distintos no generan hallazgo de duplicado', function () {
+    sembrarOrigenRico();
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
+
+    expect(implode(' ', $resultado->hallazgos))->not->toContain('duplicad');
 });

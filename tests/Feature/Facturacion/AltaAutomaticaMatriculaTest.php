@@ -264,3 +264,40 @@ test('un walkaround de una aeronave sin tipo le completa el tipo y guarda su id 
         ->and(WalkAround::first()->tipo_aeronave_id)->toBe($aeronave->aeronave_id)
         ->and(WalkAround::first()->tipo_aeronave_id)->not->toBe(0);
 });
+
+test('el lote de pernoctas da de alta las matriculas nuevas en orden alfabetico, sin alterar el orden ni el contenido de las pernoctas', function () {
+    $this->actingAs(User::factory()->create());
+
+    foreach (['XA-ZZZ', 'XA-MMM', 'XA-AAA'] as $matricula) {
+        aeronaveEnHangar($matricula);
+    }
+
+    $pernocta = fn (string $matricula, string $fecha) => [
+        'fecha' => $fecha,
+        'matricula' => $matricula,
+        'nombre' => 'Cliente',
+        'ubicacion' => 'H1',
+    ];
+
+    // Orden del lote: Z, M, A y Z otra vez.
+    $this->postJson('/api/PernoctaDia', [
+        $pernocta('XA-ZZZ', '2026-09-28'),
+        $pernocta('XA-MMM', '2026-09-28'),
+        $pernocta('XA-AAA', '2026-09-28'),
+        $pernocta('xa-zzz', '2026-09-29'),
+    ])->assertCreated();
+
+    // Las altas se hicieron en orden alfabetico (el orden de los ids lo
+    // delata): asi todos los lotes toman los bloqueos del indice unico igual.
+    $ids = Aeronave::whereIn('matricula', ['XA-AAA', 'XA-MMM', 'XA-ZZZ'])->pluck('id', 'matricula');
+    expect($ids['XA-AAA'])->toBeLessThan($ids['XA-MMM'])
+        ->and($ids['XA-MMM'])->toBeLessThan($ids['XA-ZZZ'])
+        ->and(Aeronave::count())->toBe(3)
+        ->and(FactAeronave::count())->toBe(3);
+
+    // Las pernoctas se guardaron en el orden del lote y con el contenido de
+    // siempre: la primera de cada matricula nueva sin estatus; la segunda de XA-ZZZ ya ve el catalogo.
+    $pernoctas = PernoctaDia::orderBy('id')->get();
+    expect($pernoctas->pluck('matricula')->all())->toBe(['XA-ZZZ', 'XA-MMM', 'XA-AAA', 'XA-ZZZ'])
+        ->and($pernoctas->pluck('tipo_cliente')->all())->toBe(['', '', '', 'Transito']);
+});

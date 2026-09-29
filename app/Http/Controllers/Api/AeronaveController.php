@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Models\Aeronave;
+use App\Models\TipoAeronave;
 use App\Models\WalkAround;
 use App\Services\CatalogoAeronaves;
 use Illuminate\Support\Facades\Http;
@@ -100,11 +101,30 @@ class AeronaveController extends Controller
             'tipo'         => ['required', 'string', 'max:100'],
             'tipoAeronave' => ['required', 'integer', 'exists:tipo_aeronaves,id'],
         ]);
-        $aeronave = Aeronave::create([
-            'matricula'       => $validated['matricula'],
-            'aeronave_id'            => $validated['tipoAeronave'],
-            'tipo_aeronave'   => $validated['tipo'],
-        ]);
+        // Único camino de alta que no pasaba por el catálogo. El servicio
+        // normaliza la matrícula a mayúsculas, crea la fila satélite
+        // fact_aeronaves (sin ella la matrícula no aparece en Aeronaves
+        // facturables ni se puede clasificar) y resuelve la carrera de un doble
+        // clic contra el índice único en vez de dar 500.
+        //
+        // El tipo elegido llega como id: se pasa su nombre y el servicio
+        // resuelve la misma fila.
+        $tipoElegido = TipoAeronave::findOrFail($validated['tipoAeronave']);
+
+        $aeronave = $this->catalogo->buscarOCrear($validated['matricula'], $tipoElegido->nombre);
+
+        // El texto libre "tipo" se seguía guardando en aeronaves.tipo_aeronave y
+        // buscarPorMatricula lo devuelve. Solo se escribe si esta petición creó
+        // la fila: el servicio ya cerró su transacción y no hay bloqueo que
+        // mejorar, y quien perdió una carrera no pisa el dato de la ganadora.
+        if ($aeronave->wasRecentlyCreated) {
+            $aeronave->forceFill(['tipo_aeronave' => $validated['tipo']])->save();
+        }
+
+        // Sin relaciones: la relación tipoAeronave se serializaría como
+        // `tipo_aeronave` y taparía la columna del mismo nombre, que es parte
+        // del contrato de la respuesta.
+        $aeronave = $aeronave->withoutRelations();
 
         return response()->json($aeronave, 201);
     }

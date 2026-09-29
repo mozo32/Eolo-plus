@@ -78,12 +78,21 @@ export default function ModalCatalogo<T extends RegistroCatalogo>({ titulo, subt
         setNombreRechazado(false);
         if (Object.keys(nuevos).length > 0) return;
 
-        const datos: DatosCatalogo = { nombre: nombre.trim() };
-        for (const campo of campos) datos[campo.clave] = parsearMonto(importes[campo.clave]) ?? 0;
-
         setGuardando(true);
 
         try {
+            const datos: DatosCatalogo = { nombre: nombre.trim() };
+            for (const campo of campos) {
+                const monto = parsearMonto(importes[campo.clave]);
+                // Nunca se convierte vacío en cero: cero es una tarifa de
+                // cortesía válida y el servidor la acepta, así que un vacío que
+                // llegara aquí (si el validador de arriba se rompiera) fijaría
+                // en cero las tarifas de una categoría entera sin error en
+                // ningún lado. Se lanza, y el catch lo muestra sin enviar nada.
+                if (monto === null) throw new Error(`No se pudo leer el importe de «${campo.enMensaje}». No se guardó nada.`);
+                datos[campo.clave] = monto;
+            }
+
             await onGuardar(datos);
         } catch (error) {
             if (error instanceof ErrorApi && Object.keys(error.errors).length > 0) {

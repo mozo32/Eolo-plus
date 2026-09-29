@@ -474,18 +474,53 @@ class PernoctaDiaController extends Controller
         DB::beginTransaction();
 
         try {
+            // Alta de las matrículas desconocidas, en orden alfabético y no en
+            // el orden del lote.
+            //
+            // El orden importa: aeronaves.matricula tiene índice único y cada
+            // alta toma un bloqueo de InnoDB sobre su entrada que se conserva
+            // hasta el commit de esta transacción. Dos lotes concurrentes con
+            // las mismas matrículas nuevas en orden distinto (A,B contra B,A)
+            // se esperarían el uno al otro y MySQL abortaría uno con el error
+            // 1213 (deadlock), un 500 intermitente que SQLite no puede
+            // reproducir. Si todos los lotes toman los bloqueos en el mismo
+            // orden, el segundo solo espera al primero. No quitar este orden
+            // por "innecesario": no hay prueba que lo detecte.
+            //
+            // SORT_STRING: orden por bytes, el mismo en todos los procesos y
+            // sin la comparación numérica que sort() aplica a cadenas que
+            // parecen números.
+            $matriculasDelLote = collect($data)
+                ->map(fn ($item) => mb_strtoupper(trim((string) $item['matricula'])))
+                ->unique()
+                ->sort(SORT_STRING)
+                ->values();
+
+            // Matrículas que no existían antes de este lote. La primera
+            // pernocta de cada una queda sin tipo, estatus ni categoría, igual
+            // que antes de ordenar las altas; las siguientes del mismo lote sí
+            // ven ya el catálogo.
+            $nuevasEnEsteLote = [];
+
+            foreach ($matriculasDelLote as $matriculaDelLote) {
+                if (!$this->catalogo->buscar($matriculaDelLote)) {
+                    $this->catalogo->buscarOCrear($matriculaDelLote);
+                    $nuevasEnEsteLote[$matriculaDelLote] = true;
+                }
+            }
+
             foreach ($data as $item) {
                 $datos = $this->catalogo->buscar(
                     $item['matricula']
                 );
 
-                if (!$datos) {
-                    // Aeronave desconocida: se da de alta y esta primera
-                    // pernocta queda sin tipo, estatus ni categoría, igual
-                    // que antes.
-                    $this->catalogo->buscarOCrear(
-                        $item['matricula']
-                    );
+                $claveMatricula = mb_strtoupper(trim((string) $item['matricula']));
+
+                if (isset($nuevasEnEsteLote[$claveMatricula])) {
+                    // Aeronave desconocida: esta primera pernocta queda sin
+                    // tipo, estatus ni categoría, igual que antes.
+                    $datos = null;
+                    unset($nuevasEnEsteLote[$claveMatricula]);
                 }
 
                 PernoctaDia::create([

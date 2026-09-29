@@ -2501,6 +2501,8 @@ git commit -m "Indice unico en matricula y entradas de menu de Facturacion"
 
 El índice único de la Task 11 vive en la **última** migración y lleva una guardia: si hay matrículas repetidas en `aeronaves`, falla con un mensaje que las lista, sin dejar nada a medias (las migraciones anteriores ya quedaron aplicadas). Nota: `php artisan migrate --step` **no** excluye migraciones, solo pone cada una en su propio lote; no sirve para separar el índice.
 
+**Backend y frontend se despliegan juntos.** Si se sube el frontend nuevo contra el backend viejo, `ajuste` y `margen` llegan `undefined` y la pantalla del precio de combustible muestra `NaN`. Todo lo de abajo (`git pull`, `migrate`, `npm run build`) va en el mismo despliegue; no se deja el frontend nuevo sirviéndose contra un backend sin actualizar.
+
 ```bash
 git pull
 composer install --no-dev --optimize-autoloader
@@ -2512,8 +2514,8 @@ php artisan migrate
 # 2. Simulacion: revisar el reporte del importador antes de aplicar
 php artisan facturacion:importar-matriculas
 
-# 3. Aplicar
-php artisan facturacion:importar-matriculas --aplicar
+# 3. Aplicar. Lleva --forzar (ver la nota de abajo): sin el, casi seguro falla.
+php artisan facturacion:importar-matriculas --aplicar --forzar
 
 # 4. Permisos
 php artisan db:seed --class=FacturacionSubdepartamentosSeeder
@@ -2521,6 +2523,8 @@ php artisan db:seed --class=FacturacionSubdepartamentosSeeder
 php artisan optimize:clear
 npm ci && npm run build
 ```
+
+**Por qué el paso 3 lleva `--forzar`.** El comando se niega a aplicar si `fact_aeronaves` ya tiene filas. Pero en producción el sistema **sigue capturando** entre el `migrate` y el `--aplicar`, y cada captura de una matrícula nueva crea su fila satélite: al llegar al paso 3 la tabla casi con seguridad ya tiene filas, y sin `--forzar` el comando falla con "fact_aeronaves ya tiene N filas" sin escribir nada. Aquí `--forzar` es lo correcto: esas filas son satélites recién creadas, con estatus por omisión y sin clasificar, y el importador las procesa con `updateOrCreate` sobre `aeronave_id`, así que **corrige** su estatus, categoría, motor y tarifas con los del sistema viejo. El único riesgo es sobreescribir clasificaciones hechas a mano en las pantallas de Facturación, por eso nadie debe clasificar ni editar categorías o motores ahí antes de terminar el paso 3 (la asignación de subdepartamentos, que da acceso, va después).
 
 Después, asignar los cuatro subdepartamentos de Facturación al personal desde Gestión de usuarios, con la función de agrupar por departamento.
 

@@ -95,3 +95,46 @@ test('la categoria viaja en la respuesta cuando la matricula ya esta clasificada
 
     $this->getJson('/api/aeronaves/buscar/XA-DEF')->assertOk()->assertJsonPath('categoria', 'Ejecutiva');
 });
+
+test('el alta por POST /api/aeronaves pasa por el catalogo: matricula normalizada y con satelite', function () {
+    $tipo = TipoAeronave::create(['nombre' => 'Learjet 45']);
+    $this->actingAs(User::factory()->create());
+
+    $respuesta = $this->postJson('/api/aeronaves', [
+        'matricula' => ' xa-nue ',
+        'tipo' => 'Learjet 45 XR',
+        'tipoAeronave' => $tipo->id,
+    ])->assertCreated()
+        // Contrato: la fila de aeronaves tal cual, con la columna de texto libre
+        // y sin relaciones colgadas.
+        ->assertJsonPath('matricula', 'XA-NUE')
+        ->assertJsonPath('aeronave_id', $tipo->id)
+        ->assertJsonPath('tipo_aeronave', 'Learjet 45 XR')
+        ->assertJsonStructure(['id', 'matricula', 'aeronave_id', 'tipo_aeronave', 'created_at', 'updated_at'])
+        ->assertJsonMissingPath('facturacion')
+        ->json();
+
+    $aeronave = Aeronave::where('matricula', 'XA-NUE')->firstOrFail();
+    expect($aeronave->id)->toBe($respuesta['id'])
+        ->and(Aeronave::count())->toBe(1);
+
+    // La fila satelite existe: sin ella no aparece en Aeronaves facturables.
+    $satelite = FactAeronave::where('aeronave_id', $aeronave->id)->first();
+    expect($satelite)->not->toBeNull()
+        ->and($satelite->estatus)->toBe(FactAeronave::ESTATUS_TRANSITO);
+});
+
+test('el alta por POST /api/aeronaves con una matricula que ya existe no duplica ni rompe', function () {
+    $tipo = TipoAeronave::create(['nombre' => 'Learjet 45']);
+    $this->actingAs(User::factory()->create());
+
+    // Una matricula existente se rechaza con 422, como antes.
+    Aeronave::create(['matricula' => 'XA-YAA', 'aeronave_id' => $tipo->id]);
+    $this->postJson('/api/aeronaves', ['matricula' => 'XA-YAA', 'tipo' => 'x', 'tipoAeronave' => $tipo->id])
+        ->assertUnprocessable();
+
+    // Distinta caja: el catalogo la reconoce (la validacion unique de SQLite
+    // distingue caja, la de MySQL no) y no crea una segunda fila.
+    $this->postJson('/api/aeronaves', ['matricula' => 'xa-yaa', 'tipo' => 'x', 'tipoAeronave' => $tipo->id]);
+    expect(Aeronave::count())->toBe(1);
+});

@@ -227,6 +227,21 @@ Idempotente: empata por nombre (tipo, categoría, motor) y por matrícula.
    `categoria_aeronave_id` nula y se cuentan en el reporte.
 5. **Tipos duplicados** entre `tb_tipo` y `tipo_aeronaves` con distinta
    escritura (mayúsculas, espacios).
+6. **Categorías y motores duplicados** en `tb_categoria` y `tb_motor`, con el
+   mismo patrón que los tipos y comparando sin caja ni acentos (la columna
+   única usa `utf8mb4_unicode_ci`, que los considera iguales). Dos así se
+   funden en una sola fila local: la segunda pisaría las tarifas de la primera y
+   sus matrículas heredarían las de la segunda, es decir, un cobro distinto sin
+   ningún otro aviso.
+7. **Matrículas no facturables en el origen.** El sistema viejo resuelve las
+   cuatro tarifas (pernocta, tránsito 2h, tránsito 12h, aterrizaje) con un
+   `INNER JOIN` a las cuatro tablas (`insert22.php`): si falta cualquiera, esa
+   matrícula no factura ningún concepto de estancia. Eolo-plus resuelve cada
+   tarifa por su cuenta, así que una matrícula con alguna tarifa, o con
+   categoría o motor donde heredar, facturaría lo que el origen no: lleva
+   renglón propio. Solo las que no resuelven nada en ninguno de los dos
+   sistemas (las cuatro faltan y no hay categoría ni motor) se cuentan sin
+   renglón.
 
 ## Pantallas
 
@@ -310,13 +325,48 @@ repetidas y, si las hay, falla con un mensaje que las lista; las migraciones
 anteriores ya quedaron aplicadas. `php artisan migrate --step` no sirve para
 excluirla: solo pone cada migración en su propio lote.
 
+**Backend y frontend se despliegan juntos.** El frontend nuevo espera que el
+precio de combustible traiga los campos `ajuste` y `margen`, que solo el
+backend nuevo calcula. Si se sube el frontend contra el backend viejo, esos
+campos llegan `undefined` y la pantalla del precio de combustible muestra
+`NaN`. No hay orden intermedio seguro: `git pull`, `composer install`,
+`migrate` y `npm run build` van en el mismo despliegue, sin dejar el frontend
+nuevo sirviéndose contra un backend sin actualizar.
+
 1. `php artisan migrate` (si hay matrículas repetidas falla limpio al final:
    depurarlas y volver a correrlo)
 2. `php artisan facturacion:importar-matriculas` (simulación) y revisar el reporte
-3. `php artisan facturacion:importar-matriculas --aplicar`
+3. `php artisan facturacion:importar-matriculas --aplicar --forzar`
+   (ver abajo por qué `--forzar`)
 4. `php artisan db:seed --class=FacturacionSubdepartamentosSeeder`
 5. Asignar los subdepartamentos desde Gestión de usuarios
 6. `npm run build`
+
+### Por qué el paso 3 lleva `--forzar`
+
+El comando se niega a aplicar si `fact_aeronaves` ya tiene filas, para no pisar
+lo que alguien haya editado desde la aplicación. Pero en producción el sistema
+**sigue capturando** entre el `migrate` (paso 1) y el `--aplicar` (paso 3), y
+cada captura de una matrícula nueva crea su fila satélite. Es decir: al llegar
+al paso 3, `fact_aeronaves` casi con seguridad ya tiene filas, y sin `--forzar`
+el comando falla con "fact_aeronaves ya tiene N filas" sin escribir nada.
+
+En este despliegue `--forzar` es lo correcto, no un atajo:
+
+- Esas filas son satélites recién creadas por la captura, con el estatus por
+  omisión (`transito`) y sin categoría, motor ni tarifas propias: no hay nada
+  editado que perder. El importador las trata con `updateOrCreate` sobre
+  `aeronave_id`, así que **corrige** su estatus, categoría, motor y tarifas con
+  los del sistema viejo, que es justo lo que hay que hacer con una matrícula
+  que el sistema viejo ya conocía. Las matrículas que el sistema viejo no
+  conoce no se tocan.
+- El único riesgo de `--forzar` es sobreescribir clasificaciones hechas a mano
+  en las pantallas de Facturación. Por eso **nadie debe clasificar aeronaves ni
+  editar categorías o motores desde esas pantallas entre el `migrate` y el
+  `--aplicar`**: hay que hacer el paso 3 antes de dar acceso a Facturación
+  (paso 5).
+- Corre primero la simulación (paso 2): avisa cuántas filas existentes se verían
+  afectadas.
 
 ## Pendiente que requiere respuesta del usuario
 

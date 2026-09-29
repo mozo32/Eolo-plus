@@ -11,6 +11,7 @@ use App\Models\TipoAeronave;
 use App\Models\User;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Trae de la base de Prefacturas (`fact-fbo`, conexión `remota`) lo que cuelga
@@ -85,6 +86,18 @@ class ImportadorMatriculas
         return DB::connection('remota')->table($tabla);
     }
 
+    /**
+     * Llave con la que MySQL considera iguales dos nombres: las columnas únicas
+     * de fact_categorias_aeronave y fact_tipos_motor usan utf8mb4_unicode_ci,
+     * que no distingue caja ni acentos ('Ligera' = 'ligéra'). Sin esta llave, dos
+     * nombres así se detectarían distintos aquí y se fundirían en una sola fila
+     * al importar.
+     */
+    private static function llaveNombre(string $nombre): string
+    {
+        return mb_strtolower(Str::ascii($nombre));
+    }
+
     /** Un valor de tarifa del origen como número con dos decimales; null si no hay dato. */
     private static function tarifa(mixed $valor): ?float
     {
@@ -146,6 +159,21 @@ class ImportadorMatriculas
             ->leftJoin('tb_transito2h as t2', 't2.id_transito2h', '=', 'm.id_transito2h')
             ->leftJoin('tb_transito12h as t12', 't12.id_transito12h', '=', 'm.id_transito12h')
             ->leftJoin('tb_aterrisaje as a', 'a.id_aterrizaje', '=', 'm.id_aterrizaje')
+            // Este orden decide el cobro, no es cosmético. Para las matrículas
+            // repetidas gana la fila de menor id_matricula (ver el `isset` de
+            // abajo), y las repetidas pueden divergir en datos: XA-TVA y XB-ODW
+            // tienen una fila con categoría y tarifas y otra con categoría 0 y
+            // todo NULL. Qué fila gana decide lo que se cobra.
+            //
+            // Gana la de menor id porque así lo resuelve el sistema viejo: sus
+            // consultas hacen `WHERE matricula = ?` sin ORDER BY (a_pref.php,
+            // insert22.php), y en InnoDB eso devuelve por orden de clave
+            // primaria, así que la primera fila es la de menor id_matricula. (Las
+            // consultas de tarifas, además, hacen INNER JOIN y descartan por sí
+            // solas la fila con todo en 0; en los datos actuales las dos vías
+            // llevan a la misma fila.) La coincidencia es por herencia del orden
+            // del PK, no porque nadie lo decidiera: si se cambia o se quita este
+            // orderBy, deja de coincidir sin que nada falle.
             ->orderBy('m.id_matricula')
             ->select('m.*', 'p.pernocta as v_pernocta', 't2.transito as v_transito2h', 't12.transito12 as v_transito12h', 'a.aterrizaje as v_aterrizaje')
             ->get();
@@ -225,6 +253,7 @@ class ImportadorMatriculas
     {
         $mapa = [];
         $modas = [];
+        $vistos = [];
 
         foreach ($this->legacy('tb_categoria')->get() as $fila) {
             $nombre = trim((string) $fila->categoria);
@@ -240,6 +269,18 @@ class ImportadorMatriculas
 
                 continue;
             }
+
+            // Validación 6: dos categorías que la base local no distingue. Solo
+            // cuentan las que de verdad se importan (arriba se descartaron las
+            // vacías). updateOrCreate las funde: la segunda pisa las tarifas de la
+            // primera y las matrículas de la primera heredarían las de la segunda.
+            $llave = self::llaveNombre($nombre);
+
+            if (isset($vistos[$llave])) {
+                $this->resultado->hallazgo("Categoría duplicada con distinta escritura: '{$vistos[$llave]}' y '{$nombre}'. La base local las trata como una sola: la segunda pisa las tarifas de la primera y las matrículas de la primera heredarían las de la segunda, así que el cobro puede cambiar. Corregir el origen antes de aplicar.");
+            }
+
+            $vistos[$llave] = $nombre;
 
             $moda = [
                 'pernocta' => self::moda(array_column($miembros, 'pernocta')),
@@ -304,6 +345,7 @@ class ImportadorMatriculas
     {
         $mapa = [];
         $modas = [];
+        $vistos = [];
 
         foreach ($this->legacy('tb_motor')->get() as $fila) {
             $nombre = trim((string) $fila->motor);
@@ -311,6 +353,17 @@ class ImportadorMatriculas
             if ($nombre === '' || (int) $fila->id_motor === 0) {
                 continue;
             }
+
+            // Validación 7: dos motores que la base local no distingue (ver
+            // importarCategorias): la segunda tarifa de aterrizaje pisaría la
+            // primera para todas las matrículas de ese motor.
+            $llave = self::llaveNombre($nombre);
+
+            if (isset($vistos[$llave])) {
+                $this->resultado->hallazgo("Motor duplicado con distinta escritura: '{$vistos[$llave]}' y '{$nombre}'. La base local los trata como uno solo: la segunda tarifa de aterrizaje pisa la primera y las matrículas del primero heredarían la del segundo, así que el cobro puede cambiar. Corregir el origen antes de aplicar.");
+            }
+
+            $vistos[$llave] = $nombre;
 
             $miembros = array_filter($matriculas, fn ($m) => (int) $m->id_motor === (int) $fila->id_motor);
             $moda = self::moda(array_column($miembros, 'aterrizaje'));
@@ -383,42 +436,53 @@ class ImportadorMatriculas
                 'tarifa_aterrizaje' => self::propia($fila->aterrizaje, $modaMotor),
             ];
 
-            // Una tarifa colgante (su id no existe en el origen) solo puede cambiar
-            // un cobro si tiene contra qué caer: la categoría en la estancia, el
-            // motor en el aterrizaje. En el origen esa tarifa no resuelve; aquí
-            // heredaría la de la categoría o el motor. Ese caso es el que hay que
-            // leer antes de aplicar, así que lleva renglón y conteo propios.
-            $conDestino = [];
-            $sinDestino = false;
+            // Facturabilidad en el origen. insert22.php resuelve las cuatro tarifas
+            // con un INNER JOIN a tb_pernocta, tb_transito2h, tb_transito12h y
+            // tb_aterrisaje: si falta CUALQUIERA (el id no existe en su tabla),
+            // la consulta devuelve cero filas y esa matrícula no factura ningún
+            // concepto de estancia. No basta con mirar cada tarifa por separado.
+            //
+            // En Eolo-plus, en cambio, cada tarifa se resuelve por su cuenta: la
+            // que existe se cobra, y la que falta hereda de la categoría (las tres
+            // de estancia) o del motor (aterrizaje) si los hay. Por eso una
+            // matrícula a la que le falta una sola tarifa, sin dónde heredarla,
+            // dejaría de estar exenta en el origen y facturaría las demás aquí.
+            // Solo si en Eolo-plus tampoco resuelve nada (las cuatro faltan y no
+            // hay categoría ni motor) ningún cobro cambia.
+            $estancia = [
+                'pernocta' => $fila->pernocta,
+                'tránsito de 2h' => $fila->transito2h,
+                'tránsito de 12h' => $fila->transito12h,
+            ];
+            $tarifasOrigen = $estancia + ['aterrizaje' => $fila->aterrizaje];
 
-            foreach ([
-                'pernocta' => [$fila->pernocta, $categoriaId !== null],
-                'tránsito de 2h' => [$fila->transito2h, $categoriaId !== null],
-                'tránsito de 12h' => [$fila->transito12h, $categoriaId !== null],
-                'aterrizaje' => [$fila->aterrizaje, $motorId !== null],
-            ] as $campo => [$valor, $tieneDestino]) {
-                if ($valor !== null) {
-                    continue;
-                }
+            $faltan = array_keys(array_filter($tarifasOrigen, fn ($valor) => $valor === null));
 
-                if ($tieneDestino) {
-                    $conDestino[] = $campo;
+            if ($faltan !== []) {
+                $conTarifa = array_keys(array_filter($tarifasOrigen, fn ($valor) => $valor !== null));
+                $heredanDeCategoria = $categoriaId !== null ? array_values(array_intersect($faltan, array_keys($estancia))) : [];
+                $heredaDelMotor = $motorId !== null && in_array('aterrizaje', $faltan, true);
+
+                if ($conTarifa === [] && $heredanDeCategoria === [] && ! $heredaDelMotor) {
+                    $this->resultado->contar('matriculas_con_tarifa_huerfana_sin_destino');
                 } else {
-                    $sinDestino = true;
+                    $cobrara = [];
+
+                    if ($conTarifa !== []) {
+                        $cobrara[] = implode(', ', $conTarifa).' con su tarifa del origen';
+                    }
+
+                    if ($heredanDeCategoria !== []) {
+                        $cobrara[] = implode(', ', $heredanDeCategoria)." heredada de la categoría '{$this->nombresCategoria[$fila->id_categoria]}'";
+                    }
+
+                    if ($heredaDelMotor) {
+                        $cobrara[] = "aterrizaje heredado del motor '{$this->nombresMotor[$fila->id_motor]}'";
+                    }
+
+                    $this->resultado->contar('matriculas_con_tarifa_huerfana');
+                    $this->resultado->hallazgo("La matrícula {$matricula} no era facturable en el origen: le faltan ".implode(', ', $faltan).' y el sistema viejo resuelve las cuatro tarifas con un INNER JOIN, así que sin cualquiera de ellas no facturaba ningún concepto de estancia. En Eolo-plus sí cobrará ('.implode('; ', $cobrara).'), así que puede cobrar distinto del origen.');
                 }
-            }
-
-            if ($conDestino !== []) {
-                $campos = implode(', ', $conDestino);
-                $heredaDe = array_filter([
-                    $categoriaId !== null ? "categoría '{$this->nombresCategoria[$fila->id_categoria]}'" : null,
-                    $motorId !== null ? "motor '{$this->nombresMotor[$fila->id_motor]}'" : null,
-                ]);
-
-                $this->resultado->contar('matriculas_con_tarifa_huerfana');
-                $this->resultado->hallazgo("La matrícula {$matricula} apunta a tarifas que no existen en el origen ({$campos}). En el origen no resuelven; en Eolo-plus cobrará la de su ".implode(' o su ', $heredaDe).' en esos campos, así que puede cobrar distinto del origen.');
-            } elseif ($sinDestino) {
-                $this->resultado->contar('matriculas_con_tarifa_huerfana_sin_destino');
             }
 
             $estatusOrigen = (int) $fila->id_estatus;
@@ -468,7 +532,7 @@ class ImportadorMatriculas
         $sinDestino = $this->resultado->conteos['matriculas_con_tarifa_huerfana_sin_destino'];
 
         if ($sinDestino > 0) {
-            $this->resultado->hallazgo("{$sinDestino} matrículas tienen tarifas que no existen en el origen pero no tienen categoría o motor donde caer: no heredan nada, en el origen tampoco resuelven y ningún cobro cambia.");
+            $this->resultado->hallazgo("{$sinDestino} matrículas no tienen ninguna de las cuatro tarifas en el origen y no tienen categoría ni motor de dónde heredarlas: el sistema viejo no les facturaba estancia y Eolo-plus tampoco, así que ningún cobro cambia. Las que sí tienen alguna tarifa, o categoría o motor donde heredar, llevan renglón propio arriba.");
         }
 
         // Validación 3: matrículas locales que el sistema viejo no conoce.
