@@ -106,7 +106,7 @@ No se agregan columnas: los atributos de facturación van en la satélite.
 | aeronave_id | FK aeronaves | único, `cascadeOnDelete` |
 | categoria_aeronave_id | FK fact_categorias_aeronave nullable | nulo = matrícula incompleta |
 | tipo_motor_id | FK fact_tipos_motor nullable | |
-| estatus | string(10) | `guarda` \| `transito`, default `guarda` |
+| estatus | string(10) | `guarda` \| `transito`, default `transito` (`tb_estatus`: id 1 = Transito, id 2 = Guarda; el alta antigua siempre usaba id 1) |
 | cobra_derecho_vuelos | boolean | default true |
 | timestamps | | |
 

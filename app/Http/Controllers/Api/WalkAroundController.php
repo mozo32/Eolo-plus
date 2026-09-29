@@ -312,8 +312,11 @@ class WalkAroundController extends Controller
                 $request->metadata['tipo'] ?? null
             );
 
-            // tipo_aeronave_id no admite nulo. El sistema anterior usaba 0 como
-            // "sin tipo" cuando la aeronave no traía uno.
+            // tipo_aeronave_id no admite nulo. Si la captura trae tipo, el
+            // catálogo ya lo tiene (lo crea, o lo completa si faltaba). El 0 solo
+            // queda cuando ni la captura ni el catálogo saben el tipo; es un
+            // valor de relleno de este código: el sistema anterior siempre
+            // resolvía o creaba el tipo y nunca escribía 0 aquí.
             $idTipo = $aeronave->aeronave_id ?? 0;
 
             $walkAround = WalkAround::create([

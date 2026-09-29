@@ -86,7 +86,8 @@ test('capturar con una matricula nueva la agrega al catalogo local desde los cin
     $aeronave = Aeronave::where('matricula', 'XA-NUEVA')->first();
     expect($aeronave)->not->toBeNull()
         ->and($aeronave->tipoAeronave->nombre)->toBe('Learjet 45')
-        ->and($aeronave->facturacion)->not->toBeNull();
+        ->and($aeronave->facturacion)->not->toBeNull()
+        ->and($aeronave->facturacion->estatus)->toBe(FactAeronave::ESTATUS_TRANSITO);
 
     // Movimientos CSAE.
     $this->postJson('/api/MovimientosCSAE', [
@@ -161,7 +162,7 @@ test('una matricula que ya existia no cambia de tipo y su estatus llega a pernoc
 
     $tipo = TipoAeronave::create(['nombre' => 'Original']);
     $guarda = Aeronave::create(['matricula' => 'XA-VIEJA', 'aeronave_id' => $tipo->id]);
-    FactAeronave::create(['aeronave_id' => $guarda->id]);
+    FactAeronave::create(['aeronave_id' => $guarda->id, 'estatus' => FactAeronave::ESTATUS_GUARDA]);
 
     $transito = Aeronave::create(['matricula' => 'XA-PASO', 'aeronave_id' => $tipo->id]);
     FactAeronave::create(['aeronave_id' => $transito->id, 'estatus' => FactAeronave::ESTATUS_TRANSITO]);
@@ -198,4 +199,68 @@ test('una matricula que ya existia no cambia de tipo y su estatus llega a pernoc
         ->assertExactJson(['XA-PASO']);
 
     $this->getJson('/api/walkarounds/buscar/XA-VIEJA')->assertOk()->assertExactJson(['tipo' => 'Original']);
+});
+
+test('una matricula recien creada nace en transito, el estatus del sistema viejo', function () {
+    $aeronave = app(CatalogoAeronaves::class)->buscarOCrear('XA-NUEVA', 'Learjet 45');
+
+    // En tb_estatus, id 1 = Transito y el alta antigua siempre usaba id_estatus = 1.
+    expect($aeronave->facturacion->estatus)->toBe('transito')
+        ->and(app(CatalogoAeronaves::class)->buscar('XA-NUEVA')->estatus)->toBe('transito');
+
+    // El estatus lo fija el servicio, no depende del default de la base.
+    expect(FactAeronave::where('aeronave_id', $aeronave->id)->value('estatus'))->toBe('transito');
+});
+
+test('una aeronave sin tipo aprende el primero que llega', function () {
+    $catalogo = app(CatalogoAeronaves::class);
+
+    $catalogo->buscarOCrear('XA-HUECO');
+    expect(Aeronave::where('matricula', 'XA-HUECO')->first()->aeronave_id)->toBeNull();
+
+    // Una captura sin tipo no lo inventa ni crea un tipo vacio.
+    $catalogo->buscarOCrear('XA-HUECO', '  ');
+    expect(Aeronave::where('matricula', 'XA-HUECO')->first()->aeronave_id)->toBeNull()
+        ->and(TipoAeronave::count())->toBe(0);
+
+    $aeronave = $catalogo->buscarOCrear('XA-HUECO', 'Bell 206');
+
+    expect($aeronave->tipoAeronave->nombre)->toBe('Bell 206')
+        ->and(Aeronave::where('matricula', 'XA-HUECO')->first()->aeronave_id)->toBe($aeronave->aeronave_id)
+        ->and(Aeronave::count())->toBe(1)
+        ->and(FactAeronave::count())->toBe(1);
+});
+
+test('una aeronave que ya tiene tipo lo conserva aunque llegue otro', function () {
+    $catalogo = app(CatalogoAeronaves::class);
+
+    $primera = $catalogo->buscarOCrear('XA-FIJA', 'Cessna 208');
+    $segunda = $catalogo->buscarOCrear('XA-FIJA', 'Bell 206');
+
+    expect($segunda->aeronave_id)->toBe($primera->aeronave_id)
+        ->and($segunda->tipoAeronave->nombre)->toBe('Cessna 208')
+        ->and(TipoAeronave::where('nombre', 'Bell 206')->exists())->toBeFalse();
+});
+
+test('un walkaround de una aeronave sin tipo le completa el tipo y guarda su id real', function () {
+    $this->actingAs(User::factory()->create());
+
+    // Alta previa por Comisariato, que no conoce el tipo.
+    $this->postJson('/api/ServicioComisariato', [
+        'fechaEntrega' => '2026-09-28',
+        'horaEntrega' => '10:00',
+        'matricula' => 'XA-SINTIPO',
+        'subtotal' => 100,
+        'total' => 116,
+    ])->assertCreated();
+
+    expect(Aeronave::where('matricula', 'XA-SINTIPO')->first()->aeronave_id)->toBeNull();
+
+    capturarWalkAround('XA-SINTIPO', 'Bell 206')->assertCreated();
+
+    $aeronave = Aeronave::where('matricula', 'XA-SINTIPO')->first();
+
+    expect($aeronave->tipoAeronave->nombre)->toBe('Bell 206')
+        ->and(WalkAround::first()->tipo_aeronave_id)->toBe($aeronave->aeronave_id)
+        ->and(WalkAround::first()->tipo_aeronave_id)->not->toBe(0);
 });

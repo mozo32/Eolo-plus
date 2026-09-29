@@ -34,7 +34,7 @@ test('la satelite cuelga de la aeronave y guarda sus atributos de cobro', functi
 
     $facturacion = $aeronave->fresh()->facturacion;
 
-    expect($facturacion->estatus)->toBe('guarda')
+    expect($facturacion->estatus)->toBe('transito')
         ->and($facturacion->cobra_derecho_vuelos)->toBeTrue()
         ->and($facturacion->categoria->nombre)->toBe('Ejecutiva')
         ->and($facturacion->tipoMotor->nombre)->toBe('Jet');

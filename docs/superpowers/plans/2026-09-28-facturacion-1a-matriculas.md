@@ -435,10 +435,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class FactAeronave extends Model
 {
-    /** Paga estancia (pernocta y tránsitos). */
+    /** Tiene contrato de hangar: no paga estancia suelta. */
     public const ESTATUS_GUARDA = 'guarda';
 
-    /** Está de paso: no genera cargos de estancia. */
+    /** Está de paso: paga estancia (pernocta y tránsitos). Estatus de una matrícula nueva. */
     public const ESTATUS_TRANSITO = 'transito';
 
     protected $table = 'fact_aeronaves';
@@ -1009,7 +1009,7 @@ class CatalogoAeronaves
         return new DatosAeronave(
             matricula: $aeronave->matricula,
             tipo: $aeronave->tipoAeronave?->nombre,
-            estatus: $aeronave->facturacion?->estatus ?? FactAeronave::ESTATUS_GUARDA,
+            estatus: $aeronave->facturacion?->estatus ?? FactAeronave::ESTATUS_TRANSITO,
             categoria: $aeronave->facturacion?->categoria?->nombre,
         );
     }
@@ -1910,8 +1910,8 @@ class ImportadorMatriculas
                     'categoria_aeronave_id' => $categoriaId,
                     'tipo_motor_id' => $motores[$fila->id_motor] ?? null,
                     'estatus' => (int) $fila->id_estatus === 1
-                        ? FactAeronave::ESTATUS_GUARDA
-                        : FactAeronave::ESTATUS_TRANSITO,
+                        ? FactAeronave::ESTATUS_TRANSITO
+                        : FactAeronave::ESTATUS_GUARDA,
                     'cobra_derecho_vuelos' => (int) $fila->d_vuelos === 0,
                 ],
             );

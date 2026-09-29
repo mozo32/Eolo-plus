@@ -12,6 +12,7 @@ use App\Services\CatalogoAeronaves;
 use App\Services\SecuenciaMovimientoService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
 use App\Models\Bitacora;

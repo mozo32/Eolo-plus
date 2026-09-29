@@ -6,10 +6,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class FactAeronave extends Model
 {
-    /** Paga estancia (pernocta y tránsitos). */
+    /** Tiene contrato de hangar: no paga estancia suelta. */
     public const ESTATUS_GUARDA = 'guarda';
 
-    /** Está de paso: no genera cargos de estancia. */
+    /** Está de paso: paga estancia (pernocta y tránsitos). Es el estatus de una matrícula nueva. */
     public const ESTATUS_TRANSITO = 'transito';
 
     protected $table = 'fact_aeronaves';

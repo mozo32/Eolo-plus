@@ -41,7 +41,7 @@ test('buscar funciona con una matricula incompleta, sin tipo ni categoria', func
 
     expect($datos->tipo)->toBeNull()
         ->and($datos->categoria)->toBeNull()
-        ->and($datos->estatus)->toBe('guarda');
+        ->and($datos->estatus)->toBe('transito');
 });
 
 test('buscar normaliza la matricula a mayusculas y sin espacios', function () {

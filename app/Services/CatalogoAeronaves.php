@@ -31,7 +31,7 @@ class CatalogoAeronaves
         return new DatosAeronave(
             matricula: $aeronave->matricula,
             tipo: $aeronave->tipoAeronave?->nombre,
-            estatus: $aeronave->facturacion?->estatus ?? FactAeronave::ESTATUS_GUARDA,
+            estatus: $aeronave->facturacion?->estatus ?? FactAeronave::ESTATUS_TRANSITO,
             categoria: $aeronave->facturacion?->categoria?->nombre,
         );
     }
@@ -39,7 +39,7 @@ class CatalogoAeronaves
     /**
      * Devuelve la aeronave, creándola si no existía. Una aeronave que ya
      * existe no cambia de tipo: el dato del catálogo manda sobre el que venga
-     * en la captura.
+     * en la captura. Solo se completa un tipo que faltaba (nulo).
      */
     public function buscarOCrear(string $matricula, ?string $tipo = null): Aeronave
     {
@@ -53,6 +53,22 @@ class CatalogoAeronaves
                     'matricula' => $matricula,
                     'aeronave_id' => $this->resolverTipo($tipo),
                 ]);
+            } elseif ($aeronave->aeronave_id === null) {
+                // Una aeronave dada de alta sin tipo aprende el primero que
+                // llegue. Completar un hueco no cambia un valor: si ya tenía
+                // tipo, este bloque no se ejecuta. El whereNull evita pisar el
+                // tipo que otra petición haya fijado entre la lectura y la
+                // escritura.
+                $tipoId = $this->resolverTipo($tipo);
+
+                if ($tipoId !== null) {
+                    Aeronave::query()
+                        ->whereKey($aeronave->id)
+                        ->whereNull('aeronave_id')
+                        ->update(['aeronave_id' => $tipoId]);
+
+                    $aeronave->refresh();
+                }
             }
 
             // Una aeronave dada de alta antes de este módulo no tiene satélite.
@@ -61,7 +77,13 @@ class CatalogoAeronaves
             // fact_aeronaves.aeronave_id en cada consulta. Si dos peticiones
             // llegan a la vez, createOrFirst absorbe la violación y relee.
             if (! FactAeronave::where('aeronave_id', $aeronave->id)->exists()) {
-                FactAeronave::createOrFirst(['aeronave_id' => $aeronave->id]);
+                // El estatus se fija aquí y no se deja al default de la base: una
+                // matrícula nueva es 'transito', como la creaba el sistema viejo
+                // (id_estatus = 1), y eso es lo que decide si paga estancia.
+                FactAeronave::createOrFirst(
+                    ['aeronave_id' => $aeronave->id],
+                    ['estatus' => FactAeronave::ESTATUS_TRANSITO],
+                );
             }
 
             return $aeronave->load(['tipoAeronave', 'facturacion']);

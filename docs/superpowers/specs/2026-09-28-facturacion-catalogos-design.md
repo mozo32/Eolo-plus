@@ -188,8 +188,10 @@ Tabla `fact_aeronaves` (satélite 1-1 de `aeronaves`):
 `aeronaves` no se modifica: la usan otros módulos. Una matrícula que nunca se
 factura simplemente no tiene fila aquí.
 
-`estatus` reproduce `tb_estatus`: solo las de `guarda` generan cargos de estancia
-(`insert22.php` lo condiciona con `if($estatus == 1)`).
+`estatus` reproduce `tb_estatus`: `id_estatus = 1` es `transito` y `2` es `guarda`.
+Solo las de `transito` generan cargos de estancia (`insert22.php` lo condiciona con
+`if($estatus == 1)`); una aeronave en guarda tiene contrato de hangar y no paga
+estancia suelta. Una matrícula nueva nace en `transito`, como el alta antigua.
 
 ## Dos reglas que salen del código
 
