@@ -51,13 +51,18 @@ class CatalogoAeronaves
             $creada = false;
 
             if (! $aeronave) {
+                // Fuera del try: una violación de unicidad que lanzara la
+                // resolución del tipo no es la de la matrícula y no debe
+                // tomarse por ella.
+                $tipoId = $this->resolverTipo($tipo);
+
                 try {
                     $aeronave = Aeronave::create([
                         'matricula' => $matricula,
-                        'aeronave_id' => $this->resolverTipo($tipo),
+                        'aeronave_id' => $tipoId,
                     ]);
                     $creada = true;
-                } catch (UniqueConstraintViolationException) {
+                } catch (UniqueConstraintViolationException $e) {
                     // Otra petición dio de alta la misma matrícula entre nuestra
                     // lectura y nuestro insert: el índice único de
                     // aeronaves.matricula la rechazó. La fila existe, hay que
@@ -68,10 +73,18 @@ class CatalogoAeronaves
                     // (y, si la otra petición aún no confirma, espera a que lo
                     // haga). Esto también funciona si el llamador ya abrió una
                     // transacción propia, donde salirse de esta no bastaría.
+                    //
+                    // Es sharedLock y no lockForUpdate a propósito: tras la
+                    // clave duplicada esta transacción ya conserva un bloqueo
+                    // compartido sobre el registro, y pedir uno exclusivo es una
+                    // mejora S->X que con tres o más peticiones sobre la misma
+                    // matrícula nueva provoca un deadlock (error 1213) sin
+                    // reintento. El compartido es compatible con el que ya
+                    // tenemos.
                     $aeronave = Aeronave::query()
                         ->where('matricula', $matricula)
-                        ->lockForUpdate()
-                        ->firstOrFail();
+                        ->sharedLock()
+                        ->first() ?? throw $e;
                 }
             }
 

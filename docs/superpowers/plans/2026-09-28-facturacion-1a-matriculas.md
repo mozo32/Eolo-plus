@@ -18,7 +18,7 @@
 - Bajas lógicas con `status` char(1) `A`/`N`, atómicas: `UPDATE ... WHERE id = ? AND status = 'A'`, 409 si ya estaba dada de baja.
 - Toda escritura en catálogos registra en bitácora con `Bitacora::MODULO_FACTURACION_CATALOGOS`.
 - Fechas locales de México. Nunca `toISOString()` en el frontend.
-- El índice único en `aeronaves.matricula` va en la **última** migración, después de importar y depurar.
+- El índice único en `aeronaves.matricula` va en la **última** migración (debe ordenar después de todas las demás) y lleva una guardia que falla listando las matrículas repetidas.
 - Cada pantalla tiene su propio subdepartamento; el menú se arma desde ellos.
 - Correr `php artisan test` completo antes de cada commit: el baseline es **229 pruebas en verde**.
 
@@ -2361,11 +2361,11 @@ git commit -m "Pantallas de catalogos de matricula para Facturacion"
 
 ### Task 11: Menú, índice único y documentación de despliegue
 
-Cierra el bloque. El índice único va al final, cuando ya se importó y depuró.
+Cierra el bloque. El índice único va en la última migración; si el servidor tiene matrículas repetidas, la guardia de `up()` falla listándolas.
 
 **Files:**
 - Modify: `resources/js/components/navigation.ts` (ROUTE_CONFIG y agrupación)
-- Create: `database/migrations/2026_09_28_099000_add_unique_matricula_to_aeronaves.php`
+- Create: `database/migrations/2026_09_29_099000_add_unique_matricula_to_aeronaves.php`
 - Modify: `docs/superpowers/specs/2026-09-28-facturacion-1a-matriculas-design.md` (marcar como implementado)
 - Test: `tests/Feature/Facturacion/MatriculaUnicaTest.php`
 
@@ -2398,22 +2398,37 @@ Expected: FAIL — hoy se puede repetir, así que no se lanza la excepción
 
 ```php
 <?php
-// database/migrations/2026_09_28_099000_add_unique_matricula_to_aeronaves.php
+// database/migrations/2026_09_29_099000_add_unique_matricula_to_aeronaves.php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
  * Índice único en la matrícula, que cierra el bloque.
  *
- * Va al final a propósito: en un servidor con matrículas repetidas esta
- * migración falla, y depurarlas requiere antes el reporte del importador.
+ * Va al final a propósito (debe seguir siendo la última migración): en un
+ * servidor con matrículas repetidas falla, pero con un mensaje que las lista en
+ * lugar del error crudo del motor. Como las migraciones anteriores ya
+ * quedaron aplicadas, se depuran las repetidas y se vuelve a correr
+ * `php artisan migrate`.
  */
 return new class extends Migration
 {
     public function up(): void
     {
+        $repetidas = DB::table('aeronaves')
+            ->select('matricula', DB::raw('COUNT(*) as veces'))
+            ->groupBy('matricula')
+            ->havingRaw('COUNT(*) > 1')
+            ->orderBy('matricula')
+            ->get();
+
+        if ($repetidas->isNotEmpty()) {
+            // Lanza RuntimeException con la lista (hasta 50) de matrículas repetidas.
+        }
+
         Schema::table('aeronaves', function (Blueprint $table) {
             $table->unique('matricula');
         });
@@ -2427,6 +2442,8 @@ return new class extends Migration
     }
 };
 ```
+
+Se agregan a `MatriculaUnicaTest` la prueba de que esta migración es la última por nombre y las de la guardia (falla listando las repetidas; se aplica una vez depuradas). El código definitivo está en el repositorio.
 
 - [ ] **Step 4: Register the screens in the menu**
 
@@ -2474,7 +2491,7 @@ Expected: sin errores nuevos
 - [ ] **Step 7: Commit**
 
 ```bash
-git add database/migrations/2026_09_28_099000_add_unique_matricula_to_aeronaves.php resources/js/components/navigation.ts tests/Feature/Facturacion/MatriculaUnicaTest.php docs/superpowers/specs/2026-09-28-facturacion-1a-matriculas-design.md
+git add database/migrations/2026_09_29_099000_add_unique_matricula_to_aeronaves.php resources/js/components/navigation.ts tests/Feature/Facturacion/MatriculaUnicaTest.php docs/superpowers/specs/2026-09-28-facturacion-1a-matriculas-design.md
 git commit -m "Indice unico en matricula y entradas de menu de Facturacion"
 ```
 
@@ -2482,27 +2499,23 @@ git commit -m "Indice unico en matricula y entradas de menu de Facturacion"
 
 ## Orden de despliegue en el servidor
 
-El índice único de la Task 11 **falla si hay matrículas repetidas**. Por eso el despliegue va en dos pasos de migración:
+El índice único de la Task 11 vive en la **última** migración y lleva una guardia: si hay matrículas repetidas en `aeronaves`, falla con un mensaje que las lista, sin dejar nada a medias (las migraciones anteriores ya quedaron aplicadas). Nota: `php artisan migrate --step` **no** excluye migraciones, solo pone cada una en su propio lote; no sirve para separar el índice.
 
 ```bash
 git pull
 composer install --no-dev --optimize-autoloader
 
-# 1. Todo menos el indice unico
-php artisan migrate --step
-
-# 2. Simulacion: revisar el reporte antes de aplicar
-php artisan facturacion:importar-matriculas
-
-# 3. Depurar los duplicados que reporte, si los hay
-
-# 4. Aplicar
-php artisan facturacion:importar-matriculas --aplicar
-
-# 5. Ahora si, el indice unico
+# 1. Migrar todo. Si hay matriculas repetidas, la ultima migracion falla
+#    listandolas: depurarlas y volver a correr este mismo comando.
 php artisan migrate
 
-# 6. Permisos
+# 2. Simulacion: revisar el reporte del importador antes de aplicar
+php artisan facturacion:importar-matriculas
+
+# 3. Aplicar
+php artisan facturacion:importar-matriculas --aplicar
+
+# 4. Permisos
 php artisan db:seed --class=FacturacionSubdepartamentosSeeder
 
 php artisan optimize:clear

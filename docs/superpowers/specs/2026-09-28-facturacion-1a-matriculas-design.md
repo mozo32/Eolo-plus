@@ -162,9 +162,12 @@ public function autocompletar(string $texto, int $limite = 10): array
 `categoria`, que son exactamente los cuatro campos que hoy devuelve el join
 remoto a `tb_matricula`, `tb_estatus`, `tb_tipo` y `tb_categoria`.
 
-La creación corre dentro de una transacción con `firstOrCreate` sobre la
-matrícula, apoyada en el índice único: dos capturas simultáneas de la misma
-matrícula no producen dos filas.
+La creación corre dentro de una transacción y se apoya en el índice único: dos
+capturas simultáneas de la misma matrícula no producen dos filas. Quien pierde
+la carrera atrapa `UniqueConstraintViolationException` y relee con un bloqueo
+compartido (`sharedLock`), que rompe el snapshot de REPEATABLE READ sin la
+mejora de bloqueo que causaría deadlock con tres o más peticiones. Lo mismo vale
+para el registro satélite de `fact_aeronaves`.
 
 ## Reapuntar los controladores
 
@@ -213,7 +216,7 @@ Idempotente: empata por nombre (tipo, categoría, motor) y por matrícula.
    "tarifa por categoría" solo se sostiene si no hay divergencia. Si aparece, se
    detiene y se revisa el modelo antes de aplicar.
 2. **Matrículas repetidas** en `tb_matricula` o en `aeronaves`. Se reportan y se
-   omiten; deben depurarse antes de poner el índice único.
+   omiten; si ya hay repetidas en `aeronaves`, la migración del índice único falla listándolas y deben depurarse.
 3. **Matrículas en `aeronaves` que no están en `tb_matricula`**, y al revés.
 4. **Matrículas con `id_categoria = 0`**: se importan con
    `categoria_aeronave_id` nula y se cuentan en el reporte.
@@ -295,18 +298,20 @@ estaba dada de baja. Cada escritura registra en bitácora con
 
 ## Orden de despliegue
 
-El índice único en `aeronaves.matricula` va **después** de correr el importador
-y depurar lo que reporte. Si se aplica antes, la migración falla en un servidor
-con duplicados.
+El índice único en `aeronaves.matricula` va en la **última** migración
+(`2026_09_29_099000_add_unique_matricula_to_aeronaves`, que debe seguir
+ordenando después de todas las demás). Su `up()` revisa antes las matrículas
+repetidas y, si las hay, falla con un mensaje que las lista; las migraciones
+anteriores ya quedaron aplicadas. `php artisan migrate --step` no sirve para
+excluirla: solo pone cada migración en su propio lote.
 
-1. `php artisan migrate` (todo menos el índice único)
+1. `php artisan migrate` (si hay matrículas repetidas falla limpio al final:
+   depurarlas y volver a correrlo)
 2. `php artisan facturacion:importar-matriculas` (simulación) y revisar el reporte
-3. Depurar duplicados si los hay
-4. `php artisan facturacion:importar-matriculas --aplicar`
-5. `php artisan migrate` (el índice único)
-6. `php artisan db:seed --class=FacturacionSubdepartamentosSeeder`
-7. Asignar los subdepartamentos desde Gestión de usuarios
-8. `npm run build`
+3. `php artisan facturacion:importar-matriculas --aplicar`
+4. `php artisan db:seed --class=FacturacionSubdepartamentosSeeder`
+5. Asignar los subdepartamentos desde Gestión de usuarios
+6. `npm run build`
 
 ## Pendiente que requiere respuesta del usuario
 
