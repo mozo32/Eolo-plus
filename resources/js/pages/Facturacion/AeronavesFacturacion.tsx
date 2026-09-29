@@ -16,16 +16,26 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Aeronaves de facturación' }];
 const BADGE_ESTATUS = { transito: 'bg-amber-100 text-amber-700', guarda: 'bg-sky-100 text-sky-700' } as const;
 const ETIQUETA_ESTATUS = { transito: 'Tránsito', guarda: 'Guarda' } as const;
 
-/** Tarifa aplicable: la propia de la matrícula, la heredada o, si no hay de dónde, "sin tarifa". No mira el estatus (guarda/tránsito). */
-function CeldaTarifa({ propia, efectiva }: { propia: string | null; efectiva: string | null }) {
+/**
+ * Valor resuelto de una tarifa: la propia de la matrícula, la heredada o, si no hay de dónde, "sin tarifa".
+ * El cálculo del cobro todavía no existe y el valor resuelto no mira el estatus; en las tarifas de estancia de una
+ * matrícula en Guarda (no paga estancia) la celda se atenúa y no se pinta la alerta roja de "sin tarifa".
+ */
+function CeldaTarifa({ propia, efectiva, noAplica = false }: { propia: string | null; efectiva: string | null; noAplica?: boolean }) {
     if (efectiva === null) {
-        return <span className="text-[10px] font-black uppercase text-red-500">Sin tarifa</span>;
+        return noAplica ? (
+            <span className="text-[10px] font-black uppercase text-slate-300">No aplica</span>
+        ) : (
+            <span className="text-[10px] font-black uppercase text-red-500">Sin tarifa</span>
+        );
     }
 
     return (
-        <div className="flex flex-col items-center">
+        <div className={`flex flex-col items-center ${noAplica ? 'opacity-40' : ''}`} title={noAplica ? 'No se aplica mientras la matrícula esté en Guarda (no paga estancia)' : undefined}>
             <span className="text-[11px] font-bold text-slate-700">{formatearMonto(efectiva)}</span>
-            <span className={`text-[9px] font-black uppercase tracking-wider ${propia !== null ? 'text-indigo-500' : 'text-slate-400'}`}>{propia !== null ? 'Propia' : 'Hereda'}</span>
+            <span className={`text-[9px] font-black uppercase tracking-wider ${propia !== null ? 'text-indigo-500' : 'text-slate-400'}`}>
+                {noAplica ? 'No aplica' : propia !== null ? 'Propia' : 'Hereda'}
+            </span>
         </div>
     );
 }
@@ -216,13 +226,13 @@ export default function AeronavesFacturacion() {
                                                 <td className={`${TD} text-[10px] font-black uppercase ${row.cobra_derecho_vuelos ? 'text-emerald-600' : 'text-slate-400'}`}>{row.cobra_derecho_vuelos ? 'Sí cobra' : 'No cobra'}</td>
 
                                                 <td className={TD}>
-                                                    <CeldaTarifa propia={row.tarifa_pernocta} efectiva={row.tarifa_pernocta_efectiva} />
+                                                    <CeldaTarifa propia={row.tarifa_pernocta} efectiva={row.tarifa_pernocta_efectiva} noAplica={row.estatus === 'guarda'} />
                                                 </td>
                                                 <td className={TD}>
-                                                    <CeldaTarifa propia={row.tarifa_transito_2h} efectiva={row.tarifa_transito_2h_efectiva} />
+                                                    <CeldaTarifa propia={row.tarifa_transito_2h} efectiva={row.tarifa_transito_2h_efectiva} noAplica={row.estatus === 'guarda'} />
                                                 </td>
                                                 <td className={TD}>
-                                                    <CeldaTarifa propia={row.tarifa_transito_12h} efectiva={row.tarifa_transito_12h_efectiva} />
+                                                    <CeldaTarifa propia={row.tarifa_transito_12h} efectiva={row.tarifa_transito_12h_efectiva} noAplica={row.estatus === 'guarda'} />
                                                 </td>
                                                 <td className={TD}>
                                                     <CeldaTarifa propia={row.tarifa_aterrizaje} efectiva={row.tarifa_aterrizaje_efectiva} />

@@ -35,14 +35,16 @@ interface DefinicionTarifa {
     enMensaje: string;
     /** De dónde hereda cuando la matrícula no tiene tarifa propia. */
     origen: 'categoria' | 'motor';
+    /** Tarifa de estancia (pernocta y tránsitos): una matrícula en Guarda no la paga. El aterrizaje sí, en ambos estatus. */
+    estancia: boolean;
     leerOrigen: (categoria: CategoriaAeronave | null, motor: TipoMotor | null) => string | null;
 }
 
 const TARIFAS: DefinicionTarifa[] = [
-    { clave: 'tarifa_pernocta', etiqueta: 'Pernocta', enMensaje: 'la tarifa de pernocta', origen: 'categoria', leerOrigen: c => c?.tarifa_pernocta ?? null },
-    { clave: 'tarifa_transito_2h', etiqueta: 'Tránsito 2 h', enMensaje: 'la tarifa de tránsito de 2 horas', origen: 'categoria', leerOrigen: c => c?.tarifa_transito_2h ?? null },
-    { clave: 'tarifa_transito_12h', etiqueta: 'Tránsito 12 h', enMensaje: 'la tarifa de tránsito de 12 horas', origen: 'categoria', leerOrigen: c => c?.tarifa_transito_12h ?? null },
-    { clave: 'tarifa_aterrizaje', etiqueta: 'Aterrizaje', enMensaje: 'la tarifa de aterrizaje', origen: 'motor', leerOrigen: (_c, m) => m?.tarifa_aterrizaje ?? null },
+    { clave: 'tarifa_pernocta', etiqueta: 'Pernocta', enMensaje: 'la tarifa de pernocta', origen: 'categoria', estancia: true, leerOrigen: c => c?.tarifa_pernocta ?? null },
+    { clave: 'tarifa_transito_2h', etiqueta: 'Tránsito 2 h', enMensaje: 'la tarifa de tránsito de 2 horas', origen: 'categoria', estancia: true, leerOrigen: c => c?.tarifa_transito_2h ?? null },
+    { clave: 'tarifa_transito_12h', etiqueta: 'Tránsito 12 h', enMensaje: 'la tarifa de tránsito de 12 horas', origen: 'categoria', estancia: true, leerOrigen: c => c?.tarifa_transito_12h ?? null },
+    { clave: 'tarifa_aterrizaje', etiqueta: 'Aterrizaje', enMensaje: 'la tarifa de aterrizaje', origen: 'motor', estancia: false, leerOrigen: (_c, m) => m?.tarifa_aterrizaje ?? null },
 ];
 
 /** El estatus de una matrícula. Tránsito paga estancia; guarda tiene contrato de hangar y no la paga. */
@@ -145,26 +147,31 @@ export default function ModalAeronave({ aeronave, catalogos, onCerrar, onGuardar
         const origenElegido = t.origen === 'categoria' ? categoriaElegida : motorElegido;
         const heredada = t.leerOrigen(categoriaElegida, motorElegido);
         const nombreOrigen = t.origen === 'categoria' ? 'la categoría' : 'el tipo de motor';
+        // Reacciona al estatus elegido en el modal, no al guardado.
+        const noAplica = t.estancia && estatus === 'guarda';
 
         return (
             <div className="mt-2 space-y-1.5">
                 {vacia ? (
                     heredada !== null && origenElegido ? (
                         <p className="text-xs font-bold text-slate-600">
-                            Hereda de {nombreOrigen} «{origenElegido.nombre}»: <span className="text-slate-900">{formatearMonto(heredada)}</span>. Es la tarifa aplicable.
+                            Hereda de {nombreOrigen} «{origenElegido.nombre}»: <span className="text-slate-900">{formatearMonto(heredada)}</span>.
                         </p>
                     ) : (
-                        <p className="text-xs font-bold text-red-600">
-                            {t.origen === 'categoria' ? 'Sin categoría' : 'Sin tipo de motor'} y sin tarifa propia: no hay tarifa aplicable.
+                        // En Guarda no tener tarifa de estancia es lo correcto: no se pinta como alerta.
+                        <p className={`text-xs font-bold ${noAplica ? 'text-slate-500' : 'text-red-600'}`}>
+                            {t.origen === 'categoria' ? 'Sin categoría' : 'Sin tipo de motor'} y sin tarifa propia: no hay tarifa que heredar.
                         </p>
                     )
                 ) : (
                     <p className="text-xs font-bold text-slate-600">
-                        Tarifa aplicable: <span className="text-slate-900">{formatearMonto(parsearMonto(texto))}</span>
+                        Tarifa propia: <span className="text-slate-900">{formatearMonto(parsearMonto(texto))}</span>
                         {parsearMonto(texto) === 0 && ' (cortesía, sin cargo)'}
-                        {heredada !== null && origenElegido && ` en lugar de ${formatearMonto(heredada)} de ${nombreOrigen} «${origenElegido.nombre}»`}.
+                        {heredada !== null && origenElegido && `, en lugar de ${formatearMonto(heredada)} de ${nombreOrigen} «${origenElegido.nombre}»`}.
                     </p>
                 )}
+
+                {noAplica && <p className="text-[11px] font-black uppercase tracking-tighter text-slate-500">No se aplica mientras la matrícula esté en Guarda (no paga estancia).</p>}
 
                 {modificada && (
                     <p className="text-[10px] font-black uppercase tracking-tighter text-amber-600">
@@ -205,6 +212,12 @@ export default function ModalAeronave({ aeronave, catalogos, onCerrar, onGuardar
     };
 
     const insigniaTarifa = (t: DefinicionTarifa) => {
+        const noAplica = t.estancia && estatus === 'guarda';
+
+        // Guarda sin tarifa de estancia es lo esperado: gris, no la insignia roja de "Sin tarifa".
+        if (noAplica && esTextoVacio(tarifas[t.clave]) && t.leerOrigen(categoriaElegida, motorElegido) === null)
+            return <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-black uppercase text-slate-500">No aplica</span>;
+
         if (!esTextoVacio(tarifas[t.clave])) return <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[9px] font-black uppercase text-indigo-600">Propia</span>;
 
         return t.leerOrigen(categoriaElegida, motorElegido) !== null ? (
@@ -325,7 +338,8 @@ export default function ModalAeronave({ aeronave, catalogos, onCerrar, onGuardar
                         <h4 className="text-xs font-extrabold uppercase tracking-widest text-[#00677F]">Tarifas propias de la matrícula</h4>
                         <p className="mt-1 text-[11px] font-medium text-slate-500">
                             Déjalas vacías para que la matrícula herede las de su categoría (aterrizaje: las de su tipo de motor). Escribe un importe solo si esta matrícula es una excepción. Cero es una tarifa válida (cortesía) y
-                            no es lo mismo que vacío.
+                            no es lo mismo que vacío. Los importes que se muestran son el valor resuelto por herencia: el cálculo del cobro todavía no existe en esta fase (hoy no considera el estatus), y lo definirá el módulo de
+                            facturación. Con el estatus Guarda, las tarifas de estancia (pernocta y tránsitos) se marcan como no aplicables.
                         </p>
                     </div>
 
