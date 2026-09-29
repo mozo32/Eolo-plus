@@ -102,6 +102,35 @@ class CategoriaAeronaveController extends Controller
         return response()->json(['message' => 'Categoría dada de baja.']);
     }
 
+    /** Reactivación atómica: deshace una baja por error sin tocar la base de datos. */
+    public function reactivar(int $id): JsonResponse
+    {
+        $filas = FactCategoriaAeronave::query()
+            ->where('id', $id)
+            ->where('status', FactCategoriaAeronave::STATUS_INACTIVO)
+            ->update(['status' => FactCategoriaAeronave::STATUS_ACTIVO, 'updated_at' => now()]);
+
+        if ($filas === 0) {
+            $existe = FactCategoriaAeronave::query()->whereKey($id)->exists();
+
+            abort_if(! $existe, 404);
+
+            return response()->json([
+                'message' => 'Esta categoría ya estaba activa.',
+                'codigo' => 'ya_activa',
+            ], 409);
+        }
+
+        Bitacora::log(
+            modulo: Bitacora::MODULO_FACTURACION_CATALOGOS,
+            accion: Bitacora::ACCION_ACTIVAR,
+            descripcion: "Se reactivó la categoría de aeronave {$id}.",
+            registroId: $id,
+        );
+
+        return response()->json(['message' => 'Categoría reactivada.']);
+    }
+
     private function datosBitacora(FactCategoriaAeronave $categoria): array
     {
         return [

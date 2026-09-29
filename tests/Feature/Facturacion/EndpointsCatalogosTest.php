@@ -266,7 +266,8 @@ test('las tarifas propias de la matricula se guardan y el cero es valido', funct
     ])->assertOk();
 
     $fresco = $satelite->fresh();
-    expect($fresco->tarifa_pernocta)->toBe('0.00')
+    expect($fresco->estatus)->toBe('guarda')
+        ->and($fresco->tarifa_pernocta)->toBe('0.00')
         ->and($fresco->tarifa_transito_2h)->toBe('250.50')
         ->and($fresco->tarifa_transito_12h)->toBe('600.00')
         ->and($fresco->tarifa_aterrizaje)->toBe('0.00')
@@ -309,7 +310,8 @@ test('no mandar una tarifa propia la deja como estaba', function () {
     $this->putJson("/api/facturacion/aeronaves/{$satelite->id}", ['estatus' => 'guarda', 'cobra_derecho_vuelos' => true])
         ->assertOk();
 
-    expect($satelite->fresh()->tarifa_pernocta)->toBe('999.00');
+    expect($satelite->fresh()->tarifa_pernocta)->toBe('999.00')
+        ->and($satelite->fresh()->estatus)->toBe('guarda');
 });
 
 test('no se puede asignar una categoria o un motor dados de baja ni inexistentes', function () {
@@ -401,4 +403,161 @@ test('conservar la categoria dada de baja no abre la puerta a otra categoria dad
         'estatus' => 'guarda',
         'cobra_derecho_vuelos' => true,
     ])->assertStatus(422)->assertJsonValidationErrors(['categoria_aeronave_id']);
+});
+
+test('el estatus cambia de transito a guarda y de vuelta, y queda guardado', function () {
+    $satelite = satelite();
+    $this->actingAs(usuarioConSubdepartamento('factAeronaves', 'Facturacion'));
+
+    expect($satelite->fresh()->estatus)->toBe('transito');
+
+    $this->putJson("/api/facturacion/aeronaves/{$satelite->id}", ['estatus' => 'guarda', 'cobra_derecho_vuelos' => true])
+        ->assertOk()
+        ->assertJsonPath('aeronave.estatus', 'guarda');
+    expect($satelite->fresh()->estatus)->toBe('guarda');
+
+    $this->putJson("/api/facturacion/aeronaves/{$satelite->id}", ['estatus' => 'transito', 'cobra_derecho_vuelos' => true])->assertOk();
+    expect($satelite->fresh()->estatus)->toBe('transito');
+});
+
+test('reactivar una categoria dada de baja es atomico: la segunda vez responde 409', function () {
+    $this->actingAs(usuarioConSubdepartamento('factCategoriasAeronave', 'Facturacion'));
+    $categoria = FactCategoriaAeronave::create(categoriaValida(['status' => 'N']));
+
+    $this->patchJson("/api/facturacion/categorias-aeronave/{$categoria->id}/reactivar")->assertOk();
+    expect($categoria->fresh()->status)->toBe('A');
+
+    $this->patchJson("/api/facturacion/categorias-aeronave/{$categoria->id}/reactivar")
+        ->assertStatus(409)
+        ->assertJsonPath('codigo', 'ya_activa');
+
+    expect(Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_CATALOGOS)->where('accion', Bitacora::ACCION_ACTIVAR)->where('registro_id', $categoria->id)->count())->toBe(1);
+});
+
+test('reactivar una categoria inexistente responde 404', function () {
+    $this->actingAs(usuarioConSubdepartamento('factCategoriasAeronave', 'Facturacion'));
+
+    $this->patchJson('/api/facturacion/categorias-aeronave/999/reactivar')->assertNotFound();
+});
+
+test('desactivar y reactivar una categoria se puede repetir', function () {
+    $this->actingAs(usuarioConSubdepartamento('factCategoriasAeronave', 'Facturacion'));
+    $categoria = FactCategoriaAeronave::create(categoriaValida());
+
+    $this->patchJson("/api/facturacion/categorias-aeronave/{$categoria->id}/desactivar")->assertOk();
+    $this->patchJson("/api/facturacion/categorias-aeronave/{$categoria->id}/reactivar")->assertOk();
+    $this->patchJson("/api/facturacion/categorias-aeronave/{$categoria->id}/desactivar")->assertOk();
+
+    expect($categoria->fresh()->status)->toBe('N');
+});
+
+test('reactivar un tipo de motor dado de baja es atomico: la segunda vez responde 409', function () {
+    $this->actingAs(usuarioConSubdepartamento('factTiposMotor', 'Facturacion'));
+    $motor = FactTipoMotor::create(motorValido(['status' => 'N']));
+
+    $this->patchJson("/api/facturacion/tipos-motor/{$motor->id}/reactivar")->assertOk();
+    expect($motor->fresh()->status)->toBe('A');
+
+    $this->patchJson("/api/facturacion/tipos-motor/{$motor->id}/reactivar")
+        ->assertStatus(409)
+        ->assertJsonPath('codigo', 'ya_activo');
+
+    expect(Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_CATALOGOS)->where('accion', Bitacora::ACCION_ACTIVAR)->where('registro_id', $motor->id)->count())->toBe(1);
+    $this->patchJson('/api/facturacion/tipos-motor/999/reactivar')->assertNotFound();
+});
+
+/**
+ * Cada ruta de escritura de facturacion con el subdepartamento que la protege.
+ * Si alguien saca una ruta de su grupo, el escaneo de abajo falla.
+ */
+function rutasEscrituraFacturacion(): array
+{
+    return [
+        ['POST', 'categorias-aeronave', 'factCategoriasAeronave', fn () => categoriaValida()],
+        ['PUT', 'categorias-aeronave/{id}', 'factCategoriasAeronave', fn () => categoriaValida()],
+        ['PATCH', 'categorias-aeronave/{id}/desactivar', 'factCategoriasAeronave', fn () => []],
+        ['PATCH', 'categorias-aeronave/{id}/reactivar', 'factCategoriasAeronave', fn () => []],
+        ['POST', 'tipos-motor', 'factTiposMotor', fn () => motorValido()],
+        ['PUT', 'tipos-motor/{id}', 'factTiposMotor', fn () => motorValido()],
+        ['PATCH', 'tipos-motor/{id}/desactivar', 'factTiposMotor', fn () => []],
+        ['PATCH', 'tipos-motor/{id}/reactivar', 'factTiposMotor', fn () => []],
+        ['POST', 'precios-combustible', 'factCombustible', fn () => ['precio_asa' => 22.5]],
+        ['PUT', 'aeronaves/{id}', 'factAeronaves', fn () => ['estatus' => 'guarda', 'cobra_derecho_vuelos' => true]],
+    ];
+}
+
+test('toda ruta de escritura de facturacion lleva el subdepartamento de su pantalla', function () {
+    $esperado = collect(rutasEscrituraFacturacion())
+        ->mapWithKeys(fn ($r) => [$r[0].' api/facturacion/'.$r[1] => 'subdep:'.$r[2]]);
+
+    $reales = collect(app('router')->getRoutes()->getRoutes())
+        ->filter(fn ($ruta) => str_starts_with($ruta->uri(), 'api/facturacion'))
+        ->flatMap(fn ($ruta) => collect($ruta->methods())
+            ->reject(fn ($metodo) => in_array($metodo, ['GET', 'HEAD'], true))
+            ->mapWithKeys(fn ($metodo) => [$metodo.' '.$ruta->uri() => collect($ruta->gatherMiddleware())->first(fn ($m) => is_string($m) && str_starts_with($m, 'subdep:'))]));
+
+    // Ni una ruta de escritura sin listar aqui, ni una listada que haya perdido su middleware.
+    expect($reales->all())->toEqual($esperado->all());
+});
+
+test('cada ruta de escritura responde 403 a un usuario sin su subdepartamento', function () {
+    $categoria = FactCategoriaAeronave::create(categoriaValida());
+    $motor = FactTipoMotor::create(motorValido());
+    $satelite = satelite();
+
+    foreach (rutasEscrituraFacturacion() as [$verbo, $ruta, $subdep, $cuerpo]) {
+        $id = match (true) {
+            str_starts_with($ruta, 'categorias') => $categoria->id,
+            str_starts_with($ruta, 'tipos') => $motor->id,
+            default => $satelite->id,
+        };
+        $url = '/api/facturacion/'.str_replace('{id}', (string) $id, $ruta);
+
+        // Sin ningun subdepartamento de facturacion, y con el de otra pantalla de facturacion.
+        $otro = $subdep === 'factAeronaves' ? 'factCombustible' : 'factAeronaves';
+        foreach ([usuarioSinAcceso(), usuarioConSubdepartamento($otro, 'Facturacion')] as $usuario) {
+            $this->actingAs($usuario)->json($verbo, $url, $cuerpo())->assertForbidden();
+        }
+    }
+
+    expect(FactCategoriaAeronave::count())->toBe(1)
+        ->and($categoria->fresh()->status)->toBe('A')
+        ->and($motor->fresh()->status)->toBe('A')
+        ->and(FactPrecioCombustible::count())->toBe(0)
+        ->and($satelite->fresh()->estatus)->toBe('transito');
+});
+
+test('el precio de combustible no se cuela por precision: menor a un diezmilesimo se rechaza', function () {
+    $this->actingAs(usuarioConSubdepartamento('factCombustible', 'Facturacion'));
+
+    $this->postJson('/api/facturacion/precios-combustible', ['precio_asa' => 0.00001])
+        ->assertStatus(422)->assertJsonValidationErrors(['precio_asa']);
+    $this->postJson('/api/facturacion/precios-combustible', ['precio_asa' => 20, 'precio_eolo' => 0.00001])
+        ->assertStatus(422)->assertJsonValidationErrors(['precio_eolo']);
+    $this->postJson('/api/facturacion/precios-combustible', ['precio_asa' => 20, 'precio_eolo' => 0])
+        ->assertStatus(422)->assertJsonValidationErrors(['precio_eolo']);
+
+    $this->postJson('/api/facturacion/precios-combustible', ['precio_asa' => 0.0001])->assertCreated();
+});
+
+test('un nombre mandado como arreglo se rechaza con 422 y no con 500', function () {
+    $this->actingAs(usuarioAdmin());
+
+    $this->postJson('/api/facturacion/categorias-aeronave', categoriaValida(['nombre' => ['x']]))
+        ->assertStatus(422)->assertJsonValidationErrors(['nombre']);
+    $this->postJson('/api/facturacion/tipos-motor', motorValido(['nombre' => ['x']]))
+        ->assertStatus(422)->assertJsonValidationErrors(['nombre']);
+
+    $categoria = FactCategoriaAeronave::create(categoriaValida());
+    $this->putJson("/api/facturacion/categorias-aeronave/{$categoria->id}", categoriaValida(['nombre' => ['x']]))
+        ->assertStatus(422);
+});
+
+test('el mensaje de un nombre invalido esta en espanol', function () {
+    $this->actingAs(usuarioAdmin());
+
+    $this->postJson('/api/facturacion/categorias-aeronave', categoriaValida(['nombre' => ['x']]))
+        ->assertJsonPath('errors.nombre.0', 'El nombre de la categoría debe ser texto.');
+    $this->postJson('/api/facturacion/tipos-motor', motorValido(['nombre' => ['x']]))
+        ->assertJsonPath('errors.nombre.0', 'El nombre del tipo de motor debe ser texto.');
 });

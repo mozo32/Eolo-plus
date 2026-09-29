@@ -15,7 +15,11 @@ class StoreCategoriaAeronaveRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $this->merge(['nombre' => trim((string) $this->input('nombre'))]);
+        // Solo se normaliza un valor escalar: un arreglo (nombre[]=x) debe llegar a la
+        // validación y fallar con 422, no romper aquí con un 500.
+        if (is_scalar($this->input('nombre')) || $this->input('nombre') === null) {
+            $this->merge(['nombre' => trim((string) $this->input('nombre'))]);
+        }
     }
 
     /**
@@ -39,6 +43,7 @@ class StoreCategoriaAeronaveRequest extends FormRequest
     {
         return [
             'nombre.required' => 'El nombre de la categoría es obligatorio.',
+            'nombre.string' => 'El nombre de la categoría debe ser texto.',
             'nombre.max' => 'El nombre no puede pasar de 60 caracteres.',
             'nombre.unique' => 'Ya existe una categoría con ese nombre.',
             'tarifa_pernocta.required' => 'La tarifa de pernocta es obligatoria.',

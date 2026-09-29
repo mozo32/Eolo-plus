@@ -101,6 +101,35 @@ class TipoMotorController extends Controller
         return response()->json(['message' => 'Tipo de motor dado de baja.']);
     }
 
+    /** Reactivación atómica: deshace una baja por error sin tocar la base de datos. */
+    public function reactivar(int $id): JsonResponse
+    {
+        $filas = FactTipoMotor::query()
+            ->where('id', $id)
+            ->where('status', FactTipoMotor::STATUS_INACTIVO)
+            ->update(['status' => FactTipoMotor::STATUS_ACTIVO, 'updated_at' => now()]);
+
+        if ($filas === 0) {
+            $existe = FactTipoMotor::query()->whereKey($id)->exists();
+
+            abort_if(! $existe, 404);
+
+            return response()->json([
+                'message' => 'Este tipo de motor ya estaba activo.',
+                'codigo' => 'ya_activo',
+            ], 409);
+        }
+
+        Bitacora::log(
+            modulo: Bitacora::MODULO_FACTURACION_CATALOGOS,
+            accion: Bitacora::ACCION_ACTIVAR,
+            descripcion: "Se reactivó el tipo de motor {$id}.",
+            registroId: $id,
+        );
+
+        return response()->json(['message' => 'Tipo de motor reactivado.']);
+    }
+
     private function datosBitacora(FactTipoMotor $motor): array
     {
         return [

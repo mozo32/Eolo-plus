@@ -364,12 +364,14 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(functio
         Route::post('/categorias-aeronave', [CategoriaAeronaveController::class, 'store']);
         Route::put('/categorias-aeronave/{id}', [CategoriaAeronaveController::class, 'update'])->whereNumber('id');
         Route::patch('/categorias-aeronave/{id}/desactivar', [CategoriaAeronaveController::class, 'desactivar'])->whereNumber('id');
+        Route::patch('/categorias-aeronave/{id}/reactivar', [CategoriaAeronaveController::class, 'reactivar'])->whereNumber('id');
     });
 
     Route::middleware('subdep:factTiposMotor')->group(function () {
         Route::post('/tipos-motor', [TipoMotorController::class, 'store']);
         Route::put('/tipos-motor/{id}', [TipoMotorController::class, 'update'])->whereNumber('id');
         Route::patch('/tipos-motor/{id}/desactivar', [TipoMotorController::class, 'desactivar'])->whereNumber('id');
+        Route::patch('/tipos-motor/{id}/reactivar', [TipoMotorController::class, 'reactivar'])->whereNumber('id');
     });
 
     Route::middleware('subdep:factCombustible')->group(function () {
