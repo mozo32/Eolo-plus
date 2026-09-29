@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\FactPrecioCombustible;
 use App\Models\Remision;
 use App\Models\PaymentMethod;
 use App\Models\OperacionDiaria;
@@ -39,13 +40,9 @@ class RemisionController extends Controller
                 $ultimoId = Remision::max('id') ?? 0;
                 $nuevoFolio = "EOLO-" . str_pad($ultimoId + 1, 4, '0', STR_PAD_LEFT);
 
-                $precio = DB::connection('remota')
-                    ->table('tb_combustible')
-                    ->value('p_combustible');
-
-                if (!$precio) {
-                    $precio = 0;
-                }
+                // El precio que se cobra al cliente (precio Eolo). Sin precio
+                // capturado se usa 0, igual que hacía la consulta remota.
+                $precio = (float) (FactPrecioCombustible::vigente()?->precio_eolo ?? 0);
 
                 $remision = Remision::create([
                     'folio'           => $nuevoFolio,

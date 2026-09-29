@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\FactPrecioCombustible;
 use App\Models\Imagen;
 use App\Models\Remision;
 use App\Models\SumaAutotanque;
@@ -100,13 +101,9 @@ class TurnoAutotanqueController extends Controller
                     }
                 }
 
-                $precio = DB::connection('remota')
-                    ->table('tb_combustible')
-                    ->value('pasa');
-
-                $precio = $precio
-                    ? (float) $precio
-                    : 0;
+                // Precio ASA: el costo, no lo que se cobra al cliente. Sin precio
+                // capturado se usa 0, igual que hacía la consulta remota.
+                $precio = (float) (FactPrecioCombustible::vigente()?->precio_asa ?? 0);
 
                 $sumasExistentes = SumaAutotanque::where(
                     'id_turno',
