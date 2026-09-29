@@ -6,6 +6,7 @@ use App\Models\FactAeronave;
 use App\Models\FactCategoriaAeronave;
 use App\Models\TipoAeronave;
 use App\Models\User;
+use App\Models\WalkAround;
 
 test('buscar por matricula resuelve el tipo sin la base remota', function () {
     $tipo = TipoAeronave::create(['nombre' => 'Learjet 45']);
@@ -43,6 +44,39 @@ test('el autocompletado lee del catalogo local', function () {
     $respuesta = $this->getJson('/api/aeronaves/autocomplete?q=xa-aa')->assertOk()->json();
 
     expect(collect($respuesta)->pluck('matricula')->all())->toBe(['XA-AAA', 'XA-AAB']);
+});
+
+test('el autocompletado cruza con walk_arounds y trae el movimiento del ultimo activo', function () {
+    foreach (['XA-AAA', 'XA-AAB'] as $matricula) {
+        Aeronave::create(['matricula' => $matricula]);
+    }
+
+    $walk = fn (array $datos) => WalkAround::create($datos + [
+        'matricula' => 'XA-AAA',
+        'tipo' => 'avion',
+        'tipo_aeronave' => 'C172',
+        'tipo_aeronave_id' => 1,
+        'status' => 'A',
+    ]);
+
+    // Mismo dia, hora anterior, con id menor: sin el desempate por hora, ganaria.
+    $walk(['fecha' => '2026-05-10', 'hora' => '08:00', 'movimiento' => 'entrada']);
+    // El ganador: ultima fecha y hora entre los activos.
+    $walk(['fecha' => '2026-05-10', 'hora' => '09:00', 'movimiento' => 'salida']);
+    // Fecha anterior.
+    $walk(['fecha' => '2026-05-09', 'hora' => '23:00', 'movimiento' => 'entrada']);
+    // El mas reciente de todos, pero inactivo: no debe contar.
+    $walk(['fecha' => '2026-05-11', 'hora' => '12:00', 'movimiento' => 'entrada', 'status' => 'I']);
+
+    $this->actingAs(User::factory()->create());
+
+    $respuesta = $this->getJson('/api/aeronaves/autocomplete?q=xa-aa')->assertOk()->json();
+
+    expect($respuesta)->toBe([
+        ['matricula' => 'XA-AAA', 'movimiento' => 'salida'],
+        // Sin walk-around no hay movimiento, pero la matricula sigue apareciendo.
+        ['matricula' => 'XA-AAB', 'movimiento' => null],
+    ]);
 });
 
 test('el autocompletado sin texto devuelve vacio', function () {

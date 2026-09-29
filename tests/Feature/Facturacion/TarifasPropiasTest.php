@@ -73,10 +73,22 @@ test('la tarifa propia de aterrizaje gana sobre la del motor', function () {
 });
 
 test('una tarifa propia en cero se respeta y no se confunde con ausente', function () {
-    // CortesÃ­a: cero es un precio vÃ¡lido, distinto de "hereda la categorÃ­a".
-    $facturacion = aeronaveConTarifas(['tarifa_pernocta' => 0]);
+    // Cortesía: cero es un precio válido, distinto de "hereda la categoría".
+    // Se compara el valor crudo que devuelve el método, no un (float): el cast
+    // decimal:2 lo entrega como "0.00", y esa es la representación que debe
+    // llegar al cobro. Un (float), un int o el valor heredado (4676.00, 900.00)
+    // harían fallar la aserción.
+    $facturacion = aeronaveConTarifas([
+        'tarifa_pernocta' => 0,
+        'tarifa_transito_2h' => 0,
+        'tarifa_transito_12h' => 0,
+        'tarifa_aterrizaje' => 0,
+    ]);
 
-    expect((float) $facturacion->tarifaPernocta())->toBe(0.00);
+    expect($facturacion->tarifaPernocta())->toBe('0.00')
+        ->and($facturacion->tarifaTransito2h())->toBe('0.00')
+        ->and($facturacion->tarifaTransito12h())->toBe('0.00')
+        ->and($facturacion->tarifaAterrizaje())->toBe('0.00');
 });
 
 test('una matricula sin clasificar no tiene tarifa y no revienta', function () {
