@@ -4,11 +4,13 @@ import { useState } from 'react';
 import Swal from 'sweetalert2';
 import CampoMonto from './CampoMonto';
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO, sectionTitle } from './estilos';
-import { AJUSTE_COMBUSTIBLE, COMBUSTIBLE_MAX, COMBUSTIBLE_MIN, MARGEN_COMBUSTIBLE, esTextoVacio, formatearMonto, parsearMonto, precioEoloSugerido, validarMonto } from './formato';
+import { COMBUSTIBLE_MAX, COMBUSTIBLE_MIN, esTextoVacio, formatearMonto, parsearMonto, precioEoloSugerido, validarMonto } from './formato';
 import ModalBase from './ModalBase';
 
 interface Props {
     vigente: PrecioCombustible | null;
+    /** Fórmula del precio Eolo tal como la fija el servidor. */
+    formula: { ajuste: number; margen: number };
     onCerrar: () => void;
     /** Registra el precio. Debe lanzar el ErrorApi si el servidor rechaza. */
     onGuardar: (datos: NuevoPrecioCombustible) => Promise<void>;
@@ -21,7 +23,7 @@ const OPCIONES = { decimales: 4, minimo: COMBUSTIBLE_MIN, maximo: COMBUSTIBLE_MA
  * Al teclear el ASA se propone el Eolo con la fórmula del servidor; si el
  * usuario lo edita, se envía el suyo, y si no, se omite y el servidor calcula.
  */
-export default function ModalPrecioCombustible({ vigente, onCerrar, onGuardar }: Props) {
+export default function ModalPrecioCombustible({ vigente, formula, onCerrar, onGuardar }: Props) {
     const [asa, setAsa] = useState('');
     const [eoloManual, setEoloManual] = useState('');
     const [sobrescrito, setSobrescrito] = useState(false);
@@ -30,7 +32,7 @@ export default function ModalPrecioCombustible({ vigente, onCerrar, onGuardar }:
     const [guardando, setGuardando] = useState(false);
 
     const asaNumero = parsearMonto(asa);
-    const propuesta = asaNumero !== null && asaNumero >= COMBUSTIBLE_MIN ? precioEoloSugerido(asaNumero) : null;
+    const propuesta = asaNumero !== null && asaNumero >= COMBUSTIBLE_MIN ? precioEoloSugerido(asaNumero, formula) : null;
     const eoloMostrado = sobrescrito ? eoloManual : propuesta !== null ? String(propuesta) : '';
 
     const tieneCambios = !esTextoVacio(asa) || sobrescrito;
@@ -58,11 +60,15 @@ export default function ModalPrecioCombustible({ vigente, onCerrar, onGuardar }:
         const datos: NuevoPrecioCombustible = { precio_asa: parsearMonto(asa) ?? 0 };
         if (sobrescrito) datos.precio_eolo = parsearMonto(eoloManual) ?? 0;
 
+        // Lo que se va a registrar: el Eolo capturado o, si no se tocó, el que se propuso (el servidor lo calcula con la misma fórmula).
+        const eoloARegistrar = datos.precio_eolo ?? propuesta;
+        const nuevo = `Se registrará ASA ${formatearMonto(datos.precio_asa, 4)} · Eolo ${formatearMonto(eoloARegistrar, 4)}${sobrescrito ? '' : ' (propuesto)'}.`;
+
         const confirmacion = await Swal.fire({
             title: 'Registrar el nuevo precio',
-            html: vigente
-                ? `Se cerrará hoy la vigencia del precio actual (ASA ${formatearMonto(vigente.precio_asa, 4)} · Eolo ${formatearMonto(vigente.precio_eolo, 4)}) y el nuevo empezará a aplicar hoy. Un precio registrado no se puede editar ni borrar.`
-                : 'Será el primer precio registrado. Un precio registrado no se puede editar ni borrar.',
+            text: vigente
+                ? `${nuevo} Se cerrará hoy la vigencia del precio actual (ASA ${formatearMonto(vigente.precio_asa, 4)} · Eolo ${formatearMonto(vigente.precio_eolo, 4)}) y el nuevo empezará a aplicar hoy. Un precio registrado no se puede editar ni borrar.`
+                : `${nuevo} Será el primer precio registrado y no se podrá editar ni borrar.`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonText: 'Sí, registrar',
@@ -150,7 +156,7 @@ export default function ModalPrecioCombustible({ vigente, onCerrar, onGuardar }:
                                 </button>
                             )
                         }
-                        ayuda={`Propuesta: (ASA + ${AJUSTE_COMBUSTIBLE.toFixed(2)}) × ${MARGEN_COMBUSTIBLE}. Puedes sobrescribirla; si no la tocas, el servidor calcula el precio con su fórmula al guardar.`}
+                        ayuda={`Propuesta con la fórmula del sistema: (ASA + ${formula.ajuste}) × ${formula.margen}. Puedes sobrescribirla; si no la tocas, el servidor calcula el precio con esa misma fórmula al guardar.`}
                     />
                 </div>
 

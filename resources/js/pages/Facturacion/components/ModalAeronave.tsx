@@ -151,16 +151,16 @@ export default function ModalAeronave({ aeronave, catalogos, onCerrar, onGuardar
                 {vacia ? (
                     heredada !== null && origenElegido ? (
                         <p className="text-xs font-bold text-slate-600">
-                            Hereda de {nombreOrigen} «{origenElegido.nombre}»: <span className="text-slate-900">{formatearMonto(heredada)}</span>. Es lo que se cobrará.
+                            Hereda de {nombreOrigen} «{origenElegido.nombre}»: <span className="text-slate-900">{formatearMonto(heredada)}</span>. Es la tarifa aplicable.
                         </p>
                     ) : (
                         <p className="text-xs font-bold text-red-600">
-                            {t.origen === 'categoria' ? 'Sin categoría' : 'Sin tipo de motor'} y sin tarifa propia: no hay nada que cobrar.
+                            {t.origen === 'categoria' ? 'Sin categoría' : 'Sin tipo de motor'} y sin tarifa propia: no hay tarifa aplicable.
                         </p>
                     )
                 ) : (
                     <p className="text-xs font-bold text-slate-600">
-                        Se cobrará <span className="text-slate-900">{formatearMonto(parsearMonto(texto))}</span>
+                        Tarifa aplicable: <span className="text-slate-900">{formatearMonto(parsearMonto(texto))}</span>
                         {parsearMonto(texto) === 0 && ' (cortesía, sin cargo)'}
                         {heredada !== null && origenElegido && ` en lugar de ${formatearMonto(heredada)} de ${nombreOrigen} «${origenElegido.nombre}»`}.
                     </p>

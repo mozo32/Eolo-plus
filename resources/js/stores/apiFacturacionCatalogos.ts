@@ -183,9 +183,19 @@ export async function obtenerPreciosCombustibleApi(pagina: number, porPagina: nu
     return leer(await fetch(`${BASE}/precios-combustible?${params.toString()}`, LECTURA));
 }
 
-/** El precio en uso, o null si todavía no se ha registrado ninguno. */
-export async function obtenerPrecioCombustibleVigenteApi(): Promise<PrecioCombustible | null> {
-    return (await leer<{ precio: PrecioCombustible | null }>(await fetch(`${BASE}/precios-combustible/vigente`, LECTURA))).precio;
+/**
+ * El precio en uso (null si todavía no se ha registrado ninguno) y los dos
+ * números de la fórmula del precio Eolo, `(ASA + ajuste) × margen`. La fórmula
+ * la fija el servidor y viaja siempre, incluso sin precio registrado.
+ */
+export type PrecioCombustibleVigente = {
+    precio: PrecioCombustible | null;
+    ajuste: number;
+    margen: number;
+};
+
+export async function obtenerPrecioCombustibleVigenteApi(): Promise<PrecioCombustibleVigente> {
+    return leer(await fetch(`${BASE}/precios-combustible/vigente`, LECTURA));
 }
 
 export type NuevoPrecioCombustible = {

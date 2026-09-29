@@ -4,6 +4,7 @@
 use App\Models\Aeronave;
 use App\Models\Bitacora;
 use App\Models\FactAeronave;
+use App\Models\FactConfiguracion;
 use App\Models\FactCategoriaAeronave;
 use App\Models\FactPrecioCombustible;
 use App\Models\FactTipoMotor;
@@ -212,6 +213,35 @@ test('sin precio registrado el vigente es null', function () {
     $this->actingAs(usuarioSinAcceso());
 
     $this->getJson('/api/facturacion/precios-combustible/vigente')->assertOk()->assertJsonPath('precio', null);
+});
+
+test('el vigente devuelve la formula del precio Eolo, incluso sin precio registrado', function () {
+    $this->actingAs(usuarioSinAcceso());
+
+    $this->getJson('/api/facturacion/precios-combustible/vigente')
+        ->assertOk()
+        ->assertJsonPath('precio', null)
+        ->assertJsonPath('ajuste', 0.5)
+        ->assertJsonPath('margen', 1.15);
+});
+
+test('la formula que devuelve el vigente sigue a la configuracion y coincide con lo que el servidor registra', function () {
+    FactConfiguracion::where('clave', 'combustible_ajuste')->update(['valor' => '1.00']);
+    FactConfiguracion::where('clave', 'combustible_margen')->update(['valor' => '1.20']);
+
+    $this->actingAs(usuarioConSubdepartamento('factCombustible', 'Facturacion'));
+
+    $formula = $this->getJson('/api/facturacion/precios-combustible/vigente')
+        ->assertOk()
+        ->assertJsonPath('ajuste', 1)
+        ->assertJsonPath('margen', 1.2)
+        ->json();
+
+    $propuesta = round((20 + $formula['ajuste']) * $formula['margen'], 4);
+
+    $this->postJson('/api/facturacion/precios-combustible', ['precio_asa' => 20])
+        ->assertCreated()
+        ->assertJsonPath('precio.precio_eolo', number_format($propuesta, 4, '.', ''));
 });
 
 test('asignar categoria y motor a una matricula exige su propio subdepartamento', function () {

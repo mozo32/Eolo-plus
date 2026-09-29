@@ -16,7 +16,7 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Aeronaves de facturación' }];
 const BADGE_ESTATUS = { transito: 'bg-amber-100 text-amber-700', guarda: 'bg-sky-100 text-sky-700' } as const;
 const ETIQUETA_ESTATUS = { transito: 'Tránsito', guarda: 'Guarda' } as const;
 
-/** Lo que se cobrará por una tarifa: la propia de la matrícula, la heredada o, si no hay de dónde, "sin tarifa". */
+/** Tarifa aplicable: la propia de la matrícula, la heredada o, si no hay de dónde, "sin tarifa". No mira el estatus (guarda/tránsito). */
 function CeldaTarifa({ propia, efectiva }: { propia: string | null; efectiva: string | null }) {
     if (efectiva === null) {
         return <span className="text-[10px] font-black uppercase text-red-500">Sin tarifa</span>;
@@ -76,7 +76,7 @@ export default function AeronavesFacturacion() {
         const { message } = await actualizarAeronaveFacturableApi(editando.id, cambios);
 
         setEditando(null);
-        toast.fire({ icon: 'success', title: message });
+        toast.fire({ icon: 'success', titleText: message });
         // Se recarga en vez de parchar la fila: con "Sin clasificar" activo, la matrícula recién clasificada debe salir de la lista.
         await recargar();
     };

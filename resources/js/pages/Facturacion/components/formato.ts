@@ -92,10 +92,11 @@ export function fechaMexico(valor: string | null | undefined): string {
     return `${dia}/${mes}/${anio}`;
 }
 
-/** Propuesta del precio Eolo a partir del ASA: ($asa + 0.50) * 1.15, redondeada a 4 decimales. */
-export const AJUSTE_COMBUSTIBLE = 0.5;
-export const MARGEN_COMBUSTIBLE = 1.15;
-
-export function precioEoloSugerido(precioAsa: number): number {
-    return Number(((precioAsa + AJUSTE_COMBUSTIBLE) * MARGEN_COMBUSTIBLE).toFixed(4));
+/**
+ * Propuesta del precio Eolo a partir del ASA: (ASA + ajuste) × margen, a 4
+ * decimales. El ajuste y el margen los fija el servidor (`fact_configuracion`) y
+ * llegan con el precio vigente; aquí no hay valores por omisión a propósito.
+ */
+export function precioEoloSugerido(precioAsa: number, formula: { ajuste: number; margen: number }): number {
+    return Number(((precioAsa + formula.ajuste) * formula.margen).toFixed(4));
 }

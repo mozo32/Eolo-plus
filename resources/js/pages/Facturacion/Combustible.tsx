@@ -5,6 +5,7 @@ import {
     registrarPrecioCombustibleApi,
     type NuevoPrecioCombustible,
     type PrecioCombustible,
+    type PrecioCombustibleVigente,
 } from '@/stores/apiFacturacionCatalogos';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
@@ -31,6 +32,8 @@ interface MetaPaginacion {
  */
 export default function Combustible() {
     const [vigente, setVigente] = useState<PrecioCombustible | null>(null);
+    /** Fórmula del precio Eolo que fija el servidor; sin ella no se puede registrar (no hay valores de respaldo). */
+    const [formula, setFormula] = useState<Pick<PrecioCombustibleVigente, 'ajuste' | 'margen'> | null>(null);
     const [registros, setRegistros] = useState<PrecioCombustible[]>([]);
     const [meta, setMeta] = useState<MetaPaginacion>({ pagina: 1, totalPaginas: 1, total: 0 });
     const [cargando, setCargando] = useState(true);
@@ -47,10 +50,11 @@ export default function Combustible() {
         setCargando(true);
 
         try {
-            const [precioVigente, historico] = await Promise.all([obtenerPrecioCombustibleVigenteApi(), obtenerPreciosCombustibleApi(pagina, porPagina)]);
+            const [datosVigente, historico] = await Promise.all([obtenerPrecioCombustibleVigenteApi(), obtenerPreciosCombustibleApi(pagina, porPagina)]);
             if (numero !== peticionRef.current) return;
 
-            setVigente(precioVigente);
+            setVigente(datosVigente.precio);
+            setFormula({ ajuste: datosVigente.ajuste, margen: datosVigente.margen });
             setRegistros(historico.data);
             setMeta({ pagina: historico.current_page, totalPaginas: Math.max(historico.last_page, 1), total: historico.total });
             setError(null);
@@ -72,7 +76,7 @@ export default function Combustible() {
 
         setModalAbierto(false);
         // El precio Eolo que se guardó es el del servidor, no el que se propuso en pantalla.
-        toast.fire({ icon: 'success', title: `Precio registrado: ASA ${formatearMonto(precio.precio_asa, 4)} · Eolo ${formatearMonto(precio.precio_eolo, 4)}` });
+        toast.fire({ icon: 'success', titleText: `Precio registrado: ASA ${formatearMonto(precio.precio_asa, 4)} · Eolo ${formatearMonto(precio.precio_eolo, 4)}` });
 
         if (pagina === 1) await recargar();
         else setPagina(1);
@@ -85,7 +89,7 @@ export default function Combustible() {
             <div className="p-6 bg-[#f3f4f6] min-h-screen">
                 <div className="space-y-4 animate-in fade-in duration-500">
                     <CabeceraPantalla titulo="Precio del combustible" descripcion="ASA es el costo; Eolo es lo que se cobra">
-                        <button type="button" onClick={() => setModalAbierto(true)} className={BOTON_PRIMARIO}>
+                        <button type="button" onClick={() => setModalAbierto(true)} disabled={formula === null} className={BOTON_PRIMARIO}>
                             <Plus size={14} />
                             REGISTRAR PRECIO
                         </button>
@@ -188,7 +192,7 @@ export default function Combustible() {
                 </div>
             </div>
 
-            {modalAbierto && <ModalPrecioCombustible vigente={vigente} onCerrar={() => setModalAbierto(false)} onGuardar={registrar} />}
+            {modalAbierto && formula && <ModalPrecioCombustible vigente={vigente} formula={formula} onCerrar={() => setModalAbierto(false)} onGuardar={registrar} />}
         </AppLayout>
     );
 }

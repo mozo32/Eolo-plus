@@ -21,9 +21,23 @@ class FactConfiguracion extends Model
      */
     public static function precioEoloSugerido(float $precioAsa): float
     {
-        $ajuste = (float) static::valor('combustible_ajuste', 0.50);
-        $margen = (float) static::valor('combustible_margen', 1.15);
+        ['ajuste' => $ajuste, 'margen' => $margen] = static::formulaCombustible();
 
         return round(($precioAsa + $ajuste) * $margen, 4);
+    }
+
+    /**
+     * Los dos números de la fórmula del precio Eolo. Es la única fuente: la
+     * pantalla los pide al servidor en vez de repetirlos, para que la propuesta
+     * que ve el usuario sea la que el servidor calcularía.
+     *
+     * @return array{ajuste: float, margen: float}
+     */
+    public static function formulaCombustible(): array
+    {
+        return [
+            'ajuste' => (float) static::valor('combustible_ajuste', 0.50),
+            'margen' => (float) static::valor('combustible_margen', 1.15),
+        ];
     }
 }

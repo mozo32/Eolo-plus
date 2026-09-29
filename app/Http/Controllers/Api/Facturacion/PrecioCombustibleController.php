@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Facturacion;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Facturacion\StorePrecioCombustibleRequest;
 use App\Models\Bitacora;
+use App\Models\FactConfiguracion;
 use App\Models\FactPrecioCombustible;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -34,10 +35,14 @@ class PrecioCombustibleController extends Controller
         );
     }
 
-    /** El precio en uso, o null si todavía no se ha registrado ninguno. */
+    /**
+     * El precio en uso, o null si todavía no se ha registrado ninguno, junto con
+     * el `ajuste` y el `margen` de la fórmula del precio Eolo, que se devuelven
+     * aunque no haya precio: la pantalla los necesita para proponer el primero.
+     */
     public function vigente(): JsonResponse
     {
-        return response()->json(['precio' => FactPrecioCombustible::vigente()]);
+        return response()->json(['precio' => FactPrecioCombustible::vigente()] + FactConfiguracion::formulaCombustible());
     }
 
     public function store(StorePrecioCombustibleRequest $request): JsonResponse

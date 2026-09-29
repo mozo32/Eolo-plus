@@ -34,6 +34,7 @@ export function useAeronavesFacturables() {
 
     const recargar = useCallback(async () => {
         const numero = ++peticionRef.current;
+        let corrigiendoPagina = false;
         setCargando(true);
 
         try {
@@ -41,6 +42,14 @@ export function useAeronavesFacturables() {
 
             // Una respuesta vieja no pisa la de los filtros vigentes.
             if (numero !== peticionRef.current) return;
+
+            // Se clasificó la última fila de la última página: el servidor contesta vacío con una página más allá
+            // de la última. Se vuelve a la última que existe en vez de mostrar "no hay nada" con datos en otras páginas.
+            if (respuesta.data.length === 0 && respuesta.last_page >= 1 && respuesta.current_page > respuesta.last_page) {
+                corrigiendoPagina = true;
+                setPagina(respuesta.last_page);
+                return;
+            }
 
             setRegistros(respuesta.data);
             setMeta({ pagina: respuesta.current_page, totalPaginas: Math.max(respuesta.last_page, 1), total: respuesta.total });
@@ -50,7 +59,8 @@ export function useAeronavesFacturables() {
             setRegistros([]);
             setError(e instanceof Error ? e.message : 'No se pudieron cargar las matrículas.');
         } finally {
-            if (numero === peticionRef.current) setCargando(false);
+            // Al corregir la página el efecto vuelve a pedir; se conserva "cargando" para no parpadear un vacío falso.
+            if (numero === peticionRef.current && !corrigiendoPagina) setCargando(false);
         }
     }, [filtros, pagina, porPagina]);
 

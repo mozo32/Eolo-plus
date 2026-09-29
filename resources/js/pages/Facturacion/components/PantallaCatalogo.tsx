@@ -12,6 +12,18 @@ import ModalCatalogo, { type CampoCatalogo, type RegistroCatalogo } from './Moda
 
 type FiltroEstado = 'activas' | 'baja' | 'todas';
 
+/**
+ * Minúsculas y sin marcas diacríticas. El `unique` del nombre corre en MySQL con
+ * utf8mb4_unicode_ci, que ignora acentos y mayúsculas: "Helicoptero" choca con
+ * "Helicóptero". La búsqueda debe encontrar lo mismo que rechaza el servidor.
+ */
+const normalizarBusqueda = (texto: string): string =>
+    texto
+        .normalize('NFD')
+        .replace(/\p{M}/gu, '')
+        .trim()
+        .toLowerCase();
+
 interface Props<T extends RegistroCatalogo> {
     titulo: string;
     descripcion: string;
@@ -70,13 +82,13 @@ export default function PantallaCatalogo<T extends RegistroCatalogo>({ titulo, d
     }, [recargar]);
 
     const visibles = useMemo(() => {
-        const texto = busqueda.trim().toLowerCase();
+        const texto = normalizarBusqueda(busqueda);
 
         return registros.filter(r => {
             if (estado === 'activas' && r.status !== 'A') return false;
             if (estado === 'baja' && r.status !== 'N') return false;
 
-            return texto === '' || r.nombre.toLowerCase().includes(texto);
+            return texto === '' || normalizarBusqueda(r.nombre).includes(texto);
         });
     }, [registros, estado, busqueda]);
 
@@ -85,7 +97,7 @@ export default function PantallaCatalogo<T extends RegistroCatalogo>({ titulo, d
         const respuesta = editando ? await api.actualizar(editando.id, datos) : await api.crear(datos);
 
         setModal(null);
-        toast.fire({ icon: 'success', title: respuesta.message });
+        toast.fire({ icon: 'success', titleText: respuesta.message });
         await recargar();
     };
 
@@ -95,11 +107,11 @@ export default function PantallaCatalogo<T extends RegistroCatalogo>({ titulo, d
         setAccionandoId(registro.id);
 
         try {
-            toast.fire({ icon: 'success', title: await accion() });
+            toast.fire({ icon: 'success', titleText: await accion() });
         } catch (e) {
             await Swal.fire({
                 icon: e instanceof ErrorApi && e.status === 409 ? 'info' : 'error',
-                title: tituloError,
+                titleText: tituloError,
                 text: e instanceof Error ? e.message : 'Error inesperado',
                 confirmButtonColor: '#4f46e5',
             });
@@ -111,7 +123,8 @@ export default function PantallaCatalogo<T extends RegistroCatalogo>({ titulo, d
 
     const darDeBaja = async (registro: T) => {
         const confirmacion = await Swal.fire({
-            title: `Dar de baja "${registro.nombre}"`,
+            // El nombre lo captura un usuario: titleText (texto plano), nunca title, que SweetAlert2 interpreta como HTML.
+            titleText: `Dar de baja "${registro.nombre}"`,
             text: 'Ya no aparecerá al asignar matrículas nuevas; las asignadas hasta hoy no cambian. Podrás reactivar el registro desde el filtro "De baja".',
             icon: 'warning',
             showCancelButton: true,
@@ -126,7 +139,7 @@ export default function PantallaCatalogo<T extends RegistroCatalogo>({ titulo, d
 
     const reactivar = async (registro: T) => {
         const confirmacion = await Swal.fire({
-            title: `Reactivar "${registro.nombre}"`,
+            titleText: `Reactivar "${registro.nombre}"`,
             text: 'Volverá a aparecer al asignar matrículas.',
             icon: 'question',
             showCancelButton: true,
