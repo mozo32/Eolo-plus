@@ -1,5 +1,4 @@
 import {
-    dashboard,
     walkAround,
     entregaTurno,
     gestionarAeronaves,
@@ -8,7 +7,6 @@ import {
     pernoctames,
     estacionamiento,
     entregaTurnoR,
-    asistenciaPersonal,
     checkListEquipo,
     checkListTurno,
     controlMedicamento,
@@ -23,9 +21,13 @@ import {
     prestamoChalecos,
     inspeccionCombustible,
     registroVisitantes,
-    operacionesProgramadas
+    operacionesProgramadas,
+    facturacionAeronaves,
+    facturacionCategoriasAeronave,
+    facturacionTiposMotor,
+    facturacionCombustible
 } from '@/routes'
-import { LayoutGrid } from 'lucide-react'
+import { LayoutGrid, type LucideIcon } from 'lucide-react'
 
 export type Href = string | { url: string }
 
@@ -55,7 +57,7 @@ export type NavItem = {
     title: string
     href?: Href
     moduleKey?: number
-    icon?: any
+    icon?: LucideIcon
     children?: NavItem[]
 }
 
@@ -158,6 +160,22 @@ const ROUTE_CONFIG: Record<
         href: operacionesProgramadas,
         title: 'Operaciones Programadas',
     },
+    factaeronaves: {
+        href: facturacionAeronaves,
+        title: 'Aeronaves facturables',
+    },
+    factcategoriasaeronave: {
+        href: facturacionCategoriasAeronave,
+        title: 'Categorías de aeronave',
+    },
+    facttiposmotor: {
+        href: facturacionTiposMotor,
+        title: 'Tipos de motor',
+    },
+    factcombustible: {
+        href: facturacionCombustible,
+        title: 'Combustible',
+    },
 }
 
 
@@ -246,6 +264,39 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                     { id: 'trafico-chalecos', title: 'Préstamo de chalecos', href: prestamoChalecos(), icon: LayoutGrid },
                 ],
             },
+            {
+                module: 'Facturacion',
+                key: 6,
+                items: [
+                    { id: 'facturacion-aeronaves', title: 'Aeronaves facturables', href: facturacionAeronaves(), icon: LayoutGrid },
+
+                    {
+                        id: 'facturacion-catalogos',
+                        title: 'Catálogos',
+                        icon: LayoutGrid,
+                        children: [
+                            {
+                                id: 'facturacion-categorias',
+                                title: 'Categorías de aeronave',
+                                href: facturacionCategoriasAeronave(),
+                                icon: LayoutGrid,
+                            },
+                            {
+                                id: 'facturacion-tipos-motor',
+                                title: 'Tipos de motor',
+                                href: facturacionTiposMotor(),
+                                icon: LayoutGrid,
+                            },
+                            {
+                                id: 'facturacion-combustible',
+                                title: 'Combustible',
+                                href: facturacionCombustible(),
+                                icon: LayoutGrid,
+                            },
+                        ],
+                    },
+                ],
+            },
         ]
     }
 
@@ -272,15 +323,19 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
 
             // 2. Definimos las rutas a agrupar
             const combustibleRoutes = ['reporteentregaturno', 'remision', 'inspeccioncombustible'];
+            const catalogosFacturacionRoutes = ['factcategoriasaeronave', 'facttiposmotor', 'factcombustible'];
 
             // Usamos NavItem[] para mantener la consistencia de tipos
             const finalItems: NavItem[] = [];
             const combustibleChildren: NavItem[] = [];
+            const catalogosFacturacionChildren: NavItem[] = [];
 
             rawItems.forEach(item => {
                 // Aquí 'item' ya es seguro y no es null
                 if (combustibleRoutes.includes(item.routeKey)) {
                     combustibleChildren.push(item);
+                } else if (catalogosFacturacionRoutes.includes(item.routeKey)) {
+                    catalogosFacturacionChildren.push(item);
                 } else {
                     finalItems.push(item);
                 }
@@ -294,6 +349,15 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                     // Icono opcional para el grupo padre si lo deseas
                     icon: LayoutGrid,
                     children: combustibleChildren
+                });
+            }
+
+            if (catalogosFacturacionChildren.length > 0) {
+                finalItems.push({
+                    id: `dep-${dep.id}-catalogos-facturacion`,
+                    title: 'Catálogos',
+                    icon: LayoutGrid,
+                    children: catalogosFacturacionChildren
                 });
             }
 

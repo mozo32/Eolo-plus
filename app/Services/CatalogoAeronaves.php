@@ -6,6 +6,7 @@ namespace App\Services;
 use App\Models\Aeronave;
 use App\Models\FactAeronave;
 use App\Models\TipoAeronave;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -47,13 +48,34 @@ class CatalogoAeronaves
 
         return DB::transaction(function () use ($matricula, $tipo) {
             $aeronave = Aeronave::query()->where('matricula', $matricula)->first();
+            $creada = false;
 
             if (! $aeronave) {
-                $aeronave = Aeronave::create([
-                    'matricula' => $matricula,
-                    'aeronave_id' => $this->resolverTipo($tipo),
-                ]);
-            } elseif ($aeronave->aeronave_id === null) {
+                try {
+                    $aeronave = Aeronave::create([
+                        'matricula' => $matricula,
+                        'aeronave_id' => $this->resolverTipo($tipo),
+                    ]);
+                    $creada = true;
+                } catch (UniqueConstraintViolationException) {
+                    // Otra petición dio de alta la misma matrícula entre nuestra
+                    // lectura y nuestro insert: el índice único de
+                    // aeronaves.matricula la rechazó. La fila existe, hay que
+                    // encontrarla. Repetir el first() aquí no sirve: en MySQL con
+                    // REPEATABLE READ la transacción conserva el snapshot de su
+                    // primer SELECT y no vería una fila confirmada después. Una
+                    // lectura con bloqueo va a la versión más reciente confirmada
+                    // (y, si la otra petición aún no confirma, espera a que lo
+                    // haga). Esto también funciona si el llamador ya abrió una
+                    // transacción propia, donde salirse de esta no bastaría.
+                    $aeronave = Aeronave::query()
+                        ->where('matricula', $matricula)
+                        ->lockForUpdate()
+                        ->firstOrFail();
+                }
+            }
+
+            if (! $creada && $aeronave->aeronave_id === null) {
                 // Una aeronave dada de alta sin tipo aprende el primero que
                 // llegue. Completar un hueco no cambia un valor: si ya tenía
                 // tipo, este bloque no se ejecuta. El whereNull evita pisar el
@@ -72,18 +94,24 @@ class CatalogoAeronaves
             }
 
             // Una aeronave dada de alta antes de este módulo no tiene satélite.
-            // Solo se intenta crear si falta: createOrFirst inserta primero, así
-            // que llamarlo siempre provocaría una violación del índice único de
-            // fact_aeronaves.aeronave_id en cada consulta. Si dos peticiones
-            // llegan a la vez, createOrFirst absorbe la violación y relee.
+            // Solo se intenta crear si falta: insertar siempre provocaría una
+            // violación del índice único de fact_aeronaves.aeronave_id en cada
+            // consulta.
             if (! FactAeronave::where('aeronave_id', $aeronave->id)->exists()) {
-                // El estatus se fija aquí y no se deja al default de la base: una
-                // matrícula nueva es 'transito', como la creaba el sistema viejo
-                // (id_estatus = 1), y eso es lo que decide si paga estancia.
-                FactAeronave::createOrFirst(
-                    ['aeronave_id' => $aeronave->id],
-                    ['estatus' => FactAeronave::ESTATUS_TRANSITO],
-                );
+                try {
+                    // El estatus se fija aquí y no se deja al default de la base:
+                    // una matrícula nueva es 'transito', como la creaba el sistema
+                    // viejo (id_estatus = 1), y eso es lo que decide si paga
+                    // estancia.
+                    FactAeronave::create([
+                        'aeronave_id' => $aeronave->id,
+                        'estatus' => FactAeronave::ESTATUS_TRANSITO,
+                    ]);
+                } catch (UniqueConstraintViolationException) {
+                    // Otra petición lo creó primero. Basta con que exista, y se
+                    // respeta el suyo. No se relee: con createOrFirst la relectura
+                    // caería en el snapshot de la transacción y volvería a lanzar.
+                }
             }
 
             return $aeronave->load(['tipoAeronave', 'facturacion']);

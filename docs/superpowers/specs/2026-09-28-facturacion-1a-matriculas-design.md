@@ -1,6 +1,6 @@
 # Migración de Prefacturas — Bloque 1a: independizar el catálogo de matrículas
 
-**Fecha:** 2026-09-28 · **Área:** Facturación (nueva) · **Estado:** aprobado
+**Fecha:** 2026-09-28 · **Área:** Facturación (nueva) · **Estado:** implementado (2026-09-29)
 
 Primer bloque de la migración descrita en
 `2026-09-28-facturacion-catalogos-design.md`, que pasa a ser el bloque **1b**.
