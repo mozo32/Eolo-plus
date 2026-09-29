@@ -5,11 +5,14 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\ServicioComisariato;
+use App\Services\CatalogoAeronaves;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class ServicioComisariatoController extends Controller
 {
+    public function __construct(private readonly CatalogoAeronaves $catalogo) {}
+
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -24,37 +27,12 @@ class ServicioComisariatoController extends Controller
             'subtotal'       => ['required', 'numeric', 'min:0'],
             'total'          => ['required', 'numeric', 'min:0'],
         ]);
-        $infoMatricula = DB::connection('remota')
-                    ->table('tb_matricula as m')
-                    ->leftJoin('tb_estatus as e', 'e.id_estatus', '=', 'm.id_estatus')
-                    ->leftJoin('tb_tipo as t', 't.id_tipo', '=', 'm.id_tipo')
-                    ->leftJoin('tb_categoria as c', 'c.id_categoria', '=', 'm.id_categoria')
-                    ->where('m.matricula', $validated['matricula'])
-                    ->select(
-                        'm.matricula',
-                        'e.estatus',
-                        't.tipo',
-                        'c.categoria'
-                    )
-                    ->first();
-
-        if (!$infoMatricula) {
-            DB::connection('remota')
-            ->table('tb_matricula')
-            ->insert([
-                'matricula' => $validated['matricula'],
-                'id_estatus'     => 1,
-                'id_tipo'        => 0,
-                'id_categoria'   => 0,
-                'id_motor'       => 0,
-                'id_aterrizaje'  => 0,
-                'id_transito2h'  => 0,
-                'id_transito12h' => 0,
-                'id_pernocta'    => 0,
-                'd_vuelos'       => 0,
-            ]);
-
+        // La matrícula es opcional. El resultado de la búsqueda nunca se usó:
+        // solo importa que la aeronave quede dada de alta en el catálogo.
+        if (filled($validated['matricula'] ?? null)) {
+            $this->catalogo->buscarOCrear($validated['matricula']);
         }
+
         $servicio = ServicioComisariato::create([
             'user_id'        => Auth::id(),
             'catering'       => $validated['catering'] ?? null,

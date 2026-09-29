@@ -8,6 +8,7 @@ use App\Models\OperacionDiaria;
 use App\Models\OperacionProgramada;
 use App\Events\OperacionProgramadaCambio;
 use App\Models\MovimientoCSAE;
+use App\Services\CatalogoAeronaves;
 use App\Services\SecuenciaMovimientoService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,8 @@ use App\Models\Bitacora;
 
 class OperacionesDiariasController extends Controller
 {
+    public function __construct(private readonly CatalogoAeronaves $catalogo) {}
+
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -69,42 +72,7 @@ class OperacionesDiariasController extends Controller
                 ], 422);
             }
 
-            $tipoExistente = DB::connection('remota')
-                ->table('tb_tipo')
-                ->where('tipo', $validated['equipo'])
-                ->first();
-
-            if ($tipoExistente) {
-                $idTipo = $tipoExistente->id_tipo;
-            } else {
-                $idTipo = DB::connection('remota')
-                    ->table('tb_tipo')
-                    ->insertGetId([
-                        'tipo' => $validated['equipo'],
-                    ]);
-            }
-
-            $infoMatricula = DB::connection('remota')
-                ->table('tb_matricula')
-                ->where('matricula', $matricula)
-                ->first();
-
-            if (!$infoMatricula) {
-                DB::connection('remota')
-                    ->table('tb_matricula')
-                    ->insert([
-                        'matricula' => $matricula,
-                        'id_estatus' => 1,
-                        'id_tipo' => $idTipo,
-                        'id_categoria' => 0,
-                        'id_motor' => 0,
-                        'id_aterrizaje' => 0,
-                        'id_transito2h' => 0,
-                        'id_transito12h' => 0,
-                        'id_pernocta' => 0,
-                        'd_vuelos' => 0,
-                    ]);
-            }
+            $this->catalogo->buscarOCrear($matricula, $validated['equipo'] ?? null);
 
             $operacion = OperacionDiaria::create([
                 'user_id' => Auth::id(),
@@ -825,17 +793,10 @@ class OperacionesDiariasController extends Controller
     public function buscarPorMatricula(string $matricula): JsonResponse
     {
         try {
-            $infoMatricula = DB::connection('remota')
-                ->table('tb_matricula as m')
-                ->leftJoin('tb_estatus as e', 'e.id_estatus', '=', 'm.id_estatus')
-                ->leftJoin('tb_tipo as t', 't.id_tipo', '=', 'm.id_tipo')
-                ->leftJoin('tb_categoria as c', 'c.id_categoria', '=', 'm.id_categoria')
-                ->where('m.matricula', $matricula)
-                ->select(
-                    't.tipo',
-                )
-                ->first();
-            return response()->json($infoMatricula);
+            // Misma forma que antes: {tipo: ...}, o null si la matrícula no existe.
+            $datos = $this->catalogo->buscar($matricula);
+
+            return response()->json($datos ? ['tipo' => $datos->tipo] : null);
 
         } catch (\Throwable $e) {
             \Log::error('Error al buscar aeronave: ' . $e->getMessage());
@@ -851,21 +812,17 @@ class OperacionesDiariasController extends Controller
                 return response()->json([]);
             }
 
-            $matriculas = DB::connection('remota')
-                ->table('tb_matricula')
-                ->where('matricula', 'like', '%' . strtoupper($q) . '%')
-                ->limit(10)
-                ->select('matricula')
-                ->get();
+            $matriculas = $this->catalogo->autocompletar($q);
 
             if (empty($matriculas)) {
                 return response()->json([]);
             }
 
-
+            // Se conserva la forma anterior de cada elemento: la base remota
+            // devolvía filas {matricula}, así que el valor viaja anidado.
             $result = collect($matriculas)->map(function ($matricula) {
                 return [
-                    'matricula'  => $matricula,
+                    'matricula'  => ['matricula' => $matricula],
                 ];
             })->values();
 

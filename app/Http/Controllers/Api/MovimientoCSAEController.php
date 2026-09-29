@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MovimientoCSAE;
+use App\Services\CatalogoAeronaves;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -13,6 +14,8 @@ use App\Models\Firma;
 
 class MovimientoCSAEController extends Controller
 {
+    public function __construct(private readonly CatalogoAeronaves $catalogo) {}
+
     /**
      * Guarda la ENTRADA del movimiento
      */
@@ -38,37 +41,7 @@ class MovimientoCSAEController extends Controller
                 return response()->json(['message' => 'Ya hay un registro activo de esta matrícula'], 422);
             }
 
-            $tipoExistente = DB::connection('remota')
-                ->table('tb_tipo')
-                ->where('tipo', $validated['tipo_aeronave'])
-                ->first();
-
-            if (!$tipoExistente) {
-                $idTipo = DB::connection('remota')->table('tb_tipo')->insertGetId([
-                    'tipo' => $validated['tipo_aeronave']
-                ]);
-            } else {
-                $idTipo = $tipoExistente->id_tipo;
-            }
-            $infoMatricula = DB::connection('remota')
-                ->table('tb_matricula as m')
-                ->where('m.matricula', $validated['matricula'])
-                ->first();
-
-            if (!$infoMatricula) {
-                DB::connection('remota')->table('tb_matricula')->insert([
-                    'matricula'      => $validated['matricula'],
-                    'id_estatus'     => 1,
-                    'id_tipo'        => $idTipo,
-                    'id_categoria'   => 0,
-                    'id_motor'       => 0,
-                    'id_aterrizaje'  => 0,
-                    'id_transito2h'  => 0,
-                    'id_transito12h' => 0,
-                    'id_pernocta'    => 0,
-                    'd_vuelos'       => 0,
-                ]);
-            }
+            $this->catalogo->buscarOCrear($validated['matricula'], $validated['tipo_aeronave']);
 
             $movimiento = MovimientoCSAE::create([
                 'fecha_hora_entrada'    => $validated['fecha_hora_entrada'],

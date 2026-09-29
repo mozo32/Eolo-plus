@@ -8,10 +8,13 @@ use Illuminate\Support\Facades\DB;
 use App\Models\PernoctaDia;
 use Carbon\Carbon;
 use App\Models\OperacionDiaria;
+use App\Services\CatalogoAeronaves;
 use Illuminate\Support\Facades\Validator;
 
 class PernoctaDiaController extends Controller
 {
+    public function __construct(private readonly CatalogoAeronaves $catalogo) {}
+
     public function index(Request $request)
     {
         $validated = $request->validate([
@@ -472,63 +475,17 @@ class PernoctaDiaController extends Controller
 
         try {
             foreach ($data as $item) {
-                $infoMatricula =
-                    DB::connection('remota')
-                        ->table(
-                            'tb_matricula as m'
-                        )
-                        ->leftJoin(
-                            'tb_estatus as e',
-                            'e.id_estatus',
-                            '=',
-                            'm.id_estatus'
-                        )
-                        ->leftJoin(
-                            'tb_tipo as t',
-                            't.id_tipo',
-                            '=',
-                            'm.id_tipo'
-                        )
-                        ->leftJoin(
-                            'tb_categoria as c',
-                            'c.id_categoria',
-                            '=',
-                            'm.id_categoria'
-                        )
-                        ->where(
-                            'm.matricula',
-                            $item['matricula']
-                        )
-                        ->select(
-                            'm.matricula',
-                            'e.estatus',
-                            't.tipo',
-                            'c.categoria'
-                        )
-                        ->first();
+                $datos = $this->catalogo->buscar(
+                    $item['matricula']
+                );
 
-                if (!$infoMatricula) {
-                    DB::connection('remota')
-                        ->table('tb_matricula')
-                        ->insert([
-                            'matricula' =>
-                                $item['matricula'],
-                            'id_estatus' => 1,
-                            'id_tipo' => 0,
-                            'id_categoria' => 0,
-                            'id_motor' => 0,
-                            'id_aterrizaje' => 0,
-                            'id_transito2h' => 0,
-                            'id_transito12h' => 0,
-                            'id_pernocta' => 0,
-                            'd_vuelos' => 0,
-                        ]);
-
-                    $infoMatricula = (object) [
-                        'tipo' => '',
-                        'estatus' => '',
-                        'categoria' => '',
-                    ];
+                if (!$datos) {
+                    // Aeronave desconocida: se da de alta y esta primera
+                    // pernocta queda sin tipo, estatus ni categoría, igual
+                    // que antes.
+                    $this->catalogo->buscarOCrear(
+                        $item['matricula']
+                    );
                 }
 
                 PernoctaDia::create([
@@ -544,11 +501,16 @@ class PernoctaDiaController extends Controller
                     'ubicacion' =>
                         $item['ubicacion'],
                     'aeronave' =>
-                        $infoMatricula->tipo,
+                        $datos ? $datos->tipo : '',
+                    // El sistema anterior guardaba 'Guarda' y 'Transito' con
+                    // mayúscula inicial, y Operaciones Diarias filtra
+                    // tipo_cliente por igualdad exacta. El catálogo local usa
+                    // minúsculas, así que se convierte aquí para no partir en
+                    // dos los datos históricos.
                     'tipo_cliente' =>
-                        $infoMatricula->estatus,
+                        $datos ? ucfirst($datos->estatus) : '',
                     'categoria' =>
-                        $infoMatricula->categoria,
+                        $datos ? $datos->categoria : '',
                 ]);
             }
 
@@ -579,11 +541,7 @@ class PernoctaDiaController extends Controller
             return response()->json([]);
         }
 
-        $matriculas = DB::connection('remota')
-            ->table('tb_matricula')
-            ->where('matricula', 'like', "%{$q}%")
-            ->limit(10)
-            ->pluck('matricula');
+        $matriculas = $this->catalogo->autocompletar($q, 10);
 
         return response()->json($matriculas);
     }

@@ -7,9 +7,9 @@ use App\Models\FactCategoriaAeronave;
 use App\Models\FactTipoMotor;
 
 /*
- * El 94.6% de las matrículas cobra la tarifa de su categoría, pero 41 de 763
- * tienen la suya propia en el sistema viejo. La categoría es el valor por
- * omisión; la matrícula puede sobreescribirlo para que ningún cobro cambie.
+ * El 94.6% de las matrÃ­culas cobra la tarifa de su categorÃ­a, pero 41 de 763
+ * tienen la suya propia en el sistema viejo. La categorÃ­a es el valor por
+ * omisiÃ³n; la matrÃ­cula puede sobreescribirlo para que ningÃºn cobro cambie.
  */
 
 function aeronaveConTarifas(array $propias = []): FactAeronave
@@ -45,7 +45,7 @@ test('sin tarifas propias se cobran las de la categoria y el motor', function ()
 });
 
 test('la tarifa propia gana sobre la de la categoria', function () {
-    // Caso real: una de las cinco excepciones de la categoría III.
+    // Caso real: una de las cinco excepciones de la categorÃ­a III.
     $facturacion = aeronaveConTarifas([
         'tarifa_pernocta' => 3700,
         'tarifa_transito_2h' => 1233,
@@ -55,7 +55,7 @@ test('la tarifa propia gana sobre la de la categoria', function () {
     expect((float) $facturacion->tarifaPernocta())->toBe(3700.00)
         ->and((float) $facturacion->tarifaTransito2h())->toBe(1233.00)
         ->and((float) $facturacion->tarifaTransito12h())->toBe(1850.00)
-        // El aterrizaje no se sobreescribió: sigue el del motor.
+        // El aterrizaje no se sobreescribiÃ³: sigue el del motor.
         ->and((float) $facturacion->tarifaAterrizaje())->toBe(900.00);
 });
 
@@ -73,11 +73,11 @@ test('la tarifa propia de aterrizaje gana sobre la del motor', function () {
 });
 
 test('una tarifa propia en cero se respeta y no se confunde con ausente', function () {
-    // Cortes�a: cero es un precio v�lido, distinto de "hereda la categor�a".
-    // Se compara el valor crudo que devuelve el m�todo, no un (float): el cast
-    // decimal:2 lo entrega como "0.00", y esa es la representaci�n que debe
+    // Cortesía: cero es un precio válido, distinto de "hereda la categoría".
+    // Se compara el valor crudo que devuelve el método, no un (float): el cast
+    // decimal:2 lo entrega como "0.00", y esa es la representación que debe
     // llegar al cobro. Un (float), un int o el valor heredado (4676.00, 900.00)
-    // har�an fallar la aserci�n.
+    // harían fallar la aserción.
     $facturacion = aeronaveConTarifas([
         'tarifa_pernocta' => 0,
         'tarifa_transito_2h' => 0,
@@ -92,7 +92,7 @@ test('una tarifa propia en cero se respeta y no se confunde con ausente', functi
 });
 
 test('una matricula sin clasificar no tiene tarifa y no revienta', function () {
-    // Las 56 matrículas con id_categoria = 0 del sistema viejo.
+    // Las 56 matrÃ­culas con id_categoria = 0 del sistema viejo.
     $aeronave = Aeronave::create(['matricula' => 'XA-SIN']);
     $facturacion = FactAeronave::create(['aeronave_id' => $aeronave->id]);
 

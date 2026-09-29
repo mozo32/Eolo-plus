@@ -16,6 +16,7 @@ use App\Models\Personal;
 use App\Models\Bitacora;
 use App\Models\OperacionProgramada;
 use App\Events\OperacionProgramadaCambio;
+use App\Services\CatalogoAeronaves;
 use App\Services\SecuenciaMovimientoService;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Illuminate\Support\Facades\Auth;
@@ -27,6 +28,8 @@ use Illuminate\Http\JsonResponse;
 
 class WalkAroundController extends Controller
 {
+    public function __construct(private readonly CatalogoAeronaves $catalogo) {}
+
     /**
      * LISTADO (para fetchWalkarounds)
      * GET /api/walkarounds?q=&page=
@@ -130,14 +133,7 @@ class WalkAroundController extends Controller
                 'status' => $firma->pivot->status ?? 'A',
             ];
         })->values();
-        $tipoAeronaveDb = DB::connection('remota')
-            ->table('tb_matricula as m')
-            ->leftJoin('tb_tipo as t', 't.id_tipo', '=', 'm.id_tipo')
-            ->where('m.matricula', $walkAround->matricula)
-            ->select(
-                't.tipo',
-            )
-            ->first();
+        $datosAeronave = $this->catalogo->buscar($walkAround->matricula);
 
         return response()->json([
             'id'                        => $walkAround->id,
@@ -145,7 +141,7 @@ class WalkAroundController extends Controller
             'movimiento'                => $walkAround->movimiento,
             'matricula'                 => $walkAround->matricula,
             'tipo'                      => $walkAround->tipo,
-            'tipoAeronave'              => $walkAround->tipo_aeronave ?? $tipoAeronaveDb->tipo,
+            'tipoAeronave'              => $walkAround->tipo_aeronave ?? $datosAeronave?->tipo,
             'hora'                      => $walkAround->hora,
             'destino'                   => $walkAround->destino,
             'procedensia'               => $walkAround->procedensia,
@@ -311,34 +307,14 @@ class WalkAroundController extends Controller
 
         DB::beginTransaction();
         try {
-            $tipoExistente = DB::connection('remota')
-                ->table('tb_tipo')
-                ->where('tipo', $request->metadata['tipo'])
-                ->first();
+            $aeronave = $this->catalogo->buscarOCrear(
+                $request->metadata['matricula'],
+                $request->metadata['tipo'] ?? null
+            );
 
-            $idTipo = $tipoExistente ? $tipoExistente->id_tipo : DB::connection('remota')->table('tb_tipo')->insertGetId([
-                'tipo' => $request->metadata['tipo']
-            ]);
-
-            $dbMatricula = DB::connection('remota')
-                ->table('tb_matricula')
-                ->where('matricula', $request->metadata['matricula'])
-                ->first();
-
-            if (!$dbMatricula) {
-                DB::connection('remota')->table('tb_matricula')->insert([
-                    'matricula'      => $request->metadata['matricula'],
-                    'id_estatus'     => 1,
-                    'id_tipo'        => $idTipo,
-                    'id_categoria'   => 0,
-                    'id_motor'       => 0,
-                    'id_aterrizaje'  => 0,
-                    'id_transito2h'  => 0,
-                    'id_transito12h' => 0,
-                    'id_pernocta'    => 0,
-                    'd_vuelos'       => 0,
-                ]);
-            }
+            // tipo_aeronave_id no admite nulo. El sistema anterior usaba 0 como
+            // "sin tipo" cuando la aeronave no traía uno.
+            $idTipo = $aeronave->aeronave_id ?? 0;
 
             $walkAround = WalkAround::create([
                 'fecha'                    => $request->metadata['fecha'],
@@ -1089,17 +1065,10 @@ class WalkAroundController extends Controller
     public function buscarPorMatricula(string $matricula): JsonResponse
     {
         try {
-            $infoMatricula = DB::connection('remota')
-                ->table('tb_matricula as m')
-                ->leftJoin('tb_estatus as e', 'e.id_estatus', '=', 'm.id_estatus')
-                ->leftJoin('tb_tipo as t', 't.id_tipo', '=', 'm.id_tipo')
-                ->leftJoin('tb_categoria as c', 'c.id_categoria', '=', 'm.id_categoria')
-                ->where('m.matricula', $matricula)
-                ->select(
-                    't.tipo',
-                )
-                ->first();
-            return response()->json($infoMatricula);
+            // Misma forma que antes: {tipo: ...}, o null si la matrícula no existe.
+            $datos = $this->catalogo->buscar($matricula);
+
+            return response()->json($datos ? ['tipo' => $datos->tipo] : null);
 
         } catch (\Throwable $e) {
             \Log::error('Error al buscar aeronave: ' . $e->getMessage());
