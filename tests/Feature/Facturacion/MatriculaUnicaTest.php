@@ -50,7 +50,15 @@ test('perder la carrera al crear la matricula no lanza y deja una sola fila', fu
         ->and(FactAeronave::where('aeronave_id', $competidora)->count())->toBe(1);
 });
 
-test('quien pierde la carrera completa el tipo que la ganadora dejo vacio', function () {
+/*
+ * Quien pierde la carrera queda con un bloqueo compartido sobre la fila de la
+ * ganadora (el que le dejó la clave duplicada). Cualquier UPDATE sobre esa fila
+ * pide uno exclusivo: con dos o más perdedoras, cada una esperaría la X
+ * bloqueada por la S de la otra (deadlock 1213, sin reintento). Por eso quien
+ * pierde NO completa el tipo; la fila conserva el de la ganadora, aunque sea
+ * nulo, y ese hueco lo llena la siguiente captura por el camino normal.
+ */
+test('quien pierde la carrera no escribe en la fila de la ganadora aunque le falte el tipo', function () {
     Aeronave::creating(function () {
         static $insertada = false;
 
@@ -64,6 +72,13 @@ test('quien pierde la carrera completa el tipo que la ganadora dejo vacio', func
         }
     });
 
+    $actualizaciones = [];
+    DB::listen(function ($consulta) use (&$actualizaciones) {
+        if (str_starts_with(strtolower(ltrim($consulta->sql)), 'update "aeronaves"')) {
+            $actualizaciones[] = $consulta->sql;
+        }
+    });
+
     try {
         $aeronave = app(CatalogoAeronaves::class)->buscarOCrear('XA-HUECOS', 'Bell 206');
     } finally {
@@ -71,7 +86,13 @@ test('quien pierde la carrera completa el tipo que la ganadora dejo vacio', func
     }
 
     expect(Aeronave::where('matricula', 'XA-HUECOS')->count())->toBe(1)
-        ->and($aeronave->tipoAeronave?->nombre)->toBe('Bell 206')
+        ->and($actualizaciones)->toBe([])
+        ->and($aeronave->aeronave_id)->toBeNull();
+
+    // El hueco lo llena la siguiente captura, por el camino normal (sin bloqueo previo).
+    $siguiente = app(CatalogoAeronaves::class)->buscarOCrear('XA-HUECOS', 'Bell 206');
+
+    expect($siguiente->tipoAeronave?->nombre)->toBe('Bell 206')
         ->and(TipoAeronave::where('nombre', 'Bell 206')->count())->toBe(1);
 });
 
@@ -190,7 +211,17 @@ test('si la relectura no encuentra la fila se propaga la violacion original', fu
 });
 
 test('una violacion de unicidad al resolver el tipo no se toma por la de la matricula', function () {
+    // Además de fallar, la resolución del tipo deja una fila competidora de la
+    // misma matrícula. Si resolverTipo estuviera dentro del try, la violación
+    // se atraparía, la relectura encontraría esa fila y buscarOCrear devolvería
+    // la aeronave sin lanzar. Fuera del try, la violación del tipo se propaga.
     TipoAeronave::creating(function () {
+        DB::table('aeronaves')->insert([
+            'matricula' => 'XA-TIPO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
         throw new UniqueConstraintViolationException('sqlite', 'insert into tipo_aeronaves', [], new Exception('tipo duplicado'));
     });
 
@@ -200,6 +231,4 @@ test('una violacion de unicidad al resolver el tipo no se toma por la de la matr
     } finally {
         TipoAeronave::flushEventListeners();
     }
-
-    expect(Aeronave::where('matricula', 'XA-TIPO')->exists())->toBeFalse();
 });

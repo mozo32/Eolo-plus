@@ -48,7 +48,10 @@ class CatalogoAeronaves
 
         return DB::transaction(function () use ($matricula, $tipo) {
             $aeronave = Aeronave::query()->where('matricula', $matricula)->first();
-            $creada = false;
+            // Creada por nosotros, o encontrada tras perder una carrera. En ambos
+            // casos la fila acaba de nacer en una alta concurrente y no se le
+            // completa el tipo (ver el catch).
+            $reciente = false;
 
             if (! $aeronave) {
                 // Fuera del try: una violación de unicidad que lanzara la
@@ -61,7 +64,7 @@ class CatalogoAeronaves
                         'matricula' => $matricula,
                         'aeronave_id' => $tipoId,
                     ]);
-                    $creada = true;
+                    $reciente = true;
                 } catch (UniqueConstraintViolationException $e) {
                     // Otra petición dio de alta la misma matrícula entre nuestra
                     // lectura y nuestro insert: el índice único de
@@ -81,6 +84,13 @@ class CatalogoAeronaves
                     // matrícula nueva provoca un deadlock (error 1213) sin
                     // reintento. El compartido es compatible con el que ya
                     // tenemos.
+                    //
+                    // Ese bloqueo compartido no se puede soltar antes de que
+                    // termine la transacción (InnoDB los retiene hasta el
+                    // commit), así que tampoco se puede escribir después en esta
+                    // fila: cualquier UPDATE sería otra mejora S->X. Por eso, más
+                    // abajo, quien pierde la carrera no completa el tipo.
+                    $reciente = true;
                     $aeronave = Aeronave::query()
                         ->where('matricula', $matricula)
                         ->sharedLock()
@@ -88,7 +98,7 @@ class CatalogoAeronaves
                 }
             }
 
-            if (! $creada && $aeronave->aeronave_id === null) {
+            if (! $reciente && $aeronave->aeronave_id === null) {
                 // Una aeronave dada de alta sin tipo aprende el primero que
                 // llegue. Completar un hueco no cambia un valor: si ya tenía
                 // tipo, este bloque no se ejecuta. El whereNull evita pisar el

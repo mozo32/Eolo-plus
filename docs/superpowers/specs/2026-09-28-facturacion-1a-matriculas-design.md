@@ -168,6 +168,11 @@ la carrera atrapa `UniqueConstraintViolationException` y relee con un bloqueo
 compartido (`sharedLock`), que rompe el snapshot de REPEATABLE READ sin la
 mejora de bloqueo que causaría deadlock con tres o más peticiones. Lo mismo vale
 para el registro satélite de `fact_aeronaves`.
+Quien pierde la carrera queda con un bloqueo compartido sobre la fila de la
+ganadora que InnoDB no libera hasta el commit, así que no escribe en ella:
+cualquier `UPDATE` sería otra mejora S->X con riesgo de deadlock. Por eso no
+completa el tipo; si la ganadora dejó el tipo vacío, lo llena la siguiente
+captura con tipo por el camino normal.
 
 ## Reapuntar los controladores
 
