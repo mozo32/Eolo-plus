@@ -34,6 +34,10 @@ use App\Http\Controllers\Api\MatriculaRestringidaController;
 use App\Http\Controllers\Api\PantallaProgramadasController;
 use App\Http\Controllers\Api\RelacionPlantaController;
 use App\Http\Controllers\Api\PrestamoChalecoController;
+use App\Http\Controllers\Api\Facturacion\AeronaveFacturacionController;
+use App\Http\Controllers\Api\Facturacion\CategoriaAeronaveController;
+use App\Http\Controllers\Api\Facturacion\PrecioCombustibleController;
+use App\Http\Controllers\Api\Facturacion\TipoMotorController;
 
 Route::post('/despacho', [DespachoController::class, 'store']);
 Route::get('/aeronaves/autocomplete', [AeronaveController::class, 'autocomplete']);
@@ -339,5 +343,40 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('PrestamoChalecos')->group(fu
     Route::middleware('subdep:prestamoChalecos')->group(function () {
         Route::post('/', [PrestamoChalecoController::class, 'store']);
         Route::patch('/{id}/devolver', [PrestamoChalecoController::class, 'devolver'])->whereNumber('id');
+    });
+});
+
+/*
+|--------------------------------------------------------------------------
+| Facturación — catálogos de matrícula (bloque 1a)
+|--------------------------------------------------------------------------
+| Consultar es abierto a cualquier usuario autenticado. Escribir exige el
+| subdepartamento de esa pantalla (admin siempre pasa).
+*/
+Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(function () {
+    Route::get('/categorias-aeronave', [CategoriaAeronaveController::class, 'index']);
+    Route::get('/tipos-motor', [TipoMotorController::class, 'index']);
+    Route::get('/precios-combustible', [PrecioCombustibleController::class, 'index']);
+    Route::get('/precios-combustible/vigente', [PrecioCombustibleController::class, 'vigente']);
+    Route::get('/aeronaves', [AeronaveFacturacionController::class, 'index']);
+
+    Route::middleware('subdep:factCategoriasAeronave')->group(function () {
+        Route::post('/categorias-aeronave', [CategoriaAeronaveController::class, 'store']);
+        Route::put('/categorias-aeronave/{id}', [CategoriaAeronaveController::class, 'update'])->whereNumber('id');
+        Route::patch('/categorias-aeronave/{id}/desactivar', [CategoriaAeronaveController::class, 'desactivar'])->whereNumber('id');
+    });
+
+    Route::middleware('subdep:factTiposMotor')->group(function () {
+        Route::post('/tipos-motor', [TipoMotorController::class, 'store']);
+        Route::put('/tipos-motor/{id}', [TipoMotorController::class, 'update'])->whereNumber('id');
+        Route::patch('/tipos-motor/{id}/desactivar', [TipoMotorController::class, 'desactivar'])->whereNumber('id');
+    });
+
+    Route::middleware('subdep:factCombustible')->group(function () {
+        Route::post('/precios-combustible', [PrecioCombustibleController::class, 'store']);
+    });
+
+    Route::middleware('subdep:factAeronaves')->group(function () {
+        Route::put('/aeronaves/{id}', [AeronaveFacturacionController::class, 'update'])->whereNumber('id');
     });
 });

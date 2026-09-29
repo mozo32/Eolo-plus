@@ -121,6 +121,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('inspeccionCombustible', function () {
         return Inertia::render('Rampa/InspeccionCombustible');
     })->name('inspeccionCombustible');
+
+    // Facturación (bloque 1a). Cada pantalla tiene su propio subdepartamento.
+    Route::get('facturacion/aeronaves', fn () => Inertia::render('Facturacion/AeronavesFacturacion'))->name('facturacionAeronaves');
+    Route::get('facturacion/categorias-aeronave', fn () => Inertia::render('Facturacion/CategoriasAeronave'))->name('facturacionCategoriasAeronave');
+    Route::get('facturacion/tipos-motor', fn () => Inertia::render('Facturacion/TiposMotor'))->name('facturacionTiposMotor');
+    Route::get('facturacion/combustible', fn () => Inertia::render('Facturacion/Combustible'))->name('facturacionCombustible');
 });
 
 require __DIR__.'/settings.php';

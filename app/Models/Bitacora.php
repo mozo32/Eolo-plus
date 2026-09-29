@@ -21,6 +21,8 @@ class Bitacora extends Model
 
     public const MODULO_GESTION_USUARIOS = 'GESTION_USUARIOS';
 
+    public const MODULO_FACTURACION_CATALOGOS = 'FACTURACION_CATALOGOS';
+
     public const ACCION_CREAR = 'CREAR';
     public const ACCION_ACTUALIZAR = 'ACTUALIZAR';
     public const ACCION_ELIMINAR = 'ELIMINAR';

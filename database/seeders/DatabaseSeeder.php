@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
             OperacionesProgramadasSubdepartamentoSeeder::class,
             RelacionPlantaSubdepartamentoSeeder::class,
             PrestamoChalecosSubdepartamentoSeeder::class,
+            FacturacionSubdepartamentosSeeder::class,
         ]);
     }
 }
