@@ -316,7 +316,7 @@ test('los conteos de tarifa propia cuentan solo excepciones reales y separan sin
 
 /*
  * En tb_matricula el d_vuelos = 0 es lo que dispara el cargo de $900 en el
- * sistema viejo (790 matriculas reales), y d_vuelos = 1 lo exime (33).
+ * sistema viejo, y d_vuelos = 1 lo exime.
  */
 test('d_vuelos 0 cobra derecho de vuelos y d_vuelos 1 no', function () {
     sembrarLegacy([
@@ -331,29 +331,65 @@ test('d_vuelos 0 cobra derecho de vuelos y d_vuelos 1 no', function () {
 });
 
 /*
- * Una tarifa que apunta a un id que no existe es el unico camino en el que una
- * matricula podria cobrar distinto del origen. Un renglon por matricula, con
- * los campos que le faltan, y un conteo propio.
+ * Una tarifa colgante (un id que no existe en el origen) solo puede cambiar un
+ * cobro cuando tiene contra que caer: la categoria, para la estancia, o el
+ * motor, para el aterrizaje. Ese caso lleva su renglon y su conteo. Las
+ * matriculas sin categoria ni motor, con todos los ids en 0, no heredan nada:
+ * el origen no les cobra y Eolo-plus tampoco, asi que solo se cuentan.
  */
-test('las tarifas colgantes se reportan en un solo renglon por matricula y con su propio conteo', function () {
+test('una tarifa colgante con categoria o motor donde caer lleva renglon propio y cuenta', function () {
     sembrarLegacy([
         matriculaLegacy('XA-AAA'),
-        array_merge(matriculaLegacy('XA-S1', idCategoria: 0), ['id_pernocta' => 0, 'id_transito2h' => 0, 'id_transito12h' => 0, 'id_aterrizaje' => 0, 'id_motor' => 0]),
-        array_merge(matriculaLegacy('XA-S2', idCategoria: 0), ['id_pernocta' => 0, 'id_transito2h' => 0, 'id_transito12h' => 0, 'id_aterrizaje' => 0, 'id_motor' => 0]),
         matriculaLegacy('XA-ROT', idPernocta: 99, idAterrizaje: 88),
     ]);
 
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
 
-    $renglones = fn (string $m) => array_values(array_filter($resultado->hallazgos, fn ($h) => str_contains($h, $m)));
+    $renglones = array_values(array_filter($resultado->hallazgos, fn ($h) => str_contains($h, 'XA-ROT')));
 
-    expect($resultado->conteos['matriculas_con_tarifa_huerfana'])->toBe(3)
-        ->and($renglones('XA-S1'))->toHaveCount(1)
-        ->and($renglones('XA-S2'))->toHaveCount(1)
-        ->and($renglones('XA-ROT'))->toHaveCount(1)
-        ->and($renglones('XA-ROT')[0])->toContain('pernocta')->toContain('aterrizaje')
-        ->and($renglones('XA-S1')[0])->toContain('pernocta')->toContain('tránsito de 2h')
-        ->and($renglones('XA-AAA'))->toBe([]);
+    expect($resultado->conteos['matriculas_con_tarifa_huerfana'])->toBe(1)
+        ->and($renglones)->toHaveCount(1)
+        ->and($renglones[0])->toContain('pernocta')->toContain('aterrizaje')
+        ->and($renglones[0])->toContain('Ejecutiva')->toContain('Jet')
+        ->and(implode(' ', $resultado->hallazgos))->not->toContain('XA-AAA');
+});
+
+test('una matricula sin categoria ni motor con tarifas en 0 no genera renglon individual, solo cuenta', function () {
+    $sinNada = ['id_pernocta' => 0, 'id_transito2h' => 0, 'id_transito12h' => 0, 'id_aterrizaje' => 0, 'id_motor' => 0];
+
+    sembrarLegacy([
+        matriculaLegacy('XA-AAA'),
+        array_merge(matriculaLegacy('XA-S1', idCategoria: 0), $sinNada),
+        array_merge(matriculaLegacy('XA-S2', idCategoria: 0), $sinNada),
+        matriculaLegacy('XA-ROT', idPernocta: 99),
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
+
+    $texto = implode("
+", $resultado->hallazgos);
+
+    // El unico numero que se lee es el de las que pueden cobrar distinto.
+    expect($resultado->conteos['matriculas_con_tarifa_huerfana'])->toBe(1)
+        ->and($resultado->conteos['matriculas_con_tarifa_huerfana_sin_destino'])->toBe(2)
+        ->and($texto)->not->toContain('XA-S1')
+        ->and($texto)->not->toContain('XA-S2')
+        ->and($texto)->toContain('XA-ROT')
+        // Una sola linea de resumen, y no promete herencia que no existe.
+        ->and(array_values(array_filter($resultado->hallazgos, fn ($h) => str_contains($h, '2 matrículas'))))->toHaveCount(1);
+});
+
+test('un aterrizaje colgante en una matricula sin motor no tiene donde caer y no lleva renglon', function () {
+    sembrarLegacy([
+        matriculaLegacy('XA-AAA'),
+        array_merge(matriculaLegacy('XA-SM'), ['id_motor' => 0, 'id_aterrizaje' => 77]),
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
+
+    expect($resultado->conteos['matriculas_con_tarifa_huerfana'])->toBe(0)
+        ->and($resultado->conteos['matriculas_con_tarifa_huerfana_sin_destino'])->toBe(1)
+        ->and(implode(' ', $resultado->hallazgos))->not->toContain('XA-SM');
 });
 
 test('la simulacion cuenta lo que traeria pero no escribe nada', function () {
@@ -687,4 +723,13 @@ test('la simulacion avisa cuantas filas existentes se verian afectadas pero no s
     $this->artisan('facturacion:importar-matriculas')
         ->expectsOutputToContain('1 filas')
         ->assertSuccessful();
+});
+
+test('el comando falla limpio si fact_aeronaves no existe', function () {
+    Schema::drop('fact_aeronaves');
+    sembrarLegacy([matriculaLegacy('XA-AAA')]);
+
+    $this->artisan('facturacion:importar-matriculas')
+        ->expectsOutputToContain('No se pudo completar')
+        ->assertFailed();
 });

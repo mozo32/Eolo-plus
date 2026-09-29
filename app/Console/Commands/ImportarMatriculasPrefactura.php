@@ -18,27 +18,27 @@ class ImportarMatriculasPrefactura extends Command
         $aplicar = (bool) $this->option('aplicar');
         $origen = config('database.connections.remota.database');
 
-        // Volver a importar sobreescribe estatus, categoría, motor, derecho de
-        // vuelos y tarifas propias de todas las matrículas: lo que alguien haya
-        // editado desde la aplicación se perdería sin aviso.
-        $existentes = FactAeronave::query()->count();
-
-        if ($existentes > 0 && $aplicar && ! $this->option('forzar')) {
-            $this->error("fact_aeronaves ya tiene {$existentes} filas y --aplicar las sobreescribiría (estatus, categoría, motor, derecho de vuelos y tarifas propias). No se escribió nada.");
-            $this->line('Revisa con la simulación (sin --aplicar) y, si de verdad quieres sobreescribir, agrega --forzar.');
-
-            return self::FAILURE;
-        }
-
-        if ($existentes > 0) {
-            $this->warn("fact_aeronaves ya tiene {$existentes} filas: la importación las sobreescribiría.");
-        }
-
-        $this->info($aplicar
-            ? "Importando desde '{$origen}'..."
-            : "Simulación desde '{$origen}': no se escribirá nada.");
-
         try {
+            // Volver a importar sobreescribe estatus, categoría, motor, derecho de
+            // vuelos y tarifas propias de todas las matrículas: lo que alguien haya
+            // editado desde la aplicación se perdería sin aviso.
+            $existentes = FactAeronave::query()->count();
+
+            if ($existentes > 0 && $aplicar && ! $this->option('forzar')) {
+                $this->error("fact_aeronaves ya tiene {$existentes} filas y --aplicar las sobreescribiría (estatus, categoría, motor, derecho de vuelos y tarifas propias). No se escribió nada.");
+                $this->line('Revisa con la simulación (sin --aplicar) y, si de verdad quieres sobreescribir, agrega --forzar.');
+
+                return self::FAILURE;
+            }
+
+            if ($existentes > 0) {
+                $this->warn("fact_aeronaves ya tiene {$existentes} filas: la importación las sobreescribiría.");
+            }
+
+            $this->info($aplicar
+                ? "Importando desde '{$origen}'..."
+                : "Simulación desde '{$origen}': no se escribirá nada.");
+
             $resultado = $importador->ejecutar($aplicar);
         } catch (\Throwable $e) {
             // El importador ya revirtió la transacción; nada quedó a medias.

@@ -32,9 +32,17 @@ class ImportadorMatriculas
 
     private ResultadoImportacion $resultado;
 
+    /** @var array<int,string> id_categoria viejo => nombre, para los hallazgos */
+    private array $nombresCategoria = [];
+
+    /** @var array<int,string> id_motor viejo => nombre, para los hallazgos */
+    private array $nombresMotor = [];
+
     public function ejecutar(bool $aplicar): ResultadoImportacion
     {
         $this->resultado = new ResultadoImportacion();
+        $this->nombresCategoria = [];
+        $this->nombresMotor = [];
 
         // Todas las claves existen aunque valgan 0, para que el reporte sea
         // comparable entre corridas.
@@ -44,7 +52,7 @@ class ImportadorMatriculas
             'matriculas_con_estancia_propia', 'matriculas_con_aterrizaje_propio',
             'matriculas_sin_categoria_con_tarifa_propia',
             'matriculas_sin_motor', 'matriculas_sin_motor_con_aterrizaje_propio',
-            'matriculas_con_tarifa_huerfana', 'matriculas_solo_locales', 'precios_combustible',
+            'matriculas_con_tarifa_huerfana', 'matriculas_con_tarifa_huerfana_sin_destino', 'matriculas_solo_locales', 'precios_combustible',
         ] as $clave) {
             $this->resultado->contar($clave, 0);
         }
@@ -277,6 +285,7 @@ class ImportadorMatriculas
             );
 
             $mapa[$fila->id_categoria] = $categoria->id;
+            $this->nombresCategoria[$fila->id_categoria] = $nombre;
             $modas[$fila->id_categoria] = $moda;
             $this->resultado->contar('categorias');
         }
@@ -319,6 +328,7 @@ class ImportadorMatriculas
             );
 
             $mapa[$fila->id_motor] = $motor->id;
+            $this->nombresMotor[$fila->id_motor] = $nombre;
             $modas[$fila->id_motor] = $moda;
             $this->resultado->contar('motores');
         }
@@ -373,19 +383,42 @@ class ImportadorMatriculas
                 'tarifa_aterrizaje' => self::propia($fila->aterrizaje, $modaMotor),
             ];
 
-            // Un solo renglón por matrícula, con los campos que le faltan: es el
-            // único camino en el que podría cobrar distinto del origen.
-            $colgantes = array_keys(array_filter([
-                'pernocta' => $fila->pernocta === null,
-                'tránsito de 2h' => $fila->transito2h === null,
-                'tránsito de 12h' => $fila->transito12h === null,
-                'aterrizaje' => $fila->aterrizaje === null,
-            ]));
+            // Una tarifa colgante (su id no existe en el origen) solo puede cambiar
+            // un cobro si tiene contra qué caer: la categoría en la estancia, el
+            // motor en el aterrizaje. En el origen esa tarifa no resuelve; aquí
+            // heredaría la de la categoría o el motor. Ese caso es el que hay que
+            // leer antes de aplicar, así que lleva renglón y conteo propios.
+            $conDestino = [];
+            $sinDestino = false;
 
-            if ($colgantes !== []) {
-                $campos = implode(', ', $colgantes);
+            foreach ([
+                'pernocta' => [$fila->pernocta, $categoriaId !== null],
+                'tránsito de 2h' => [$fila->transito2h, $categoriaId !== null],
+                'tránsito de 12h' => [$fila->transito12h, $categoriaId !== null],
+                'aterrizaje' => [$fila->aterrizaje, $motorId !== null],
+            ] as $campo => [$valor, $tieneDestino]) {
+                if ($valor !== null) {
+                    continue;
+                }
+
+                if ($tieneDestino) {
+                    $conDestino[] = $campo;
+                } else {
+                    $sinDestino = true;
+                }
+            }
+
+            if ($conDestino !== []) {
+                $campos = implode(', ', $conDestino);
+                $heredaDe = array_filter([
+                    $categoriaId !== null ? "categoría '{$this->nombresCategoria[$fila->id_categoria]}'" : null,
+                    $motorId !== null ? "motor '{$this->nombresMotor[$fila->id_motor]}'" : null,
+                ]);
+
                 $this->resultado->contar('matriculas_con_tarifa_huerfana');
-                $this->resultado->hallazgo("La matrícula {$matricula} apunta a tarifas que no existen en el origen ({$campos}): no se le guarda tarifa propia en esos campos y cobrará la de su categoría o motor.");
+                $this->resultado->hallazgo("La matrícula {$matricula} apunta a tarifas que no existen en el origen ({$campos}). En el origen no resuelven; en Eolo-plus cobrará la de su ".implode(' o su ', $heredaDe).' en esos campos, así que puede cobrar distinto del origen.');
+            } elseif ($sinDestino) {
+                $this->resultado->contar('matriculas_con_tarifa_huerfana_sin_destino');
             }
 
             $estatusOrigen = (int) $fila->id_estatus;
@@ -430,6 +463,12 @@ class ImportadorMatriculas
             }
 
             $this->resultado->contar('matriculas');
+        }
+
+        $sinDestino = $this->resultado->conteos['matriculas_con_tarifa_huerfana_sin_destino'];
+
+        if ($sinDestino > 0) {
+            $this->resultado->hallazgo("{$sinDestino} matrículas tienen tarifas que no existen en el origen pero no tienen categoría o motor donde caer: no heredan nada, en el origen tampoco resuelven y ningún cobro cambia.");
         }
 
         // Validación 3: matrículas locales que el sistema viejo no conoce.
