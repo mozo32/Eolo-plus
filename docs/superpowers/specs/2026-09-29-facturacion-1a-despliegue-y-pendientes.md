@@ -20,7 +20,7 @@ falla si alguien la reintroduce.
 
 ## Decisión pendiente antes de importar: la matrícula ZZ-GFT
 
-Es la **única** de 817 cuyo cobro cambiaría. Se enumeró el conjunto completo por
+Es la **única** cuyo cobro cambiaría, confirmado contra dos conjuntos de datos: la copia local (817 matrículas importables) y el volcado de producción del 2026-09-29 (835 importables, 45 con tarifa de estancia propia). Se enumeró el conjunto completo por
 SQL sobre las 823 filas del origen y no hay una segunda.
 
 `ZZ-GFT` (categoría III) tiene `id_pernocta = 19` e `id_transito12h = 20`
@@ -97,10 +97,11 @@ Después, asignar los cuatro subdepartamentos de Facturación (`factAeronaves`,
 `factCategoriasAeronave`, `factTiposMotor`, `factCombustible`) desde Gestión de
 usuarios, con la función de agrupar por departamento.
 
-**El precio de combustible que se importa está vencido** (`f_ini` 2018-08-26,
-`f_fin` 2024-08-26). Se trae tal cual porque es el que cobran hoy Remisiones y
-Turno de autotanque —así ningún cobro cambia—, pero conviene capturar uno actual
-desde la pantalla nueva el primer día.
+**El precio de combustible está vigente**: ASA 22.1643, Eolo 26.0640, con
+vigencia del 2022-09-26 al 2028-09-26. El importador trae el valor almacenado tal
+cual, así que ningún cobro cambia. (Nota menor: la fórmula `(ASA + 0.50) × 1.15`
+daría 26.0639, un diezmilésimo menos que lo guardado; la pantalla propone el
+calculado al capturar uno nuevo, pero la importación respeta el original.)
 
 ## Verificaciones que faltan contra MySQL real
 
