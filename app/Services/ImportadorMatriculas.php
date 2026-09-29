@@ -42,7 +42,9 @@ class ImportadorMatriculas
             'tipos', 'categorias', 'motores', 'matriculas', 'aeronaves_creadas',
             'matriculas_sin_categoria', 'matriculas_duplicadas',
             'matriculas_con_estancia_propia', 'matriculas_con_aterrizaje_propio',
-            'matriculas_solo_locales', 'precios_combustible',
+            'matriculas_sin_categoria_con_tarifa_propia',
+            'matriculas_sin_motor', 'matriculas_sin_motor_con_aterrizaje_propio',
+            'matriculas_con_tarifa_huerfana', 'matriculas_solo_locales', 'precios_combustible',
         ] as $clave) {
             $this->resultado->contar($clave, 0);
         }
@@ -371,13 +373,19 @@ class ImportadorMatriculas
                 'tarifa_aterrizaje' => self::propia($fila->aterrizaje, $modaMotor),
             ];
 
-            foreach ([
-                'pernocta' => $fila->pernocta, 'tránsito de 2h' => $fila->transito2h,
-                'tránsito de 12h' => $fila->transito12h, 'aterrizaje' => $fila->aterrizaje,
-            ] as $nombre => $valor) {
-                if ($valor === null) {
-                    $this->resultado->hallazgo("La matrícula {$matricula} apunta a una tarifa de {$nombre} que no existe en el origen: no se le guarda tarifa propia y cobrará la de su categoría o motor.");
-                }
+            // Un solo renglón por matrícula, con los campos que le faltan: es el
+            // único camino en el que podría cobrar distinto del origen.
+            $colgantes = array_keys(array_filter([
+                'pernocta' => $fila->pernocta === null,
+                'tránsito de 2h' => $fila->transito2h === null,
+                'tránsito de 12h' => $fila->transito12h === null,
+                'aterrizaje' => $fila->aterrizaje === null,
+            ]));
+
+            if ($colgantes !== []) {
+                $campos = implode(', ', $colgantes);
+                $this->resultado->contar('matriculas_con_tarifa_huerfana');
+                $this->resultado->hallazgo("La matrícula {$matricula} apunta a tarifas que no existen en el origen ({$campos}): no se le guarda tarifa propia en esos campos y cobrará la de su categoría o motor.");
             }
 
             $estatusOrigen = (int) $fila->id_estatus;
@@ -403,12 +411,22 @@ class ImportadorMatriculas
                 ] + $propias,
             );
 
-            if ($propias['tarifa_pernocta'] !== null || $propias['tarifa_transito_2h'] !== null || $propias['tarifa_transito_12h'] !== null) {
-                $this->resultado->contar('matriculas_con_estancia_propia');
+            $conEstanciaPropia = $propias['tarifa_pernocta'] !== null
+                || $propias['tarifa_transito_2h'] !== null
+                || $propias['tarifa_transito_12h'] !== null;
+
+            // Solo son excepciones reales las que se apartan de una moda que existe;
+            // sin categoría o sin motor no hay contra qué compararse y se cuentan aparte.
+            if ($conEstanciaPropia) {
+                $this->resultado->contar($categoriaId !== null ? 'matriculas_con_estancia_propia' : 'matriculas_sin_categoria_con_tarifa_propia');
+            }
+
+            if ($motorId === null) {
+                $this->resultado->contar('matriculas_sin_motor');
             }
 
             if ($propias['tarifa_aterrizaje'] !== null) {
-                $this->resultado->contar('matriculas_con_aterrizaje_propio');
+                $this->resultado->contar($motorId !== null ? 'matriculas_con_aterrizaje_propio' : 'matriculas_sin_motor_con_aterrizaje_propio');
             }
 
             $this->resultado->contar('matriculas');
