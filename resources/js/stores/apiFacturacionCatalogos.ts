@@ -1,7 +1,8 @@
 /**
- * Acceso a la API de los catálogos de matrícula de Facturación (bloque 1a):
+ * Acceso a la API de los catálogos de Facturación: los de matrícula (bloque 1a:
  * categorías de aeronave, tipos de motor, precio del combustible y datos de
- * cobro de cada matrícula.
+ * cobro de cada matrícula) y los de la prefacturación (bloque 1b: clientes,
+ * servicios y sus categorías, formas de pago y proveedores).
  *
  * Los importes decimales llegan del servidor como texto ("12.50") porque el
  * modelo los castea a decimal; se conservan así para no perder precisión y para
@@ -116,6 +117,45 @@ export type AeronaveFacturable = {
     tarifa_aterrizaje_efectiva: string | null;
 };
 
+/** Cliente de facturación. El RFC puede repetirse (el genérico lo comparten muchos clientes) y puede faltar. */
+export type Cliente = {
+    id: number;
+    nombre: string;
+    rfc: string | null;
+    correo: string | null;
+    telefono: string | null;
+    status: StatusCatalogo;
+};
+
+/** Clasificación de los servicios; se administra desde la pantalla de servicios. */
+export type CategoriaServicio = {
+    id: number;
+    nombre: string;
+    status: StatusCatalogo;
+};
+
+/** Cómo se ajusta el precio antes de aplicar el margen; la fórmula vive en `FactServicio::aplicarAjuste()`. */
+export type AjustePrecio = 'ninguno' | 'mas_5' | 'sin_iva' | 'comision_131';
+
+export type Servicio = {
+    id: number;
+    categoria_servicio_id: number | null;
+    /** Viene en el listado, con su estado (puede estar dada de baja). */
+    categoria: CategoriaServicio | null;
+    nombre: string;
+    /** Decimal de 4 lugares ("1000.0000"); cero es un precio válido. */
+    precio_unitario: string;
+    es_de_tercero: boolean;
+    /** Porcentaje ("50.00"). Es de tercero si y solo si es mayor a 0. */
+    margen: string;
+    ajuste_precio: AjustePrecio;
+    status: StatusCatalogo;
+};
+
+export type FormaPago = { id: number; nombre: string; status: StatusCatalogo };
+
+export type Proveedor = { id: number; nombre: string; status: StatusCatalogo };
+
 export interface Pagina<T> {
     data: T[];
     current_page: number;
@@ -133,18 +173,31 @@ export interface Pagina<T> {
 /** Lo que se envía al alta y a la edición: el nombre y los importes ya convertidos a número. */
 export type DatosCatalogo = { nombre: string } & Record<string, string | number>;
 
-export interface ApiCatalogo<T> {
+/** Alta y edición de un cliente: lo opcional vacío viaja como null. */
+export type DatosCliente = { nombre: string; rfc: string | null; correo: string | null; telefono: string | null };
+
+/** Alta y edición de un servicio: el precio y el margen ya convertidos a número. */
+export type DatosServicio = {
+    categoria_servicio_id: number | null;
+    nombre: string;
+    precio_unitario: number;
+    es_de_tercero: boolean;
+    margen: number;
+    ajuste_precio: AjustePrecio;
+};
+
+export interface ApiCatalogo<T, D = DatosCatalogo> {
     /** Todas las filas, activas y de baja: el filtro de baja se resuelve en pantalla. */
     listar: () => Promise<T[]>;
-    crear: (datos: DatosCatalogo) => Promise<{ message: string; registro: T }>;
-    actualizar: (id: number, datos: DatosCatalogo) => Promise<{ message: string; registro: T }>;
+    crear: (datos: D) => Promise<{ message: string; registro: T }>;
+    actualizar: (id: number, datos: D) => Promise<{ message: string; registro: T }>;
     /** 409 (ErrorApi.codigo ya_desactivad*) si ya estaba de baja. */
     desactivar: (id: number) => Promise<string>;
     /** 409 (ErrorApi.codigo ya_activ*) si ya estaba activa. */
     reactivar: (id: number) => Promise<string>;
 }
 
-function crearApiCatalogo<T>(ruta: string, claveLista: string, claveRegistro: string): ApiCatalogo<T> {
+function crearApiCatalogo<T, D = DatosCatalogo>(ruta: string, claveLista: string, claveRegistro: string): ApiCatalogo<T, D> {
     const url = `${BASE}/${ruta}`;
 
     return {
@@ -172,6 +225,21 @@ function crearApiCatalogo<T>(ruta: string, claveLista: string, claveRegistro: st
 export const apiCategoriasAeronave = crearApiCatalogo<CategoriaAeronave>('categorias-aeronave', 'categorias', 'categoria');
 
 export const apiTiposMotor = crearApiCatalogo<TipoMotor>('tipos-motor', 'tipos_motor', 'tipo_motor');
+
+// ---------------------------------------------------------------------------
+// Catálogos de la prefacturación (bloque 1b): misma forma, distinto recurso.
+// Los listados traen todas las filas (activas y de baja) y se filtran en pantalla.
+// ---------------------------------------------------------------------------
+
+export const apiClientes = crearApiCatalogo<Cliente, DatosCliente>('clientes', 'clientes', 'cliente');
+
+export const apiServicios = crearApiCatalogo<Servicio, DatosServicio>('servicios', 'servicios', 'servicio');
+
+export const apiCategoriasServicio = crearApiCatalogo<CategoriaServicio>('categorias-servicio', 'categorias', 'categoria');
+
+export const apiFormasPago = crearApiCatalogo<FormaPago>('formas-pago', 'formas_pago', 'forma_pago');
+
+export const apiProveedores = crearApiCatalogo<Proveedor>('proveedores', 'proveedores', 'proveedor');
 
 // ---------------------------------------------------------------------------
 // Precio del combustible

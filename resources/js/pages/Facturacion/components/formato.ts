@@ -7,6 +7,8 @@
  * `||` / `!valor` para decidir si hay un importe.
  */
 
+import type { AjustePrecio } from '@/stores/apiFacturacionCatalogos';
+
 /** Máximo de las tarifas de estancia y aterrizaje (decimal 10,2 en el servidor). */
 export const TARIFA_MAX = 99999999.99;
 
@@ -14,7 +16,23 @@ export const TARIFA_MAX = 99999999.99;
 export const COMBUSTIBLE_MAX = 999999.9999;
 export const COMBUSTIBLE_MIN = 0.0001;
 
+/** Máximo del precio de un servicio (decimal 10,4) y del margen (decimal 5,2). Cero es válido en los dos. */
+export const PRECIO_SERVICIO_MAX = 999999.9999;
+export const MARGEN_MAX = 999.99;
+
 type Monto = string | number | null | undefined;
+
+/**
+ * Minúsculas y sin marcas diacríticas. El `unique` de un nombre corre en MySQL
+ * con utf8mb4_unicode_ci, que ignora acentos y mayúsculas: "Helicoptero" choca
+ * con "Helicóptero". La búsqueda debe encontrar lo mismo que rechaza el servidor.
+ */
+export const normalizarBusqueda = (texto: string): string =>
+    texto
+        .normalize('NFD')
+        .replace(/\p{M}/gu, '')
+        .trim()
+        .toLowerCase();
 
 /** "$1,234.50", o "—" si no hay importe. Cero se muestra como "$0.00". */
 export function formatearMonto(valor: Monto, decimalesMax = 2): string {
@@ -99,4 +117,54 @@ export function fechaMexico(valor: string | null | undefined): string {
  */
 export function precioEoloSugerido(precioAsa: number, formula: { ajuste: number; margen: number }): number {
     return Number(((precioAsa + formula.ajuste) * formula.margen).toFixed(4));
+}
+
+/** Redondeo a 2 decimales con la mitad hacia arriba, como `number_format` de PHP (toFixed fallaría en 1.005). */
+function redondear2(valor: number): number {
+    const texto = String(valor);
+    // Un exponente ("8.6e-7") no admite el truco de desplazar el punto; a ese tamaño el resultado es 0.00 de todos modos.
+    if (texto.includes('e')) return Number(valor.toFixed(2));
+
+    return Number(`${Math.round(Number(`${texto}e2`))}e-2`);
+}
+
+/**
+ * VISTA PREVIA del importe de un servicio, para que quien captura vea el efecto
+ * del margen y del ajuste. No es la cifra oficial: la calcula el servidor.
+ *
+ * AUTORIDAD: `FactServicio::importe()` y `FactServicio::aplicarAjuste()` (app/Models/FactServicio.php).
+ * Esta función es una copia de esa fórmula: quien cambie una tiene que cambiar la otra.
+ *
+ *   ajustado = según el ajuste: ninguno → precio; mas_5 → precio × 1.05;
+ *              sin_iva → precio ÷ 1.16; comision_131 → p1 = precio ÷ 1.31, p1 × 0.15 + p1
+ *   conMargen = ajustado + ajustado × margen ÷ 100
+ *   importe = conMargen × cantidad, a dos decimales
+ *
+ * Un ajuste desconocido lanza, igual que el servidor: cobrar sin ajuste en silencio sería peor que fallar.
+ */
+export function importeVistaPrevia(precio: number, margen: number, ajuste: AjustePrecio, cantidad = 1): number {
+    let ajustado: number;
+
+    switch (ajuste) {
+        case 'ninguno':
+            ajustado = precio;
+            break;
+        case 'mas_5':
+            ajustado = precio * 1.05;
+            break;
+        case 'sin_iva':
+            ajustado = precio / 1.16;
+            break;
+        case 'comision_131': {
+            const precio1 = precio / 1.31;
+            ajustado = precio1 * 0.15 + precio1;
+            break;
+        }
+        default:
+            throw new Error(`ajuste_precio desconocido: '${String(ajuste)}'`);
+    }
+
+    const conMargen = ajustado + (ajustado * margen) / 100;
+
+    return redondear2(conMargen * cantidad);
 }

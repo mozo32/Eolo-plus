@@ -17,13 +17,17 @@ interface Props {
     pie?: ReactNode;
     autoFocus?: boolean;
     disabled?: boolean;
+    /** Símbolo antes del valor; null lo quita (un porcentaje no lleva "$"). */
+    prefijo?: string | null;
+    /** Símbolo después del valor ("%"). */
+    sufijo?: string;
 }
 
 /**
  * Campo de importe. Es de texto (no `type="number"`) para que "0" y "" lleguen
  * tal cual al padre: cero es una tarifa válida y vacío no lo es.
  */
-export default function CampoMonto({ id, etiqueta, valor, onChange, error, obligatorio = false, placeholder = '0.00', ayuda, junto, pie, autoFocus, disabled }: Props) {
+export default function CampoMonto({ id, etiqueta, valor, onChange, error, obligatorio = false, placeholder = '0.00', ayuda, junto, pie, autoFocus, disabled, prefijo = '$', sufijo }: Props) {
     return (
         <div>
             <div className="mb-1 flex items-center justify-between gap-2">
@@ -34,7 +38,8 @@ export default function CampoMonto({ id, etiqueta, valor, onChange, error, oblig
             </div>
 
             <div className="relative">
-                <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-sm font-bold text-slate-400">$</span>
+                {prefijo && <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-sm font-bold text-slate-400">{prefijo}</span>}
+                {sufijo && <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm font-bold text-slate-400">{sufijo}</span>}
                 <input
                     id={id}
                     type="text"
@@ -46,7 +51,7 @@ export default function CampoMonto({ id, etiqueta, valor, onChange, error, oblig
                     onChange={e => onChange(e.target.value)}
                     placeholder={placeholder}
                     aria-invalid={error ? true : undefined}
-                    className={`${campoConError(!!error)} pl-8`}
+                    className={`${campoConError(!!error)} ${prefijo ? 'pl-8' : ''} ${sufijo ? 'pr-10' : ''}`}
                 />
             </div>
 

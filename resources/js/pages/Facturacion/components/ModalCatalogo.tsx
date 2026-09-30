@@ -6,6 +6,7 @@ import { BOTON_PRIMARIO, BOTON_SECUNDARIO, campoConError, errorStyle, labelStyle
 import { TARIFA_MAX, montoATexto, parsearMonto, validarMonto } from './formato';
 import ModalBase from './ModalBase';
 
+/** Tope del nombre cuando el catálogo no dice otro (categorías de aeronave, tipos de motor, formas de pago). */
 export const NOMBRE_MAX = 60;
 
 /** Lo mínimo que comparten las categorías de aeronave y los tipos de motor. */
@@ -32,12 +33,14 @@ interface Props<T extends RegistroCatalogo> {
     onCerrar: () => void;
     /** Guarda. Debe lanzar el ErrorApi si el servidor rechaza; el modal muestra los errores por campo. */
     onGuardar: (datos: DatosCatalogo) => Promise<void>;
+    /** Largo máximo del nombre, igual al del servidor. */
+    nombreMax?: number;
     /** El nombre repetido puede ser de una fila dada de baja: lleva a buscarla. */
     onBuscarNombre: (nombre: string) => void;
 }
 
 /** Alta y edición de un registro con nombre y uno o más importes (categorías y motores). */
-export default function ModalCatalogo<T extends RegistroCatalogo>({ titulo, subtitulo, registro, campos, onCerrar, onGuardar, onBuscarNombre }: Props<T>) {
+export default function ModalCatalogo<T extends RegistroCatalogo>({ titulo, subtitulo, registro, campos, nombreMax = NOMBRE_MAX, onCerrar, onGuardar, onBuscarNombre }: Props<T>) {
     const inicial = (): Record<string, string> => Object.fromEntries(campos.map(c => [c.clave, registro ? montoATexto(c.leer(registro)) : '']));
 
     const [nombre, setNombre] = useState(registro?.nombre ?? '');
@@ -57,7 +60,7 @@ export default function ModalCatalogo<T extends RegistroCatalogo>({ titulo, subt
         const nombreLimpio = nombre.trim();
 
         if (nombreLimpio === '') nuevos.nombre = 'El nombre es obligatorio.';
-        else if (nombreLimpio.length > NOMBRE_MAX) nuevos.nombre = `El nombre no puede pasar de ${NOMBRE_MAX} caracteres.`;
+        else if (nombreLimpio.length > nombreMax) nuevos.nombre = `El nombre no puede pasar de ${nombreMax} caracteres.`;
 
         for (const campo of campos) {
             // Cero es válido (cortesía); vacío no.
@@ -122,7 +125,7 @@ export default function ModalCatalogo<T extends RegistroCatalogo>({ titulo, subt
                             type="text"
                             autoFocus
                             autoComplete="off"
-                            maxLength={NOMBRE_MAX}
+                            maxLength={nombreMax}
                             value={nombre}
                             onChange={e => {
                                 setNombre(e.target.value);

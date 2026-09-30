@@ -2,6 +2,12 @@ import { X } from 'lucide-react';
 import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import Swal from 'sweetalert2';
 
+/**
+ * Modales abiertos, el de encima al final. Con uno encima de otro (las categorías
+ * de servicio abren su alta sobre su lista) Escape solo debe cerrar el de arriba.
+ */
+const pilaModales: symbol[] = [];
+
 interface Props {
     idTitulo: string;
     titulo: string;
@@ -46,12 +52,19 @@ export default function ModalBase({ idTitulo, titulo, subtitulo, tieneCambios, o
     }, [onCerrar]);
 
     useEffect(() => {
+        const yo = Symbol('modal');
+        pilaModales.push(yo);
+
         const alTeclear = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && !Swal.isVisible()) void intentarCerrar();
+            if (e.key === 'Escape' && !Swal.isVisible() && pilaModales[pilaModales.length - 1] === yo) void intentarCerrar();
         };
 
         window.addEventListener('keydown', alTeclear);
-        return () => window.removeEventListener('keydown', alTeclear);
+
+        return () => {
+            window.removeEventListener('keydown', alTeclear);
+            pilaModales.splice(pilaModales.indexOf(yo), 1);
+        };
     }, [intentarCerrar]);
 
     return (
