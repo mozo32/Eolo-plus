@@ -7,6 +7,7 @@ use App\Models\FactCliente;
 use App\Models\FactFormaPago;
 use App\Models\FactProveedor;
 use App\Models\FactServicio;
+use Illuminate\Support\Facades\DB;
 
 function clienteValido(array $extra = []): array
 {
@@ -29,6 +30,30 @@ function servicioValido(array $extra = []): array
         'ajuste_precio' => 'ninguno',
     ], $extra);
 }
+
+/** Un cuerpo valido de alta para cada catalogo de 1b, por el segmento de la ruta. */
+function cuerpoValido1b(string $ruta): array
+{
+    return match ($ruta) {
+        'clientes' => clienteValido(),
+        'servicios' => servicioValido(),
+        default => ['nombre' => 'Nombre '.uniqid()],
+    };
+}
+
+/** Crea una fila de cualquiera de los cinco catalogos con el status indicado. */
+function filaCatalogo1b(string $ruta, string $status = 'A'): Illuminate\Database\Eloquent\Model
+{
+    return match ($ruta) {
+        'clientes' => FactCliente::create(clienteValido(['nombre' => 'Cliente '.uniqid(), 'status' => $status])),
+        'servicios' => FactServicio::create(servicioValido(['status' => $status])),
+        'categorias-servicio' => FactCategoriaServicio::create(['nombre' => 'Categoria '.uniqid(), 'status' => $status]),
+        'formas-pago' => FactFormaPago::create(['nombre' => 'Forma '.uniqid(), 'status' => $status]),
+        'proveedores' => FactProveedor::create(['nombre' => 'Proveedor '.uniqid(), 'status' => $status]),
+    };
+}
+
+dataset('catalogos1b', ['clientes', 'servicios', 'categorias-servicio', 'formas-pago', 'proveedores']);
 
 test('sin sesion no se puede consultar ni escribir', function () {
     $this->getJson('/api/facturacion/clientes')->assertUnauthorized();
@@ -198,7 +223,12 @@ test('la regla de tercero y margen no se contesta dos veces cuando el campo ya t
     expect($r->json('errors'))->not->toHaveKey('margen');
 });
 
-test('desactivar y reactivar un cliente son atomicos', function () {
+// Prueba el 409 y la transicion de estado con peticiones SECUENCIALES. No prueba la
+// atomicidad: un find + comprobar status + save la pasaria igual. La garantia real es
+// el `UPDATE ... WHERE id = ? AND status = ?` del controlador, que solo una de dos
+// peticiones concurrentes encuentra todavia en el estado previo; eso no se puede
+// demostrar en un proceso con sqlite en memoria, sin concurrencia real.
+test('desactivar y reactivar un cliente responde 409 la segunda vez y cambia el estado', function () {
     $this->actingAs(usuarioConSubdepartamento('factClientes', 'Facturacion'));
     $cliente = FactCliente::create(clienteValido());
 
@@ -237,23 +267,24 @@ test('los codigos 409 de baja y alta respetan el genero de cada catalogo', funct
         ->and(Bitacora::where('accion', Bitacora::ACCION_ACTIVAR)->count())->toBe(4);
 });
 
-test('desactivar o reactivar algo que no existe responde 404, no 409', function () {
+test('desactivar, reactivar o editar algo que no existe responde 404, no 409', function (string $ruta) {
     $this->actingAs(usuarioAdmin());
 
-    $this->patchJson('/api/facturacion/clientes/999/desactivar')->assertNotFound();
-    $this->patchJson('/api/facturacion/clientes/999/reactivar')->assertNotFound();
-    $this->putJson('/api/facturacion/clientes/999', clienteValido())->assertNotFound();
-});
+    $this->patchJson("/api/facturacion/{$ruta}/999/desactivar")->assertNotFound();
+    $this->patchJson("/api/facturacion/{$ruta}/999/reactivar")->assertNotFound();
+    $this->putJson("/api/facturacion/{$ruta}/999", cuerpoValido1b($ruta))->assertNotFound();
+})->with('catalogos1b');
 
-test('consultar permite filtrar solo las activas', function () {
+test('consultar permite filtrar solo las activas', function (string $ruta) {
     $this->actingAs(usuarioSinAcceso());
-    FactCliente::create(clienteValido(['nombre' => 'Activo']));
-    FactCliente::create(clienteValido(['nombre' => 'Baja', 'status' => 'N']));
+    $activa = filaCatalogo1b($ruta, 'A');
+    filaCatalogo1b($ruta, 'N');
+    $llave = $ruta === 'categorias-servicio' ? 'categorias' : str_replace('-', '_', $ruta);
 
-    $this->getJson('/api/facturacion/clientes')->assertOk()->assertJsonCount(2, 'clientes');
-    $this->getJson('/api/facturacion/clientes?activas=1')->assertOk()->assertJsonCount(1, 'clientes')
-        ->assertJsonPath('clientes.0.nombre', 'Activo');
-});
+    $this->getJson("/api/facturacion/{$ruta}")->assertOk()->assertJsonCount(2, $llave);
+    $this->getJson("/api/facturacion/{$ruta}?activas=1")->assertOk()->assertJsonCount(1, $llave)
+        ->assertJsonPath("{$llave}.0.id", $activa->id);
+})->with('catalogos1b');
 
 test('categorias, formas de pago y proveedores rechazan el nombre repetido con 422, no con un error de base', function () {
     $this->actingAs(usuarioAdmin());
@@ -341,11 +372,12 @@ test('cada ruta de escritura de 1b lleva su subdepartamento', function () {
 
     foreach (app('router')->getRoutes() as $ruta) {
         // El mismo predicado que EndpointsCatalogosTest.php excluye de SU prueba, visto
-        // del otro lado: entre las dos cubren toda `api/facturacion` sin dejar hueco.
+        // del otro lado (la unica lista de prefijos es esRutaFacturacion1b(), en tests/Pest.php):
+        // entre las dos cubren toda `api/facturacion` sin dejar hueco.
         // Por eso NO se puede saltar una ruta solo porque no esté en $esperado: una
         // ruta nueva de estos cinco prefijos tiene que romper esta prueba, que es todo
         // el punto de compararla con toEqual en ambos sentidos.
-        if (preg_match('#^api/facturacion/(clientes|servicios|categorias-servicio|formas-pago|proveedores)(/|$)#', $ruta->uri()) !== 1) {
+        if (! esRutaFacturacion1b($ruta->uri())) {
             continue;
         }
 
@@ -366,3 +398,139 @@ test('el seeder crea los cuatro subdepartamentos nuevos', function () {
 
     expect($nombres)->toContain('factClientes', 'factServicios', 'factFormasPago', 'factProveedores');
 });
+
+// ---------------------------------------------------------------------------
+// Categoria de baja (mismo criterio que UpdateAeronaveFacturacionRequest, 1a)
+// ---------------------------------------------------------------------------
+
+test('no se puede asignar un servicio a una categoria dada de baja, ni en alta ni en edicion', function () {
+    $this->actingAs(usuarioConSubdepartamento('factServicios', 'Facturacion'));
+    $baja = FactCategoriaServicio::create(['nombre' => 'Retirada', 'status' => 'N']);
+    $servicio = FactServicio::create(servicioValido());
+
+    $this->postJson('/api/facturacion/servicios', servicioValido(['categoria_servicio_id' => $baja->id]))
+        ->assertStatus(422)->assertJsonValidationErrors(['categoria_servicio_id']);
+
+    $this->putJson("/api/facturacion/servicios/{$servicio->id}", servicioValido(['categoria_servicio_id' => $baja->id]))
+        ->assertStatus(422)->assertJsonValidationErrors(['categoria_servicio_id']);
+
+    expect(FactServicio::count())->toBe(1)
+        ->and($servicio->fresh()->categoria_servicio_id)->not->toBe($baja->id);
+});
+
+test('un servicio que ya apuntaba a una categoria de baja conserva esa categoria al editar otro campo', function () {
+    $this->actingAs(usuarioConSubdepartamento('factServicios', 'Facturacion'));
+    $baja = FactCategoriaServicio::create(['nombre' => 'Retirada', 'status' => 'N']);
+    $otraBaja = FactCategoriaServicio::create(['nombre' => 'Tambien retirada', 'status' => 'N']);
+    $servicio = FactServicio::create(servicioValido(['categoria_servicio_id' => $baja->id]));
+
+    $this->putJson("/api/facturacion/servicios/{$servicio->id}", servicioValido([
+        'categoria_servicio_id' => $baja->id,
+        'nombre' => 'Renombrado',
+    ]))->assertOk();
+
+    expect($servicio->fresh()->nombre)->toBe('Renombrado')
+        ->and($servicio->fresh()->categoria_servicio_id)->toBe($baja->id);
+
+    // Conservar una categoria de baja no abre la puerta a otra categoria de baja.
+    $this->putJson("/api/facturacion/servicios/{$servicio->id}", servicioValido(['categoria_servicio_id' => $otraBaja->id]))
+        ->assertStatus(422)->assertJsonValidationErrors(['categoria_servicio_id']);
+});
+
+test('la categoria del servicio debe existir y ser un entero', function () {
+    $this->actingAs(usuarioConSubdepartamento('factServicios', 'Facturacion'));
+
+    $this->postJson('/api/facturacion/servicios', servicioValido(['categoria_servicio_id' => 999999]))
+        ->assertStatus(422)->assertJsonValidationErrors(['categoria_servicio_id']);
+    $this->postJson('/api/facturacion/servicios', servicioValido(['categoria_servicio_id' => 'abc']))
+        ->assertStatus(422)->assertJsonValidationErrors(['categoria_servicio_id']);
+    $this->postJson('/api/facturacion/servicios', servicioValido(['categoria_servicio_id' => 1.5]))
+        ->assertStatus(422)->assertJsonValidationErrors(['categoria_servicio_id']);
+
+    // Sin categoria tambien es valido: la columna admite null.
+    $this->postJson('/api/facturacion/servicios', servicioValido(['categoria_servicio_id' => null]))->assertCreated();
+});
+
+// ---------------------------------------------------------------------------
+// Exactitud del precio
+// ---------------------------------------------------------------------------
+
+// Que atrapa: un cast a float o un round() en el camino del precio (controlador, Form Request
+// o modelo) cambiaria 26.0640 o 0.0001 al guardarse o al responder, y esta prueba fallaria.
+// Que NO puede atrapar en sqlite: que la columna sea DECIMAL. La afinidad numerica de sqlite
+// guarda un REAL, asi que el valor crudo solo se puede comparar numericamente, no como
+// texto '26.0640'. La garantia real vive en el DECIMAL(10,4) de MySQL mas el cast
+// `decimal:4` del modelo; lo segundo si se comprueba aqui, por la respuesta JSON (cadena de
+// cuatro decimales) y por el atributo leido de nuevo del modelo.
+test('el precio se guarda y se devuelve con sus cuatro decimales', function (float $precio, string $esperado) {
+    $this->actingAs(usuarioConSubdepartamento('factServicios', 'Facturacion'));
+
+    $id = $this->postJson('/api/facturacion/servicios', servicioValido(['precio_unitario' => $precio]))
+        ->assertCreated()
+        ->assertJsonPath('servicio.precio_unitario', $esperado)
+        ->json('servicio.id');
+
+    expect((float) DB::table('fact_servicios')->where('id', $id)->value('precio_unitario'))->toBe($precio)
+        ->and(FactServicio::find($id)->precio_unitario)->toBe($esperado);
+
+    $this->putJson("/api/facturacion/servicios/{$id}", servicioValido(['precio_unitario' => $precio]))
+        ->assertOk()
+        ->assertJsonPath('servicio.precio_unitario', $esperado);
+
+    expect((float) DB::table('fact_servicios')->where('id', $id)->value('precio_unitario'))->toBe($precio);
+})->with([
+    'combustible Jet A-1' => [26.0640, '26.0640'],
+    'la diezmilesima' => [0.0001, '0.0001'],
+    'cuatro decimales y cinco enteros' => [12345.6789, '12345.6789'],
+]);
+
+// ---------------------------------------------------------------------------
+// Topes y formatos que solo la regla hace cumplir (sqlite no aplica varchar(N))
+// ---------------------------------------------------------------------------
+
+test('los maximos del cliente los produce la regla, en el limite y un caracter despues', function (string $campo, int $max) {
+    $this->actingAs(usuarioConSubdepartamento('factClientes', 'Facturacion'));
+
+    $this->postJson('/api/facturacion/clientes', clienteValido([$campo => str_repeat('a', $max + 1)]))
+        ->assertStatus(422)->assertJsonValidationErrors([$campo]);
+
+    $this->postJson('/api/facturacion/clientes', clienteValido([$campo => str_repeat('a', $max)]))
+        ->assertCreated();
+})->with([
+    'nombre' => ['nombre', 160],
+    'rfc' => ['rfc', 20],
+    'telefono' => ['telefono', 20],
+]);
+
+test('el correo del cliente tiene formato y maximo de 120', function () {
+    $this->actingAs(usuarioConSubdepartamento('factClientes', 'Facturacion'));
+
+    // Correo valido de la longitud pedida: dos etiquetas de 50 y una final (maximo 63 por etiqueta).
+    $correo = fn (int $largo) => 'a@'.str_repeat('b', 50).'.'.str_repeat('b', 50).'.'.str_repeat('c', $largo - 104);
+
+    $this->postJson('/api/facturacion/clientes', clienteValido(['correo' => 'sin-arroba']))
+        ->assertStatus(422)->assertJsonValidationErrors(['correo']);
+
+    $r = $this->postJson('/api/facturacion/clientes', clienteValido(['correo' => $correo(121)]))
+        ->assertStatus(422)->assertJsonValidationErrors(['correo']);
+    expect($r->json('errors.correo.0'))->toContain('120');
+
+    $this->postJson('/api/facturacion/clientes', clienteValido(['correo' => $correo(120)]))->assertCreated();
+});
+
+test('el nombre del servicio tiene maximo de 120', function () {
+    $this->actingAs(usuarioConSubdepartamento('factServicios', 'Facturacion'));
+
+    $this->postJson('/api/facturacion/servicios', servicioValido(['nombre' => str_repeat('a', 121)]))
+        ->assertStatus(422)->assertJsonValidationErrors(['nombre']);
+    $this->postJson('/api/facturacion/servicios', servicioValido(['nombre' => str_repeat('a', 120)]))
+        ->assertCreated();
+});
+
+test('los cuatro ajustes de precio se aceptan', function (string $ajuste) {
+    $this->actingAs(usuarioConSubdepartamento('factServicios', 'Facturacion'));
+
+    $this->postJson('/api/facturacion/servicios', servicioValido(['ajuste_precio' => $ajuste]))
+        ->assertCreated()
+        ->assertJsonPath('servicio.ajuste_precio', $ajuste);
+})->with(['ninguno', 'mas_5', 'sin_iva', 'comision_131']);

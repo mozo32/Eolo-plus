@@ -95,3 +95,16 @@ function usuarioSinAcceso(): App\Models\User
 {
     return usuarioConSubdepartamento('entregaTurno', 'Rampa', 'empleado');
 }
+
+/**
+ * Rutas de facturación del bloque 1b (catálogos de prefactura).
+ *
+ * ÚNICA lista de esos prefijos. Dos pruebas son complementarias y la usan:
+ * EndpointsCatalogos1bTest.php INCLUYE solo estas rutas y EndpointsCatalogosTest.php
+ * (bloque 1a) las EXCLUYE. Un prefijo nuevo se agrega aquí y en ningún otro lado;
+ * agregarlo a una sola de las pruebas dejaría una ruta de escritura sin revisar.
+ */
+function esRutaFacturacion1b(string $uri): bool
+{
+    return preg_match('#^api/facturacion/(clientes|servicios|categorias-servicio|formas-pago|proveedores)(/|$)#', $uri) === 1;
+}
