@@ -340,19 +340,18 @@ test('cada ruta de escritura de 1b lleva su subdepartamento', function () {
     $real = [];
 
     foreach (app('router')->getRoutes() as $ruta) {
-        if (! str_starts_with($ruta->uri(), 'api/facturacion/')) {
+        // El mismo predicado que EndpointsCatalogosTest.php excluye de SU prueba, visto
+        // del otro lado: entre las dos cubren toda `api/facturacion` sin dejar hueco.
+        // Por eso NO se puede saltar una ruta solo porque no esté en $esperado: una
+        // ruta nueva de estos cinco prefijos tiene que romper esta prueba, que es todo
+        // el punto de compararla con toEqual en ambos sentidos.
+        if (preg_match('#^api/facturacion/(clientes|servicios|categorias-servicio|formas-pago|proveedores)(/|$)#', $ruta->uri()) !== 1) {
             continue;
         }
 
         foreach (array_diff($ruta->methods(), ['GET', 'HEAD']) as $metodo) {
-            $llave = "{$metodo} {$ruta->uri()}";
-
-            if (! isset($esperado[$llave])) {
-                continue; // rutas del bloque 1a, cubiertas por su propia prueba
-            }
-
             $subdep = collect($ruta->gatherMiddleware())->first(fn ($m) => is_string($m) && str_starts_with($m, 'subdep:'));
-            $real[$llave] = $subdep;
+            $real["{$metodo} {$ruta->uri()}"] = $subdep;
         }
     }
 
