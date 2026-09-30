@@ -5,7 +5,12 @@ namespace App\Services;
 use App\Models\Aeronave;
 use App\Models\FactAeronave;
 use App\Models\FactCategoriaAeronave;
+use App\Models\FactCategoriaServicio;
+use App\Models\FactCliente;
+use App\Models\FactFormaPago;
 use App\Models\FactPrecioCombustible;
+use App\Models\FactProveedor;
+use App\Models\FactServicio;
 use App\Models\FactTipoMotor;
 use App\Models\TipoAeronave;
 use App\Models\User;
@@ -31,6 +36,19 @@ class ImportadorMatriculas
     /** Hallazgos individuales de matrículas solo locales antes de resumirlos. */
     private const MAX_HUERFANAS_LISTADAS = 25;
 
+    /** Desde el id 94 los servicios del sistema viejo son de tercero (`altaserv.php`). */
+    private const ULTIMO_SERVICIO_PROPIO = 93;
+
+    /** Porcentaje que el sistema viejo le suma a los servicios de tercero. */
+    private const MARGEN_TERCERO = 50;
+
+    /** Ids de los tres servicios con fórmula propia en `altaserv.php`. */
+    private const SERVICIO_MAS_5 = 106;
+
+    private const SERVICIO_SIN_IVA = 107;
+
+    private const SERVICIO_COMISION_131 = 113;
+
     private ResultadoImportacion $resultado;
 
     /** @var array<int,string> id_categoria viejo => nombre, para los hallazgos */
@@ -54,6 +72,8 @@ class ImportadorMatriculas
             'matriculas_sin_categoria_con_tarifa_propia',
             'matriculas_sin_motor', 'matriculas_sin_motor_con_aterrizaje_propio',
             'matriculas_con_tarifa_huerfana', 'matriculas_con_tarifa_huerfana_sin_destino', 'matriculas_solo_locales', 'precios_combustible',
+            'clientes', 'categorias_servicio', 'servicios', 'servicios_de_tercero', 'servicios_sin_categoria',
+            'formas_pago', 'proveedores',
         ] as $clave) {
             $this->resultado->contar($clave, 0);
         }
@@ -68,6 +88,11 @@ class ImportadorMatriculas
             [$motores, $modasMotor] = $this->importarMotores($matriculas);
             $this->importarMatriculas($matriculas, $tipos, $categorias, $modasCategoria, $motores, $modasMotor);
             $this->importarCombustible();
+            $this->importarClientes();
+            $categoriasServicio = $this->importarCategoriasServicio();
+            $this->importarServicios($categoriasServicio);
+            $this->importarFormasPago();
+            $this->importarProveedores();
 
             $aplicar ? DB::commit() : DB::rollBack();
         } catch (\Throwable $e) {
@@ -593,5 +618,181 @@ class ImportadorMatriculas
         }
 
         $this->resultado->contar('precios_combustible');
+    }
+
+    /**
+     * Los clientes se traen uno a uno, sin deduplicar por RFC.
+     *
+     * El RFC se repite de forma legítima: `XAXX010101000` (público en general)
+     * lo comparten 22 clientes sin relación entre sí en los datos reales, y
+     * `XEXX010101000` otros 5. Deduplicar por él fusionaría clientes distintos.
+     * El nombre sí es la llave de idempotencia, para que volver a correr el
+     * importador no duplique. Es seguro hoy porque los 195 nombres del origen
+     * son únicos, pero no es una garantía del modelo: si aparecieran dos
+     * clientes reales con el mismo nombre, esto los fusionaría. Por eso el
+     * segundo se omite (gana el de menor id) y se reporta como hallazgo antes
+     * de aplicar. Se compara con `llaveNombre` porque la columna de la base
+     * nueva no distingue caja ni acentos.
+     */
+    private function importarClientes(): void
+    {
+        $vistos = [];
+
+        foreach ($this->legacy('tb_clientes')->orderBy('id_cliente')->get() as $fila) {
+            $nombre = trim((string) $fila->nombre);
+
+            if ($nombre === '') {
+                $this->resultado->hallazgo("Cliente sin nombre en tb_clientes (id {$fila->id_cliente}): no se importa.");
+
+                continue;
+            }
+
+            $llave = self::llaveNombre($nombre);
+
+            if (isset($vistos[$llave])) {
+                $this->resultado->hallazgo("Cliente con nombre repetido en tb_clientes: '{$nombre}' (id {$fila->id_cliente}). Se importa una sola vez, con los datos del primero; revísalo antes de aplicar.");
+
+                continue;
+            }
+
+            $vistos[$llave] = true;
+
+            FactCliente::updateOrCreate(
+                ['nombre' => $nombre],
+                [
+                    'rfc' => $this->oNulo($fila->rfc ?? null),
+                    'correo' => $this->oNulo($fila->correo ?? null),
+                    'telefono' => $this->oNulo($fila->telefono ?? null),
+                ],
+            );
+
+            $this->resultado->contar('clientes');
+        }
+    }
+
+    /** @return array<int,int> id_categorias viejo => id de fact_categorias_servicio */
+    private function importarCategoriasServicio(): array
+    {
+        $mapa = [];
+
+        // La categoría 0 del sistema viejo significa "sin categoría", no es una fila real.
+        foreach ($this->legacy('tb_categoria_serv')->orderBy('id_categorias')->get() as $fila) {
+            $nombre = trim((string) $fila->categoras);
+
+            if ($nombre === '' || (int) $fila->id_categorias === 0) {
+                continue;
+            }
+
+            $mapa[(int) $fila->id_categorias] = FactCategoriaServicio::firstOrCreate(['nombre' => $nombre])->id;
+            $this->resultado->contar('categorias_servicio');
+        }
+
+        return $mapa;
+    }
+
+    /**
+     * El sistema viejo decide el recargo de tercero por el número de id y los
+     * ajustes con tres `if` sobre ids concretos (`altaserv.php`). Aquí esa
+     * clasificación se traduce a columnas una sola vez, en la importación.
+     *
+     * El precio se pasa tal como llega (decimal(10,4) en ambos lados), sin
+     * convertirlo a float.
+     *
+     * @param  array<int,int>  $categorias
+     */
+    private function importarServicios(array $categorias): void
+    {
+        $vistos = [];
+
+        foreach ($this->legacy('tb_servicio')->orderBy('id_servicio')->get() as $fila) {
+            $idViejo = (int) $fila->id_servicio;
+            $nombre = trim((string) $fila->servicio);
+
+            if ($nombre === '') {
+                $this->resultado->hallazgo("Servicio sin nombre en tb_servicio (id {$idViejo}): no se importa.");
+
+                continue;
+            }
+
+            $llave = self::llaveNombre($nombre);
+
+            if (isset($vistos[$llave])) {
+                $this->resultado->hallazgo("Servicio con nombre repetido en tb_servicio: '{$nombre}' (id {$idViejo}). Se importa una sola vez, con los datos del primero; revísalo antes de aplicar.");
+
+                continue;
+            }
+
+            $vistos[$llave] = true;
+
+            $idCategoriaVieja = (int) $fila->id_categorias;
+            $categoriaId = $categorias[$idCategoriaVieja] ?? null;
+            $esDeTercero = $idViejo > self::ULTIMO_SERVICIO_PROPIO;
+
+            if ($categoriaId === null) {
+                $this->resultado->contar('servicios_sin_categoria');
+
+                if ($idCategoriaVieja !== 0) {
+                    $this->resultado->hallazgo("Servicio '{$nombre}' (id {$idViejo}) apunta a la categoría {$idCategoriaVieja}, que no existe en tb_categoria_serv: queda sin categoría.");
+                }
+            }
+
+            if ($esDeTercero) {
+                $this->resultado->contar('servicios_de_tercero');
+            }
+
+            FactServicio::updateOrCreate(
+                ['nombre' => $nombre],
+                [
+                    'categoria_servicio_id' => $categoriaId,
+                    'precio_unitario' => $fila->precio_u ?? 0,
+                    'es_de_tercero' => $esDeTercero,
+                    'margen' => $esDeTercero ? self::MARGEN_TERCERO : 0,
+                    'ajuste_precio' => match ($idViejo) {
+                        self::SERVICIO_MAS_5 => FactServicio::AJUSTE_MAS_5,
+                        self::SERVICIO_SIN_IVA => FactServicio::AJUSTE_SIN_IVA,
+                        self::SERVICIO_COMISION_131 => FactServicio::AJUSTE_COMISION_131,
+                        default => FactServicio::AJUSTE_NINGUNO,
+                    },
+                ],
+            );
+
+            $this->resultado->contar('servicios');
+        }
+    }
+
+    private function importarFormasPago(): void
+    {
+        foreach ($this->legacy('tb_tip_fpago')->orderBy('id_tipo_formas')->get() as $fila) {
+            $nombre = trim((string) $fila->tipo_forma);
+
+            if ($nombre === '') {
+                continue;
+            }
+
+            FactFormaPago::firstOrCreate(['nombre' => $nombre]);
+            $this->resultado->contar('formas_pago');
+        }
+    }
+
+    private function importarProveedores(): void
+    {
+        foreach ($this->legacy('tb_proveedor')->orderBy('id_proveedor')->get() as $fila) {
+            $nombre = trim((string) $fila->proveedor);
+
+            if ($nombre === '') {
+                continue;
+            }
+
+            FactProveedor::firstOrCreate(['nombre' => $nombre]);
+            $this->resultado->contar('proveedores');
+        }
+    }
+
+    /** Una cadena vacía del origen es un dato ausente, no una cadena. */
+    private function oNulo(mixed $valor): ?string
+    {
+        $valor = trim((string) $valor);
+
+        return $valor === '' ? null : $valor;
     }
 }

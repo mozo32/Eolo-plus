@@ -1,0 +1,327 @@
+<?php
+// tests/Feature/Facturacion/ImportadorCatalogosTest.php
+
+use App\Models\FactCliente;
+use App\Models\FactCategoriaServicio;
+use App\Models\FactFormaPago;
+use App\Models\FactProveedor;
+use App\Models\FactServicio;
+use App\Services\ImportadorMatriculas;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+/*
+ * Los catálogos del bloque 1b. La conexión `remota` está bloqueada por TestCase,
+ * así que hay que sobrescribirla y purgarla.
+ */
+
+function prepararOrigenCatalogos(): void
+{
+    config(['database.connections.remota' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']]);
+    DB::purge('remota');
+
+    $esquema = Schema::connection('remota');
+
+    $esquema->create('tb_clientes', function ($t) {
+        $t->integer('id_cliente', true);
+        $t->string('nombre');
+        $t->string('rfc')->nullable();
+        $t->string('correo')->nullable();
+        $t->string('telefono')->nullable();
+        $t->integer('fol_prefactura')->nullable();
+    });
+    $esquema->create('tb_categoria_serv', function ($t) {
+        $t->integer('id_categorias', true);
+        $t->string('categoras');
+    });
+    $esquema->create('tb_servicio', function ($t) {
+        $t->integer('id_servicio', true);
+        $t->string('servicio');
+        $t->decimal('precio_u', 10, 4);
+        $t->integer('id_categorias');
+    });
+    $esquema->create('tb_tip_fpago', function ($t) {
+        $t->integer('id_tipo_formas', true);
+        $t->string('tipo_forma');
+    });
+    $esquema->create('tb_proveedor', function ($t) {
+        $t->integer('id_proveedor', true);
+        $t->string('proveedor');
+    });
+
+    // El importador de matrículas necesita sus tablas aunque estén vacías.
+    foreach ([
+        'tb_tipo' => ['id_tipo', 'tipo'],
+        'tb_categoria' => ['id_categoria', 'categoria'],
+        'tb_motor' => ['id_motor', 'motor'],
+    ] as $tabla => $cols) {
+        $esquema->create($tabla, function ($t) use ($cols) {
+            $t->integer($cols[0], true);
+            $t->string($cols[1]);
+        });
+    }
+    // Nombres reales de columna en fact-fbo (ojo: 'aterrisaje' la tabla, 'aterrizaje' la columna).
+    foreach ([
+        'tb_pernocta' => ['id_pernocta', 'pernocta'],
+        'tb_transito2h' => ['id_transito2h', 'transito'],
+        'tb_transito12h' => ['id_transito12h', 'transito12'],
+        'tb_aterrisaje' => ['id_aterrizaje', 'aterrizaje'],
+    ] as $tabla => $cols) {
+        $esquema->create($tabla, function ($t) use ($cols) {
+            $t->integer($cols[0], true);
+            $t->decimal($cols[1], 10, 2);
+        });
+    }
+    $esquema->create('tb_matricula', function ($t) {
+        $t->integer('id_matricula', true);
+        $t->string('matricula');
+        $t->integer('id_estatus');
+        $t->integer('id_tipo');
+        $t->integer('id_categoria');
+        $t->integer('id_motor');
+        $t->integer('id_aterrizaje');
+        $t->integer('id_transito2h');
+        $t->integer('id_transito12h');
+        $t->integer('id_pernocta');
+        $t->integer('d_vuelos');
+    });
+    $esquema->create('tb_combustible', function ($t) {
+        $t->integer('id_combustible', true);
+        $t->decimal('p_combustible', 10, 4);
+        $t->date('f_ini');
+        $t->date('f_fin');
+        $t->decimal('pasa', 10, 4);
+    });
+}
+
+beforeEach(fn () => prepararOrigenCatalogos());
+
+test('los clientes se importan uno a uno, sin deduplicar por RFC', function () {
+    DB::connection('remota')->table('tb_clientes')->insert([
+        ['nombre' => 'HIPOTECARIA ARBI', 'rfc' => 'XAXX010101000', 'correo' => 'a@x.com', 'telefono' => '111'],
+        ['nombre' => 'OLI STONE', 'rfc' => 'XAXX010101000', 'correo' => null, 'telefono' => null],
+        ['nombre' => 'AEROSAN', 'rfc' => 'AER970627QE9', 'correo' => 'b@x.com', 'telefono' => '222'],
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactCliente::count())->toBe(3)
+        ->and(FactCliente::where('rfc', 'XAXX010101000')->count())->toBe(2)
+        ->and($resultado->conteos['clientes'])->toBe(3);
+});
+
+test('un cliente sin RFC ni contacto se importa igual', function () {
+    DB::connection('remota')->table('tb_clientes')->insert([
+        ['nombre' => 'Sin datos', 'rfc' => '', 'correo' => '', 'telefono' => ''],
+    ]);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    $cliente = FactCliente::first();
+
+    expect($cliente->nombre)->toBe('Sin datos')
+        ->and($cliente->rfc)->toBeNull()
+        ->and($cliente->correo)->toBeNull();
+});
+
+test('los servicios traen su categoria, su precio de cuatro decimales y su clasificacion', function () {
+    DB::connection('remota')->table('tb_categoria_serv')->insert(['id_categorias' => 3, 'categoras' => 'Combustible & Servicios']);
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 7, 'servicio' => 'Combustible JET A-1', 'precio_u' => 26.0640, 'id_categorias' => 3],
+        ['id_servicio' => 94, 'servicio' => 'Comisariato, Tercero', 'precio_u' => 0, 'id_categorias' => 3],
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    $propio = FactServicio::where('nombre', 'Combustible JET A-1')->first();
+    $tercero = FactServicio::where('nombre', 'Comisariato, Tercero')->first();
+
+    expect((float) $propio->precio_unitario)->toBe(26.0640)
+        ->and($propio->es_de_tercero)->toBeFalse()
+        ->and((float) $propio->margen)->toBe(0.0)
+        ->and($propio->categoria->nombre)->toBe('Combustible & Servicios')
+        ->and($tercero->es_de_tercero)->toBeTrue()
+        ->and((float) $tercero->margen)->toBe(50.0)
+        ->and($resultado->conteos['servicios_de_tercero'])->toBe(1);
+});
+
+test('los tres servicios con formula propia traen su ajuste', function () {
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 106, 'servicio' => 'Comisariato_Manny', 'precio_u' => 0, 'id_categorias' => 0],
+        ['id_servicio' => 107, 'servicio' => 'Comisariato_Avemex', 'precio_u' => 0, 'id_categorias' => 0],
+        ['id_servicio' => 113, 'servicio' => 'Comisariato_Fly Across', 'precio_u' => 0, 'id_categorias' => 0],
+        ['id_servicio' => 95, 'servicio' => 'Otro de tercero', 'precio_u' => 0, 'id_categorias' => 0],
+    ]);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactServicio::where('nombre', 'Comisariato_Manny')->value('ajuste_precio'))->toBe('mas_5')
+        ->and(FactServicio::where('nombre', 'Comisariato_Avemex')->value('ajuste_precio'))->toBe('sin_iva')
+        ->and(FactServicio::where('nombre', 'Comisariato_Fly Across')->value('ajuste_precio'))->toBe('comision_131')
+        ->and(FactServicio::where('nombre', 'Otro de tercero')->value('ajuste_precio'))->toBe('ninguno');
+});
+
+test('un servicio con categoria cero queda sin clasificar y se cuenta', function () {
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 1, 'servicio' => 'Handling', 'precio_u' => 1, 'id_categorias' => 0],
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactServicio::first()->categoria_servicio_id)->toBeNull()
+        ->and($resultado->conteos['servicios_sin_categoria'])->toBe(1);
+});
+
+test('formas de pago y proveedores se importan por nombre', function () {
+    DB::connection('remota')->table('tb_tip_fpago')->insert([
+        ['tipo_forma' => 'Efectivo'], ['tipo_forma' => 'AvCard by WFS'],
+    ]);
+    DB::connection('remota')->table('tb_proveedor')->insert([
+        ['proveedor' => 'EOLO'], ['proveedor' => 'MANNY CATERING'],
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactFormaPago::pluck('nombre')->sort()->values()->all())->toBe(['AvCard by WFS', 'Efectivo'])
+        ->and(FactProveedor::count())->toBe(2)
+        ->and($resultado->conteos['formas_pago'])->toBe(2)
+        ->and($resultado->conteos['proveedores'])->toBe(2);
+});
+
+test('correrlo dos veces no duplica los catalogos', function () {
+    DB::connection('remota')->table('tb_clientes')->insert([['nombre' => 'Uno', 'rfc' => 'ABC010101AAA']]);
+    DB::connection('remota')->table('tb_servicio')->insert([['id_servicio' => 5, 'servicio' => 'Aterrizaje', 'precio_u' => 100, 'id_categorias' => 0]]);
+    DB::connection('remota')->table('tb_tip_fpago')->insert([['tipo_forma' => 'Efectivo']]);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactCliente::count())->toBe(1)
+        ->and(FactServicio::count())->toBe(1)
+        ->and(FactFormaPago::count())->toBe(1);
+});
+
+test('la simulacion no escribe ningun catalogo', function () {
+    DB::connection('remota')->table('tb_clientes')->insert([['nombre' => 'Uno', 'rfc' => 'ABC010101AAA']]);
+    DB::connection('remota')->table('tb_tip_fpago')->insert([['tipo_forma' => 'Efectivo']]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
+
+    expect($resultado->conteos['clientes'])->toBe(1)
+        ->and(FactCliente::count())->toBe(0)
+        ->and(FactFormaPago::count())->toBe(0);
+});
+
+test('un nombre de cliente repetido en el origen da un hallazgo y se importa una sola vez', function () {
+    DB::connection('remota')->table('tb_clientes')->insert([
+        ['nombre' => 'Aeroservicios', 'rfc' => 'AAA010101AAA', 'correo' => 'primero@x.com', 'telefono' => null],
+        ['nombre' => 'AEROSERVICIOS', 'rfc' => 'BBB020202BBB', 'correo' => 'segundo@x.com', 'telefono' => null],
+        ['nombre' => 'Otro', 'rfc' => null, 'correo' => null, 'telefono' => null],
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactCliente::count())->toBe(2)
+        ->and(FactCliente::where('nombre', 'Aeroservicios')->value('rfc'))->toBe('AAA010101AAA')
+        ->and($resultado->conteos['clientes'])->toBe(2)
+        ->and($resultado->hallazgos)->toHaveCount(1)
+        ->and($resultado->hallazgos[0])->toContain('AEROSERVICIOS');
+});
+
+test('un nombre de servicio repetido en el origen da un hallazgo y no se cuenta dos veces', function () {
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 10, 'servicio' => 'Handling', 'precio_u' => 100, 'id_categorias' => 0],
+        ['id_servicio' => 11, 'servicio' => 'Handling', 'precio_u' => 999, 'id_categorias' => 0],
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactServicio::count())->toBe(1)
+        ->and((float) FactServicio::first()->precio_unitario)->toBe(100.0)
+        ->and($resultado->conteos['servicios'])->toBe(1)
+        ->and($resultado->conteos['servicios_sin_categoria'])->toBe(1)
+        ->and($resultado->hallazgos)->toHaveCount(1);
+});
+
+test('un cliente sin nombre no se importa y se reporta', function () {
+    DB::connection('remota')->table('tb_clientes')->insert([
+        ['nombre' => '  ', 'rfc' => 'ABC010101AAA'],
+        ['nombre' => 'Con nombre', 'rfc' => null],
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactCliente::count())->toBe(1)
+        ->and($resultado->hallazgos)->toHaveCount(1);
+});
+
+test('las categorias de servicio se importan por nombre, sin la categoria cero', function () {
+    DB::connection('remota')->table('tb_categoria_serv')->insert([
+        ['id_categorias' => 0, 'categoras' => 'Sin categoria'],
+        ['id_categorias' => 1, 'categoras' => 'Handling'],
+        ['id_categorias' => 2, 'categoras' => 'Hangar'],
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactCategoriaServicio::pluck('nombre')->sort()->values()->all())->toBe(['Handling', 'Hangar'])
+        ->and($resultado->conteos['categorias_servicio'])->toBe(2);
+});
+
+test('un servicio que apunta a una categoria inexistente queda sin clasificar y se reporta', function () {
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 1, 'servicio' => 'Huerfano', 'precio_u' => 1, 'id_categorias' => 42],
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactServicio::first()->categoria_servicio_id)->toBeNull()
+        ->and($resultado->conteos['servicios_sin_categoria'])->toBe(1)
+        ->and($resultado->hallazgos)->toHaveCount(1)
+        ->and($resultado->hallazgos[0])->toContain('42');
+});
+
+test('el precio de un servicio se importa exacto, con sus cuatro decimales', function () {
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 1, 'servicio' => 'Minimo', 'precio_u' => 0.0001, 'id_categorias' => 0],
+        ['id_servicio' => 2, 'servicio' => 'Cuatro', 'precio_u' => 26.0640, 'id_categorias' => 0],
+    ]);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect((string) FactServicio::where('nombre', 'Minimo')->first()->precio_unitario)->toBe('0.0001')
+        ->and((string) FactServicio::where('nombre', 'Cuatro')->first()->precio_unitario)->toBe('26.0640');
+});
+
+test('la frontera de tercero es el id 94: el 93 es propio y el 94 es de tercero', function () {
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 93, 'servicio' => 'Ultimo propio', 'precio_u' => 1, 'id_categorias' => 0],
+        ['id_servicio' => 94, 'servicio' => 'Primer tercero', 'precio_u' => 1, 'id_categorias' => 0],
+    ]);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactServicio::where('nombre', 'Ultimo propio')->first()->es_de_tercero)->toBeFalse()
+        ->and(FactServicio::where('nombre', 'Primer tercero')->first()->es_de_tercero)->toBeTrue();
+});
+
+test('los conteos de catalogos existen en cero aunque el origen este vacio', function () {
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
+
+    foreach (['clientes', 'categorias_servicio', 'servicios', 'servicios_de_tercero', 'servicios_sin_categoria', 'formas_pago', 'proveedores'] as $clave) {
+        expect($resultado->conteos)->toHaveKey($clave, 0);
+    }
+});
+
+test('la simulacion de servicios y categorias tampoco escribe', function () {
+    DB::connection('remota')->table('tb_categoria_serv')->insert([['id_categorias' => 1, 'categoras' => 'Handling']]);
+    DB::connection('remota')->table('tb_servicio')->insert([['id_servicio' => 1, 'servicio' => 'X', 'precio_u' => 1, 'id_categorias' => 1]]);
+    DB::connection('remota')->table('tb_proveedor')->insert([['proveedor' => 'EOLO']]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
+
+    expect($resultado->conteos['servicios'])->toBe(1)
+        ->and(FactServicio::count())->toBe(0)
+        ->and(FactCategoriaServicio::count())->toBe(0)
+        ->and(FactProveedor::count())->toBe(0);
+});

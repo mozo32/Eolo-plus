@@ -78,6 +78,35 @@ function prepararBaseLegacy(): void
         $t->date('f_fin');
         $t->decimal('pasa', 10, 4);
     });
+
+    // El importador también trae los catálogos de facturación (bloque 1b). Aquí
+    // quedan vacíos: lo que cubren estas pruebas es lo de la matrícula, y los
+    // catálogos tienen sus pruebas en ImportadorCatalogosTest.
+    $esquema->create('tb_clientes', function ($t) {
+        $t->integer('id_cliente', true);
+        $t->string('nombre');
+        $t->string('rfc')->nullable();
+        $t->string('correo')->nullable();
+        $t->string('telefono')->nullable();
+    });
+    $esquema->create('tb_categoria_serv', function ($t) {
+        $t->integer('id_categorias', true);
+        $t->string('categoras');
+    });
+    $esquema->create('tb_servicio', function ($t) {
+        $t->integer('id_servicio', true);
+        $t->string('servicio');
+        $t->decimal('precio_u', 10, 4);
+        $t->integer('id_categorias');
+    });
+    $esquema->create('tb_tip_fpago', function ($t) {
+        $t->integer('id_tipo_formas', true);
+        $t->string('tipo_forma');
+    });
+    $esquema->create('tb_proveedor', function ($t) {
+        $t->integer('id_proveedor', true);
+        $t->string('proveedor');
+    });
 }
 
 function sembrarLegacy(array $matriculas): void
