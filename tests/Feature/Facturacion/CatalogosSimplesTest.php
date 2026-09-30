@@ -41,6 +41,14 @@ test('el scope activos excluye los dados de baja en los tres', function () {
         ->and(FactProveedor::activos()->pluck('nombre')->all())->toBe(['Vivo']);
 });
 
+/*
+ * LIMITACION: las pruebas corren en sqlite en memoria, que no aplica la longitud
+ * de varchar(N) ni la conserva en el esquema (Schema::getColumns y sqlite_master
+ * solo ven "varchar"). Por eso esta prueba NO garantiza que la columna `nombre`
+ * mida 80 en las categorías: solo fija que el modelo no trunca ni transforma un
+ * nombre de 39 caracteres. La garantia de la longitud es `string('nombre', 80)`
+ * en la migracion (MySQL, que si la aplica); si se toca, verificarlo a mano contra MySQL.
+ */
 test('la categoria admite los nombres largos del origen', function () {
     // El más largo de los datos reales.
     $nombre = 'Servicios Internacionales & Migratorios';
