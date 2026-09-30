@@ -38,7 +38,10 @@ class StoreServicioRequest extends FormRequest
      */
     public function rules(): array
     {
-        $actual = FactServicio::query()->find($this->route('id'));
+        // En un alta no hay id de ruta. Sin la guarda, `find(null)` lanzaria un
+        // `where id is null` contra la base en cada POST: inocuo pero inutil.
+        $id = $this->route('id');
+        $actual = $id === null ? null : FactServicio::query()->find($id);
 
         return [
             'categoria_servicio_id' => ['nullable', 'integer', $this->categoriaActiva($actual?->categoria_servicio_id)],

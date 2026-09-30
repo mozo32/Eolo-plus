@@ -455,8 +455,13 @@ test('la categoria del servicio debe existir y ser un entero', function () {
 // Exactitud del precio
 // ---------------------------------------------------------------------------
 
-// Que atrapa: un cast a float o un round() en el camino del precio (controlador, Form Request
-// o modelo) cambiaria 26.0640 o 0.0001 al guardarse o al responder, y esta prueba fallaria.
+// Que atrapa: un round() en cualquier punto del camino, y que al modelo le cambien o le
+// quiten el cast `decimal:4` (la respuesta saldria como numero 26.064 en lugar de la cadena
+// '26.0640'). Las dos cosas hacen fallar esta prueba.
+// Que NO atrapa, y conviene no creer que si: un (float) en el controlador o en el Form
+// Request. Un float representa exacto cualquier decimal(10,4) --diez cifras significativas--
+// y sqlite ya guarda la columna como REAL, asi que ese cast no cambiaria ningun monto. No es
+// un hueco: es que ahi un float no puede alterar el cobro.
 // Que NO puede atrapar en sqlite: que la columna sea DECIMAL. La afinidad numerica de sqlite
 // guarda un REAL, asi que el valor crudo solo se puede comparar numericamente, no como
 // texto '26.0640'. La garantia real vive en el DECIMAL(10,4) de MySQL mas el cast
