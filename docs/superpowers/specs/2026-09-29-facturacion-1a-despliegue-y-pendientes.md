@@ -48,16 +48,39 @@ concepto**, ni siquiera los dos que sí resuelven.
 El importador la reporta con nombre y detalle en cada corrida, así que no se
 puede aplicar sin verla.
 
-## Otra decisión: filas de prueba en `fact-fbo`
+## Filas de prueba en la copia local de `fact-fbo` — NO en producción
 
-Una corrida accidental de pruebas escribió en la base real del sistema viejo:
+> **NO BORRES POR ID.** Una versión anterior de esta guía decía que había que
+> borrar a mano los ids 886-889 de `tb_matricula` y 200-202 de `tb_tipo`. Eso
+> era **falso y peligroso**: en la base de producción esos mismos ids guardan
+> datos reales. Verificado contra el volcado del 2026-09-29:
+>
+> | id | `tb_matricula` en producción | id | `tb_tipo` en producción |
+> |---|---|---|---|
+> | 886 | `N950PC` | 200 | `GFL6` |
+> | 887 | `XB-TIG` | 201 | `B505` |
+> | 888 | `N423RB` | 202 | `BELL505` |
+> | 889 | `XB-RAJ` | | |
+>
+> Borrar por id habría destruido cuatro matrículas y tres tipos de aeronave
+> reales.
 
-- `tb_matricula`: ids 886 `XA-NUEVA`, 887 `XA-REPE`, 888 `XA-VIEJA`, 889 `XA-PASO`
-- `tb_tipo`: ids 200 `Learjet 45`, 201 `Cessna 208`, 202 `Otro`
+Una corrida accidental de pruebas escribió `XA-NUEVA`, `XA-REPE`, `XA-VIEJA` y
+`XA-PASO` en `tb_matricula`, y `Learjet 45`, `Cessna 208` y `Otro` en `tb_tipo`,
+**solo en la copia local de desarrollo**. Verificado: en producción no existe
+ninguna de las siete filas (`WHERE matricula IN (...)` devuelve cero).
 
-Hay que borrarlas a mano. Con el código nuevo no puede repetirse: `TestCase`
-apunta la conexión `remota` a un destino inválido durante las pruebas, así que
-cualquier escritura accidental revienta.
+Así que **no hay nada que borrar en producción**. Si alguna vez hace falta
+limpiar una copia local, hágalo **por nombre y nunca por id**:
+
+```sql
+DELETE FROM tb_matricula WHERE matricula IN ('XA-NUEVA','XA-REPE','XA-VIEJA','XA-PASO');
+DELETE FROM tb_tipo      WHERE tipo      IN ('Learjet 45','Cessna 208','Otro');
+```
+
+Con el código nuevo no puede repetirse: `TestCase` apunta la conexión `remota` a
+un destino inválido durante las pruebas, así que cualquier escritura accidental
+revienta.
 
 ## Orden de despliegue
 
