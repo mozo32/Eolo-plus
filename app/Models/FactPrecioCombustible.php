@@ -64,21 +64,54 @@ class FactPrecioCombustible extends Model
 
             // El sistema viejo sincroniza el precio del servicio de combustible
             // con el precio Eolo (`actualizar_combustible.php`). Sin esto, el
-            // combustible se cobraría al precio anterior.
-            //
-            // Se busca por nombre (ver SERVICIO_COMBUSTIBLE): si no existe o está
-            // dado de baja no actualiza nada y tampoco falla. Es el único punto
-            // donde un renombrado silencioso dejaría el precio desfasado, y de
-            // ahí la guarda en `UpdateServicioRequest`. El `where` lo resuelve
-            // MySQL con la collation de la columna, la misma comparación
-            // insensible a la caja que aplica esa guarda.
-            FactServicio::query()
-                ->where('nombre', self::SERVICIO_COMBUSTIBLE)
-                ->where('status', FactServicio::STATUS_ACTIVO)
-                ->update(['precio_unitario' => $precio->precio_eolo, 'updated_at' => now()]);
+            // combustible se cobraría al precio anterior. Va dentro de la
+            // transacción: o se registran el precio nuevo, la sincronía y su
+            // rastro, o no se registra nada.
+            static::sincronizarServicio($precio, $userId);
 
             return $precio;
         });
+    }
+
+    /**
+     * Fija el precio del servicio de combustible al precio Eolo recién
+     * registrado y deja rastro del cambio, con el valor anterior.
+     *
+     * Es el único precio que el bloque 1b cambia a propósito, así que es el que
+     * hay que poder explicar después. Se busca por nombre (ver
+     * SERVICIO_COMBUSTIBLE) y solo entre los activos: si no existe o está dado de
+     * baja no actualiza nada y tampoco falla. El `where` por nombre es lo que
+     * impide tocar el cobro de cualquier otro servicio. Lo resuelve MySQL con la
+     * collation de la columna, la misma comparación insensible a la caja que
+     * aplica la guarda de `UpdateServicioRequest`. Como el nombre no es único,
+     * se recorren todos los que coincidan.
+     */
+    private static function sincronizarServicio(self $precio, int $userId): void
+    {
+        $servicios = FactServicio::query()
+            ->where('nombre', self::SERVICIO_COMBUSTIBLE)
+            ->where('status', FactServicio::STATUS_ACTIVO)
+            ->get();
+
+        foreach ($servicios as $servicio) {
+            $anterior = $servicio->precio_unitario;
+
+            if ((float) $anterior === (float) $precio->precio_eolo) {
+                continue;
+            }
+
+            $servicio->update(['precio_unitario' => $precio->precio_eolo]);
+
+            Bitacora::log(
+                modulo: Bitacora::MODULO_FACTURACION_CATALOGOS,
+                accion: Bitacora::ACCION_ACTUALIZAR,
+                descripcion: "El precio del servicio '{$servicio->nombre}' pasó de {$anterior} a {$precio->precio_eolo} al registrar el precio del combustible.",
+                usuarioId: $userId,
+                registroId: $servicio->id,
+                datosAnteriores: ['precio_unitario' => $anterior],
+                datosNuevos: ['precio_unitario' => $servicio->precio_unitario],
+            );
+        }
     }
 
     public function capturadoPor()
