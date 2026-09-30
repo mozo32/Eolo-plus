@@ -2,7 +2,11 @@
 
 namespace App\Http\Requests\Facturacion;
 
+use App\Models\FactCategoriaServicio;
+use App\Models\FactServicio;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Exists;
 use Illuminate\Validation\Validator;
 
 class StoreServicioRequest extends FormRequest
@@ -27,17 +31,37 @@ class StoreServicioRequest extends FormRequest
      * El tope del precio sigue a la columna decimal(10,4): seis enteros y cuatro
      * decimales, 999999.9999. Uno más grande llegaría a la base y lanzaría un 500.
      * El margen sigue a decimal(5,2): tope 999.99.
+     *
+     * A una categoría dada de baja no se puede asignar un servicio, salvo que ya
+     * la tuviera (para poder editar el resto sin perderla): el mismo criterio que
+     * UpdateAeronaveFacturacionRequest en el bloque 1a.
      */
     public function rules(): array
     {
+        $actual = FactServicio::query()->find($this->route('id'));
+
         return [
-            'categoria_servicio_id' => ['nullable', 'integer', 'exists:fact_categorias_servicio,id'],
+            'categoria_servicio_id' => ['nullable', 'integer', $this->categoriaActiva($actual?->categoria_servicio_id)],
             'nombre' => ['required', 'string', 'max:120'],
             'precio_unitario' => ['required', 'numeric', 'min:0', 'decimal:0,4', 'max:999999.9999'],
             'es_de_tercero' => ['required', 'boolean'],
             'margen' => ['required', 'numeric', 'min:0', 'max:999.99', 'decimal:0,2'],
             'ajuste_precio' => ['required', 'in:ninguno,mas_5,sin_iva,comision_131'],
         ];
+    }
+
+    private function categoriaActiva(?int $idActual): Exists
+    {
+        return Rule::exists((new FactCategoriaServicio)->getTable(), 'id')->where(function ($query) use ($idActual) {
+            // Agrupado: sin el paréntesis, el orWhere anularía la condición sobre el id que se valida.
+            $query->where(function ($grupo) use ($idActual) {
+                $grupo->where('status', FactCategoriaServicio::STATUS_ACTIVO);
+
+                if ($idActual !== null) {
+                    $grupo->orWhere('id', $idActual);
+                }
+            });
+        });
     }
 
     /**
@@ -77,7 +101,7 @@ class StoreServicioRequest extends FormRequest
     {
         return [
             'categoria_servicio_id.integer' => 'La categoría del servicio no es válida.',
-            'categoria_servicio_id.exists' => 'La categoría del servicio no existe.',
+            'categoria_servicio_id.exists' => 'La categoría del servicio no existe o está dada de baja.',
             'nombre.required' => 'El nombre del servicio es obligatorio.',
             'nombre.string' => 'El nombre del servicio debe ser texto.',
             'nombre.max' => 'El nombre no puede pasar de 120 caracteres.',
