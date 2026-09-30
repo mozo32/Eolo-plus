@@ -54,13 +54,30 @@ class FactPrecioCombustible extends Model
                 ->whereNull('vigencia_fin')
                 ->update(['vigencia_fin' => $hoy, 'updated_at' => now()]);
 
-            return static::create([
+            $precio = static::create([
                 'precio_asa' => $precioAsa,
                 'precio_eolo' => $precioEolo ?? FactConfiguracion::precioEoloSugerido($precioAsa),
                 'vigencia_inicio' => $hoy,
                 'vigencia_fin' => null,
                 'user_id' => $userId,
             ]);
+
+            // El sistema viejo sincroniza el precio del servicio de combustible
+            // con el precio Eolo (`actualizar_combustible.php`). Sin esto, el
+            // combustible se cobraría al precio anterior.
+            //
+            // Se busca por nombre (ver SERVICIO_COMBUSTIBLE): si no existe o está
+            // dado de baja no actualiza nada y tampoco falla. Es el único punto
+            // donde un renombrado silencioso dejaría el precio desfasado, y de
+            // ahí la guarda en `UpdateServicioRequest`. El `where` lo resuelve
+            // MySQL con la collation de la columna, la misma comparación
+            // insensible a la caja que aplica esa guarda.
+            FactServicio::query()
+                ->where('nombre', self::SERVICIO_COMBUSTIBLE)
+                ->where('status', FactServicio::STATUS_ACTIVO)
+                ->update(['precio_unitario' => $precio->precio_eolo, 'updated_at' => now()]);
+
+            return $precio;
         });
     }
 

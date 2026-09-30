@@ -25,7 +25,11 @@ import {
     facturacionAeronaves,
     facturacionCategoriasAeronave,
     facturacionTiposMotor,
-    facturacionCombustible
+    facturacionCombustible,
+    facturacionClientes,
+    facturacionServicios,
+    facturacionFormasPago,
+    facturacionProveedores
 } from '@/routes'
 import { LayoutGrid, type LucideIcon } from 'lucide-react'
 
@@ -176,6 +180,22 @@ const ROUTE_CONFIG: Record<
         href: facturacionCombustible,
         title: 'Combustible',
     },
+    factclientes: {
+        href: facturacionClientes,
+        title: 'Clientes',
+    },
+    factservicios: {
+        href: facturacionServicios,
+        title: 'Servicios',
+    },
+    factformaspago: {
+        href: facturacionFormasPago,
+        title: 'Formas de pago',
+    },
+    factproveedores: {
+        href: facturacionProveedores,
+        title: 'Proveedores',
+    },
 }
 
 
@@ -269,6 +289,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                 key: 6,
                 items: [
                     { id: 'facturacion-aeronaves', title: 'Aeronaves facturables', href: facturacionAeronaves(), icon: LayoutGrid },
+                    { id: 'facturacion-clientes', title: 'Clientes', href: facturacionClientes(), icon: LayoutGrid },
 
                     {
                         id: 'facturacion-catalogos',
@@ -291,6 +312,24 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                                 id: 'facturacion-combustible',
                                 title: 'Combustible',
                                 href: facturacionCombustible(),
+                                icon: LayoutGrid,
+                            },
+                            {
+                                id: 'facturacion-servicios',
+                                title: 'Servicios',
+                                href: facturacionServicios(),
+                                icon: LayoutGrid,
+                            },
+                            {
+                                id: 'facturacion-formas-pago',
+                                title: 'Formas de pago',
+                                href: facturacionFormasPago(),
+                                icon: LayoutGrid,
+                            },
+                            {
+                                id: 'facturacion-proveedores',
+                                title: 'Proveedores',
+                                href: facturacionProveedores(),
                                 icon: LayoutGrid,
                             },
                         ],
@@ -323,7 +362,16 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
 
             // 2. Definimos las rutas a agrupar
             const combustibleRoutes = ['reporteentregaturno', 'remision', 'inspeccioncombustible'];
-            const catalogosFacturacionRoutes = ['factcategoriasaeronave', 'facttiposmotor', 'factcombustible'];
+            // Clientes (`factclientes`) queda fuera a propósito: es de uso diario y va en
+            // el primer nivel, junto a Aeronaves facturables.
+            const catalogosFacturacionRoutes = [
+                'factcategoriasaeronave',
+                'facttiposmotor',
+                'factcombustible',
+                'factservicios',
+                'factformaspago',
+                'factproveedores',
+            ];
 
             // Usamos NavItem[] para mantener la consistencia de tipos
             const finalItems: NavItem[] = [];
