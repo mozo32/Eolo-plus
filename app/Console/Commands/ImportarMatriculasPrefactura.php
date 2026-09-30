@@ -17,7 +17,7 @@ use Illuminate\Console\Command;
 class ImportarMatriculasPrefactura extends Command
 {
     protected $signature = 'facturacion:importar-matriculas {--aplicar : Escribe los cambios; sin esta bandera solo simula}
-        {--forzar : Con --aplicar, corre aunque fact_aeronaves ya tenga filas (las sobreescribe)}';
+        {--forzar : Con --aplicar, corre aunque Eolo-plus ya tenga datos en las tablas que la importación toca}';
 
     protected $description = 'Importa matrículas, tipos, categorías, motores, tarifas, combustible y los catálogos de facturación (clientes, servicios, formas de pago, proveedores) desde la base de Prefacturas';
 
@@ -32,7 +32,7 @@ class ImportarMatriculasPrefactura extends Command
         FactAeronave::class => 'estatus, categoría, motor, derecho de vuelos y tarifas propias',
         FactCategoriaAeronave::class => 'tarifas de pernocta y tránsito 2 h / 12 h',
         FactTipoMotor::class => 'tarifa de aterrizaje',
-        FactPrecioCombustible::class => 'el precio vigente que dejó el importador',
+        FactPrecioCombustible::class => 'el precio vigente, solo si coincide la fecha de inicio',
         FactCliente::class => 'RFC, correo y teléfono',
         FactServicio::class => 'categoría, precio, margen y ajuste de precio',
     ];
