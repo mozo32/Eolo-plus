@@ -20,6 +20,7 @@
 - Los Form Requests devuelven `true` en `authorize()` y llevan mensajes en español.
 - Nada fuera de `app/Services/ImportadorMatriculas.php` y `app/Console/Commands/` puede usar `DB::connection('remota')`. Hay una prueba que lo verifica.
 - Fechas locales de México; nunca `toISOString()` en el frontend.
+- **Las migraciones de este bloque se numeran entre `2026_09_29_090000` y `2026_09_29_099000`.** El bloque anterior dejó una prueba (`tests/Feature/Facturacion/MatriculaUnicaTest.php`) que exige que la migración del índice único en `aeronaves` sea la última por orden alfabético, para que si falla listando matrículas repetidas no deje nada pendiente detrás. Una migración con fecha posterior rompe esa prueba.
 - **El baseline es 382 pruebas en verde.** Correr `php artisan test` completo antes de cada commit.
 - Verificación de frontend: `npx tsc --noEmit` (solo debe quedar el error preexistente de `WalkAroundController.ts(905,5)`), `npx eslint` sin errores ni advertencias, y `npm run build`.
 
@@ -42,7 +43,7 @@ Volcado de producción cargado en la base local `fact-fbo-prod`, alcanzable por 
 El catálogo más grande y el único con datos personales. **No se deduplica**: la especificación explica por qué (195 nombres únicos, y el RFC se repite de forma legítima).
 
 **Files:**
-- Create: `database/migrations/2026_09_30_090000_create_fact_clientes_table.php`
+- Create: `database/migrations/2026_09_29_091000_create_fact_clientes_table.php`
 - Create: `app/Models/FactCliente.php`
 - Test: `tests/Feature/Facturacion/ClienteTest.php`
 
@@ -119,7 +120,7 @@ Expected: FAIL con `Class "App\Models\FactCliente" not found`
 
 ```php
 <?php
-// database/migrations/2026_09_30_090000_create_fact_clientes_table.php
+// database/migrations/2026_09_29_091000_create_fact_clientes_table.php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -195,7 +196,7 @@ Expected: PASS, 387 pruebas (382 + 5)
 - [ ] **Step 7: Commit**
 
 ```bash
-git add database/migrations/2026_09_30_090000_create_fact_clientes_table.php app/Models/FactCliente.php tests/Feature/Facturacion/ClienteTest.php
+git add database/migrations/2026_09_29_091000_create_fact_clientes_table.php app/Models/FactCliente.php tests/Feature/Facturacion/ClienteTest.php
 git commit -m "Catalogo de clientes de facturacion"
 ```
 
@@ -206,9 +207,9 @@ git commit -m "Catalogo de clientes de facturacion"
 Tres catálogos de nombre suelto, idénticos en forma. Van juntos porque separarlos serían tres tasks que repiten el mismo código.
 
 **Files:**
-- Create: `database/migrations/2026_09_30_090100_create_fact_categorias_servicio_table.php`
-- Create: `database/migrations/2026_09_30_090200_create_fact_formas_pago_table.php`
-- Create: `database/migrations/2026_09_30_090300_create_fact_proveedores_table.php`
+- Create: `database/migrations/2026_09_29_091100_create_fact_categorias_servicio_table.php`
+- Create: `database/migrations/2026_09_29_091200_create_fact_formas_pago_table.php`
+- Create: `database/migrations/2026_09_29_091300_create_fact_proveedores_table.php`
 - Create: `app/Models/FactCategoriaServicio.php`
 - Create: `app/Models/FactFormaPago.php`
 - Create: `app/Models/FactProveedor.php`
@@ -283,7 +284,7 @@ Expected: FAIL con `Class "App\Models\FactCategoriaServicio" not found`
 
 ```php
 <?php
-// database/migrations/2026_09_30_090100_create_fact_categorias_servicio_table.php
+// database/migrations/2026_09_29_091100_create_fact_categorias_servicio_table.php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -315,7 +316,7 @@ return new class extends Migration
 
 ```php
 <?php
-// database/migrations/2026_09_30_090200_create_fact_formas_pago_table.php
+// database/migrations/2026_09_29_091200_create_fact_formas_pago_table.php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -343,7 +344,7 @@ return new class extends Migration
 
 ```php
 <?php
-// database/migrations/2026_09_30_090300_create_fact_proveedores_table.php
+// database/migrations/2026_09_29_091300_create_fact_proveedores_table.php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -473,7 +474,7 @@ Expected: PASS, 391 pruebas
 - [ ] **Step 7: Commit**
 
 ```bash
-git add database/migrations/2026_09_30_0901*.php database/migrations/2026_09_30_0902*.php database/migrations/2026_09_30_0903*.php app/Models/FactCategoriaServicio.php app/Models/FactFormaPago.php app/Models/FactProveedor.php tests/Feature/Facturacion/CatalogosSimplesTest.php
+git add database/migrations/2026_09_29_0911*.php database/migrations/2026_09_29_0912*.php database/migrations/2026_09_29_0913*.php app/Models/FactCategoriaServicio.php app/Models/FactFormaPago.php app/Models/FactProveedor.php tests/Feature/Facturacion/CatalogosSimplesTest.php
 git commit -m "Catalogos de categorias de servicio, formas de pago y proveedores"
 ```
 
@@ -484,7 +485,7 @@ git commit -m "Catalogos de categorias de servicio, formas de pago y proveedores
 El único catálogo con lógica. Saca del código del sistema viejo el recargo de terceros y los tres ajustes de precio.
 
 **Files:**
-- Create: `database/migrations/2026_09_30_090400_create_fact_servicios_table.php`
+- Create: `database/migrations/2026_09_29_091400_create_fact_servicios_table.php`
 - Create: `app/Models/FactServicio.php`
 - Test: `tests/Feature/Facturacion/ServicioTest.php`
 
@@ -595,7 +596,7 @@ Expected: FAIL con `Class "App\Models\FactServicio" not found`
 
 ```php
 <?php
-// database/migrations/2026_09_30_090400_create_fact_servicios_table.php
+// database/migrations/2026_09_29_091400_create_fact_servicios_table.php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -733,7 +734,7 @@ Expected: PASS, 400 pruebas
 - [ ] **Step 7: Commit**
 
 ```bash
-git add database/migrations/2026_09_30_090400_create_fact_servicios_table.php app/Models/FactServicio.php tests/Feature/Facturacion/ServicioTest.php
+git add database/migrations/2026_09_29_091400_create_fact_servicios_table.php app/Models/FactServicio.php tests/Feature/Facturacion/ServicioTest.php
 git commit -m "Catalogo de servicios con el recargo de terceros y los ajustes de precio"
 ```
 
