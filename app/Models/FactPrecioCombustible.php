@@ -7,6 +7,17 @@ use Illuminate\Support\Facades\DB;
 
 class FactPrecioCombustible extends Model
 {
+    /**
+     * Nombre del servicio cuyo precio sigue al precio Eolo del combustible.
+     *
+     * El sistema viejo lo apunta por id fijo (`actualizar_combustible.php` hace
+     * `WHERE id_servicio='7'`, y el 7 es esta fila). Aqui no hay un id estable que
+     * sobreviva a la importacion, asi que el vinculo es el nombre; por eso
+     * `UpdateServicioRequest` impide renombrarlo: si se renombra, la sincronia deja
+     * de encontrarlo y el combustible se cobraria al precio anterior sin aviso.
+     */
+    public const SERVICIO_COMBUSTIBLE = 'Combustible JET A-1';
+
     protected $table = 'fact_precios_combustible';
 
     protected $fillable = [
