@@ -4,7 +4,12 @@
 use App\Models\Aeronave;
 use App\Models\FactAeronave;
 use App\Models\FactCategoriaAeronave;
+use App\Models\FactCategoriaServicio;
+use App\Models\FactCliente;
+use App\Models\FactFormaPago;
 use App\Models\FactPrecioCombustible;
+use App\Models\FactProveedor;
+use App\Models\FactTipoMotor;
 use App\Models\TipoAeronave;
 use App\Models\User;
 use App\Services\ImportadorMatriculas;
@@ -907,4 +912,94 @@ test('categorias y motores distintos no generan hallazgo de duplicado', function
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
 
     expect(implode(' ', $resultado->hallazgos))->not->toContain('duplicad');
+});
+
+/*
+ * La guarda de --forzar cubre todas las tablas que el importador toca, no solo
+ * fact_aeronaves. fact_categorias_aeronave y fact_tipos_motor guardan tarifas
+ * que se cobran y tienen pantalla de edicion: re-aplicar las pisaria en silencio.
+ */
+test('--aplicar se niega si solo fact_categorias_aeronave tiene filas y nombra la tabla', function () {
+    sembrarLegacy([matriculaLegacy('XA-AAA')]);
+    FactCategoriaAeronave::create(['nombre' => 'Ligera', 'tarifa_pernocta' => 500, 'tarifa_transito_2h' => 0, 'tarifa_transito_12h' => 0]);
+
+    $this->artisan('facturacion:importar-matriculas', ['--aplicar' => true])
+        ->expectsOutputToContain('fact_categorias_aeronave: 1 filas')
+        ->assertFailed();
+
+    expect(Aeronave::count())->toBe(0)
+        ->and((float) FactCategoriaAeronave::first()->tarifa_pernocta)->toBe(500.0);
+});
+
+test('--aplicar se niega si solo fact_tipos_motor tiene filas', function () {
+    sembrarLegacy([matriculaLegacy('XA-AAA')]);
+    FactTipoMotor::create(['nombre' => 'Jet', 'tarifa_aterrizaje' => 900]);
+
+    $this->artisan('facturacion:importar-matriculas', ['--aplicar' => true])
+        ->expectsOutputToContain('fact_tipos_motor: 1 filas')
+        ->assertFailed();
+
+    expect(Aeronave::count())->toBe(0);
+});
+
+test('--aplicar se niega si solo hay un precio de combustible', function () {
+    sembrarLegacy([matriculaLegacy('XA-AAA')]);
+    FactPrecioCombustible::create(['precio_asa' => 1, 'precio_eolo' => 2, 'vigencia_inicio' => '2026-01-01', 'vigencia_fin' => null, 'user_id' => User::factory()->create()->id]);
+
+    $this->artisan('facturacion:importar-matriculas', ['--aplicar' => true])
+        ->expectsOutputToContain('fact_precios_combustible: 1 filas')
+        ->assertFailed();
+});
+
+test('--aplicar se niega si un catalogo de facturacion ya tiene filas y distingue sobreescribe de agrega', function () {
+    sembrarLegacy([matriculaLegacy('XA-AAA')]);
+    FactCliente::create(['nombre' => 'Existente']);
+    FactProveedor::create(['nombre' => 'EOLO']);
+
+    $this->artisan('facturacion:importar-matriculas', ['--aplicar' => true])
+        ->expectsOutputToContain('fact_clientes: 1 filas')
+        ->expectsOutputToContain('fact_proveedores: 1 filas')
+        ->expectsOutputToContain('Se sobreescriben')
+        ->expectsOutputToContain('Solo se agrega lo que falta')
+        ->assertFailed();
+
+    expect(Aeronave::count())->toBe(0);
+});
+
+test('el mensaje de la guarda no dice que se sobreescribe lo que solo se agrega', function () {
+    sembrarLegacy([matriculaLegacy('XA-AAA')]);
+    FactFormaPago::create(['nombre' => 'Efectivo']);
+
+    $this->artisan('facturacion:importar-matriculas', ['--aplicar' => true])
+        ->expectsOutputToContain('fact_formas_pago: 1 filas')
+        ->expectsOutputToContain('Solo se agrega lo que falta')
+        ->doesntExpectOutputToContain('Se sobreescriben')
+        ->assertFailed();
+});
+
+test('--forzar deja pasar aunque solo un catalogo de facturacion tenga filas', function () {
+    sembrarLegacy([matriculaLegacy('XA-AAA')]);
+    FactCategoriaServicio::create(['nombre' => 'Handling']);
+
+    $this->artisan('facturacion:importar-matriculas', ['--aplicar' => true, '--forzar' => true])
+        ->assertSuccessful();
+
+    expect(Aeronave::where('matricula', 'XA-AAA')->exists())->toBeTrue();
+});
+
+test('la simulacion avisa de los catalogos con filas y no se niega', function () {
+    sembrarLegacy([matriculaLegacy('XA-AAA')]);
+    FactCliente::create(['nombre' => 'Existente']);
+
+    $this->artisan('facturacion:importar-matriculas')
+        ->expectsOutputToContain('fact_clientes: 1 filas')
+        ->assertSuccessful();
+});
+
+test('sin filas en ninguna tabla --aplicar corre sin --forzar', function () {
+    sembrarLegacy([matriculaLegacy('XA-AAA')]);
+
+    $this->artisan('facturacion:importar-matriculas', ['--aplicar' => true])->assertSuccessful();
+
+    expect(Aeronave::where('matricula', 'XA-AAA')->exists())->toBeTrue();
 });
