@@ -119,6 +119,21 @@ export function precioEoloSugerido(precioAsa: number, formula: { ajuste: number;
     return Number(((precioAsa + formula.ajuste) * formula.margen).toFixed(4));
 }
 
+/** Los ajustes de precio tal como se le muestran a quien captura. Cambian lo que se cobra: cada uno dice qué hace. */
+export const AJUSTES_PRECIO: { valor: AjustePrecio; titulo: string; descripcion: string }[] = [
+    { valor: 'ninguno', titulo: 'Sin ajuste', descripcion: 'El precio se usa tal cual.' },
+    { valor: 'mas_5', titulo: 'Más 5 %', descripcion: 'El precio se multiplica por 1.05.' },
+    { valor: 'sin_iva', titulo: 'Sin IVA', descripcion: 'El precio se divide entre 1.16 para descontarle el IVA.' },
+    { valor: 'comision_131', titulo: 'Comisión 131', descripcion: 'El precio se divide entre 1.31 y el resultado se multiplica por 1.15.' },
+];
+
+/** Quita los ceros sobrantes de un decimal del servidor para capturarlo: "1000.0000" es "1000", "12.5000" es "12.5". */
+export function sinCerosFinales(valor: Monto): string {
+    const texto = montoATexto(valor);
+
+    return texto.includes('.') ? texto.replace(/\.?0+$/, '') : texto;
+}
+
 /** Redondeo a 2 decimales con la mitad hacia arriba, como `number_format` de PHP (toFixed fallaría en 1.005). */
 function redondear2(valor: number): number {
     const texto = String(valor);

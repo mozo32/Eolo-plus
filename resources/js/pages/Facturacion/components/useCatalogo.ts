@@ -186,3 +186,6 @@ export function useCatalogo<T extends RegistroCatalogo, D>(api: ApiCatalogo<T, D
         buscarNombre,
     };
 }
+
+/** Lo que devuelve `useCatalogo`: para pasar un catálogo ya cargado a un componente hijo. */
+export type EstadoCatalogo<T extends RegistroCatalogo, D> = ReturnType<typeof useCatalogo<T, D>>;
