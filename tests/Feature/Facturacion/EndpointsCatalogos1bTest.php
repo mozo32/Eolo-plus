@@ -279,12 +279,144 @@ test('consultar permite filtrar solo las activas', function (string $ruta) {
     $this->actingAs(usuarioSinAcceso());
     $activa = filaCatalogo1b($ruta, 'A');
     filaCatalogo1b($ruta, 'N');
-    $llave = $ruta === 'categorias-servicio' ? 'categorias' : str_replace('-', '_', $ruta);
+    // Clientes es el único paginado: sus filas vienen en `data`.
+    $llave = match ($ruta) {
+        'clientes' => 'data',
+        'categorias-servicio' => 'categorias',
+        default => str_replace('-', '_', $ruta),
+    };
 
     $this->getJson("/api/facturacion/{$ruta}")->assertOk()->assertJsonCount(2, $llave);
     $this->getJson("/api/facturacion/{$ruta}?activas=1")->assertOk()->assertJsonCount(1, $llave)
         ->assertJsonPath("{$llave}.0.id", $activa->id);
 })->with('catalogos1b');
+
+/** Crea un cliente con los datos dados; lo demas lo pone clienteValido(). */
+function clienteEn(string $nombre, ?string $rfc, string $status = 'A'): FactCliente
+{
+    return FactCliente::create(clienteValido(['nombre' => $nombre, 'rfc' => $rfc, 'status' => $status]));
+}
+
+/** Nombres de las filas de una respuesta paginada de clientes, en el orden recibido. */
+function nombresDe($respuesta): array
+{
+    return collect($respuesta->json('data'))->pluck('nombre')->all();
+}
+
+test('el listado de clientes esta paginado y ordenado por nombre', function () {
+    $this->actingAs(usuarioSinAcceso());
+    clienteEn('Zeta', null);
+    clienteEn('Alfa', null);
+    clienteEn('Media', null);
+
+    $r = $this->getJson('/api/facturacion/clientes')->assertOk()
+        ->assertJsonStructure(['data', 'current_page', 'last_page', 'per_page', 'total', 'from', 'to']);
+
+    expect(nombresDe($r))->toBe(['Alfa', 'Media', 'Zeta'])
+        ->and($r->json('total'))->toBe(3)
+        ->and($r->json('per_page'))->toBe(20);
+});
+
+test('la busqueda de clientes encuentra por nombre', function () {
+    $this->actingAs(usuarioSinAcceso());
+    clienteEn('Aeromexico', 'AAA010101AAA');
+    clienteEn('Volaris', 'BBB020202BBB');
+
+    expect(nombresDe($this->getJson('/api/facturacion/clientes?q=volar')->assertOk()))->toBe(['Volaris']);
+});
+
+test('la busqueda de clientes encuentra por RFC', function () {
+    $this->actingAs(usuarioSinAcceso());
+    clienteEn('Aeromexico', 'AAA010101AAA');
+    clienteEn('Volaris', 'BBB020202BBB');
+
+    expect(nombresDe($this->getJson('/api/facturacion/clientes?q=bbb0202')->assertOk()))->toBe(['Volaris']);
+});
+
+test('un q no vacio no trae los clientes sin RFC que no coinciden por nombre', function () {
+    $this->actingAs(usuarioSinAcceso());
+    clienteEn('Sin RFC uno', null);
+    clienteEn('Sin RFC dos', null);
+    clienteEn('Con RFC', 'XYZ010101XYZ');
+
+    $r = $this->getJson('/api/facturacion/clientes?q=XYZ')->assertOk();
+
+    expect(nombresDe($r))->toBe(['Con RFC']);
+});
+
+test('la busqueda de clientes no se come el filtro de estado', function () {
+    $this->actingAs(usuarioSinAcceso());
+    clienteEn('Mexicana activa', 'MEX010101AAA', 'A');
+    clienteEn('Mexicana de baja', 'MEX020202BBB', 'N');
+    // Coincide solo por RFC: prueba que el OR esta agrupado tambien en esa rama.
+    clienteEn('Otro de baja', 'MEX030303CCC', 'N');
+
+    foreach (['?q=mexicana&estado=activas', '?q=MEX0&estado=activas', '?q=mexicana&activas=1'] as $consulta) {
+        expect(nombresDe($this->getJson("/api/facturacion/clientes{$consulta}")->assertOk()))->toBe(['Mexicana activa'], $consulta);
+    }
+
+    expect(nombresDe($this->getJson('/api/facturacion/clientes?q=MEX0&estado=baja')->assertOk()))->toBe(['Mexicana de baja', 'Otro de baja']);
+});
+
+test('el estado de los clientes admite activas, baja y todas, y por omision son todas', function () {
+    $this->actingAs(usuarioSinAcceso());
+    clienteEn('Activo', null, 'A');
+    clienteEn('Baja', null, 'N');
+
+    expect(nombresDe($this->getJson('/api/facturacion/clientes?estado=activas')->assertOk()))->toBe(['Activo'])
+        ->and(nombresDe($this->getJson('/api/facturacion/clientes?estado=baja')->assertOk()))->toBe(['Baja'])
+        ->and(nombresDe($this->getJson('/api/facturacion/clientes?estado=todas')->assertOk()))->toBe(['Activo', 'Baja'])
+        ->and(nombresDe($this->getJson('/api/facturacion/clientes')->assertOk()))->toBe(['Activo', 'Baja'])
+        ->and(nombresDe($this->getJson('/api/facturacion/clientes?estado=cualquiera')->assertOk()))->toBe(['Activo', 'Baja']);
+});
+
+test('activas=1 sigue siendo el atajo de estado=activas y gana sobre un estado contradictorio', function () {
+    $this->actingAs(usuarioSinAcceso());
+    clienteEn('Activo', null, 'A');
+    clienteEn('Baja', null, 'N');
+
+    expect(nombresDe($this->getJson('/api/facturacion/clientes?activas=1')->assertOk()))->toBe(['Activo'])
+        ->and(nombresDe($this->getJson('/api/facturacion/clientes?activas=1&estado=baja')->assertOk()))->toBe(['Activo']);
+});
+
+test('un per_page fuera de la lista cae a 20 y uno permitido se respeta', function () {
+    $this->actingAs(usuarioSinAcceso());
+    foreach (range(1, 12) as $n) {
+        clienteEn(sprintf('Cliente %02d', $n), null);
+    }
+
+    expect($this->getJson('/api/facturacion/clientes?per_page=7')->assertOk()->json('per_page'))->toBe(20)
+        ->and($this->getJson('/api/facturacion/clientes?per_page=100000')->assertOk()->json('per_page'))->toBe(20)
+        ->and($this->getJson('/api/facturacion/clientes?per_page=abc')->assertOk()->json('per_page'))->toBe(20);
+
+    $r = $this->getJson('/api/facturacion/clientes?per_page=10')->assertOk();
+    expect($r->json('per_page'))->toBe(10)
+        ->and($r->json('data'))->toHaveCount(10)
+        ->and($r->json('last_page'))->toBe(2);
+});
+
+test('una pagina de clientes fuera de rango responde vacia con su ultima pagina, no un error', function () {
+    $this->actingAs(usuarioSinAcceso());
+    clienteEn('Uno', null);
+
+    $r = $this->getJson('/api/facturacion/clientes?page=9')->assertOk();
+
+    expect($r->json('data'))->toBe([])
+        ->and($r->json('current_page'))->toBe(9)
+        ->and($r->json('last_page'))->toBe(1)
+        ->and($r->json('total'))->toBe(1);
+});
+
+test('los enlaces de la paginacion de clientes conservan la consulta', function () {
+    $this->actingAs(usuarioSinAcceso());
+    foreach (range(1, 12) as $n) {
+        clienteEn(sprintf('Mexicana %02d', $n), null);
+    }
+
+    $siguiente = $this->getJson('/api/facturacion/clientes?q=mexicana&estado=activas&per_page=10')->assertOk()->json('next_page_url');
+
+    expect($siguiente)->toContain('q=mexicana')->toContain('estado=activas')->toContain('per_page=10')->toContain('page=2');
+});
 
 test('categorias, formas de pago y proveedores rechazan el nombre repetido con 422, no con un error de base', function () {
     $this->actingAs(usuarioAdmin());

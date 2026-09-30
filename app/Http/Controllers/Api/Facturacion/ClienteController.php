@@ -19,16 +19,51 @@ use Illuminate\Http\Request;
  */
 class ClienteController extends Controller
 {
-    /** Ordenado por nombre. `?activas=1` deja fuera lo dado de baja. */
+    private const PER_PAGE_PERMITIDOS = [10, 20, 50, 100];
+
+    private const ESTADO_ACTIVAS = 'activas';
+
+    private const ESTADO_BAJA = 'baja';
+
+    /**
+     * Ordenado por nombre y paginado (es el único catálogo que crece sin techo).
+     *
+     * Filtros:
+     *  - `q`: busca en el nombre y en el RFC. Va AGRUPADO: sin el paréntesis, el
+     *    OR se comería el filtro de estado y devolvería filas de cualquier estado.
+     *    Un RFC nulo no coincide con nada, que es lo correcto.
+     *  - `estado`: `activas`, `baja` o `todas` (por omisión, `todas`: desde esta
+     *    lista se llega a un cliente dado de baja para reactivarlo).
+     *  - `activas=1`: atajo de `estado=activas`, para los desplegables de otras
+     *    pantallas. Se normaliza primero, en un solo lugar.
+     *  - `per_page` (10, 20, 50 o 100) y `page`.
+     */
     public function index(Request $request): JsonResponse
     {
-        $query = FactCliente::query()->orderBy('nombre');
-
-        if ($request->boolean('activas')) {
-            $query->activos();
+        $perPage = (int) $request->query('per_page', 20);
+        if (! in_array($perPage, self::PER_PAGE_PERMITIDOS, true)) {
+            $perPage = 20;
         }
 
-        return response()->json(['clientes' => $query->get()]);
+        $estado = $request->boolean('activas') ? self::ESTADO_ACTIVAS : $request->query('estado');
+
+        $query = FactCliente::query()->orderBy('nombre')->orderBy('id');
+
+        match ($estado) {
+            self::ESTADO_ACTIVAS => $query->where('status', FactCliente::STATUS_ACTIVO),
+            self::ESTADO_BAJA => $query->where('status', FactCliente::STATUS_INACTIVO),
+            default => null,
+        };
+
+        if ($request->filled('q')) {
+            $patron = '%'.trim((string) $request->query('q')).'%';
+
+            $query->where(function ($busqueda) use ($patron) {
+                $busqueda->where('nombre', 'LIKE', $patron)->orWhere('rfc', 'LIKE', $patron);
+            });
+        }
+
+        return response()->json($query->paginate($perPage)->appends($request->query()));
     }
 
     public function store(StoreClienteRequest $request): JsonResponse
