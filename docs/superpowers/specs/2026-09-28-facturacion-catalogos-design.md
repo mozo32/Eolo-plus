@@ -121,14 +121,23 @@ Tabla `fact_clientes`:
 |---|---|---|
 | id | bigint | |
 | nombre | string(160) | index |
-| rfc | string(13) nullable | index; puede faltar en registros viejos |
+| rfc | string(20) nullable | index, **no único**. El máximo real usado es 15. Se repite de forma legítima: 16 RFC los comparten varios clientes. |
 | correo | string(120) nullable | |
 | telefono | string(20) nullable | |
 | status | char(1) | |
 | timestamps | | |
 
-`tb_clientes` arrastra hoy un `fol_prefactura`, lo que crea un cliente nuevo por
-cada prefactura. Aquí el cliente existe una vez y la prefactura lo referencia.
+`tb_clientes` arrastra un `fol_prefactura` que aquí no se migra: el cliente existe
+una vez y la prefactura lo referenciará.
+
+**Los clientes NO se deduplican.** El diseño suponía que ese `fol_prefactura`
+generaba un cliente por prefactura y que habría duplicados; los datos reales dicen
+lo contrario: 195 clientes con 195 nombres distintos, ninguno repetido, y solo uno
+sin RFC. Deduplicar por nombre no haría nada, y **deduplicar por RFC sería
+destructivo**: `XAXX010101000` (público en general) lo comparten 22 clientes sin
+relación entre sí y `XEXX010101000` (residentes en el extranjero) otros 5. Los
+demás RFC repetidos son variantes de nombre de una misma empresa (`AEROSA` /
+`AEROSAN`). El importador los trae uno a uno.
 
 Tabla `fact_categorias_servicio`:
 
@@ -146,7 +155,7 @@ Tabla `fact_servicios`:
 | id | bigint | |
 | categoria_servicio_id | FK fact_categorias_servicio | |
 | nombre | string(120) | index |
-| precio_unitario | decimal(10,2) | |
+| precio_unitario | decimal(10,4) | Cuatro decimales, como el origen: `Combustible JET A-1` vale 26.0640 y `Limpieza exterior` 2105.8601. Con dos decimales se truncarían y cambiaría el cobro. |
 | es_de_tercero | boolean | default false |
 | margen | decimal(5,2) | porcentaje; default 0, y 50 cuando `es_de_tercero` |
 | ajuste_precio | string(16) | `ninguno` \| `mas_5` \| `sin_iva` \| `comision_131` |
@@ -170,6 +179,38 @@ Tabla `fact_proveedores`:
 | nombre | string(120) | |
 | status | char(1) | |
 | timestamps | | |
+
+### Dos cosas que los datos reales aclararon
+
+**`tb_servicio_ter` no se migra.** Son 12 nombres de proveedores de servicios de
+tercero ("Comisariato, Comexa", "Servicios Internacionales - entrada"). Los
+archivos que la consultan (`modal_f_pago.php`, `p_impresas.php`) arman con ella un
+`<select>` que **nunca llegan a imprimir**: es código muerto.
+
+**El servicio 7, `Combustible JET A-1`, está acoplado al precio de combustible.**
+`actualizar_combustible.php` no solo actualiza `tb_combustible`: también sincroniza
+`tb_servicio.precio_u` de ese servicio con el precio Eolo recién calculado. Hoy
+ambos valen 26.0640. Al capturar un precio nuevo desde la pantalla de Combustible
+(bloque 1a), el precio del servicio debe seguirlo, o quedarán desfasados y el
+combustible se cobraría al precio viejo.
+
+**`fact_proveedores` se migra, aunque la dimensión esté muerta.** Son 5 filas (EOLO,
+MANNY CATERING, ARTURO GARDUÑO, COMEXA, OTROS), pero todos los `INSERT` de
+`tb_venta` del sistema viejo escriben `Id_proveedor = 5` fijo, sin importar el
+servicio. La columna existe y no se usa. Se trae el catálogo por si el bloque 2 la
+aprovecha, sin reproducir el valor fijo.
+
+### Volumen real
+
+| Catálogo | Filas |
+|---|---|
+| Clientes | 195 |
+| Servicios | 54 (15 de tercero, con `id > 93`) |
+| Categorías de servicio | 13 |
+| Formas de pago | 7 |
+| Proveedores | 5 |
+
+Son volúmenes pequeños: las pantallas no necesitan paginación del servidor.
 
 ### Enlace con las aeronaves existentes
 
