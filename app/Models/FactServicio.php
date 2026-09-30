@@ -65,13 +65,28 @@ class FactServicio extends Model
         return number_format($conMargen * $cantidad, 2, '.', '');
     }
 
+    /**
+     * Un ajuste desconocido lanza en vez de cobrar sin ajuste: un typo o un dato
+     * importado ('mas5' por 'mas_5') dejaria el servicio 106 sin su 5% sin avisar.
+     * `null` equivale a sin ajuste: un modelo recien creado no trae en memoria el
+     * default de la base. `match` compara estricto, asi que '' tampoco pasa.
+     */
     private function aplicarAjuste(float $precio): float
     {
         return match ($this->ajuste_precio) {
+            null, self::AJUSTE_NINGUNO => $precio,
             self::AJUSTE_MAS_5 => $precio * 1.05,
             self::AJUSTE_SIN_IVA => $precio / 1.16,
-            self::AJUSTE_COMISION_131 => ($precio / 1.31) * 1.15,
-            default => $precio,
+            self::AJUSTE_COMISION_131 => $this->comision131($precio),
+            default => throw new \UnexpectedValueException("ajuste_precio desconocido: '{$this->ajuste_precio}'"),
         };
+    }
+
+    /** Literal de altaserv.php: $Precio1 = $Precio / 1.31; ($Precio1 * .15) + $Precio1. */
+    private function comision131(float $precio): float
+    {
+        $precio1 = $precio / 1.31;
+
+        return $precio1 * .15 + $precio1;
     }
 }

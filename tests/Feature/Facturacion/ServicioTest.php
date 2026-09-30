@@ -58,6 +58,31 @@ test('el ajuste comision_131 aplica la formula del servicio 113', function () {
     expect($s->importe(1310, 1))->toBe('1150.00');
 });
 
+test('el 113 real es de tercero con margen 50: el ajuste va antes del margen', function () {
+    // Comisariato_Fly Across: id > 93 (recargo de tercero, 50%) y ajuste del 113.
+    $s = servicio(['es_de_tercero' => true, 'margen' => 50, 'ajuste_precio' => 'comision_131']);
+
+    // 1310 / 1.31 = 1000 ; 1000 * .15 + 1000 = 1150 ; 1150 + 50% = 1725
+    expect($s->importe(1310, 1))->toBe('1725.00');
+});
+
+test('un ajuste desconocido lanza en vez de cobrar sin ajuste', function () {
+    // Un typo ('mas5' por 'mas_5') no debe cobrar el servicio 106 sin su 5%.
+    $s = servicio(['ajuste_precio' => 'mas5']);
+
+    expect(fn () => $s->importe(1000, 1))
+        ->toThrow(UnexpectedValueException::class, 'mas5');
+});
+
+test('un modelo recien creado, con ajuste_precio null en memoria, cobra sin ajuste', function () {
+    // El default de la base ('ninguno') no se carga en el modelo sin fresh().
+    $s = servicio();
+
+    expect($s->ajuste_precio)->toBeNull()
+        ->and($s->importe(1000, 1))->toBe('1000.00')
+        ->and($s->fresh()->importe(1000, 1))->toBe('1000.00');
+});
+
 test('un precio en cero es valido y da importe cero', function () {
     // Los 15 servicios de tercero del origen tienen precio_u = 0: se teclea al capturar.
     $s = servicio(['precio_unitario' => 0, 'es_de_tercero' => true, 'margen' => 50]);
@@ -65,11 +90,23 @@ test('un precio en cero es valido y da importe cero', function () {
     expect($s->importe(0, 3))->toBe('0.00');
 });
 
-test('el precio guarda cuatro decimales, como el origen', function () {
+/*
+ * LIMITACION: las pruebas corren en sqlite en memoria, que guarda 26.064 como
+ * REAL sin importar si la columna es decimal(10,4) o decimal(10,2). Por eso esta
+ * prueba NO garantiza la escala de `precio_unitario` en la base: solo fija el
+ * cast `decimal:4` del modelo (con `decimal:2` fallaria). La garantia de los
+ * cuatro decimales es `decimal('precio_unitario', 10, 4)` en la migracion
+ * (MySQL, que si la aplica); si se toca, verificarlo a mano contra MySQL.
+ */
+test('el cast del modelo conserva cuatro decimales en el precio', function () {
     // Combustible JET A-1 vale 26.0640 y Limpieza exterior 2105.8601.
-    $s = servicio(['precio_unitario' => 26.0640]);
+    $jet = servicio(['precio_unitario' => 26.0640]);
+    $limpieza = servicio(['precio_unitario' => 2105.8601]);
 
-    expect((float) $s->fresh()->precio_unitario)->toBe(26.0640);
+    expect((float) $jet->fresh()->precio_unitario)->toBe(26.0640)
+        ->and($jet->fresh()->precio_unitario)->toBe('26.0640')
+        ->and((float) $limpieza->fresh()->precio_unitario)->toBe(2105.8601)
+        ->and($limpieza->fresh()->precio_unitario)->toBe('2105.8601');
 });
 
 test('un servicio puede no tener categoria', function () {
