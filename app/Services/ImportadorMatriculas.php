@@ -89,8 +89,8 @@ class ImportadorMatriculas
             $this->importarMatriculas($matriculas, $tipos, $categorias, $modasCategoria, $motores, $modasMotor);
             $this->importarCombustible();
             $this->importarClientes();
-            $categoriasServicio = $this->importarCategoriasServicio();
-            $this->importarServicios($categoriasServicio);
+            [$categoriasServicio, $categoriasSinNombre] = $this->importarCategoriasServicio();
+            $this->importarServicios($categoriasServicio, $categoriasSinNombre);
             $this->importarFormasPago();
             $this->importarProveedores();
 
@@ -620,6 +620,16 @@ class ImportadorMatriculas
         $this->resultado->contar('precios_combustible');
     }
 
+    /*
+     * Catálogos de facturación (bloque 1b).
+     *
+     * Los conteos de estos catálogos son filas del origen procesadas, no filas
+     * escritas: en una segunda corrida `clientes` sigue diciendo lo mismo aunque
+     * no se cree ninguna. Es a propósito, para que el reporte sea comparable
+     * entre corridas; lo que no se procesa (nombre vacío, repetido) no cuenta y
+     * sale como hallazgo.
+     */
+
     /**
      * Los clientes se traen uno a uno, sin deduplicar por RFC.
      *
@@ -631,7 +641,7 @@ class ImportadorMatriculas
      * son únicos, pero no es una garantía del modelo: si aparecieran dos
      * clientes reales con el mismo nombre, esto los fusionaría. Por eso el
      * segundo se omite (gana el de menor id) y se reporta como hallazgo antes
-     * de aplicar. Se compara con `llaveNombre` porque la columna de la base
+     * de aplicar. Se compara con `llaveCatalogo` porque la columna de la base
      * nueva no distingue caja ni acentos.
      */
     private function importarClientes(): void
@@ -639,23 +649,21 @@ class ImportadorMatriculas
         $vistos = [];
 
         foreach ($this->legacy('tb_clientes')->orderBy('id_cliente')->get() as $fila) {
-            $nombre = trim((string) $fila->nombre);
+            $nombre = $this->nombreCatalogo($fila->nombre, 'tb_clientes', $fila->id_cliente, 'Cliente');
 
-            if ($nombre === '') {
-                $this->resultado->hallazgo("Cliente sin nombre en tb_clientes (id {$fila->id_cliente}): no se importa.");
-
+            if ($nombre === null) {
                 continue;
             }
 
-            $llave = self::llaveNombre($nombre);
+            $llave = self::llaveCatalogo($nombre);
 
             if (isset($vistos[$llave])) {
-                $this->resultado->hallazgo("Cliente con nombre repetido en tb_clientes: '{$nombre}' (id {$fila->id_cliente}). Se importa una sola vez, con los datos del primero; revísalo antes de aplicar.");
+                $this->hallazgoRepetido('Cliente', 'tb_clientes', $fila->id_cliente, $nombre, $vistos[$llave]);
 
                 continue;
             }
 
-            $vistos[$llave] = true;
+            $vistos[$llave] = $nombre;
 
             FactCliente::updateOrCreate(
                 ['nombre' => $nombre],
@@ -670,24 +678,51 @@ class ImportadorMatriculas
         }
     }
 
-    /** @return array<int,int> id_categorias viejo => id de fact_categorias_servicio */
+    /**
+     * La categoría 0 del sistema viejo significa "sin categoría", no es una fila
+     * real. Si dos categorías comparten nombre (para la base nueva), la segunda
+     * se omite pero su id viejo apunta a la misma fila que la primera, para que
+     * sus servicios no queden huérfanos por un duplicado del origen.
+     *
+     * @return array{0: array<int,int>, 1: array<int,true>} [id_categorias viejo => id de
+     *                                                       fact_categorias_servicio, ids viejos sin nombre]
+     */
     private function importarCategoriasServicio(): array
     {
         $mapa = [];
+        $sinNombre = [];
+        $vistos = [];
 
-        // La categoría 0 del sistema viejo significa "sin categoría", no es una fila real.
         foreach ($this->legacy('tb_categoria_serv')->orderBy('id_categorias')->get() as $fila) {
-            $nombre = trim((string) $fila->categoras);
+            $idViejo = (int) $fila->id_categorias;
 
-            if ($nombre === '' || (int) $fila->id_categorias === 0) {
+            if ($idViejo === 0) {
                 continue;
             }
 
-            $mapa[(int) $fila->id_categorias] = FactCategoriaServicio::firstOrCreate(['nombre' => $nombre])->id;
+            $nombre = $this->nombreCatalogo($fila->categoras, 'tb_categoria_serv', $idViejo, 'Categoría de servicio');
+
+            if ($nombre === null) {
+                $sinNombre[$idViejo] = true;
+
+                continue;
+            }
+
+            $llave = self::llaveCatalogo($nombre);
+
+            if (isset($vistos[$llave])) {
+                $this->hallazgoRepetido('Categoría de servicio', 'tb_categoria_serv', $idViejo, $nombre, $vistos[$llave]['nombre']);
+                $mapa[$idViejo] = $vistos[$llave]['id'];
+
+                continue;
+            }
+
+            $mapa[$idViejo] = FactCategoriaServicio::firstOrCreate(['nombre' => $nombre])->id;
+            $vistos[$llave] = ['nombre' => $nombre, 'id' => $mapa[$idViejo]];
             $this->resultado->contar('categorias_servicio');
         }
 
-        return $mapa;
+        return [$mapa, $sinNombre];
     }
 
     /**
@@ -699,30 +734,29 @@ class ImportadorMatriculas
      * convertirlo a float.
      *
      * @param  array<int,int>  $categorias
+     * @param  array<int,true>  $categoriasSinNombre
      */
-    private function importarServicios(array $categorias): void
+    private function importarServicios(array $categorias, array $categoriasSinNombre): void
     {
         $vistos = [];
 
         foreach ($this->legacy('tb_servicio')->orderBy('id_servicio')->get() as $fila) {
             $idViejo = (int) $fila->id_servicio;
-            $nombre = trim((string) $fila->servicio);
+            $nombre = $this->nombreCatalogo($fila->servicio, 'tb_servicio', $idViejo, 'Servicio');
 
-            if ($nombre === '') {
-                $this->resultado->hallazgo("Servicio sin nombre en tb_servicio (id {$idViejo}): no se importa.");
-
+            if ($nombre === null) {
                 continue;
             }
 
-            $llave = self::llaveNombre($nombre);
+            $llave = self::llaveCatalogo($nombre);
 
             if (isset($vistos[$llave])) {
-                $this->resultado->hallazgo("Servicio con nombre repetido en tb_servicio: '{$nombre}' (id {$idViejo}). Se importa una sola vez, con los datos del primero; revísalo antes de aplicar.");
+                $this->hallazgoRepetido('Servicio', 'tb_servicio', $idViejo, $nombre, $vistos[$llave]);
 
                 continue;
             }
 
-            $vistos[$llave] = true;
+            $vistos[$llave] = $nombre;
 
             $idCategoriaVieja = (int) $fila->id_categorias;
             $categoriaId = $categorias[$idCategoriaVieja] ?? null;
@@ -731,7 +765,9 @@ class ImportadorMatriculas
             if ($categoriaId === null) {
                 $this->resultado->contar('servicios_sin_categoria');
 
-                if ($idCategoriaVieja !== 0) {
+                if (isset($categoriasSinNombre[$idCategoriaVieja])) {
+                    $this->resultado->hallazgo("Servicio '{$nombre}' (id {$idViejo}) apunta a la categoría {$idCategoriaVieja}, que existe en tb_categoria_serv pero está sin nombre y no se importó: queda sin categoría.");
+                } elseif ($idCategoriaVieja !== 0) {
                     $this->resultado->hallazgo("Servicio '{$nombre}' (id {$idViejo}) apunta a la categoría {$idCategoriaVieja}, que no existe en tb_categoria_serv: queda sin categoría.");
                 }
             }
@@ -744,6 +780,10 @@ class ImportadorMatriculas
                 ['nombre' => $nombre],
                 [
                     'categoria_servicio_id' => $categoriaId,
+                    // `tb_servicio.precio_u` es NOT NULL en el origen, así que el
+                    // `?? 0` no se alcanza hoy. No es un cobro que pueda volverse
+                    // 0 en silencio: solo evita un null en la columna si el
+                    // origen cambiara.
                     'precio_unitario' => $fila->precio_u ?? 0,
                     'es_de_tercero' => $esDeTercero,
                     'margen' => $esDeTercero ? self::MARGEN_TERCERO : 0,
@@ -762,30 +802,93 @@ class ImportadorMatriculas
 
     private function importarFormasPago(): void
     {
-        foreach ($this->legacy('tb_tip_fpago')->orderBy('id_tipo_formas')->get() as $fila) {
-            $nombre = trim((string) $fila->tipo_forma);
-
-            if ($nombre === '') {
-                continue;
-            }
-
-            FactFormaPago::firstOrCreate(['nombre' => $nombre]);
-            $this->resultado->contar('formas_pago');
-        }
+        $this->importarCatalogoSimple(
+            'tb_tip_fpago', 'id_tipo_formas', 'tipo_forma', 'Forma de pago', FactFormaPago::class, 'formas_pago',
+        );
     }
 
     private function importarProveedores(): void
     {
-        foreach ($this->legacy('tb_proveedor')->orderBy('id_proveedor')->get() as $fila) {
-            $nombre = trim((string) $fila->proveedor);
+        $this->importarCatalogoSimple(
+            'tb_proveedor', 'id_proveedor', 'proveedor', 'Proveedor', FactProveedor::class, 'proveedores',
+        );
+    }
 
-            if ($nombre === '') {
+    /**
+     * Catálogos de solo nombre, con `firstOrCreate`. Su columna `nombre` es única
+     * con collation que no distingue caja ni acentos, así que 'EOLO' y 'Eolo'
+     * serían la misma fila: el segundo se omite y se reporta en lugar de contarse.
+     *
+     * @param  class-string<\Illuminate\Database\Eloquent\Model>  $modelo
+     */
+    private function importarCatalogoSimple(string $tabla, string $llavePrimaria, string $columna, string $etiqueta, string $modelo, string $conteo): void
+    {
+        $vistos = [];
+
+        foreach ($this->legacy($tabla)->orderBy($llavePrimaria)->get() as $fila) {
+            $id = $fila->{$llavePrimaria};
+            $nombre = $this->nombreCatalogo($fila->{$columna}, $tabla, $id, $etiqueta);
+
+            if ($nombre === null) {
                 continue;
             }
 
-            FactProveedor::firstOrCreate(['nombre' => $nombre]);
-            $this->resultado->contar('proveedores');
+            $llave = self::llaveCatalogo($nombre);
+
+            if (isset($vistos[$llave])) {
+                $this->hallazgoRepetido($etiqueta, $tabla, $id, $nombre, $vistos[$llave]);
+
+                continue;
+            }
+
+            $vistos[$llave] = $nombre;
+
+            $modelo::firstOrCreate(['nombre' => $nombre]);
+            $this->resultado->contar($conteo);
         }
+    }
+
+    /**
+     * Nombre listo para guardar, o null si la fila no se importa (nombre vacío,
+     * con hallazgo). Recorta los extremos y colapsa cada corrida de espacio en
+     * blanco, U+00A0 incluido, a un espacio simple: un espacio duro rompe la
+     * búsqueda por texto (nadie lo teclea) y uno final sale impreso en la
+     * prefactura. Si hubo que normalizar, se reporta con el id y los dos valores.
+     */
+    private function nombreCatalogo(mixed $crudo, string $tabla, int|string $id, string $etiqueta): ?string
+    {
+        $original = (string) $crudo;
+        $colapsado = preg_replace('/[\s\p{Z}]+/u', ' ', $original);
+        $nombre = trim($colapsado ?? $original);
+
+        if ($nombre === '') {
+            $this->resultado->hallazgo("{$etiqueta} sin nombre en {$tabla} (id {$id}): no se importa.");
+
+            return null;
+        }
+
+        if ($nombre !== $original) {
+            $visible = str_replace("\u{00A0}", '<NBSP>', $original);
+            $this->resultado->hallazgo("{$etiqueta} con espacios raros en {$tabla} (id {$id}): '{$visible}' se importa como '{$nombre}'.");
+        }
+
+        return $nombre;
+    }
+
+    private function hallazgoRepetido(string $etiqueta, string $tabla, int|string $id, string $nombre, string $primero): void
+    {
+        $this->resultado->hallazgo("{$etiqueta} con nombre repetido en {$tabla}: '{$nombre}' (id {$id}) es igual a '{$primero}' para la base nueva. Se importa una sola vez, con los datos del primero; revísalo antes de aplicar.");
+    }
+
+    /**
+     * `llaveNombre`, pero sin colapsar los nombres que no tienen equivalente
+     * ASCII: `Str::ascii('日本')` es '' y todos compartirían la misma llave.
+     */
+    private static function llaveCatalogo(string $nombre): string
+    {
+        $llave = self::llaveNombre($nombre);
+
+        return $llave === '' ? mb_strtolower($nombre) : $llave;
     }
 
     /** Una cadena vacía del origen es un dato ausente, no una cadena. */

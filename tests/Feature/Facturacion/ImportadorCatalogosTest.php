@@ -37,7 +37,9 @@ function prepararOrigenCatalogos(): void
     $esquema->create('tb_servicio', function ($t) {
         $t->integer('id_servicio', true);
         $t->string('servicio');
-        $t->decimal('precio_u', 10, 4);
+        // Texto y no decimal: sqlite guardaría un decimal como REAL y la prueba del precio
+        // exacto no vería el valor tal como lo entrega MySQL ('26.0640').
+        $t->string('precio_u');
         $t->integer('id_categorias');
     });
     $esquema->create('tb_tip_fpago', function ($t) {
@@ -121,7 +123,8 @@ test('un cliente sin RFC ni contacto se importa igual', function () {
 
     expect($cliente->nombre)->toBe('Sin datos')
         ->and($cliente->rfc)->toBeNull()
-        ->and($cliente->correo)->toBeNull();
+        ->and($cliente->correo)->toBeNull()
+        ->and($cliente->telefono)->toBeNull();
 });
 
 test('los servicios traen su categoria, su precio de cuatro decimales y su clasificacion', function () {
@@ -216,6 +219,7 @@ test('un nombre de cliente repetido en el origen da un hallazgo y se importa una
     DB::connection('remota')->table('tb_clientes')->insert([
         ['nombre' => 'Aeroservicios', 'rfc' => 'AAA010101AAA', 'correo' => 'primero@x.com', 'telefono' => null],
         ['nombre' => 'AEROSERVICIOS', 'rfc' => 'BBB020202BBB', 'correo' => 'segundo@x.com', 'telefono' => null],
+        ['nombre' => 'Aeroservícios', 'rfc' => 'CCC030303CCC', 'correo' => 'tercero@x.com', 'telefono' => null],
         ['nombre' => 'Otro', 'rfc' => null, 'correo' => null, 'telefono' => null],
     ]);
 
@@ -224,19 +228,21 @@ test('un nombre de cliente repetido en el origen da un hallazgo y se importa una
     expect(FactCliente::count())->toBe(2)
         ->and(FactCliente::where('nombre', 'Aeroservicios')->value('rfc'))->toBe('AAA010101AAA')
         ->and($resultado->conteos['clientes'])->toBe(2)
-        ->and($resultado->hallazgos)->toHaveCount(1)
-        ->and($resultado->hallazgos[0])->toContain('AEROSERVICIOS');
+        ->and($resultado->hallazgos)->toHaveCount(2)
+        ->and($resultado->hallazgos[0])->toContain('AEROSERVICIOS')
+        ->and($resultado->hallazgos[1])->toContain('Aeroservícios');
 });
 
 test('un nombre de servicio repetido en el origen da un hallazgo y no se cuenta dos veces', function () {
     DB::connection('remota')->table('tb_servicio')->insert([
         ['id_servicio' => 10, 'servicio' => 'Handling', 'precio_u' => 100, 'id_categorias' => 0],
-        ['id_servicio' => 11, 'servicio' => 'Handling', 'precio_u' => 999, 'id_categorias' => 0],
+        ['id_servicio' => 11, 'servicio' => 'Handlíng', 'precio_u' => 999, 'id_categorias' => 0],
     ]);
 
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
     expect(FactServicio::count())->toBe(1)
+        ->and(FactServicio::first()->nombre)->toBe('Handling')
         ->and((float) FactServicio::first()->precio_unitario)->toBe(100.0)
         ->and($resultado->conteos['servicios'])->toBe(1)
         ->and($resultado->conteos['servicios_sin_categoria'])->toBe(1)
@@ -281,16 +287,30 @@ test('un servicio que apunta a una categoria inexistente queda sin clasificar y 
         ->and($resultado->hallazgos[0])->toContain('42');
 });
 
-test('el precio de un servicio se importa exacto, con sus cuatro decimales', function () {
+/*
+ * Protege el invariante "el precio viaja sin tocarse". Para un decimal(10,4) un
+ * float es exacto, asi que esto no cubre un cobro que hoy pueda salir mal: cubre
+ * que nadie meta un (float) o un round() en el camino. El valor releido del
+ * modelo no sirve para esto (el cast `decimal:4` lo formatea al leer y sqlite
+ * guarda REAL), asi que se captura lo que el importador manda a la base.
+ */
+test('el precio de un servicio viaja al insert como texto exacto, sin pasar por float', function () {
     DB::connection('remota')->table('tb_servicio')->insert([
-        ['id_servicio' => 1, 'servicio' => 'Minimo', 'precio_u' => 0.0001, 'id_categorias' => 0],
-        ['id_servicio' => 2, 'servicio' => 'Cuatro', 'precio_u' => 26.0640, 'id_categorias' => 0],
+        ['id_servicio' => 1, 'servicio' => 'Minimo', 'precio_u' => '0.0001', 'id_categorias' => 0],
+        ['id_servicio' => 2, 'servicio' => 'Cuatro', 'precio_u' => '26.0640', 'id_categorias' => 0],
     ]);
+
+    $bindings = [];
+    DB::listen(function ($consulta) use (&$bindings) {
+        if (str_starts_with($consulta->sql, 'insert into "fact_servicios"')) {
+            $bindings = array_merge($bindings, $consulta->bindings);
+        }
+    });
 
     app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
-    expect((string) FactServicio::where('nombre', 'Minimo')->first()->precio_unitario)->toBe('0.0001')
-        ->and((string) FactServicio::where('nombre', 'Cuatro')->first()->precio_unitario)->toBe('26.0640');
+    expect($bindings)->toContain('0.0001')
+        ->and($bindings)->toContain('26.0640');
 });
 
 test('la frontera de tercero es el id 94: el 93 es propio y el 94 es de tercero', function () {
@@ -324,4 +344,181 @@ test('la simulacion de servicios y categorias tampoco escribe', function () {
         ->and(FactServicio::count())->toBe(0)
         ->and(FactCategoriaServicio::count())->toBe(0)
         ->and(FactProveedor::count())->toBe(0);
+});
+
+/*
+ * Normalizacion de nombres. Dos filas reales del origen vienen sucias: una
+ * categoria con espacio final y un proveedor con U+00A0 (espacio duro) en medio.
+ */
+test('un espacio final en el nombre se recorta y se reporta con su id y los dos valores', function () {
+    DB::connection('remota')->table('tb_categoria_serv')->insert([['id_categorias' => 3, 'categoras' => 'Combustible & Servicios ']]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactCategoriaServicio::pluck('nombre')->all())->toBe(['Combustible & Servicios'])
+        ->and($resultado->hallazgos)->toHaveCount(1)
+        ->and($resultado->hallazgos[0])->toContain('tb_categoria_serv')
+        ->and($resultado->hallazgos[0])->toContain('id 3')
+        ->and($resultado->hallazgos[0])->toContain("'Combustible & Servicios '")
+        ->and($resultado->hallazgos[0])->toContain("'Combustible & Servicios'");
+});
+
+test('un espacio duro U+00A0 en el nombre se vuelve espacio normal y se reporta', function () {
+    DB::connection('remota')->table('tb_proveedor')->insert([
+        ['id_proveedor' => 4, 'proveedor' => "ARTURO\u{00A0}GARDUÑO"],
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactProveedor::pluck('nombre')->all())->toBe(['ARTURO GARDUÑO'])
+        ->and($resultado->hallazgos)->toHaveCount(1)
+        ->and($resultado->hallazgos[0])->toContain('tb_proveedor')
+        ->and($resultado->hallazgos[0])->toContain('id 4')
+        ->and($resultado->hallazgos[0])->toContain('ARTURO GARDUÑO');
+});
+
+test('la normalizacion colapsa corridas de espacios y aplica a clientes, servicios y formas de pago', function () {
+    DB::connection('remota')->table('tb_clientes')->insert([['id_cliente' => 1, 'nombre' => "  Hipotecaria \t  Arbi\u{00A0}\u{00A0}"]]);
+    DB::connection('remota')->table('tb_servicio')->insert([['id_servicio' => 1, 'servicio' => 'Uso  de   hangar ', 'precio_u' => '1.0000', 'id_categorias' => 0]]);
+    DB::connection('remota')->table('tb_tip_fpago')->insert([['tipo_forma' => ' Efectivo  ']]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactCliente::pluck('nombre')->all())->toBe(['Hipotecaria Arbi'])
+        ->and(FactServicio::pluck('nombre')->all())->toBe(['Uso de hangar'])
+        ->and(FactFormaPago::pluck('nombre')->all())->toBe(['Efectivo'])
+        ->and($resultado->hallazgos)->toHaveCount(3);
+});
+
+test('un nombre ya limpio no genera hallazgo de normalizacion', function () {
+    DB::connection('remota')->table('tb_proveedor')->insert([['proveedor' => 'EOLO']]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect($resultado->hallazgos)->toBe([]);
+});
+
+/*
+ * Las columnas `nombre` de estos tres catalogos son unicas con collation
+ * utf8mb4_unicode_ci: en MySQL 'EOLO' y 'Eolo' son la misma fila. En sqlite el
+ * indice unico es binario y insertaria dos, asi que aqui se verifica lo que si
+ * es verificable: el conteo reportado y el hallazgo, no cuantas filas quedaron.
+ */
+test('formas de pago y proveedores con nombre repetido no se cuentan dos veces y se reportan', function () {
+    DB::connection('remota')->table('tb_tip_fpago')->insert([
+        ['tipo_forma' => 'Efectivo'], ['tipo_forma' => 'EFECTIVO'], ['tipo_forma' => 'Tarjeta'],
+    ]);
+    DB::connection('remota')->table('tb_proveedor')->insert([
+        ['proveedor' => 'EOLO'], ['proveedor' => 'Eolo'],
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect($resultado->conteos['formas_pago'])->toBe(2)
+        ->and($resultado->conteos['proveedores'])->toBe(1)
+        ->and($resultado->hallazgos)->toHaveCount(2)
+        ->and(implode(' ', $resultado->hallazgos))->toContain('EFECTIVO')
+        ->and(implode(' ', $resultado->hallazgos))->toContain('Eolo');
+});
+
+test('dos categorias de servicio con el mismo nombre: un solo conteo, hallazgo, y los servicios de la segunda no quedan huerfanos', function () {
+    DB::connection('remota')->table('tb_categoria_serv')->insert([
+        ['id_categorias' => 1, 'categoras' => 'Handling'],
+        ['id_categorias' => 2, 'categoras' => 'HÁNDLING'],
+    ]);
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 1, 'servicio' => 'Uno', 'precio_u' => '1', 'id_categorias' => 1],
+        ['id_servicio' => 2, 'servicio' => 'Dos', 'precio_u' => '1', 'id_categorias' => 2],
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect($resultado->conteos['categorias_servicio'])->toBe(1)
+        ->and($resultado->conteos['servicios_sin_categoria'])->toBe(0)
+        ->and(FactServicio::where('nombre', 'Dos')->value('categoria_servicio_id'))
+        ->toBe(FactServicio::where('nombre', 'Uno')->value('categoria_servicio_id'))
+        ->and($resultado->hallazgos)->toHaveCount(1)
+        ->and($resultado->hallazgos[0])->toContain('HÁNDLING');
+});
+
+/*
+ * Str::ascii('日本') devuelve ''. Sin una salida para eso, todos los nombres no
+ * latinos compartirian la llave '' y el segundo se omitiria como falso duplicado.
+ */
+test('dos nombres enteramente no latinos y distintos se importan los dos', function () {
+    DB::connection('remota')->table('tb_clientes')->insert([
+        ['nombre' => '日本'], ['nombre' => '中国'],
+    ]);
+    DB::connection('remota')->table('tb_proveedor')->insert([
+        ['proveedor' => '日本'], ['proveedor' => '中国'],
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect($resultado->conteos['clientes'])->toBe(2)
+        ->and($resultado->conteos['proveedores'])->toBe(2)
+        ->and(FactCliente::count())->toBe(2)
+        ->and($resultado->hallazgos)->toBe([]);
+});
+
+test('correrlo dos veces no cambia categoria de los servicios ni toca las filas de firstOrCreate', function () {
+    DB::connection('remota')->table('tb_categoria_serv')->insert([['id_categorias' => 4, 'categoras' => 'Handling']]);
+    DB::connection('remota')->table('tb_servicio')->insert([['id_servicio' => 5, 'servicio' => 'Aterrizaje', 'precio_u' => '100', 'id_categorias' => 4]]);
+    DB::connection('remota')->table('tb_tip_fpago')->insert([['tipo_forma' => 'Efectivo']]);
+    DB::connection('remota')->table('tb_proveedor')->insert([['proveedor' => 'EOLO']]);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    $categoriaId = FactServicio::first()->categoria_servicio_id;
+    $marcas = [
+        FactCategoriaServicio::first()->updated_at->toIso8601String(),
+        FactFormaPago::first()->updated_at->toIso8601String(),
+        FactProveedor::first()->updated_at->toIso8601String(),
+    ];
+
+    $this->travel(2)->hours();
+
+    $segunda = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactServicio::first()->categoria_servicio_id)->toBe($categoriaId)
+        ->and(FactCategoriaServicio::count())->toBe(1)
+        ->and(FactProveedor::count())->toBe(1)
+        ->and([
+            FactCategoriaServicio::first()->updated_at->toIso8601String(),
+            FactFormaPago::first()->updated_at->toIso8601String(),
+            FactProveedor::first()->updated_at->toIso8601String(),
+        ])->toBe($marcas)
+        // Los conteos son filas del origen procesadas, no filas escritas.
+        ->and($segunda->conteos['proveedores'])->toBe(1);
+});
+
+test('categorias, formas de pago y proveedores con nombre vacio se omiten y se reportan', function () {
+    DB::connection('remota')->table('tb_categoria_serv')->insert([
+        ['id_categorias' => 1, 'categoras' => ' '], ['id_categorias' => 2, 'categoras' => 'Hangar'],
+    ]);
+    DB::connection('remota')->table('tb_tip_fpago')->insert([['tipo_forma' => ''], ['tipo_forma' => 'Efectivo']]);
+    DB::connection('remota')->table('tb_proveedor')->insert([['proveedor' => "\u{00A0}"], ['proveedor' => 'EOLO']]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect($resultado->conteos['categorias_servicio'])->toBe(1)
+        ->and($resultado->conteos['formas_pago'])->toBe(1)
+        ->and($resultado->conteos['proveedores'])->toBe(1)
+        ->and($resultado->hallazgos)->toHaveCount(3)
+        ->and(implode(' ', $resultado->hallazgos))->toContain('tb_categoria_serv')
+        ->and(implode(' ', $resultado->hallazgos))->toContain('tb_tip_fpago')
+        ->and(implode(' ', $resultado->hallazgos))->toContain('tb_proveedor');
+});
+
+test('un servicio cuya categoria existe pero no tiene nombre lo dice asi, no "no existe"', function () {
+    DB::connection('remota')->table('tb_categoria_serv')->insert([['id_categorias' => 9, 'categoras' => '']]);
+    DB::connection('remota')->table('tb_servicio')->insert([['id_servicio' => 1, 'servicio' => 'Suelto', 'precio_u' => '1', 'id_categorias' => 9]]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    $servicio = collect($resultado->hallazgos)->first(fn ($h) => str_contains($h, "'Suelto'"));
+
+    expect($servicio)->toContain('sin nombre')
+        ->and($servicio)->not->toContain('no existe')
+        ->and(FactServicio::first()->categoria_servicio_id)->toBeNull();
 });
