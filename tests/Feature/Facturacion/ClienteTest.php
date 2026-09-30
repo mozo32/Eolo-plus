@@ -19,7 +19,9 @@ test('un cliente guarda sus datos de contacto', function () {
 
     expect($guardado->status)->toBe('A')
         ->and($guardado->nombre)->toBe('Aerolíneas de Prueba')
-        ->and($guardado->rfc)->toBe('AER970627QE9');
+        ->and($guardado->rfc)->toBe('AER970627QE9')
+        ->and($guardado->correo)->toBe('facturacion@ejemplo.com')
+        ->and($guardado->telefono)->toBe('7221234567');
 });
 
 test('el RFC puede repetirse entre clientes distintos', function () {
@@ -31,6 +33,15 @@ test('el RFC puede repetirse entre clientes distintos', function () {
     expect(FactCliente::where('rfc', 'XAXX010101000')->count())->toBe(3);
 });
 
+test('el nombre puede repetirse entre clientes distintos', function () {
+    // Hoy no hay nombres repetidos en los datos reales, pero la tabla no debe
+    // impedirlos: un duplicado no puede tumbar el importador en produccion.
+    FactCliente::create(['nombre' => 'Cliente Repetido', 'rfc' => 'AAA010101AAA']);
+    FactCliente::create(['nombre' => 'Cliente Repetido', 'rfc' => 'BBB020202BBB']);
+
+    expect(FactCliente::where('nombre', 'Cliente Repetido')->count())->toBe(2);
+});
+
 test('un cliente puede no tener RFC ni contacto', function () {
     $cliente = FactCliente::create(['nombre' => 'Cliente sin datos']);
 
@@ -39,6 +50,14 @@ test('un cliente puede no tener RFC ni contacto', function () {
         ->and($cliente->fresh()->telefono)->toBeNull();
 });
 
+/*
+ * LIMITACION: las pruebas corren en sqlite en memoria, que no aplica la longitud
+ * de varchar(N) ni la conserva en el esquema (Schema::getColumns y sqlite_master
+ * solo ven "varchar"). Por eso esta prueba NO garantiza que la columna `rfc`
+ * mida 20: solo fija que el modelo no trunca ni transforma un RFC de 15
+ * caracteres. La garantia de la longitud es `string('rfc', 20)` en la migracion
+ * (MySQL, que si la aplica); si se toca, verificarlo a mano contra MySQL.
+ */
 test('el RFC admite los 15 caracteres que se usan en los datos reales', function () {
     $cliente = FactCliente::create(['nombre' => 'RFC largo', 'rfc' => 'ABCD123456EFGHI']);
 
