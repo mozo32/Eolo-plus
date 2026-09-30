@@ -1,7 +1,7 @@
 import { apiFormasPago } from '@/stores/apiFacturacionCatalogos';
 import { type BreadcrumbItem } from '@/types';
 import PantallaCatalogo from './components/PantallaCatalogo';
-import type { TextosCatalogo } from './components/useCatalogo';
+import type { TextosCatalogo } from './components/useAccionesCatalogo';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Formas de pago' }];
 

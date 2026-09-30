@@ -50,7 +50,7 @@ export default function ModalServicio({ servicio, categorias, onCerrar, onGuarda
         esDeTercero: servicio?.es_de_tercero ?? false,
         // Un servicio nuevo no es de tercero: su margen es 0, y se muestra así en vez de dejar el campo vacío.
         margen: servicio ? sinCerosFinales(servicio.margen) : '0',
-        ajuste: (servicio?.ajuste_precio ?? 'ninguno') as AjustePrecio,
+        ajuste: servicio?.ajuste_precio ?? 'ninguno',
     };
 
     const [categoria, setCategoria] = useState(inicial.categoria);

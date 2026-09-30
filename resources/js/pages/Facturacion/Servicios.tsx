@@ -10,7 +10,8 @@ import { AJUSTES_PRECIO, formatearMonto } from './components/formato';
 import ModalCategoriasServicio from './components/ModalCategoriasServicio';
 import ModalServicio from './components/ModalServicio';
 import { AccionesFila, FilasEstado, InsigniaEstado, SelectorEstado } from './components/PiezasCatalogo';
-import { useCatalogo, type TextosCatalogo } from './components/useCatalogo';
+import { type TextosCatalogo } from './components/useAccionesCatalogo';
+import { useCatalogo } from './components/useCatalogo';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Servicios' }];
 

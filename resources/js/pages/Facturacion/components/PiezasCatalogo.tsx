@@ -1,6 +1,7 @@
+import type { FiltroEstado } from '@/stores/apiFacturacionCatalogos';
 import { Ban, Pencil, RotateCcw } from 'lucide-react';
 import { BADGE_ACTIVO, BADGE_BAJA, FILTRO } from './estilos';
-import type { FiltroEstado } from './useCatalogo';
+
 
 /** "Activa" / "De baja" de la columna Estado. */
 export function InsigniaEstado({ baja }: { baja: boolean }) {

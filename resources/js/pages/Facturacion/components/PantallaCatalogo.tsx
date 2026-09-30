@@ -8,7 +8,8 @@ import { BOTON_PRIMARIO, FILTRO, TD, TH } from './estilos';
 import { formatearMonto } from './formato';
 import ModalCatalogo, { NOMBRE_MAX, type CampoCatalogo, type RegistroCatalogo } from './ModalCatalogo';
 import { AccionesFila, FilasEstado, InsigniaEstado, SelectorEstado } from './PiezasCatalogo';
-import { useCatalogo, type TextosCatalogo } from './useCatalogo';
+import { type TextosCatalogo } from './useAccionesCatalogo';
+import { useCatalogo } from './useCatalogo';
 
 /** Lo que dicen los avisos de baja y reactivación de los catálogos que se asignan a matrículas. */
 const TEXTOS_MATRICULA: TextosCatalogo = {

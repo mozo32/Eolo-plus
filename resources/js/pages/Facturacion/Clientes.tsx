@@ -1,15 +1,15 @@
 import AppLayout from '@/layouts/app-layout';
-import { apiClientes, type Cliente } from '@/stores/apiFacturacionCatalogos';
+import { FILTROS_CLIENTES_VACIOS, apiClientes, obtenerClientesApi, type Cliente, type FiltrosClientes } from '@/stores/apiFacturacionCatalogos';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { Plus } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import CabeceraPantalla from './components/CabeceraPantalla';
 import { BOTON_PRIMARIO, FILTRO, TD, TH } from './components/estilos';
 import ModalCliente from './components/ModalCliente';
 import PiePaginacion from './components/PiePaginacion';
 import { AccionesFila, FilasEstado, InsigniaEstado, SelectorEstado } from './components/PiezasCatalogo';
-import { useCatalogo, type TextosCatalogo } from './components/useCatalogo';
-import { usePaginaLocal } from './components/usePaginaLocal';
+import { useAccionesCatalogo, type TextosCatalogo } from './components/useAccionesCatalogo';
+import { useListaPaginada } from './components/useListaPaginada';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Clientes' }];
 
@@ -18,24 +18,20 @@ const textos: TextosCatalogo = {
     reactivar: 'Volverá a poder elegirse en prefacturas nuevas.',
 };
 
-/** El buscador encuentra por nombre y por RFC. */
-const buscarEn = (cliente: Cliente): string[] => [cliente.nombre, cliente.rfc ?? ''];
-
 const SIN_DATO = <span className="text-[10px] font-black uppercase text-slate-300">—</span>;
 
 /**
- * Clientes de facturación. El listado llega completo del servidor (unos cientos
- * de filas, sin filtros ni paginación propios), así que el buscador y la
- * paginación se resuelven aquí; la carga, el filtro de estado y la baja y
- * reactivación son los de `useCatalogo`. El RFC repetido no es un error.
+ * Clientes de facturación. Es el catálogo que crece sin techo, así que el
+ * servidor busca (por nombre y por RFC), filtra por estado y pagina:
+ * `useListaPaginada` pone la lista, con la espera de la búsqueda, el descarte
+ * de respuestas viejas y la corrección de página; `useAccionesCatalogo` pone el
+ * alta, la edición, la baja y la reactivación. El RFC repetido no es un error.
  */
 export default function Clientes() {
-    const { registros, visibles, cargando, error, recargar, estado, setEstado, busqueda, setBusqueda, modal, setModal, accionandoId, guardar, darDeBaja, reactivar } = useCatalogo(apiClientes, {
-        textos,
-        buscarEn,
-    });
+    const lista = useListaPaginada<Cliente, FiltrosClientes>({ obtener: obtenerClientesApi, vacios: FILTROS_CLIENTES_VACIOS, mensajeError: 'No se pudieron cargar los clientes.' });
+    const { registros, total, pagina, totalPaginas, porPagina, cargando, error, filtros, busqueda, setBusqueda, setFiltros, limpiarFiltros, hayFiltros, cambiarPagina, cambiarPorPagina, recargar } = lista;
 
-    const paginacion = usePaginaLocal(visibles, `${estado}|${busqueda}`);
+    const { modal, setModal, accionandoId, guardar, darDeBaja, reactivar } = useAccionesCatalogo(apiClientes, { textos, alTerminar: recargar });
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -53,7 +49,7 @@ export default function Clientes() {
                     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div className="px-6 py-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
                             <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                                {visibles.length} {visibles.length === 1 ? 'cliente' : 'clientes'}
+                                {total} {total === 1 ? 'cliente' : 'clientes'}
                             </h3>
 
                             <div className="flex gap-2">
@@ -65,7 +61,13 @@ export default function Clientes() {
                                     className={`${FILTRO} md:w-64`}
                                     aria-label="Buscar por nombre o RFC"
                                 />
-                                <SelectorEstado valor={estado} onChange={setEstado} />
+                                <SelectorEstado valor={filtros.estado} onChange={estado => setFiltros({ estado })} />
+
+                                {hayFiltros && (
+                                    <button type="button" onClick={limpiarFiltros} className="p-1.5 text-slate-400 hover:text-red-500 transition-colors" title="Limpiar filtros">
+                                        <X size={14} />
+                                    </button>
+                                )}
                             </div>
                         </div>
 
@@ -87,14 +89,14 @@ export default function Clientes() {
                                         columnas={6}
                                         cargando={cargando}
                                         error={error}
-                                        vacio={visibles.length === 0}
-                                        textoVacio={registros.length === 0 ? 'Aún no hay clientes' : 'No se encontraron clientes'}
+                                        vacio={registros.length === 0}
+                                        textoVacio={hayFiltros ? 'No se encontraron clientes' : 'Aún no hay clientes'}
                                         onReintentar={() => void recargar()}
                                     />
 
                                     {!cargando &&
                                         !error &&
-                                        paginacion.enPagina.map(c => {
+                                        registros.map(c => {
                                             const baja = c.status === 'N';
                                             const tono = baja ? 'text-slate-400' : 'text-slate-700';
 
@@ -127,14 +129,7 @@ export default function Clientes() {
                         </div>
                     </div>
 
-                    <PiePaginacion
-                        pagina={paginacion.pagina}
-                        totalPaginas={paginacion.totalPaginas}
-                        total={paginacion.total}
-                        porPagina={paginacion.porPagina}
-                        onPagina={paginacion.cambiarPagina}
-                        onPorPagina={paginacion.cambiarPorPagina}
-                    />
+                    <PiePaginacion pagina={pagina} totalPaginas={totalPaginas} total={total} porPagina={porPagina} onPagina={cambiarPagina} onPorPagina={cambiarPorPagina} />
                 </div>
             </div>
 

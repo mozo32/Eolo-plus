@@ -62,6 +62,9 @@ function escritura(method: 'POST' | 'PUT' | 'PATCH', cuerpo?: unknown): RequestI
 /** 'A' activo, 'N' dado de baja. */
 export type StatusCatalogo = 'A' | 'N';
 
+/** Filtro de estado de una pantalla de catálogo: las activas, las de baja o todas. */
+export type FiltroEstado = 'activas' | 'baja' | 'todas';
+
 export type CategoriaAeronave = {
     id: number;
     nombre: string;
@@ -186,9 +189,8 @@ export type DatosServicio = {
     ajuste_precio: AjustePrecio;
 };
 
-export interface ApiCatalogo<T, D = DatosCatalogo> {
-    /** Todas las filas, activas y de baja: el filtro de baja se resuelve en pantalla. */
-    listar: () => Promise<T[]>;
+/** Lo que se puede hacer con un registro de un catálogo, sin importar cómo se lista. */
+export interface ApiEscritura<T, D = DatosCatalogo> {
     crear: (datos: D) => Promise<{ message: string; registro: T }>;
     actualizar: (id: number, datos: D) => Promise<{ message: string; registro: T }>;
     /** 409 (ErrorApi.codigo ya_desactivad*) si ya estaba de baja. */
@@ -197,14 +199,15 @@ export interface ApiCatalogo<T, D = DatosCatalogo> {
     reactivar: (id: number) => Promise<string>;
 }
 
-function crearApiCatalogo<T, D = DatosCatalogo>(ruta: string, claveLista: string, claveRegistro: string): ApiCatalogo<T, D> {
+export interface ApiCatalogo<T, D = DatosCatalogo> extends ApiEscritura<T, D> {
+    /** Todas las filas, activas y de baja: el filtro de baja se resuelve en pantalla. */
+    listar: () => Promise<T[]>;
+}
+
+function crearApiEscritura<T, D>(ruta: string, claveRegistro: string): ApiEscritura<T, D> {
     const url = `${BASE}/${ruta}`;
 
     return {
-        async listar() {
-            const datos = await leer<Record<string, T[]>>(await fetch(url, LECTURA));
-            return datos[claveLista];
-        },
         async crear(datos) {
             const r = await leer<Record<string, unknown> & { message: string }>(await fetch(url, escritura('POST', datos)));
             return { message: r.message, registro: r[claveRegistro] as T };
@@ -222,16 +225,44 @@ function crearApiCatalogo<T, D = DatosCatalogo>(ruta: string, claveLista: string
     };
 }
 
+function crearApiCatalogo<T, D = DatosCatalogo>(ruta: string, claveLista: string, claveRegistro: string): ApiCatalogo<T, D> {
+    return {
+        ...crearApiEscritura<T, D>(ruta, claveRegistro),
+        async listar() {
+            const datos = await leer<Record<string, T[]>>(await fetch(`${BASE}/${ruta}`, LECTURA));
+            return datos[claveLista];
+        },
+    };
+}
+
 export const apiCategoriasAeronave = crearApiCatalogo<CategoriaAeronave>('categorias-aeronave', 'categorias', 'categoria');
 
 export const apiTiposMotor = crearApiCatalogo<TipoMotor>('tipos-motor', 'tipos_motor', 'tipo_motor');
 
 // ---------------------------------------------------------------------------
 // Catálogos de la prefacturación (bloque 1b): misma forma, distinto recurso.
-// Los listados traen todas las filas (activas y de baja) y se filtran en pantalla.
+// Los listados traen todas las filas (activas y de baja) y se filtran en pantalla, salvo clientes, que pagina el servidor.
 // ---------------------------------------------------------------------------
 
-export const apiClientes = crearApiCatalogo<Cliente, DatosCliente>('clientes', 'clientes', 'cliente');
+/** Clientes no tiene `listar`: su listado es paginado y filtrado por el servidor (`obtenerClientesApi`). */
+export const apiClientes = crearApiEscritura<Cliente, DatosCliente>('clientes', 'cliente');
+
+export type FiltrosClientes = {
+    /** Búsqueda por nombre o RFC. */
+    q: string;
+    estado: FiltroEstado;
+};
+
+/** La pantalla abre con los clientes activos; los de baja se alcanzan con el filtro de estado para reactivarlos. */
+export const FILTROS_CLIENTES_VACIOS: FiltrosClientes = { q: '', estado: 'activas' };
+
+export async function obtenerClientesApi(filtros: FiltrosClientes, pagina: number, porPagina: number): Promise<Pagina<Cliente>> {
+    const params = new URLSearchParams({ page: String(pagina), per_page: String(porPagina), estado: filtros.estado });
+
+    if (filtros.q.trim() !== '') params.set('q', filtros.q.trim());
+
+    return leer(await fetch(`${BASE}/clientes?${params.toString()}`, LECTURA));
+}
 
 export const apiServicios = crearApiCatalogo<Servicio, DatosServicio>('servicios', 'servicios', 'servicio');
 
