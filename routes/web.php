@@ -127,6 +127,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('facturacion/categorias-aeronave', fn () => Inertia::render('Facturacion/CategoriasAeronave'))->name('facturacionCategoriasAeronave');
     Route::get('facturacion/tipos-motor', fn () => Inertia::render('Facturacion/TiposMotor'))->name('facturacionTiposMotor');
     Route::get('facturacion/combustible', fn () => Inertia::render('Facturacion/Combustible'))->name('facturacionCombustible');
+    Route::get('facturacion/clientes', fn () => Inertia::render('Facturacion/Clientes'))->name('facturacionClientes');
+    Route::get('facturacion/servicios', fn () => Inertia::render('Facturacion/Servicios'))->name('facturacionServicios');
+    Route::get('facturacion/formas-pago', fn () => Inertia::render('Facturacion/FormasPago'))->name('facturacionFormasPago');
+    Route::get('facturacion/proveedores', fn () => Inertia::render('Facturacion/Proveedores'))->name('facturacionProveedores');
 });
 
 require __DIR__.'/settings.php';

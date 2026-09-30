@@ -36,7 +36,12 @@ use App\Http\Controllers\Api\RelacionPlantaController;
 use App\Http\Controllers\Api\PrestamoChalecoController;
 use App\Http\Controllers\Api\Facturacion\AeronaveFacturacionController;
 use App\Http\Controllers\Api\Facturacion\CategoriaAeronaveController;
+use App\Http\Controllers\Api\Facturacion\CategoriaServicioController;
+use App\Http\Controllers\Api\Facturacion\ClienteController;
+use App\Http\Controllers\Api\Facturacion\FormaPagoController;
 use App\Http\Controllers\Api\Facturacion\PrecioCombustibleController;
+use App\Http\Controllers\Api\Facturacion\ProveedorController;
+use App\Http\Controllers\Api\Facturacion\ServicioController;
 use App\Http\Controllers\Api\Facturacion\TipoMotorController;
 
 Route::post('/despacho', [DespachoController::class, 'store']);
@@ -348,7 +353,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('PrestamoChalecos')->group(fu
 
 /*
 |--------------------------------------------------------------------------
-| Facturación — catálogos de matrícula (bloque 1a)
+| Facturación — catálogos de matrícula (1a) y de prefactura (1b)
 |--------------------------------------------------------------------------
 | Consultar es abierto a cualquier usuario autenticado. Escribir exige el
 | subdepartamento de esa pantalla (admin siempre pasa).
@@ -359,6 +364,11 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(functio
     Route::get('/precios-combustible', [PrecioCombustibleController::class, 'index']);
     Route::get('/precios-combustible/vigente', [PrecioCombustibleController::class, 'vigente']);
     Route::get('/aeronaves', [AeronaveFacturacionController::class, 'index']);
+    Route::get('/clientes', [ClienteController::class, 'index']);
+    Route::get('/servicios', [ServicioController::class, 'index']);
+    Route::get('/categorias-servicio', [CategoriaServicioController::class, 'index']);
+    Route::get('/formas-pago', [FormaPagoController::class, 'index']);
+    Route::get('/proveedores', [ProveedorController::class, 'index']);
 
     Route::middleware('subdep:factCategoriasAeronave')->group(function () {
         Route::post('/categorias-aeronave', [CategoriaAeronaveController::class, 'store']);
@@ -380,5 +390,39 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(functio
 
     Route::middleware('subdep:factAeronaves')->group(function () {
         Route::put('/aeronaves/{id}', [AeronaveFacturacionController::class, 'update'])->whereNumber('id');
+    });
+
+    Route::middleware('subdep:factClientes')->group(function () {
+        Route::post('/clientes', [ClienteController::class, 'store']);
+        Route::put('/clientes/{id}', [ClienteController::class, 'update'])->whereNumber('id');
+        Route::patch('/clientes/{id}/desactivar', [ClienteController::class, 'desactivar'])->whereNumber('id');
+        Route::patch('/clientes/{id}/reactivar', [ClienteController::class, 'reactivar'])->whereNumber('id');
+    });
+
+    // Las categorías de servicio van bajo factServicios a propósito: son una
+    // clasificación de los servicios y se administran desde la misma pantalla.
+    Route::middleware('subdep:factServicios')->group(function () {
+        Route::post('/servicios', [ServicioController::class, 'store']);
+        Route::put('/servicios/{id}', [ServicioController::class, 'update'])->whereNumber('id');
+        Route::patch('/servicios/{id}/desactivar', [ServicioController::class, 'desactivar'])->whereNumber('id');
+        Route::patch('/servicios/{id}/reactivar', [ServicioController::class, 'reactivar'])->whereNumber('id');
+        Route::post('/categorias-servicio', [CategoriaServicioController::class, 'store']);
+        Route::put('/categorias-servicio/{id}', [CategoriaServicioController::class, 'update'])->whereNumber('id');
+        Route::patch('/categorias-servicio/{id}/desactivar', [CategoriaServicioController::class, 'desactivar'])->whereNumber('id');
+        Route::patch('/categorias-servicio/{id}/reactivar', [CategoriaServicioController::class, 'reactivar'])->whereNumber('id');
+    });
+
+    Route::middleware('subdep:factFormasPago')->group(function () {
+        Route::post('/formas-pago', [FormaPagoController::class, 'store']);
+        Route::put('/formas-pago/{id}', [FormaPagoController::class, 'update'])->whereNumber('id');
+        Route::patch('/formas-pago/{id}/desactivar', [FormaPagoController::class, 'desactivar'])->whereNumber('id');
+        Route::patch('/formas-pago/{id}/reactivar', [FormaPagoController::class, 'reactivar'])->whereNumber('id');
+    });
+
+    Route::middleware('subdep:factProveedores')->group(function () {
+        Route::post('/proveedores', [ProveedorController::class, 'store']);
+        Route::put('/proveedores/{id}', [ProveedorController::class, 'update'])->whereNumber('id');
+        Route::patch('/proveedores/{id}/desactivar', [ProveedorController::class, 'desactivar'])->whereNumber('id');
+        Route::patch('/proveedores/{id}/reactivar', [ProveedorController::class, 'reactivar'])->whereNumber('id');
     });
 });
