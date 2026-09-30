@@ -1673,6 +1673,12 @@ git commit -m "Menu de los catalogos 1b y sincronizacion del precio de combustib
 
 ## Orden de despliegue
 
+> **Esta sección está desactualizada.** La guía vigente es
+> `docs/superpowers/specs/2026-09-30-facturacion-1b-despliegue-y-pendientes.md`. Lo que
+> dice aquí de que el bloque "no toca nada existente" es falso: refactoriza componentes
+> compartidos del 1a, y `--forzar` pisa tarifas y precios editados a mano. No desplegar
+> siguiendo el texto de abajo.
+
 Este bloque no toca nada existente ni tiene migraciones peligrosas: todas crean tablas nuevas.
 
 ```bash
