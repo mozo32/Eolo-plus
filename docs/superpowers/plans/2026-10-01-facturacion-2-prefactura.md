@@ -2003,7 +2003,43 @@ class StoreRenglonRequest extends FormRequest
 }
 ```
 
-- [ ] **Step 4: Write the shared guard as a trait**
+- [ ] **Step 4: Give `RenglonDePrefacturaCerradaException` its own `render()`**
+
+Esa excepcion llega desde TRES sitios distintos: la guarda del modelo
+`FactPrefacturaRenglon` (al crear o borrar un renglon de una cerrada) y las dos
+operaciones de `CargosEstancia` (recalcular estancia y agregar el paquete). Sin
+mapearla, los cuatro endpoints que escriben renglones devolverian **500** cuando
+la prefactura este cerrada, en lugar de 409.
+
+El trait `RechazaPrefacturaCerrada` atrapa el caso comun antes de llamar al
+servicio, pero queda una carrera: entre su comprobacion y el candado del servicio,
+otra sesion puede cerrar. Ahi es donde la excepcion escapa.
+
+Como su significado HTTP es siempre el mismo, en lugar de repetir cuatro `catch`
+se le da a la excepcion su propio `render()`, que es lo idiomatico en Laravel:
+
+```php
+    /**
+     * Siempre significa lo mismo para un cliente HTTP: la prefactura esta cerrada y
+     * no se puede tocar. Se mapea aqui, en un solo lugar, porque esta excepcion la
+     * lanzan la guarda del modelo y las dos operaciones de CargosEstancia.
+     */
+    public function render(): \Illuminate\Http\JsonResponse
+    {
+        return response()->json([
+            'message' => $this->getMessage(),
+            'codigo' => 'ya_cerrada',
+        ], 409);
+    }
+```
+
+Con pruebas: que los cuatro endpoints de escritura de renglones devuelvan **409** y
+`codigo: 'ya_cerrada'` cuando la prefactura este cerrada, llegando por la excepcion
+y no solo por el trait. Para forzar ese camino, cierra la prefactura **despues** de
+que el trait haya comprobado — por ejemplo con `DB::listen`, como ya se hace en la
+prueba del sello inconsistente de la Task 4.
+
+- [ ] **Step 5: Write the shared guard as a trait**
 
 Los dos controladores necesitan rechazar cualquier escritura sobre una prefactura
 cerrada. El cuerpo es el mismo, así que va una vez:
@@ -2029,7 +2065,7 @@ Los dos controladores lo usan con `use RechazaPrefacturaCerrada;` y **ninguno
 declara el método**. En el código de los controladores que sigue, donde aparece
 `private function rechazarSiCerrada(...)`, bórralo: está aquí.
 
-- [ ] **Step 5: Write the controllers**
+- [ ] **Step 6: Write the controllers**
 
 `PrefacturaController.php` — lista, ficha, alta, edición y cierre. La guarda de "cerrada no se edita" es un método privado que los dos controladores usan:
 
@@ -2046,6 +2082,8 @@ use App\Models\FactPrefactura;
 use App\Services\CierrePrefactura;
 use App\Services\PrefacturaIncompletaException;
 use App\Services\PrefacturaYaCerradaException;
+use App\Services\RenglonDePrefacturaCerradaException;
+use App\Services\SelloInconsistenteException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -2157,10 +2195,18 @@ class PrefacturaController extends Controller
 
         try {
             $cerrada = $cierre->cerrar($prefactura, $request->user()->id);
-        } catch (PrefacturaYaCerradaException $e) {
+        } catch (PrefacturaYaCerradaException|RenglonDePrefacturaCerradaException $e) {
             return response()->json(['message' => $e->getMessage(), 'codigo' => 'ya_cerrada'], 409);
         } catch (PrefacturaIncompletaException $e) {
             return response()->json(['message' => $e->getMessage(), 'codigo' => 'incompleta'], 422);
+        } catch (SelloInconsistenteException $e) {
+            // El cierre se aborto porque el sello no coincidia con la derivacion, casi
+            // siempre porque otra sesion toco los renglones. Nada quedo escrito y el folio
+            // no se consumio, asi que reintentar es seguro.
+            return response()->json([
+                'message' => 'El cierre se cancelo porque los totales cambiaron mientras se cerraba. Nada se guardo; vuelve a intentarlo.',
+                'codigo' => 'sello_inconsistente',
+            ], 409);
         }
 
         return response()->json([
@@ -2394,7 +2440,7 @@ class PrefacturaRenglonController extends Controller
 }
 ```
 
-- [ ] **Step 6: Register the routes**
+- [ ] **Step 7: Register the routes**
 
 En `routes/api.php`, dentro del grupo `prefix('facturacion')` que ya existe, las lecturas:
 
@@ -2425,21 +2471,21 @@ En `routes/web.php`, junto a las otras de Facturación:
     Route::get('facturacion/prefacturas/{id}', fn ($id) => Inertia::render('Facturacion/EditorPrefactura', ['id' => (int) $id]))->whereNumber('id')->name('facturacionEditorPrefactura');
 ```
 
-- [ ] **Step 7: Add the subdepartamento to the seeder**
+- [ ] **Step 8: Add the subdepartamento to the seeder**
 
 En `database/seeders/FacturacionSubdepartamentosSeeder.php`, agregar `'factPrefacturas'` al arreglo.
 
-- [ ] **Step 8: Run the tests**
+- [ ] **Step 9: Run the tests**
 
 Run: `php artisan test tests/Feature/Facturacion/EndpointsPrefacturaTest.php`
 Expected: PASS, 15 pruebas.
 
-- [ ] **Step 9: Run the full suite**
+- [ ] **Step 10: Run the full suite**
 
 Run: `php artisan test`
 Expected: PASS.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add app/Http/Controllers/Api/Facturacion app/Http/Requests/Facturacion routes database/seeders tests/Feature/Facturacion/EndpointsPrefacturaTest.php
