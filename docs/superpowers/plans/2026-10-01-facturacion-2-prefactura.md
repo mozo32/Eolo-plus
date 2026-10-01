@@ -1278,14 +1278,22 @@ class CierrePrefactura
         }
 
         return DB::transaction(function () use ($prefactura, $userId) {
+            // CANDADO antes de leer los renglones. Sin él, un renglón que otra sesión
+            // agregue durante el cierre queda fuera del sello: el documento se emite
+            // cobrando menos de lo que tiene. `discrepanciasDelSello()` lo delataría
+            // después, pero el folio ya se consumió.
+            $prefactura = FactPrefactura::query()->whereKey($prefactura->id)->lockForUpdate()->firstOrFail();
+
             $folio = $this->siguienteFolio();
 
+            // Se usan los métodos del modelo, NO una copia de la fórmula: el redondeo
+            // del IVA ya vive en `FactPrefactura::iva()` y duplicarlo aquí es una
+            // segunda implementación que puede divergir. Se leen ANTES de cambiar el
+            // estado, porque los totales deciden por `estaCerrada()`.
             $subtotal = $prefactura->subtotal();
             $tasa = $prefactura->ivaTasa();
-            // Redondea igual que `FactPrefactura::iva()`: medio centavo antes de truncar.
-            // `bcmul(..., 2)` truncaría y el sistema viejo redondea.
-            $iva = bcadd(bcmul($subtotal, $tasa, 6), '0.005', 2);
-            $total = bcadd($subtotal, $iva, 2);
+            $iva = $prefactura->iva();
+            $total = $prefactura->total();
 
             // Atómico: si otra sesión la cerró entre la comprobación y aquí,
             // esto afecta cero filas y nadie consume un folio de más.
