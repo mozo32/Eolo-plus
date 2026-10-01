@@ -283,3 +283,31 @@ test('IVA y total no cuentan dos veces a las prefacturas sin renglones o con sub
         ->expectsOutputToContain('Total idénticas: 1')
         ->assertExitCode(0);
 });
+
+test('el comando y el modelo calculan el IVA con la misma funcion, en los casos que distinguen redondear de truncar', function () {
+    // 26.06 → 4.1696 (redondeado 4.17, truncado 4.16); 1234.56 → 197.5296
+    // (197.53 contra 197.52); 0.05 → 0.008 (0.01 contra 0.00).
+    $casos = [['26.06', '4.17'], ['1234.56', '197.53'], ['0.05', '0.01']];
+
+    foreach ($casos as $i => [$subtotal, $iva]) {
+        // El modelo: una prefactura con ese subtotal derivado de su renglón.
+        $p = prefacturaBorrador();
+        renglonDe($p, (float) $subtotal, 1);
+        expect($p->fresh()->iva())->toBe($iva);
+
+        // La función compartida, con la tasa por omisión.
+        expect(App\Models\FactPrefactura::calcularIva($subtotal, '0.16'))->toBe($iva);
+
+        // El comando, con el mismo subtotal guardado en el histórico: el IVA
+        // guardado es el correcto, así que sale exacto al centavo; si el comando
+        // usara otra fórmula (truncar), saldría como no exacto.
+        $folio = $i + 1;
+        legacyPref($folio, (float) $subtotal, (float) $iva, (float) bcadd($subtotal, $iva, 2));
+        legacyVenta($folio, (float) $subtotal, 1, (float) $subtotal);
+    }
+
+    $this->artisan('facturacion:comparar-prefacturas')
+        ->expectsOutputToContain('IVA idénticas: 3')
+        ->expectsOutputToContain('  de ellas, exactas al centavo: 3')
+        ->assertExitCode(0);
+});

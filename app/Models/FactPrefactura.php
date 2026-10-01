@@ -208,11 +208,26 @@ class FactPrefactura extends Model
     }
 
     /**
+     * Delega en `calcularIva()`, igual que `FactServicio::importe()` delega en
+     * `ImporteServicio::calcular()`: la fórmula vive en un solo lugar.
+     */
+    private function ivaDerivado(string $subtotal, string $tasa): string
+    {
+        return self::calcularIva($subtotal, $tasa);
+    }
+
+    /**
+     * La fórmula del IVA, en un solo lugar. Pública y estática para que quien
+     * necesite el mismo número sin tener una prefactura —el comando
+     * `facturacion:comparar-prefacturas`, que la aplica al subtotal GUARDADO del
+     * histórico— llame a esta y no escriba otra copia: si hubiera dos, la red que
+     * existe para detectar una divergencia podría desalinearse de lo que verifica.
+     *
      * Medio centavo antes de truncar, en aritmética de cadenas: redondea hacia
      * arriba en el medio sin pasar por float. `bcmul` a escala 6 es exacto
      * (subtotal de 2 decimales por tasa de 4).
      */
-    private function ivaDerivado(string $subtotal, string $tasa): string
+    public static function calcularIva(string $subtotal, string $tasa): string
     {
         return bcadd(bcmul($subtotal, $tasa, 6), '0.005', 2);
     }

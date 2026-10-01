@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\FactPrefactura;
 use App\Support\ImporteServicio;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -70,8 +71,9 @@ class CompararPrefacturas extends Command
     /**
      * La tasa con la que se recalcula el IVA. Es la del sistema viejo
      * (`$caja * 0.16`), no la de `fact_configuracion`: aquí se mide si lo guardado
-     * es el 16%. La fórmula es la de `FactPrefactura::ivaDerivado()` (privada, por
-     * eso la copia): medio centavo antes de truncar, o sea redondeo, no truncamiento.
+     * es el 16%. La fórmula NO se copia: se llama a `FactPrefactura::calcularIva()`, la
+     * misma que usa el modelo (medio centavo antes de truncar, o sea redondeo, no
+     * truncamiento), para que esta red no pueda desalinearse de lo que verifica.
      */
     private const IVA_TASA = '0.16';
 
@@ -158,7 +160,7 @@ class CompararPrefacturas extends Command
 
                 // El IVA se recalcula desde el subtotal GUARDADO, no desde el
                 // recalculado: así aísla el IVA y no arrastra la diferencia del subtotal.
-                $ivaRecalculado = bcadd(bcmul($guardado, self::IVA_TASA, 6), '0.005', 2);
+                $ivaRecalculado = FactPrefactura::calcularIva($guardado, self::IVA_TASA);
                 $this->acumular($iva, $h->fol_prefactura, $ivaGuardado, $ivaRecalculado);
 
                 // El total que el sistema viejo dice calcular: subtotal + IVA, ambos guardados.
