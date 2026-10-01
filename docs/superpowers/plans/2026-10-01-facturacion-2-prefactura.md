@@ -999,7 +999,14 @@ class FactPrefactura extends Model
             return (string) $this->iva_sellado;
         }
 
-        return bcmul($this->subtotal(), $this->ivaTasa(), 2);
+        // REDONDEA, no trunca. `bcmul(..., 2)` truncaría, y el sistema viejo redondea:
+        // calcula `$iv = $caja * 0.16` y lo guarda con `number_format`
+        // (`Prefectura/prefactura.php:102` y `:556`). Con truncamiento el cliente pagaría
+        // hasta un centavo menos de IVA, que viola «ningún cobro puede cambiar» —
+        // y el comando comparador de la Task 8 clasifica ≤1 peso como redondeo esperado,
+        // así que no lo alertaría. Medio centavo antes de truncar da el redondeo
+        // hacia arriba del original, sin pasar por float.
+        return bcadd(bcmul($this->subtotal(), $this->ivaTasa(), 6), '0.005', 2);
     }
 
     public function total(): string
@@ -1275,7 +1282,9 @@ class CierrePrefactura
 
             $subtotal = $prefactura->subtotal();
             $tasa = $prefactura->ivaTasa();
-            $iva = bcmul($subtotal, $tasa, 2);
+            // Redondea igual que `FactPrefactura::iva()`: medio centavo antes de truncar.
+            // `bcmul(..., 2)` truncaría y el sistema viejo redondea.
+            $iva = bcadd(bcmul($subtotal, $tasa, 6), '0.005', 2);
             $total = bcadd($subtotal, $iva, 2);
 
             // Atómico: si otra sesión la cerró entre la comprobación y aquí,
@@ -1385,35 +1394,17 @@ use App\Models\FactServicio;
 use App\Services\CargosEstancia;
 
 /*
- * `conEstancia()` NO se declara aqui: lo creo la Task 3 en `tests/Pest.php`,
- * porque la Task 6 tambien lo usa. Es este, para que puedas comprobar su firma:
+ * `conEstancia()` NO SE DECLARA EN ESTE ARCHIVO. Ya existe en `tests/Pest.php`,
+ * creada por la Task 3, porque la Task 6 tambien la usa; declararla otra vez
+ * revienta con un error fatal de redeclaracion. Su firma:
+ *
+ *   conEstancia(string $estatus = FactAeronave::ESTATUS_TRANSITO): FactPrefactura
+ *
+ * Crea los tres servicios de estancia con su `concepto`, una matricula con estatus
+ * `$estatus` y las tres tarifas (pernocta 4676.00, transito 2 h 1144.50, transito
+ * 12 h 2338.00), y devuelve un borrador nacional sobre esa matricula. Si necesitas
+ * leer su cuerpo, esta en `tests/Pest.php`.
  */
-function conEstancia(string $estatus = FactAeronave::ESTATUS_TRANSITO): FactPrefactura
-{
-    foreach ([
-        FactServicio::CONCEPTO_ESTANCIA_PERNOCTA => 'Transito 24 hrs - pernocta',
-        FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H => 'Transito 02 hrs',
-        FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H => 'Transito 12 hrs',
-    ] as $concepto => $nombre) {
-        FactServicio::firstOrCreate(['nombre' => $nombre], ['precio_unitario' => 99.0, 'concepto' => $concepto]);
-    }
-
-    $aeronave = Aeronave::create(['matricula' => 'XA-'.substr(uniqid(), -4)]);
-    FactAeronave::create([
-        'aeronave_id' => $aeronave->id,
-        'estatus' => $estatus,
-        'tarifa_pernocta' => 4676.00,
-        'tarifa_transito_2h' => 1144.50,
-        'tarifa_transito_12h' => 2338.00,
-    ]);
-
-    return FactPrefactura::create([
-        'aeronave_id' => $aeronave->id,
-        'estado' => FactPrefactura::ESTADO_BORRADOR,
-        'tipo_destino' => FactPrefactura::DESTINO_NACIONAL,
-        'user_id' => App\Models\User::factory()->create()->id,
-    ]);
-}
 
 test('la estancia usa la tarifa de la matricula, no el precio del catalogo', function () {
     $p = conEstancia();
