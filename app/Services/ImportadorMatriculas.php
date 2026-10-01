@@ -793,30 +793,59 @@ class ImportadorMatriculas
                 $this->resultado->contar('servicios_de_tercero');
             }
 
-            FactServicio::updateOrCreate(
-                ['nombre' => $nombre],
-                [
-                    'categoria_servicio_id' => $categoriaId,
-                    // `tb_servicio.precio_u` es NOT NULL en el origen, así que el
-                    // `?? 0` no se alcanza hoy. No es un cobro que pueda volverse
-                    // 0 en silencio: solo evita un null en la columna si el
-                    // origen cambiara.
-                    'precio_unitario' => $fila->precio_u ?? 0,
-                    'concepto' => self::CONCEPTOS_POR_ID_VIEJO[$idViejo] ?? null,
-                    'en_paquete_internacional' => in_array($idViejo, self::SERVICIOS_PAQUETE_INTERNACIONAL, true),
-                    'es_de_tercero' => $esDeTercero,
-                    'margen' => $esDeTercero ? self::MARGEN_TERCERO : 0,
-                    'ajuste_precio' => match ($idViejo) {
-                        self::SERVICIO_MAS_5 => FactServicio::AJUSTE_MAS_5,
-                        self::SERVICIO_SIN_IVA => FactServicio::AJUSTE_SIN_IVA,
-                        self::SERVICIO_COMISION_131 => FactServicio::AJUSTE_COMISION_131,
-                        default => FactServicio::AJUSTE_NINGUNO,
-                    },
-                ],
-            );
+            $concepto = self::CONCEPTOS_POR_ID_VIEJO[$idViejo] ?? null;
+
+            $valores = [
+                'categoria_servicio_id' => $categoriaId,
+                // `tb_servicio.precio_u` es NOT NULL en el origen, así que el
+                // `?? 0` no se alcanza hoy. No es un cobro que pueda volverse
+                // 0 en silencio: solo evita un null en la columna si el
+                // origen cambiara.
+                'precio_unitario' => $fila->precio_u ?? 0,
+                'en_paquete_internacional' => in_array($idViejo, self::SERVICIOS_PAQUETE_INTERNACIONAL, true),
+                'es_de_tercero' => $esDeTercero,
+                'margen' => $esDeTercero ? self::MARGEN_TERCERO : 0,
+                'ajuste_precio' => match ($idViejo) {
+                    self::SERVICIO_MAS_5 => FactServicio::AJUSTE_MAS_5,
+                    self::SERVICIO_SIN_IVA => FactServicio::AJUSTE_SIN_IVA,
+                    self::SERVICIO_COMISION_131 => FactServicio::AJUSTE_COMISION_131,
+                    default => FactServicio::AJUSTE_NINGUNO,
+                },
+            ];
+
+            if ($concepto === null) {
+                // Solo entre los que no llevan concepto: si el combustible se
+                // renombró a un nombre que el origen también usa, casar por nombre
+                // le escribiría a esa fila el precio de otro servicio.
+                FactServicio::whereNull('concepto')->where('nombre', $nombre)->firstOrNew()->fill($valores + ['nombre' => $nombre])->save();
+            } else {
+                $this->importarServicioConConcepto($concepto, $nombre, $valores);
+            }
 
             $this->resultado->contar('servicios');
         }
+    }
+
+    /**
+     * Un servicio que lleva concepto se identifica por su concepto, no por su
+     * nombre: el nombre del catálogo se puede cambiar en pantalla, y casar por él
+     * intentaría insertar una segunda fila con el mismo concepto (índice único) en
+     * cuanto alguien lo renombrara. El nombre pasa al lado de los valores, así que
+     * una corrección de nombre en el origen sigue llegando.
+     *
+     * Las filas importadas antes de que existiera la columna no tienen concepto:
+     * si no hay ninguna con él, se busca por nombre una que todavía no lo tenga y
+     * se le asigna, en lugar de insertar un duplicado (el nombre no es único).
+     *
+     * @param  array<string,mixed>  $valores
+     */
+    private function importarServicioConConcepto(string $concepto, string $nombre, array $valores): void
+    {
+        $servicio = FactServicio::porConcepto($concepto)->first()
+            ?? FactServicio::whereNull('concepto')->where('nombre', $nombre)->first()
+            ?? new FactServicio;
+
+        $servicio->fill($valores + ['nombre' => $nombre, 'concepto' => $concepto])->save();
     }
 
     /**

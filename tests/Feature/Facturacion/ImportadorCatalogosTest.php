@@ -687,3 +687,95 @@ test('el importador asigna los siete conceptos y una segunda corrida no los dupl
         ->and(FactServicio::where('en_paquete_internacional', true)->count())->toBe(4)
         ->and(FactServicio::count())->toBe(9);
 });
+
+test('renombrar un servicio con concepto y volver a importar actualiza esa fila, sin crear otra ni lanzar', function () {
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 7, 'servicio' => 'Combustible JET A-1', 'precio_u' => '26.0640', 'id_categorias' => 0],
+    ]);
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    $servicio = FactServicio::porConcepto(FactServicio::CONCEPTO_COMBUSTIBLE)->sole();
+    $servicio->update(['nombre' => 'Turbosina JET A-1']);
+
+    // El nombre del origen cambia y el precio del origen también: el importador
+    // sigue a la fila por su concepto, y la fila toma el nombre del origen.
+    DB::connection('remota')->table('tb_servicio')->where('id_servicio', 7)->update(['servicio' => 'Combustible JET A-1 (revisado)']);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactServicio::count())->toBe(1)
+        ->and(FactServicio::porConcepto(FactServicio::CONCEPTO_COMBUSTIBLE)->sole()->id)->toBe($servicio->id)
+        ->and($servicio->fresh()->nombre)->toBe('Combustible JET A-1 (revisado)');
+});
+
+test('un servicio renombrado en pantalla y reimportado con su nombre original conserva su fila', function () {
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 7, 'servicio' => 'Combustible JET A-1', 'precio_u' => '26.0640', 'id_categorias' => 0],
+    ]);
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+    $servicio = FactServicio::porConcepto(FactServicio::CONCEPTO_COMBUSTIBLE)->sole();
+    $servicio->update(['nombre' => 'Turbosina JET A-1']);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactServicio::count())->toBe(1)
+        ->and($servicio->fresh()->nombre)->toBe('Combustible JET A-1');
+});
+
+test('las filas ya importadas sin concepto lo reciben al reimportar, sin duplicarse', function () {
+    // El estado de produccion al migrar: el servicio existe, sin concepto.
+    $existente = FactServicio::create(['nombre' => 'Combustible JET A-1', 'precio_unitario' => 26.064]);
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 7, 'servicio' => 'Combustible JET A-1', 'precio_u' => '26.0640', 'id_categorias' => 0],
+    ]);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactServicio::count())->toBe(1)
+        ->and($existente->fresh()->concepto)->toBe(FactServicio::CONCEPTO_COMBUSTIBLE);
+});
+
+test('un servicio sin concepto sigue casando por nombre', function () {
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 50, 'servicio' => 'Comisariato', 'precio_u' => '100.0000', 'id_categorias' => 0],
+    ]);
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+    DB::connection('remota')->table('tb_servicio')->where('id_servicio', 50)->update(['precio_u' => '120.0000']);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactServicio::count())->toBe(1)
+        ->and((float) FactServicio::first()->precio_unitario)->toBe(120.0);
+});
+
+test('el nombre repetido sigue dando hallazgo en los servicios sin concepto, y el concepto no se pierde', function () {
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 10, 'servicio' => 'Handling', 'precio_u' => 100, 'id_categorias' => 0],
+        ['id_servicio' => 11, 'servicio' => 'Handlíng', 'precio_u' => 999, 'id_categorias' => 0],
+        ['id_servicio' => 7, 'servicio' => 'Combustible JET A-1', 'precio_u' => '26.0640', 'id_categorias' => 0],
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactServicio::whereNull('concepto')->count())->toBe(1)
+        ->and(FactServicio::porConcepto(FactServicio::CONCEPTO_COMBUSTIBLE)->count())->toBe(1)
+        ->and(collect($resultado->hallazgos)->filter(fn ($h) => str_contains($h, 'Handl'))->count())->toBe(1);
+});
+
+test('un servicio sin concepto no pisa a uno con concepto que se renombro a su mismo nombre', function () {
+    // El combustible ya existe y alguien lo renombro a un nombre que el origen
+    // tambien usa para otro servicio (id 5, que se importa antes que el 7).
+    $combustible = FactServicio::create(['nombre' => 'Hangaraje', 'concepto' => FactServicio::CONCEPTO_COMBUSTIBLE, 'precio_unitario' => 26.064]);
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 5, 'servicio' => 'Hangaraje', 'precio_u' => '1500.0000', 'id_categorias' => 0],
+        ['id_servicio' => 7, 'servicio' => 'Combustible JET A-1', 'precio_u' => '26.0640', 'id_categorias' => 0],
+    ]);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    $hangaraje = FactServicio::whereNull('concepto')->where('nombre', 'Hangaraje')->sole();
+
+    expect($hangaraje->id)->not->toBe($combustible->id)
+        ->and((float) $hangaraje->precio_unitario)->toBe(1500.0)
+        ->and(FactServicio::count())->toBe(2);
+});
