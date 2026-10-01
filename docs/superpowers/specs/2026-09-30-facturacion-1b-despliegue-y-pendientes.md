@@ -65,11 +65,14 @@ php artisan migrate
 # 1. Simulación del importador: lee fact-fbo, escribe y revierte.
 #    LEER ENTERA la salida: la lista de tablas que --forzar va a pisar, los
 #    hallazgos esperados y que no haya "nombre repetido" (ver abajo).
-php artisan facturacion:importar-matriculas
+#    GUARDAR LA SALIDA: el comando NO escribe ningún log en archivo (la
+#    especificación prometía storage/logs/facturacion-importacion-AAAA-MM-DD.log,
+#    pero no existe: todo va a consola) y el paso 3 necesita leer los conteos.
+php artisan facturacion:importar-matriculas | tee storage/logs/facturacion-importacion-$(date +%F).log
 
 # 2. Aplicar. Si el 1a ya está en uso, fact_aeronaves tiene filas y el comando
 #    se negará sin --forzar. LEER "Qué pisa --forzar" antes de agregarlo.
-php artisan facturacion:importar-matriculas --aplicar --forzar
+php artisan facturacion:importar-matriculas --aplicar --forzar | tee -a storage/logs/facturacion-importacion-$(date +%F).log
 
 # 3. Comprobar los conteos contra las tablas (SQL en la sección de collation).
 
@@ -115,25 +118,63 @@ sobrevivir, no aplicar hasta resolverlo.
 
 ## Lo que la corrida real va a producir y que NO es un error
 
-La simulación ya no dirá "Sin hallazgos". Saldrán **al menos dos** hallazgos de
-normalización de nombres, ambos esperados. Los renglones exactos son:
+La simulación ya no dirá "Sin hallazgos". De los cinco catálogos salen
+**exactamente cinco** hallazgos, todos esperados. Estos son los renglones
+literales, en el orden en que el comando los imprime (comprobados corriendo la
+simulación contra `fact-fbo-prod`):
 
 ```
+Cliente sin nombre en tb_clientes (id 28): no se importa.
 Categoría de servicio con espacios raros en tb_categoria_serv (id 3): 'Combustible & Servicios ' se importa como 'Combustible & Servicios'.
+Servicio con espacios raros en tb_servicio (id 15): 'Basura Internacional by SENASICA ' se importa como 'Basura Internacional by SENASICA'.
+Servicio con espacios raros en tb_servicio (id 37): 'Despacho de Vuelos Internacionales ' se importa como 'Despacho de Vuelos Internacionales'.
 Proveedor con espacios raros en tb_proveedor (id 4): 'ARTURO<NBSP>GARDUÑO' se importa como 'ARTURO GARDUÑO'.
 ```
 
-- **Categoría de servicio id 3** trae un espacio al final; se importa sin él.
+- **Cliente id 28** tiene nombre, RFC, correo y teléfono **todos vacíos**: es una
+  fila fantasma del origen. El importador la omite, porque el nombre es su llave de
+  idempotencia. Por eso `tb_clientes` tiene 195 filas y el reporte cuenta
+  **194 clientes**: no es una fusión silenciosa (ver el paso obligatorio de abajo).
+- **Categoría de servicio id 3** y **servicios id 15 y id 37** traen un espacio al
+  final; se importan sin él.
 - **Proveedor id 4** trae un espacio duro (U+00A0) en lugar de un espacio normal.
   El reporte lo imprime literalmente como `<NBSP>`; se importa con espacio normal.
 
 Nadie debe "arreglar" esto en el origen: es el importador haciendo su trabajo.
 
+**Una versión anterior de esta guía decía "al menos dos" y listaba dos.** El error
+venía de medir las filas sucias con `servicio <> TRIM(servicio)`: la collation de
+MySQL es **PAD SPACE**, así que `'X '` y `'X'` son iguales en una comparación y esa
+consulta siempre devuelve 0. Para buscar espacios sobrantes hay que comparar
+longitudes, nunca `TRIM`:
+
+```sql
+SELECT id_servicio, CONCAT('[', servicio, ']')
+FROM tb_servicio
+WHERE CHAR_LENGTH(servicio) <> CHAR_LENGTH(TRIM(servicio))
+   OR HEX(servicio) LIKE '%C2A0%';   -- U+00A0 en utf8
+```
+
+**Un sexto renglón puede aparecer, y solo en una segunda corrida:** el de la
+corrección del precio del servicio de combustible.
+
+```
+El precio del servicio 'Combustible JET A-1' se corrigió de 26.0640 a <vigente>: el origen traía 26.0640, pero el precio Eolo vigente en Eolo-plus es <vigente> y el precio de ese servicio debe seguirlo. Se conserva el vigente, no el del origen.
+```
+
+Sale cuando ya se capturó un precio de combustible desde la pantalla después del
+primer import: `importarServicios()` escribe el precio del origen en todos los
+servicios, incluido ese, y el importador lo devuelve al precio vigente al final de
+la corrida. **Es lo correcto y hay que dejarlo así**: sin esa corrección la
+pantalla mostraría el precio nuevo y el catálogo cobraría el viejo. Queda en la
+bitácora con el valor anterior. En la primera corrida no aparece, porque el valor
+del origen y el vigente coinciden.
+
 **Los hallazgos del 1a siguen apareciendo.** La guía del 1a
 (`2026-09-29-facturacion-1a-despliegue-y-pendientes.md`) explica que el renglón
 de la matrícula `ZZ-GFT` aparece en cada corrida mientras no se corrija el origen,
-y hay más de matrículas y tarifas. Un hallazgo que no sea de esos ni de estos dos
-sí merece revisión.
+y hay más de matrículas y tarifas. Un hallazgo que no sea de esos ni de estos cinco
+(seis con el del precio del combustible) sí merece revisión.
 
 ## Paso obligatorio: collation de MySQL contra la llave del importador
 
@@ -174,6 +215,23 @@ Se compara con las filas `clientes`, `servicios`, `categorias_servicio`,
 una tabla ya tenía filas antes de aplicar (por ejemplo, en una segunda corrida),
 la comparación solo vale contra el aumento, no contra el total.
 
+**Lo que el reporte y las tablas deben decir hoy**, con el volcado actual de
+`fact-fbo-prod` (`COUNT(*)` del origen contra el conteo del reporte):
+
+| Catálogo | Filas en el origen | Importables | Por qué la diferencia |
+|---|---|---|---|
+| clientes | 195 | **194** | el cliente id 28 no tiene nombre y se omite (lleva su propio hallazgo) |
+| servicios | 54 | 54 | — |
+| categorias_servicio | 13 | 13 | — |
+| formas_pago | 7 | 7 | — |
+| proveedores | 5 | 5 | — |
+
+**Los 194 clientes NO son una fusión silenciosa.** Es la única diferencia esperada
+entre el origen y el reporte, y viene con su hallazgo (`Cliente sin nombre en
+tb_clientes (id 28)`). Lo que hay que comparar es el conteo del reporte contra el
+`COUNT(*)` de `fact_clientes`, y esos dos sí deben ser **194** exactos. Cualquier
+otra diferencia, o un 194 sin ese hallazgo, sí es una fusión.
+
 Si hay diferencia, dos nombres del origen colapsaron en MySQL: revisar cuáles y
 corregir el origen o decidir a mano cuál conserva el dato.
 
@@ -187,8 +245,21 @@ aquí no hay un id estable tras la importación, así que el vínculo es el
 - `UpdateServicioRequest` **impide renombrar** ese servicio: si se renombrara, la
   sincronía dejaría de encontrarlo y no fallaría, simplemente no actualizaría
   nada.
+- `UpdateServicioRequest` y `StoreServicioRequest` **impiden también traer
+  cualquier otro servicio a ese nombre**, por alta o por edición: la sincronía
+  actualiza TODOS los servicios activos que casen el nombre (la columna no es
+  única), así que un servicio renombrado así pasaría a cobrar el precio del
+  combustible.
 - La sincronía solo toca el servicio **activo**. Dado de baja, o inexistente,
-  registrar un precio nuevo funciona igual y no cambia nada en servicios.
+  registrar un precio nuevo funciona igual y no cambia nada en servicios. **Ojo con
+  la reactivación**: mientras está de baja, cada precio que se registre lo deja
+  atrás y **no queda ningún rastro en la bitácora** de que se lo saltó, así que al
+  reactivarlo aparece con el precio que tenía antes de la baja, no con el vigente.
+  Si se reactiva, hay que registrar un precio (o corregirle el precio a mano) para
+  volver a alinearlo.
+- **La importación también restablece el invariante**, al final de la corrida: si el
+  origen trae un precio distinto del vigente, el importador deja el del vigente y
+  lo dice en un hallazgo (ver "Lo que la corrida real va a producir").
 - **Cada cambio deja rastro en la bitácora** (módulo `FACTURACION_CATALOGOS`,
   acción `ACTUALIZAR`, con el precio anterior y el nuevo del servicio). Es el
   único precio que este bloque cambia a propósito; ahí está la respuesta a por
@@ -217,3 +288,29 @@ aquí no hay un id estable tras la importación, así que el vínculo es el
   del 1a, cuatro del 1b) se verifican solo con `tsc`, `eslint` y el build.
 - La deuda de `routes/api.php` (rutas preexistentes sin autenticación) descrita
   en la guía del 1a sigue abierta.
+- **No hay log en archivo.** La especificación prometía
+  `storage/logs/facturacion-importacion-AAAA-MM-DD.log` y no se implementó: la
+  única salida del importador es la consola. Mientras no exista, hay que redirigir
+  la salida a mano (`| tee ...`, ya está en el orden de despliegue), porque el paso
+  obligatorio de los conteos exige volver a leerla.
+- **El cliente id 241 queda con un correo que su propia validación rechaza.**
+  `AEROTRANSPORTES INTERNACIONALES DE TORREON SA DE CV` trae `correo = '.'` en el
+  origen; el importador lo guarda tal cual (solo convierte la cadena vacía en NULL),
+  y `StoreClienteRequest` pide `email`. Consecuencia: **cualquier edición de ese
+  cliente responderá 422** aunque solo se le cambie el teléfono, hasta que se le
+  corrija el correo (o se le ponga vacío) en la pantalla. Es una sola fila y el
+  mensaje dice qué pasa ("El correo no tiene un formato válido."), pero hay que
+  saberlo para no buscar un fallo donde no hay.
+  Los otros cuatro correos raros del origen (ids 250, 261, 287 y 288, sin punto en
+  el dominio) **sí pasan** la regla `email` de Laravel, que no consulta DNS. Solo el
+  241 molesta.
+- **Divergencia con la especificación, a propósito: los clientes duplicados se
+  reportan por NOMBRE, no por RFC.** La spec hablaba de deduplicar por RFC; sería
+  destructivo, porque 22 clientes sin relación entre sí comparten `XAXX010101000`
+  (público en general) y otros 5 `XEXX010101000`. La llave de idempotencia es el
+  nombre y el hallazgo de repetidos también.
+- **Divergencia con la especificación, a propósito: la validación de "servicios con
+  id > 93 marcados como propios" no existe porque es vacía por construcción.** El
+  importador **deriva** `es_de_tercero` de ese mismo id (`$idViejo >
+  ULTIMO_SERVICIO_PROPIO`), así que la comprobación no podría fallar nunca: se
+  estaría comparando el dato consigo mismo.

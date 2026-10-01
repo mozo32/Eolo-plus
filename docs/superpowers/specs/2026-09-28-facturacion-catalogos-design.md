@@ -132,8 +132,11 @@ una vez y la prefactura lo referenciará.
 
 **Los clientes NO se deduplican.** El diseño suponía que ese `fol_prefactura`
 generaba un cliente por prefactura y que habría duplicados; los datos reales dicen
-lo contrario: 195 clientes con 195 nombres distintos, ninguno repetido, y solo uno
-sin RFC. Deduplicar por nombre no haría nada, y **deduplicar por RFC sería
+lo contrario: 195 filas con 195 nombres distintos, ninguno repetido. De esas 195,
+**194 son importables**: el cliente id 28 tiene nombre, RFC, correo y teléfono todos
+vacíos, y el importador omite las filas sin nombre (es su llave de idempotencia) con
+un hallazgo propio. Ese id 28 es también el "uno sin RFC" que esta sección contaba
+antes como importable. Deduplicar por nombre no haría nada, y **deduplicar por RFC sería
 destructivo**: `XAXX010101000` (público en general) lo comparten 22 clientes sin
 relación entre sí y `XEXX010101000` (residentes en el extranjero) otros 5. Los
 demás RFC repetidos son variantes de nombre de una misma empresa (`AEROSA` /
@@ -202,13 +205,17 @@ aprovecha, sin reproducir el valor fijo.
 
 ### Volumen real
 
-| Catálogo | Filas |
-|---|---|
-| Clientes | 195 |
-| Servicios | 54 (15 de tercero, con `id > 93`) |
-| Categorías de servicio | 13 |
-| Formas de pago | 7 |
-| Proveedores | 5 |
+| Catálogo | Filas en el origen | Importables |
+|---|---|---|
+| Clientes | 195 | **194** (el id 28 no tiene nombre: se omite con hallazgo) |
+| Servicios | 54 (15 de tercero, con `id > 93`) | 54 |
+| Categorías de servicio | 13 | 13 |
+| Formas de pago | 7 | 7 |
+| Proveedores | 5 | 5 |
+
+El conteo que imprime el importador es el de **importables**, así que para clientes
+dice 194 y no 195. La guía de despliegue del 1b lo explica en el paso obligatorio de
+comparar conteos, donde la diferencia podría leerse como una fusión silenciosa.
 
 Son volúmenes pequeños: las pantallas no necesitan paginación del servidor.
 

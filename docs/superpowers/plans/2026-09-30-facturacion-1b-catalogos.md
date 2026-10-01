@@ -30,7 +30,7 @@ Volcado de producción cargado en la base local `fact-fbo-prod`, alcanzable por 
 
 | Origen | Filas | Notas |
 |---|---|---|
-| `tb_clientes` | 195 | 195 nombres distintos, **ninguno repetido**; 1 sin RFC; 16 RFC compartidos |
+| `tb_clientes` | 195 | 195 nombres distintos, **ninguno repetido**; 16 RFC compartidos. **Importables: 194** — el id 28 tiene nombre, RFC, correo y teléfono todos vacíos, y el importador omite las filas sin nombre (su llave de idempotencia) con un hallazgo. Es la misma fila que antes se contaba como "1 sin RFC" importable |
 | `tb_servicio` | 54 | 15 de tercero (`id > 93`); 5 con `id_categorias = 0`; 2 con 4 decimales |
 | `tb_categoria_serv` | 13 | una sin servicios (`Dugaeam Fee`) |
 | `tb_tip_fpago` | 7 | Visa, Mastercard, Amex, Efectivo, AvCard by WFS, Transferencia, Tarjeta Remota |
@@ -40,7 +40,7 @@ Volcado de producción cargado en la base local `fact-fbo-prod`, alcanzable por 
 
 ### Task 1: Clientes
 
-El catálogo más grande y el único con datos personales. **No se deduplica**: la especificación explica por qué (195 nombres únicos, y el RFC se repite de forma legítima).
+El catálogo más grande y el único con datos personales. **No se deduplica**: la especificación explica por qué (195 nombres únicos, y el RFC se repite de forma legítima). De las 195 filas del origen se importan **194**: el id 28 viene sin nombre y se omite con hallazgo.
 
 **Files:**
 - Create: `database/migrations/2026_09_29_091000_create_fact_clientes_table.php`
