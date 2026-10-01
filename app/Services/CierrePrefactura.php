@@ -6,6 +6,7 @@ use App\Models\Bitacora;
 use App\Models\FactConfiguracion;
 use App\Models\FactPrefactura;
 use Illuminate\Support\Facades\DB;
+use UnexpectedValueException;
 
 /**
  * Cierra una prefactura: le asigna folio, le sella los totales y lo registra.
@@ -61,8 +62,10 @@ class CierrePrefactura
 
             $folio = $this->siguienteFolio();
 
-            // Atómico: si otra sesión la cerró entre el candado y aquí, esto afecta
-            // cero filas y la transacción (con el folio incluido) se revierte.
+            // Respaldo, no mecanismo: la fila ya está en X por el `lockForUpdate` de
+            // arriba, así que ninguna otra sesión pudo cerrarla desde entonces. Si aun
+            // así no afecta ninguna fila, no se emite nada y la transacción se revierte
+            // con el folio incluido.
             $filas = FactPrefactura::query()
                 ->where('id', $prefactura->id)
                 ->where('estado', FactPrefactura::ESTADO_BORRADOR)
@@ -82,42 +85,55 @@ class CierrePrefactura
                 throw new PrefacturaYaCerradaException('Esta prefactura ya está cerrada.');
             }
 
+            // El sello sale de varias lecturas (renglones y tasa) y solo es coherente
+            // si el aislamiento es REPEATABLE READ, que `config/database.php` no fija.
+            // Se compara con la derivación ya sellada: si algo se movió entre lecturas,
+            // se revierte antes de que el folio quede consumido.
+            $cerrada = FactPrefactura::query()->findOrFail($prefactura->id);
+
+            if ($cerrada->selloDiscrepa()) {
+                throw new SelloInconsistenteException(
+                    'El sello no coincide con los renglones; el cierre se canceló y no consumió folio.'
+                );
+            }
+
             Bitacora::log(
                 modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
                 accion: Bitacora::ACCION_FINALIZAR,
                 descripcion: "Se cerró la prefactura con folio {$folio} por un total de {$total}.",
                 usuarioId: $userId,
                 registroId: $prefactura->id,
-                datosNuevos: ['folio' => $folio, 'subtotal' => $subtotal, 'iva' => $iva, 'total' => $total],
+                datosNuevos: [
+                    'folio' => $folio,
+                    'subtotal' => $subtotal,
+                    'iva_tasa' => $tasa,
+                    'iva' => $iva,
+                    'total' => $total,
+                ],
             );
 
-            return $prefactura->fresh();
+            return $cerrada;
         });
     }
 
     /**
-     * El contador, con bloqueo de fila. La fila se crea en el primer cierre.
-     *
-     * La creación es `insertOrIgnore` y no `create`: `clave` es única, y dos primeros
-     * cierres simultáneos verían ambos la fila ausente; el segundo `create` reventaría
-     * con violación de unicidad. Con `insertOrIgnore` el perdedor no falla, y ambos
-     * leen después la misma fila con `lockForUpdate()`, de modo que se serializan.
+     * El contador, con bloqueo de fila. La fila la siembra una migración: aquí NO se
+     * crea, porque un `insert ignore` en cada cierre provoca deadlock bajo InnoDB
+     * (candado compartido por el duplicado, luego dos exclusivos que se esperan).
      */
     private function siguienteFolio(): int
     {
-        FactConfiguracion::query()->insertOrIgnore([
-            'clave' => self::CLAVE_FOLIO,
-            'valor' => (string) self::FOLIO_INICIAL,
-            // `descripcion` es NOT NULL sin valor por omisión: sin ella el insert falla.
-            'descripcion' => 'Siguiente folio de prefactura. La serie propia del bloque 2 arranca en 10000.',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
         $fila = FactConfiguracion::query()
             ->where('clave', self::CLAVE_FOLIO)
             ->lockForUpdate()
             ->firstOrFail();
+
+        // Un contador corrupto no se interpreta: `(int) 'x'` daría folio 0.
+        if (preg_match('/^[1-9]\d*$/', (string) $fila->valor) !== 1) {
+            throw new UnexpectedValueException(
+                "El contador '".self::CLAVE_FOLIO."' no es un entero positivo: '{$fila->valor}'"
+            );
+        }
 
         $folio = (int) $fila->valor;
         $fila->update(['valor' => (string) ($folio + 1)]);

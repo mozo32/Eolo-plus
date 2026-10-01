@@ -7,6 +7,8 @@ use App\Models\FactPrefactura;
 use App\Services\CierrePrefactura;
 use App\Services\PrefacturaIncompletaException;
 use App\Services\PrefacturaYaCerradaException;
+use App\Services\SelloInconsistenteException;
+use Illuminate\Support\Facades\DB;
 
 test('la primera prefactura cerrada se lleva el folio 10000', function () {
     [$p, $usuario] = prefacturaCompleta();
@@ -86,7 +88,16 @@ test('el cierre deja rastro en bitacora con el folio y el total', function () {
         ->where('accion', Bitacora::ACCION_FINALIZAR)->sole();
 
     expect($entrada->descripcion)->toContain('10000')
-        ->and($entrada->descripcion)->toContain('1160.00');
+        ->and($entrada->descripcion)->toContain('1160.00')
+        ->and($entrada->registro_id)->toBe($p->id)
+        ->and($entrada->usuario_id)->toBe($usuario->id)
+        ->and($entrada->datos_nuevos)->toBe([
+            'folio' => 10000,
+            'subtotal' => '1000.00',
+            'iva_tasa' => '0.1600',
+            'iva' => '160.00',
+            'total' => '1160.00',
+        ]);
 });
 
 test('un cierre que falla no consume folio', function () {
@@ -122,5 +133,84 @@ test('una tasa de IVA ilegible aborta el cierre sin consumir folio ni dejar rast
 
     expect(FactConfiguracion::valor('prefactura_folio_siguiente', '10000'))->toBe('10000')
         ->and($p->fresh()->estado)->toBe(FactPrefactura::ESTADO_BORRADOR)
+        ->and(Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)->count())->toBe(0);
+});
+
+test('el contador del folio queda sembrado por la migracion, listo para leerse con candado', function () {
+    expect(FactConfiguracion::valor('prefactura_folio_siguiente'))->toBe('10000');
+});
+
+test('el IVA se redondea al sellar, no se trunca', function () {
+    // 26.06 * 0.16 = 4.1696: redondeado 4.17, truncado 4.16.
+    [$p, $usuario] = prefacturaCompleta(precio: 26.06, cantidad: 1);
+
+    $cerrada = app(CierrePrefactura::class)->cerrar($p, $usuario->id);
+
+    expect((string) $cerrada->iva_sellado)->toBe('4.17')
+        ->and((string) $cerrada->total_sellado)->toBe('30.23');
+});
+
+test('el folio sale del contador y no del maximo de los folios', function () {
+    FactConfiguracion::where('clave', 'prefactura_folio_siguiente')->update(['valor' => '20000']);
+    [$p, $usuario] = prefacturaCompleta();
+
+    $cerrada = app(CierrePrefactura::class)->cerrar($p, $usuario->id);
+
+    expect($cerrada->folio)->toBe(20000)
+        ->and(FactConfiguracion::valor('prefactura_folio_siguiente'))->toBe('20001');
+});
+
+test('un contador corrupto no entrega folio 0: el cierre se aborta', function () {
+    FactConfiguracion::where('clave', 'prefactura_folio_siguiente')->update(['valor' => 'abc']);
+    [$p, $usuario] = prefacturaCompleta();
+
+    expect(fn () => app(CierrePrefactura::class)->cerrar($p, $usuario->id))
+        ->toThrow(UnexpectedValueException::class);
+
+    expect($p->fresh()->estado)->toBe(FactPrefactura::ESTADO_BORRADOR)
+        ->and(FactConfiguracion::valor('prefactura_folio_siguiente'))->toBe('abc');
+});
+
+test('si la bitacora falla al final, el cierre entero se revierte', function () {
+    [$p, $usuario] = prefacturaCompleta();
+    Bitacora::creating(fn () => throw new RuntimeException('bitacora caida'));
+
+    expect(fn () => app(CierrePrefactura::class)->cerrar($p, $usuario->id))->toThrow(RuntimeException::class);
+
+    $p = $p->fresh();
+    expect($p->estado)->toBe(FactPrefactura::ESTADO_BORRADOR)
+        ->and($p->folio)->toBeNull()
+        ->and($p->subtotal_sellado)->toBeNull()
+        ->and($p->cerrada_at)->toBeNull()
+        ->and(FactConfiguracion::valor('prefactura_folio_siguiente'))->toBe('10000');
+});
+
+test('si el sello no coincide con los renglones tras escribirlo, el cierre se revierte sin consumir folio', function () {
+    [$p, $usuario] = prefacturaCompleta(precio: 100.0, cantidad: 1);
+
+    // Simula la deriva bajo un aislamiento menor a REPEATABLE READ: justo despues del
+    // UPDATE del sello aparece un renglon que el sello no vio (insercion cruda, que
+    // la guarda del modelo no cubre).
+    $servicioId = $p->renglones()->first()->servicio_id;
+    $metido = false;
+    DB::listen(function ($consulta) use ($p, $servicioId, &$metido) {
+        if (! $metido && str_starts_with($consulta->sql, 'update "fact_prefacturas"')) {
+            $metido = true;
+            DB::table('fact_prefactura_renglones')->insert([
+                'prefactura_id' => $p->id, 'servicio_id' => $servicioId, 'nombre_servicio' => 'Colado',
+                'precio_unitario' => 50, 'cantidad' => 1, 'es_de_tercero' => false, 'margen' => 0,
+                'ajuste_precio' => 'ninguno', 'orden' => 2, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+    });
+
+    expect(fn () => app(CierrePrefactura::class)->cerrar($p, $usuario->id))
+        ->toThrow(SelloInconsistenteException::class);
+
+    $p = $p->fresh();
+    expect($metido)->toBeTrue()
+        ->and($p->estado)->toBe(FactPrefactura::ESTADO_BORRADOR)
+        ->and($p->folio)->toBeNull()
+        ->and(FactConfiguracion::valor('prefactura_folio_siguiente'))->toBe('10000')
         ->and(Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)->count())->toBe(0);
 });
