@@ -1574,7 +1574,12 @@ class CargosEstancia
                 $motivo .= " Se quitaron {$quitados} renglones de estancia que la prefactura ya tenía.";
             }
 
-            $motivo .= ' Si hay que cobrarla de todos modos, agrega el servicio a mano.';
+            // NO se aconseja «agrega el servicio a mano»: el alta manual congela el precio
+            // DEL CATALOGO, y ahi los tres servicios de estancia valen 99.00, que es relleno,
+            // mientras las tarifas reales van de 2,300 a 10,238. Seguir ese consejo facturaria
+            // 99 pesos donde van miles, sin forma de corregirlo. Por eso `store` rechaza los
+            // servicios con concepto de estancia.
+            $motivo .= ' Si de verdad corresponde cobrar estancia, corrige el estatus de la aeronave a Tránsito y vuelve a recalcular.';
 
             return ['renglones' => 0, 'motivo' => $motivo];
         }
