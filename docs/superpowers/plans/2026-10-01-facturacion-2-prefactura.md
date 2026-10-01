@@ -608,7 +608,9 @@ use App\Models\FactServicio;
 
 function prefacturaBorrador(): FactPrefactura
 {
-    $aeronave = App\Models\Aeronave::create(['matricula' => 'XA-ABC']);
+    // `aeronaves.matricula` es UNICA desde el bloque 1a, asi que un literal fijo revienta
+    // en cuanto una prueba crea dos borradores.
+    $aeronave = App\Models\Aeronave::create(['matricula' => 'XA-'.substr(uniqid(), -4)]);
     App\Models\FactAeronave::create(['aeronave_id' => $aeronave->id, 'estatus' => App\Models\FactAeronave::ESTATUS_TRANSITO]);
 
     return FactPrefactura::create([
@@ -671,7 +673,9 @@ test('el IVA es la tasa vigente sobre el subtotal y el total es la suma', functi
 });
 
 test('una tasa distinta en configuracion cambia el IVA de un borrador', function () {
-    FactConfiguracion::create(['clave' => 'iva_tasa', 'valor' => '0.08']);
+    // `fact_configuracion.descripcion` es NOT NULL sin valor por omision: toda escritura
+    // que inserte tiene que darla. `iva_tasa` no esta sembrada, asi que esto INSERTA.
+    FactConfiguracion::create(['clave' => 'iva_tasa', 'valor' => '0.08', 'descripcion' => 'Tasa de IVA']);
     $p = prefacturaBorrador();
     renglonDe($p, 1000.0, 1);
 
@@ -1113,7 +1117,8 @@ test('el sello no se mueve si despues cambia la tasa de IVA', function () {
     [$p, $usuario] = prefacturaCompleta(precio: 1000.0, cantidad: 1);
     $cerrada = app(CierrePrefactura::class)->cerrar($p, $usuario->id);
 
-    FactConfiguracion::updateOrCreate(['clave' => 'iva_tasa'], ['valor' => '0.08']);
+    // `iva_tasa` no esta sembrada, asi que esto INSERTA y `descripcion` es NOT NULL.
+    FactConfiguracion::updateOrCreate(['clave' => 'iva_tasa'], ['valor' => '0.08', 'descripcion' => 'Tasa de IVA']);
 
     expect($cerrada->fresh()->iva())->toBe('160.00');
 });
@@ -1318,9 +1323,11 @@ class CierrePrefactura
             ->first();
 
         if ($fila === null) {
+            // `descripcion` es NOT NULL sin valor por omision: sin ella este create falla.
             $fila = FactConfiguracion::create([
                 'clave' => self::CLAVE_FOLIO,
                 'valor' => (string) self::FOLIO_INICIAL,
+                'descripcion' => 'Siguiente folio de prefactura. La serie propia del bloque 2 arranca en 10000.',
             ]);
         }
 
