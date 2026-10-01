@@ -120,13 +120,25 @@ function esRutaFacturacion1b(string $uri): bool
 */
 
 /**
+ * Una matrícula distinta en cada llamada, determinista: un contador y no
+ * `uniqid()` recortado, que colisionaría de vez en cuando contra el índice único
+ * de `aeronaves.matricula`.
+ */
+function matriculaDePrueba(): string
+{
+    static $contador = 0;
+
+    return 'XA-T'.str_pad((string) ++$contador, 4, '0', STR_PAD_LEFT);
+}
+
+/**
  * Una prefactura en borrador con su matrícula en Tránsito.
  */
 function prefacturaBorrador(): App\Models\FactPrefactura
 {
     // Matrícula distinta en cada llamada: `aeronaves.matricula` es única desde el
     // bloque 1a y varias pruebas crean dos borradores en la misma prueba.
-    $aeronave = App\Models\Aeronave::create(['matricula' => 'XA-'.substr(uniqid(), -4)]);
+    $aeronave = App\Models\Aeronave::create(['matricula' => matriculaDePrueba()]);
     App\Models\FactAeronave::create(['aeronave_id' => $aeronave->id, 'estatus' => App\Models\FactAeronave::ESTATUS_TRANSITO]);
 
     return App\Models\FactPrefactura::create([
@@ -162,7 +174,7 @@ function renglonDe(App\Models\FactPrefactura $p, float $precio, int $cantidad, f
 function prefacturaCompleta(float $precio = 100.0, int $cantidad = 1): array
 {
     $usuario = App\Models\User::factory()->create();
-    $aeronave = App\Models\Aeronave::create(['matricula' => 'XA-'.substr(uniqid(), -4)]);
+    $aeronave = App\Models\Aeronave::create(['matricula' => matriculaDePrueba()]);
     App\Models\FactAeronave::create(['aeronave_id' => $aeronave->id, 'estatus' => App\Models\FactAeronave::ESTATUS_TRANSITO]);
     $cliente = App\Models\FactCliente::create(['nombre' => 'Cliente '.uniqid()]);
     $servicio = App\Models\FactServicio::create(['nombre' => 'Servicio '.uniqid(), 'precio_unitario' => $precio]);
@@ -203,7 +215,7 @@ function conEstancia(string $estatus = App\Models\FactAeronave::ESTATUS_TRANSITO
         App\Models\FactServicio::firstOrCreate(['nombre' => $nombre], ['precio_unitario' => 99.0, 'concepto' => $concepto]);
     }
 
-    $aeronave = App\Models\Aeronave::create(['matricula' => 'XA-'.substr(uniqid(), -4)]);
+    $aeronave = App\Models\Aeronave::create(['matricula' => matriculaDePrueba()]);
     App\Models\FactAeronave::create([
         'aeronave_id' => $aeronave->id,
         'estatus' => $estatus,
@@ -219,3 +231,22 @@ function conEstancia(string $estatus = App\Models\FactAeronave::ESTATUS_TRANSITO
         'user_id' => App\Models\User::factory()->create()->id,
     ]);
 }
+
+/**
+ * Cierra a mano una prefactura con el sello indicado (sin pasar por el servicio de
+ * cierre de la Task 4): sirve para probar la rama sellada.
+ */
+function cerrarConSello(App\Models\FactPrefactura $p, string $subtotal, string $iva, string $total, string $tasa = '0.1600'): App\Models\FactPrefactura
+{
+    $p->update([
+        'estado' => App\Models\FactPrefactura::ESTADO_CERRADA,
+        'folio' => 10000,
+        'subtotal_sellado' => $subtotal,
+        'iva_sellado' => $iva,
+        'total_sellado' => $total,
+        'iva_tasa_sellada' => $tasa,
+    ]);
+
+    return $p->fresh();
+}
+
