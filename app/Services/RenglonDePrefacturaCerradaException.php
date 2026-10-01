@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use DomainException;
+use Illuminate\Http\JsonResponse;
 
 /**
  * Se intentó crear, modificar, mover o borrar un renglón de una prefactura cerrada.
@@ -18,5 +19,18 @@ class RenglonDePrefacturaCerradaException extends DomainException
     public function __construct(string $message = 'La prefactura está cerrada: sus renglones ya no se pueden modificar.')
     {
         parent::__construct($message);
+    }
+
+    /**
+     * Siempre significa lo mismo para un cliente HTTP: la prefactura esta cerrada y
+     * no se puede tocar. Se mapea aqui, en un solo lugar, porque esta excepcion la
+     * lanzan la guarda del modelo y las dos operaciones de CargosEstancia.
+     */
+    public function render(): JsonResponse
+    {
+        return response()->json([
+            'message' => $this->getMessage(),
+            'codigo' => 'ya_cerrada',
+        ], 409);
     }
 }

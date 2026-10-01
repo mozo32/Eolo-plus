@@ -131,6 +131,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('facturacion/servicios', fn () => Inertia::render('Facturacion/Servicios'))->name('facturacionServicios');
     Route::get('facturacion/formas-pago', fn () => Inertia::render('Facturacion/FormasPago'))->name('facturacionFormasPago');
     Route::get('facturacion/proveedores', fn () => Inertia::render('Facturacion/Proveedores'))->name('facturacionProveedores');
+
+    // Facturación (bloque 2): prefacturas. El permiso de escritura lo exige la API (subdep:factPrefacturas).
+    Route::get('facturacion/prefacturas', fn () => Inertia::render('Facturacion/Prefacturas'))->name('facturacionPrefacturas');
+    Route::get('facturacion/prefacturas/{id}', fn ($id) => Inertia::render('Facturacion/EditorPrefactura', ['id' => (int) $id]))->whereNumber('id')->name('facturacionEditorPrefactura');
 });
 
 require __DIR__.'/settings.php';

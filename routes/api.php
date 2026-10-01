@@ -40,6 +40,8 @@ use App\Http\Controllers\Api\Facturacion\CategoriaServicioController;
 use App\Http\Controllers\Api\Facturacion\ClienteController;
 use App\Http\Controllers\Api\Facturacion\FormaPagoController;
 use App\Http\Controllers\Api\Facturacion\PrecioCombustibleController;
+use App\Http\Controllers\Api\Facturacion\PrefacturaController;
+use App\Http\Controllers\Api\Facturacion\PrefacturaRenglonController;
 use App\Http\Controllers\Api\Facturacion\ProveedorController;
 use App\Http\Controllers\Api\Facturacion\ServicioController;
 use App\Http\Controllers\Api\Facturacion\TipoMotorController;
@@ -369,6 +371,8 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(functio
     Route::get('/categorias-servicio', [CategoriaServicioController::class, 'index']);
     Route::get('/formas-pago', [FormaPagoController::class, 'index']);
     Route::get('/proveedores', [ProveedorController::class, 'index']);
+    Route::get('/prefacturas', [PrefacturaController::class, 'index']);
+    Route::get('/prefacturas/{id}', [PrefacturaController::class, 'show'])->whereNumber('id');
 
     Route::middleware('subdep:factCategoriasAeronave')->group(function () {
         Route::post('/categorias-aeronave', [CategoriaAeronaveController::class, 'store']);
@@ -410,6 +414,19 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(functio
         Route::put('/categorias-servicio/{id}', [CategoriaServicioController::class, 'update'])->whereNumber('id');
         Route::patch('/categorias-servicio/{id}/desactivar', [CategoriaServicioController::class, 'desactivar'])->whereNumber('id');
         Route::patch('/categorias-servicio/{id}/reactivar', [CategoriaServicioController::class, 'reactivar'])->whereNumber('id');
+    });
+
+    // Prefacturas (bloque 2). Una prefactura cerrada no se edita: lo hace cumplir cada
+    // endpoint, no solo la pantalla.
+    Route::middleware('subdep:factPrefacturas')->group(function () {
+        Route::post('/prefacturas', [PrefacturaController::class, 'store']);
+        Route::put('/prefacturas/{id}', [PrefacturaController::class, 'update'])->whereNumber('id');
+        Route::patch('/prefacturas/{id}/cerrar', [PrefacturaController::class, 'cerrar'])->whereNumber('id');
+        Route::post('/prefacturas/{id}/renglones', [PrefacturaRenglonController::class, 'store'])->whereNumber('id');
+        Route::delete('/prefacturas/{id}/renglones/{renglon}', [PrefacturaRenglonController::class, 'destroy'])->whereNumber('id')->whereNumber('renglon');
+        Route::patch('/prefacturas/{id}/estancia', [PrefacturaRenglonController::class, 'estancia'])->whereNumber('id');
+        Route::patch('/prefacturas/{id}/internacional', [PrefacturaRenglonController::class, 'internacional'])->whereNumber('id');
+        Route::patch('/prefacturas/{id}/descartar', [PrefacturaController::class, 'descartar'])->whereNumber('id');
     });
 
     Route::middleware('subdep:factFormasPago')->group(function () {
