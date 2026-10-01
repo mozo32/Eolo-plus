@@ -847,10 +847,13 @@ class ImportadorMatriculas
         // el nombre del origen: al devolverle su nombre a la primera quedan dos
         // filas iguales, y no hay forma de saber cuál es la que se quiere.
         if ($porConcepto !== null) {
-            $gemela = FactServicio::whereNull('concepto')->where('nombre', $nombre)->where('id', '!=', $porConcepto->id)->first();
+            $gemelas = FactServicio::whereNull('concepto')->where('nombre', $nombre)->where('id', '!=', $porConcepto->id)->orderBy('id')->pluck('id');
 
-            if ($gemela !== null) {
-                $this->resultado->hallazgo("Servicio '{$nombre}': la fila con concepto '{$concepto}' (id {$porConcepto->id}, hoy '{$porConcepto->nombre}') y otra sin concepto (id {$gemela->id}) van a quedar con el mismo nombre. La importación actualiza la que lleva concepto y deja la otra intacta; decide a mano cuál conservar.");
+            if ($gemelas->isNotEmpty()) {
+                $ids = $gemelas->implode(', ');
+                $cuantas = $gemelas->count() === 1 ? 'otra fila sin concepto (id' : 'otras '.$gemelas->count().' filas sin concepto (ids';
+
+                $this->resultado->hallazgo("Servicio '{$nombre}': la fila con concepto '{$concepto}' (id {$porConcepto->id}, hoy '{$porConcepto->nombre}') y {$cuantas} {$ids}) van a quedar con el mismo nombre. La importación actualiza la que lleva concepto y deja las otras intactas; decide a mano cuál conservar.");
             }
         }
 

@@ -7,6 +7,7 @@ namespace App\Http\Requests\Facturacion;
  *
  * Antes sumaba una guarda propia que impedía renombrar el servicio de combustible,
  * porque el nombre era el vínculo con la sincronía del precio. Ese vínculo ahora
- * es la columna `concepto`, así que el servicio se puede renombrar libremente.
+ * es la columna `concepto`, así que renombrarlo ya no rompe la sincronía (el
+ * importador sí le devuelve el nombre del origen en cada corrida).
  */
 class UpdateServicioRequest extends StoreServicioRequest {}

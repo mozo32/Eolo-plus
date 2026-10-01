@@ -26,6 +26,10 @@ class ImportarMatriculasPrefactura extends Command
      * alguien haya editado desde la aplicación se perdería. Varias guardan
      * tarifas que se cobran y tienen pantalla de edición.
      *
+     * `concepto` y `en_paquete_internacional` de los servicios no figuran: no se
+     * editan desde la aplicación (solo un SQL a mano los alteraría), y el importador
+     * solo asigna el concepto a una fila que lo tiene en NULL, nunca lo cambia.
+     *
      * @var array<class-string<\Illuminate\Database\Eloquent\Model>,string>
      */
     private const SOBREESCRIBEN = [
@@ -34,7 +38,7 @@ class ImportarMatriculasPrefactura extends Command
         FactTipoMotor::class => 'tarifa de aterrizaje',
         FactPrecioCombustible::class => 'el precio vigente, solo si coincide la fecha de inicio',
         FactCliente::class => 'RFC, correo y teléfono',
-        FactServicio::class => 'nombre, concepto, marca de paquete internacional, categoría, precio, margen y ajuste de precio',
+        FactServicio::class => 'es de tercero, categoría, precio, margen y ajuste de precio; el nombre solo en los cuatro con concepto (en los demás es la llave: renombrar en pantalla y reimportar recrea el original y quedan dos)',
     ];
 
     /**

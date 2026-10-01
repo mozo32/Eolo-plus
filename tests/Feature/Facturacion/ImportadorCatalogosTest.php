@@ -823,5 +823,20 @@ test('sin una segunda fila con el mismo nombre no hay hallazgo de duplicado al r
 
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
-    expect(collect($resultado->hallazgos)->filter(fn ($h) => str_contains($h, 'concepto'))->count())->toBe(0);
+    expect($resultado->hallazgos)->toBe([]);
+});
+
+test('el hallazgo de la fila gemela lista todas las filas sin concepto que comparten el nombre', function () {
+    $conConcepto = FactServicio::create(['nombre' => 'Turbosina JET A-1', 'concepto' => FactServicio::CONCEPTO_COMBUSTIBLE, 'precio_unitario' => 26.064]);
+    $uno = FactServicio::create(['nombre' => 'Combustible JET A-1', 'precio_unitario' => 5]);
+    $dos = FactServicio::create(['nombre' => 'Combustible JET A-1', 'precio_unitario' => 6]);
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 7, 'servicio' => 'Combustible JET A-1', 'precio_u' => '26.0640', 'id_categorias' => 0],
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect($resultado->hallazgos)->toHaveCount(1)
+        ->and($resultado->hallazgos[0])->toContain("id {$conConcepto->id}")
+        ->and($resultado->hallazgos[0])->toContain("ids {$uno->id}, {$dos->id}");
 });

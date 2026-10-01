@@ -28,7 +28,8 @@ test('el scope porConcepto encuentra el servicio', function () {
 /*
  * El vinculo del precio de combustible deja de ser el nombre. Esta prueba es la
  * que sustituye a las 16 de NombreServicioCombustibleTest.php: el servicio se
- * puede renombrar libremente y la sincronia lo sigue encontrando.
+ * puede renombrar y la sincronia lo sigue encontrando (el importador, eso si,
+ * le devuelve el nombre del origen en cada corrida).
  */
 test('renombrar el servicio de combustible ya no rompe la sincronia', function () {
     $usuario = User::factory()->create();
