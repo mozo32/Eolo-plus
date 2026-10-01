@@ -242,7 +242,7 @@ export default function ModalNuevaPrefactura({ onCerrar, onCreada }: Props) {
                         {llegadas.length > 0 && (
                             <fieldset className="space-y-2">
                                 <legend className="mb-1 text-[11px] font-semibold text-slate-500">
-                                    Si una de estas es la llegada que se va a prefacturar, úsala para precargar la fecha, la hora y el origen. Revisa que no tenga ya su prefactura.
+                                    Solo se muestran las llegadas que todavía no tienen prefactura. Si una es la que se va a prefacturar, úsala para precargar la fecha, la hora y el origen.
                                 </legend>
 
                                 {llegadas.map(l => (

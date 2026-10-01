@@ -473,15 +473,12 @@ export interface LlegadaOperacion {
 }
 
 /**
- * Las llegadas más recientes de una matrícula en `operaciones_diarias` (las activas; las canceladas no salen del servidor).
- *
- * LÍMITE CONOCIDO: el endpoint de Operaciones Diarias no sabe qué operaciones ya tienen prefactura, así que aquí NO se
- * puede decir "sin facturar". Cuando exista un endpoint de facturación que lo filtre, solo cambia esta función.
+ * Las llegadas más recientes de una matrícula que todavía NO tienen prefactura, de la más reciente a la más antigua.
+ * El servidor hace la coincidencia exacta de la matrícula, deja fuera las operaciones canceladas y las ya tomadas por
+ * una prefactura activa (borrador o cerrada); una prefactura descartada no reserva su operación.
  */
 export async function obtenerLlegadasDeMatriculaApi(matricula: string, maximo = 5): Promise<LlegadaOperacion[]> {
-    const params = new URLSearchParams({ buscar: matricula, tipo: 'llegada' });
-    const pagina = await pedir<{ data: LlegadaOperacion[] }>(`/api/OperacionesDiarias?${params.toString()}`);
+    const params = new URLSearchParams({ matricula, max: String(maximo) });
 
-    // `buscar` es un LIKE: "XA-AB" traería "XA-ABC". Solo cuenta la matrícula exacta.
-    return pagina.data.filter(o => o.matricula.toUpperCase() === matricula.toUpperCase()).slice(0, maximo);
+    return (await pedir<{ data: LlegadaOperacion[] }>(`${BASE}/prefacturas/llegadas-sin-facturar?${params.toString()}`)).data;
 }
