@@ -41,7 +41,8 @@ class CargosEstancia
 {
     /**
      * Reemplaza los renglones de estancia de la prefactura (y solo esos: lo capturado
-     * a mano no se toca).
+     * a mano no se toca). Una aeronave en Guarda, o sin ficha, no recibe ninguno nuevo
+     * y además pierde los que ya tuviera, como en el sistema viejo.
      *
      * @return array{renglones: int, motivo: ?string} `motivo` dice por qué no se
      *                                                generó ningún renglón (o por qué faltó alguno), para que la pantalla
@@ -62,14 +63,27 @@ class CargosEstancia
             // estatus pudo cambiar (a Guarda, por ejemplo) desde que se cargó la instancia.
             $satelite = FactAeronave::query()->where('aeronave_id', $actual->aeronave_id)->first();
 
+            // En el sistema viejo el DELETE de los servicios de estancia es INCONDICIONAL
+            // (`insert22.php:82`) y el `if($estatus == 1)` que decide si se vuelven a
+            // cobrar empieza mucho después (`:114`). Una aeronave en Guarda (o sin ficha)
+            // pierde sus cargos de estancia previos y no recibe ninguno nuevo. Dejarlos
+            // haría que el operador cerrara creyendo que no hay estancia y se facturara
+            // a una aeronave que no la paga.
             if ($satelite === null) {
-                return ['renglones' => 0, 'motivo' => 'La matrícula no tiene ficha de facturación, así que no hay tarifas de estancia que aplicar.'];
+                $quitados = $this->quitarEstancia($actual);
+
+                return [
+                    'renglones' => 0,
+                    'motivo' => 'La matrícula no tiene ficha de facturación, así que no hay tarifas de estancia que aplicar.'.$this->nota($quitados),
+                ];
             }
 
             if ($satelite->estatus === FactAeronave::ESTATUS_GUARDA) {
+                $quitados = $this->quitarEstancia($actual);
+
                 return [
                     'renglones' => 0,
-                    'motivo' => 'La aeronave está en Guarda y una aeronave en Guarda no paga estancia. Si hay que cobrarla, agrega el servicio a mano.',
+                    'motivo' => 'La aeronave está en Guarda y una aeronave en Guarda no paga estancia. Si hay que cobrarla, agrega el servicio a mano.'.$this->nota($quitados),
                 ];
             }
 
@@ -85,7 +99,7 @@ class CargosEstancia
                 ->whereIn('concepto', FactServicio::CONCEPTOS_ESTANCIA)
                 ->pluck('orden', 'concepto');
 
-            $actual->renglones()->whereIn('concepto', FactServicio::CONCEPTOS_ESTANCIA)->delete();
+            $this->quitarEstancia($actual);
 
             $creados = 0;
             $sinTarifa = [];
@@ -95,11 +109,13 @@ class CargosEstancia
                     continue;
                 }
 
-                $servicio = FactServicio::porConcepto($concepto)->first();
+                // Solo activos, igual que el paquete internacional: un servicio dado de
+                // baja no se sigue cobrando.
+                $servicio = FactServicio::porConcepto($concepto)->activos()->first();
 
                 if ($servicio === null) {
                     // Lanza dentro de la transacción: el borrado de arriba se revierte.
-                    throw new RuntimeException("No existe el servicio con concepto '{$concepto}'. Corre el importador de catálogos.");
+                    throw new RuntimeException("No existe un servicio activo con concepto '{$concepto}'. Corre el importador de catálogos o reactívalo.");
                 }
 
                 if ($tarifa === null) {
@@ -178,6 +194,25 @@ class CargosEstancia
 
             return $creados;
         });
+    }
+
+    /**
+     * Borra los renglones de estancia y devuelve cuántos quitó. Es un borrado MASIVO
+     * y no pasa por la guarda del modelo: solo se llama con el candado tomado y la
+     * prefactura ya comprobada como borrador (`bloquearBorrador()`).
+     */
+    private function quitarEstancia(FactPrefactura $prefactura): int
+    {
+        return $prefactura->renglones()->whereIn('concepto', FactServicio::CONCEPTOS_ESTANCIA)->delete();
+    }
+
+    private function nota(int $quitados): string
+    {
+        return match (true) {
+            $quitados === 0 => '',
+            $quitados === 1 => ' Se quitó 1 renglón de estancia que ya tenía la prefactura.',
+            default => " Se quitaron {$quitados} renglones de estancia que ya tenía la prefactura.",
+        };
     }
 
     /**

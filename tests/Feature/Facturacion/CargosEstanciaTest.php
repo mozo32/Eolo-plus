@@ -146,12 +146,28 @@ test('recalcular rechaza una prefactura cerrada aunque la instancia en memoria d
         ->and(FactPrefacturaRenglon::count())->toBe(1);
 });
 
-test('una cerrada en Guarda tambien se rechaza antes de decidir nada', function () {
-    $p = conEstancia(FactAeronave::ESTATUS_GUARDA);
-    cerrarConSello($p->fresh(), '0.00', '0.00', '0.00');
+test('una cerrada en Guarda se rechaza y no pierde su estancia', function () {
+    $p = conEstancia();
+    app(CargosEstancia::class)->recalcular($p, pernoctas: 2, transitos2h: 0, transitos12h: 0);
+    FactAeronave::where('aeronave_id', $p->aeronave_id)->update(['estatus' => FactAeronave::ESTATUS_GUARDA]);
+    cerrarConSello(FactPrefactura::find($p->id), '9352.00', '1496.32', '10848.32');
 
-    expect(fn () => app(CargosEstancia::class)->recalcular($p, pernoctas: 1, transitos2h: 0, transitos12h: 0))
-        ->toThrow(RenglonDePrefacturaCerradaException::class);
+    // Aqui `quitarEstancia()` SOLO borra (nunca llama a `create()`), asi que la guarda
+    // del modelo no la salva: solo la comprobacion del servicio.
+    expect(fn () => app(CargosEstancia::class)->recalcular($p, pernoctas: 0, transitos2h: 0, transitos12h: 0))
+        ->toThrow(RenglonDePrefacturaCerradaException::class)
+        ->and(FactPrefacturaRenglon::count())->toBe(1);
+});
+
+test('una cerrada sin ficha de facturacion se rechaza y no pierde su estancia', function () {
+    $p = conEstancia();
+    app(CargosEstancia::class)->recalcular($p, pernoctas: 2, transitos2h: 0, transitos12h: 0);
+    FactAeronave::where('aeronave_id', $p->aeronave_id)->delete();
+    cerrarConSello(FactPrefactura::find($p->id), '9352.00', '1496.32', '10848.32');
+
+    expect(fn () => app(CargosEstancia::class)->recalcular($p, pernoctas: 0, transitos2h: 0, transitos12h: 0))
+        ->toThrow(RenglonDePrefacturaCerradaException::class)
+        ->and(FactPrefacturaRenglon::count())->toBe(1);
 });
 
 test('el paquete internacional no agrega nada a una prefactura cerrada', function () {
@@ -164,7 +180,24 @@ test('el paquete internacional no agrega nada a una prefactura cerrada', functio
         ->and(FactPrefacturaRenglon::count())->toBe(0);
 });
 
-test('la comprobacion de cerrada va despues de leer la prefactura con candado, dentro de la transaccion', function () {
+test('el paquete internacional rechaza una cerrada aunque no haya nada que agregar', function () {
+    // Sin servicios de paquete, `create()` nunca se llama y la guarda del modelo no
+    // interviene: si el servicio no comprueba el estado, devolveria 0 en silencio.
+    $p = conEstancia();
+    cerrarConSello(FactPrefactura::find($p->id), '0.00', '0.00', '0.00');
+
+    expect(fn () => app(CargosEstancia::class)->agregarPaqueteInternacional($p))
+        ->toThrow(RenglonDePrefacturaCerradaException::class);
+});
+
+/*
+ * OJO: esta prueba NO verifica el candado. `lockForUpdate()` es un no-op en sqlite, asi
+ * que la prueba pasa igual con o sin el. Solo fija el ORDEN: la prefactura se lee dentro
+ * de la transaccion antes del borrado masivo. La garantia real es el `select ... for
+ * update` del SQL de MySQL (la gramatica lo emite) y hay que probarla contra MySQL, con
+ * dos conexiones: cierre de una sesion intercalado con `recalcular()` de otra.
+ */
+test('la prefactura se lee antes del borrado masivo (el candado en si se prueba contra MySQL)', function () {
     $p = conEstancia();
     DB::enableQueryLog();
     DB::flushQueryLog();
@@ -255,11 +288,121 @@ test('un renglon de estancia recalculado conserva su posicion', function () {
     expect($p->fresh()->renglones()->pluck('orden', 'concepto')->all())->toBe($ordenes);
 });
 
-test('el precio de la estancia se congela con sus cuatro decimales, sin pasar por float', function () {
+/*
+ * Que la lectura devuelva '4676.1000' NO prueba que no se paso por float: un
+ * decimal(10,4) hace el viaje por float sin perdida y el cast `decimal:4` del modelo
+ * normaliza igual. Lo que si se puede fijar es lo que el servicio ENTREGA al modelo:
+ * el valor que llega a `saving` es la cadena de la tarifa, no un float. La garantia
+ * contra un cambio de cobro por redondeo vive ademas en que las tarifas son
+ * decimal(_, 2) y en `ImporteServicio::calcular()`, que es la unica formula.
+ */
+test('el servicio entrega la tarifa al renglon como cadena decimal, no como float', function () {
     $p = conEstancia();
     FactAeronave::where('aeronave_id', $p->aeronave_id)->update(['tarifa_pernocta' => 4676.10]);
 
+    $entregado = null;
+    FactPrefacturaRenglon::saving(function ($renglon) use (&$entregado) {
+        $entregado = $renglon->getAttributes()['precio_unitario'];
+    });
+
     app(CargosEstancia::class)->recalcular($p, pernoctas: 1, transitos2h: 0, transitos12h: 0);
 
-    expect($p->fresh()->renglones()->sole()->precio_unitario)->toBe('4676.1000');
+    expect($entregado)->toBeString()
+        ->and($p->fresh()->renglones()->sole()->precio_unitario)->toBe('4676.1000');
+});
+
+test('en Guarda se quitan los renglones de estancia que ya habia y el motivo dice cuantos', function () {
+    $p = conEstancia();
+    $otro = FactServicio::create(['nombre' => 'Comisariato', 'precio_unitario' => 500.0]);
+    $p->renglones()->create([
+        'servicio_id' => $otro->id, 'nombre_servicio' => 'Comisariato', 'precio_unitario' => 500.0,
+        'cantidad' => 1, 'es_de_tercero' => false, 'margen' => 0, 'ajuste_precio' => 'ninguno', 'orden' => 9,
+    ]);
+    app(CargosEstancia::class)->recalcular($p, pernoctas: 2, transitos2h: 1, transitos12h: 0);
+    expect($p->fresh()->renglones()->count())->toBe(3);
+
+    FactAeronave::where('aeronave_id', $p->aeronave_id)->update(['estatus' => FactAeronave::ESTATUS_GUARDA]);
+
+    $resultado = app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 2, transitos2h: 1, transitos12h: 0);
+
+    $p = $p->fresh();
+
+    expect($resultado['renglones'])->toBe(0)
+        ->and($resultado['motivo'])->toContain('Guarda')
+        ->and($resultado['motivo'])->toContain('Se quitaron 2 renglones')
+        ->and($p->renglones()->whereIn('concepto', FactServicio::CONCEPTOS_ESTANCIA)->count())->toBe(0)
+        // Lo capturado a mano se queda.
+        ->and($p->renglones()->sole()->nombre_servicio)->toBe('Comisariato');
+});
+
+test('sin ficha de facturacion se quitan los renglones de estancia que ya habia y el motivo dice cuantos', function () {
+    $p = conEstancia();
+    app(CargosEstancia::class)->recalcular($p, pernoctas: 1, transitos2h: 0, transitos12h: 0);
+
+    FactAeronave::where('aeronave_id', $p->aeronave_id)->delete();
+
+    $resultado = app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 1, transitos2h: 0, transitos12h: 0);
+
+    expect($resultado['renglones'])->toBe(0)
+        ->and($resultado['motivo'])->toContain('ficha de facturación')
+        ->and($resultado['motivo'])->toContain('Se quitó 1 renglón')
+        ->and($p->fresh()->renglones()->count())->toBe(0);
+});
+
+test('en Guarda sin estancia previa el motivo no menciona renglones quitados', function () {
+    $p = conEstancia(FactAeronave::ESTATUS_GUARDA);
+
+    $resultado = app(CargosEstancia::class)->recalcular($p, pernoctas: 1, transitos2h: 0, transitos12h: 0);
+
+    expect($resultado['motivo'])->not->toContain('quit');
+});
+
+test('recalcular conserva el orden de los renglones de estancia aunque haya uno manual con orden alto', function () {
+    $p = conEstancia();
+    app(CargosEstancia::class)->recalcular($p, pernoctas: 1, transitos2h: 1, transitos12h: 0);
+    $antes = $p->fresh()->renglones()->pluck('orden', 'concepto')->all();
+
+    $otro = FactServicio::create(['nombre' => 'Comisariato', 'precio_unitario' => 500.0]);
+    $p->renglones()->create([
+        'servicio_id' => $otro->id, 'nombre_servicio' => 'Comisariato', 'precio_unitario' => 500.0,
+        'cantidad' => 1, 'es_de_tercero' => false, 'margen' => 0, 'ajuste_precio' => 'ninguno', 'orden' => 9,
+    ]);
+
+    app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 2, transitos2h: 2, transitos12h: 0);
+
+    $p = $p->fresh();
+
+    // Sin la preservacion, los nuevos tomarian `max(orden) + 1` = 10 y 11.
+    expect($p->renglones()->whereNotNull('concepto')->pluck('orden', 'concepto')->all())->toBe($antes)
+        ->and($p->renglones()->whereNull('concepto')->sole()->orden)->toBe(9);
+});
+
+test('un servicio de estancia dado de baja no se cobra', function () {
+    $p = conEstancia();
+    FactServicio::porConcepto(FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->update(['status' => FactServicio::STATUS_INACTIVO]);
+
+    expect(fn () => app(CargosEstancia::class)->recalcular($p, pernoctas: 1, transitos2h: 0, transitos12h: 0))
+        ->toThrow(RuntimeException::class, 'activo')
+        ->and($p->fresh()->renglones()->count())->toBe(0);
+});
+
+test('el paquete internacional con parte del paquete ya puesto agrega solo lo que falta', function () {
+    $p = conEstancia();
+    $servicios = collect([['DSMES - salida', 4060.50], ['DSM - salida', 348.0], ['Mex-eAPI - salida', 900.0]])
+        ->map(fn ($f) => FactServicio::create(['nombre' => $f[0], 'precio_unitario' => $f[1], 'en_paquete_internacional' => true]));
+
+    // La persona ya puso el segundo, con otra cantidad.
+    $p->renglones()->create([
+        'servicio_id' => $servicios[1]->id, 'nombre_servicio' => 'DSM - salida', 'precio_unitario' => 348.0,
+        'cantidad' => 3, 'es_de_tercero' => false, 'margen' => 0, 'ajuste_precio' => 'ninguno', 'orden' => 1,
+    ]);
+
+    $agregados = app(CargosEstancia::class)->agregarPaqueteInternacional($p);
+
+    $p = $p->fresh();
+
+    expect($agregados)->toBe(2)
+        ->and($p->renglones()->count())->toBe(3)
+        ->and($p->renglones()->where('servicio_id', $servicios[1]->id)->sole()->cantidad)->toBe(3)
+        ->and($p->renglones()->pluck('servicio_id')->sort()->values()->all())->toBe($servicios->pluck('id')->sort()->values()->all());
 });
