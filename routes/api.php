@@ -372,6 +372,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(functio
     Route::get('/formas-pago', [FormaPagoController::class, 'index']);
     Route::get('/proveedores', [ProveedorController::class, 'index']);
     Route::get('/prefacturas', [PrefacturaController::class, 'index']);
+    Route::get('/prefacturas/llegadas-sin-facturar', [PrefacturaController::class, 'llegadasSinFacturar']);
     Route::get('/prefacturas/{id}', [PrefacturaController::class, 'show'])->whereNumber('id');
 
     Route::middleware('subdep:factCategoriasAeronave')->group(function () {

@@ -739,3 +739,130 @@ test('un renglon con ajuste desconocido dentro de una cerrada no tumba la ficha:
     $lista = $this->getJson('/api/facturacion/prefacturas')->assertOk()->json('data');
     expect($lista[0]['sello_error'])->toBeString();
 });
+
+/*
+|--------------------------------------------------------------------------
+| Ronda de arreglos 2: filtro por llegada y llegadas sin facturar
+|--------------------------------------------------------------------------
+*/
+
+test('desde y hasta filtran por la fecha de llegada, no por la de captura', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $enero = prefacturaBorrador();
+    $enero->update(['llegada_at' => '2026-01-15 10:00:00']);
+    $marzo = prefacturaBorrador();
+    $marzo->update(['llegada_at' => '2026-03-15 10:00:00']);
+
+    // Las dos se CAPTURARON hoy: si el filtro mirara `created_at`, entrarian ambas.
+    $ids = fn (string $consulta) => collect($this->getJson("/api/facturacion/prefacturas?{$consulta}")->assertOk()->json('data'))->pluck('id')->sort()->values()->all();
+
+    expect($ids('desde=2026-02-01'))->toBe([$marzo->id])
+        ->and($ids('hasta=2026-02-01'))->toBe([$enero->id])
+        ->and($ids('desde=2026-01-15&hasta=2026-01-15'))->toBe([$enero->id])
+        ->and($ids('desde=2026-01-01&hasta=2026-12-31'))->toBe([$enero->id, $marzo->id]);
+});
+
+test('con un filtro de fechas activo, un borrador sin llegada capturada queda fuera; sin filtro, sale', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $sinLlegada = prefacturaBorrador();
+    $conLlegada = prefacturaBorrador();
+    $conLlegada->update(['llegada_at' => '2026-03-15 10:00:00']);
+
+    $ids = fn (string $consulta) => collect($this->getJson("/api/facturacion/prefacturas{$consulta}")->assertOk()->json('data'))->pluck('id')->sort()->values()->all();
+
+    // Deliberado: sin fecha de llegada no hay nada que comparar contra el rango.
+    expect($ids(''))->toBe([$sinLlegada->id, $conLlegada->id])
+        ->and($ids('?desde=2000-01-01'))->toBe([$conLlegada->id])
+        ->and($ids('?hasta=2100-01-01'))->toBe([$conLlegada->id]);
+});
+
+function operacionDeLlegada(string $matricula, array $extra = []): App\Models\OperacionDiaria
+{
+    return App\Models\OperacionDiaria::create(array_merge([
+        'user_id' => App\Models\User::factory()->create()->id,
+        'fecha' => '2026-10-01',
+        'tipo' => 'llegada',
+        'matricula' => $matricula,
+        'equipo' => 'C525',
+        'hora' => '10:00:00',
+        'lugar' => 'MMTO',
+        'pax' => 2,
+        'departamento' => 'Despacho',
+    ], $extra));
+}
+
+test('las llegadas sin facturar son de lectura: sin sesion 401, y cualquier autenticado las ve', function () {
+    $this->getJson('/api/facturacion/prefacturas/llegadas-sin-facturar?matricula=XA-AAA')->assertUnauthorized();
+
+    $this->actingAs(usuarioConSubdepartamento('factClientes', 'Facturacion'));
+    $this->getJson('/api/facturacion/prefacturas/llegadas-sin-facturar?matricula=XA-AAA')->assertOk()->assertJsonPath('data', []);
+});
+
+test('las llegadas sin facturar exigen la matricula', function () {
+    $this->actingAs(usuarioConSubdepartamento('factClientes', 'Facturacion'));
+
+    $this->getJson('/api/facturacion/prefacturas/llegadas-sin-facturar')
+        ->assertStatus(422)
+        ->assertJsonPath('errors.matricula.0', 'Indica la matrícula.');
+});
+
+test('las llegadas sin facturar excluyen las que una prefactura activa ya tomo, y devuelven la forma que la pantalla espera', function () {
+    $this->actingAs(usuarioConSubdepartamento('factClientes', 'Facturacion'));
+    $libre = operacionDeLlegada('XA-AAA', ['hora' => '09:30:00', 'lugar' => 'KMIA']);
+    $enBorrador = operacionDeLlegada('XA-AAA');
+    $enCerrada = operacionDeLlegada('XA-AAA');
+    $enDescartada = operacionDeLlegada('XA-AAA');
+
+    foreach ([[$enBorrador, 'borrador', 'A'], [$enCerrada, 'cerrada', 'A'], [$enDescartada, 'borrador', 'N']] as [$operacion, $estado, $status]) {
+        prefacturaBorrador()->update(['operacion_llegada_id' => $operacion->id, 'estado' => $estado, 'status' => $status]);
+    }
+
+    $respuesta = $this->getJson('/api/facturacion/prefacturas/llegadas-sin-facturar?matricula=XA-AAA')->assertOk();
+
+    // La descartada ya no reserva su operacion: vuelve a ofrecerse. Las activas (borrador o cerrada), no.
+    expect(collect($respuesta->json('data'))->pluck('id')->sort()->values()->all())->toBe([$libre->id, $enDescartada->id])
+        ->and(array_keys($respuesta->json('data.0')))->toEqualCanonicalizing(['id', 'matricula', 'fecha', 'hora', 'lugar']);
+
+    $fila = collect($respuesta->json('data'))->firstWhere('id', $libre->id);
+    expect($fila['matricula'])->toBe('XA-AAA')
+        ->and($fila['hora'])->toBe('09:30:00')
+        ->and($fila['lugar'])->toBe('KMIA')
+        ->and($fila['fecha'])->toStartWith('2026-10-01');
+});
+
+test('las llegadas sin facturar son de la matricula exacta, solo llegadas y solo activas', function () {
+    $this->actingAs(usuarioConSubdepartamento('factClientes', 'Facturacion'));
+    $buena = operacionDeLlegada('XA-AB');
+    operacionDeLlegada('XA-ABC');
+    operacionDeLlegada('XA-AB', ['tipo' => 'salida']);
+    operacionDeLlegada('XA-AB', ['status' => false]);
+
+    $ids = collect($this->getJson('/api/facturacion/prefacturas/llegadas-sin-facturar?matricula=xa-ab')->assertOk()->json('data'))->pluck('id')->all();
+
+    expect($ids)->toBe([$buena->id]);
+});
+
+test('las llegadas sin facturar salen de la mas reciente a la mas antigua y respetan el maximo', function () {
+    $this->actingAs(usuarioConSubdepartamento('factClientes', 'Facturacion'));
+    $vieja = operacionDeLlegada('XA-AAA', ['fecha' => '2026-09-01']);
+    $media = operacionDeLlegada('XA-AAA', ['fecha' => '2026-09-15']);
+    $nueva = operacionDeLlegada('XA-AAA', ['fecha' => '2026-09-30']);
+
+    $todas = collect($this->getJson('/api/facturacion/prefacturas/llegadas-sin-facturar?matricula=XA-AAA')->assertOk()->json('data'))->pluck('id')->all();
+    $dos = collect($this->getJson('/api/facturacion/prefacturas/llegadas-sin-facturar?matricula=XA-AAA&max=2')->assertOk()->json('data'))->pluck('id')->all();
+
+    expect($todas)->toBe([$nueva->id, $media->id, $vieja->id])
+        ->and($dos)->toBe([$nueva->id, $media->id]);
+
+    $this->getJson('/api/facturacion/prefacturas/llegadas-sin-facturar?matricula=XA-AAA&max=0')->assertStatus(422);
+});
+
+test('una prefactura con la operacion de llegada nula no esconde ninguna llegada (el NOT IN no se envenena con NULL)', function () {
+    $this->actingAs(usuarioConSubdepartamento('factClientes', 'Facturacion'));
+    $libre = operacionDeLlegada('XA-AAA');
+    prefacturaBorrador(); // operacion_llegada_id = NULL, activa
+
+    $ids = collect($this->getJson('/api/facturacion/prefacturas/llegadas-sin-facturar?matricula=XA-AAA')->assertOk()->json('data'))->pluck('id')->all();
+
+    expect($ids)->toBe([$libre->id]);
+});

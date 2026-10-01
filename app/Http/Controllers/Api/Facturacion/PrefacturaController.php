@@ -9,6 +9,7 @@ use App\Http\Requests\Facturacion\UpdatePrefacturaRequest;
 use App\Models\Bitacora;
 use App\Models\FactPrefactura;
 use App\Models\FactPrefacturaRenglon;
+use App\Models\OperacionDiaria;
 use App\Services\CierrePrefactura;
 use App\Services\PrefacturaIncompletaException;
 use App\Services\PrefacturaYaCerradaException;
@@ -77,18 +78,66 @@ class PrefacturaController extends Controller
             });
         }
 
+        // `desde` y `hasta` filtran por la fecha de LLEGADA, que es la que la lista
+        // muestra (no por `created_at`: el operador filtraría por una fecha y vería otra).
+        // `llegada_at` admite nulos, y a propósito: con un filtro de fechas activo, un
+        // borrador sin llegada capturada queda FUERA, porque no tiene fecha que comparar.
+        // Sin filtro, sale en la lista como cualquier otro.
         if ($request->filled('desde')) {
-            $query->whereDate('created_at', '>=', $request->query('desde'));
+            $query->whereDate('llegada_at', '>=', $request->query('desde'));
         }
 
         if ($request->filled('hasta')) {
-            $query->whereDate('created_at', '<=', $request->query('hasta'));
+            $query->whereDate('llegada_at', '<=', $request->query('hasta'));
         }
 
         $pagina = $query->paginate($perPage)->appends($request->query());
         $pagina->through(fn (FactPrefactura $p) => $this->presentar($p, conRenglones: false));
 
         return response()->json($pagina);
+    }
+
+    /**
+     * Las llegadas de una matrícula que la pantalla puede ofrecer al abrir una
+     * prefactura: solo las que NINGUNA prefactura activa ha tomado ya
+     * (`fact_prefacturas.operacion_llegada_id`). Una prefactura descartada no
+     * reserva su operación. Es de lectura, como el resto: sin `subdep:`.
+     *
+     * La matrícula es exacta (no un LIKE) y solo salen operaciones activas, que es lo
+     * que el resto del sistema entiende por operación vigente. Las más recientes primero.
+     */
+    public function llegadasSinFacturar(Request $request): JsonResponse
+    {
+        $datos = $request->validate([
+            'matricula' => ['required', 'string', 'max:20'],
+            'max' => ['nullable', 'integer', 'min:1', 'max:20'],
+        ], [
+            'matricula.required' => 'Indica la matrícula.',
+            'matricula.string' => 'La matrícula debe ser texto.',
+            'matricula.max' => 'La matrícula no puede pasar de 20 caracteres.',
+            'max.integer' => 'El máximo debe ser un número entero.',
+            'max.min' => 'El máximo debe ser al menos 1.',
+            'max.max' => 'El máximo no puede pasar de 20.',
+        ]);
+
+        // `whereNotNull` dentro de la subconsulta: un `NOT IN` con un NULL en la lista no devuelve nada.
+        $tomadas = FactPrefactura::query()
+            ->where('status', FactPrefactura::STATUS_ACTIVO)
+            ->whereNotNull('operacion_llegada_id')
+            ->select('operacion_llegada_id');
+
+        $llegadas = OperacionDiaria::query()
+            ->activas()
+            ->llegadas()
+            ->where('matricula', strtoupper(trim($datos['matricula'])))
+            ->whereNotIn('id', $tomadas)
+            ->orderByDesc('fecha')
+            ->orderByDesc('hora')
+            ->orderByDesc('id')
+            ->limit((int) ($datos['max'] ?? 5))
+            ->get(['id', 'matricula', 'fecha', 'hora', 'lugar']);
+
+        return response()->json(['data' => $llegadas]);
     }
 
     public function show(int $id): JsonResponse
