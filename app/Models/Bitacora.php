@@ -23,6 +23,8 @@ class Bitacora extends Model
 
     public const MODULO_FACTURACION_CATALOGOS = 'FACTURACION_CATALOGOS';
 
+    public const MODULO_FACTURACION_PREFACTURAS = 'FACTURACION_PREFACTURAS';
+
     public const ACCION_CREAR = 'CREAR';
     public const ACCION_ACTUALIZAR = 'ACTUALIZAR';
     public const ACCION_ELIMINAR = 'ELIMINAR';
