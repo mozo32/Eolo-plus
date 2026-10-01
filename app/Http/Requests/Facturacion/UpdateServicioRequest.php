@@ -2,19 +2,23 @@
 
 namespace App\Http\Requests\Facturacion;
 
-use App\Models\FactPrecioCombustible;
 use App\Models\FactServicio;
 use Illuminate\Validation\Validator;
 
 /**
- * Mismas reglas que el alta, incluida la validación cruzada de tercero y margen,
- * más la guarda del servicio de combustible.
+ * Mismas reglas que el alta —incluidas la validación cruzada de tercero y margen y
+ * la guarda del nombre reservado— más la mitad que solo aplica al editar: que el
+ * servicio de combustible no se pueda renombrar.
  */
 class UpdateServicioRequest extends StoreServicioRequest
 {
     /**
      * A las reglas del alta se suma una propia: el servicio de combustible no se
      * puede renombrar.
+     *
+     * Es la otra mitad del hueco que `reglaDelNombreReservado()` cubre del lado
+     * del alta: ahí se impide que CUALQUIER otro servicio tome ese nombre, aquí
+     * que ese servicio lo suelte.
      *
      * `FactPrecioCombustible::registrar()` sincroniza el precio de ese servicio
      * buscándolo por su nombre, porque al importar no queda un id estable que
@@ -52,18 +56,5 @@ class UpdateServicioRequest extends StoreServicioRequest
                 );
             }
         }]);
-    }
-
-    /**
-     * Comparación insensible a la caja, que es como la resuelve MySQL con la
-     * collation de la columna (`utf8mb4_unicode_ci`). Así la guarda protege los
-     * mismos nombres que la sincronía llegaría a actualizar, nunca menos.
-     *
-     * El `trim` aplica al nombre GUARDADO: el recibido ya viene recortado por el
-     * middleware `TrimStrings`, así que de ese lado no hace nada.
-     */
-    private static function esNombreDeCombustible(string $nombre): bool
-    {
-        return mb_strtolower(trim($nombre)) === mb_strtolower(FactPrecioCombustible::SERVICIO_COMBUSTIBLE);
     }
 }

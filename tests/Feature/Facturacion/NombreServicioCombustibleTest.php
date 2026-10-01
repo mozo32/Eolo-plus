@@ -143,3 +143,76 @@ test('editar un servicio que no existe sigue dando 404, no 422 por la guarda', f
     $this->putJson('/api/facturacion/servicios/999999', cuerpoServicioCombustible())
         ->assertNotFound();
 });
+
+/*
+ * El otro lado del hueco, que es peor que el renombrado: traer CUALQUIER servicio
+ * a ese nombre. `fact_servicios.nombre` solo tiene `->index()`, no es único, así
+ * que nada en la base lo impide; y la sincronía recorre TODOS los activos que
+ * casen el nombre, no uno.
+ *
+ * Con 'Slot MMTO' (19250.0000, de tercero con margen 50) renombrado a
+ * 'Combustible JET A-1', la siguiente captura de precio le fijaría 26.0639 y en el
+ * bloque 2 ese servicio facturaría 26.0639 × 1.5 = 39.10 en lugar de 28,875.00.
+ */
+test('no se puede renombrar otro servicio HACIA el nombre del combustible', function () {
+    $this->actingAs(usuarioConSubdepartamento('factServicios', 'Facturacion'));
+    $otro = FactServicio::create([
+        'nombre' => 'Slot MMTO',
+        'precio_unitario' => 19250.0000,
+        'es_de_tercero' => true,
+        'margen' => 50,
+    ]);
+
+    $this->putJson("/api/facturacion/servicios/{$otro->id}", cuerpoServicioCombustible([
+        'precio_unitario' => 19250.0000,
+        'es_de_tercero' => true,
+        'margen' => 50,
+    ]))->assertStatus(422)->assertJsonValidationErrors(['nombre']);
+
+    expect($otro->fresh()->nombre)->toBe('Slot MMTO');
+});
+
+test('no se puede dar de alta otro servicio con el nombre del combustible', function () {
+    $this->actingAs(usuarioConSubdepartamento('factServicios', 'Facturacion'));
+
+    $this->postJson('/api/facturacion/servicios', cuerpoServicioCombustible())
+        ->assertStatus(422)->assertJsonValidationErrors(['nombre']);
+
+    expect(FactServicio::count())->toBe(0);
+});
+
+test('la guarda del nombre reservado tampoco se burla con la caja, ni en alta ni en edicion', function () {
+    $this->actingAs(usuarioConSubdepartamento('factServicios', 'Facturacion'));
+    $otro = FactServicio::create(['nombre' => 'Slot MMTO', 'precio_unitario' => 19250]);
+
+    $this->postJson('/api/facturacion/servicios', cuerpoServicioCombustible([
+        'nombre' => 'combustible JET a-1',
+    ]))->assertStatus(422)->assertJsonValidationErrors(['nombre']);
+
+    $this->putJson("/api/facturacion/servicios/{$otro->id}", cuerpoServicioCombustible([
+        'nombre' => 'COMBUSTIBLE JET A-1',
+        'precio_unitario' => 19250,
+    ]))->assertStatus(422)->assertJsonValidationErrors(['nombre']);
+
+    expect($otro->fresh()->nombre)->toBe('Slot MMTO');
+});
+
+test('el mensaje dice que el nombre esta reservado al servicio que sigue el precio del combustible', function () {
+    $this->actingAs(usuarioConSubdepartamento('factServicios', 'Facturacion'));
+
+    $mensaje = $this->postJson('/api/facturacion/servicios', cuerpoServicioCombustible())
+        ->assertStatus(422)->json('errors.nombre.0');
+
+    expect($mensaje)->toContain('reservado')
+        ->and($mensaje)->toContain('precio del combustible');
+});
+
+test('dar de alta un servicio con otro nombre sigue respondiendo 201', function () {
+    $this->actingAs(usuarioConSubdepartamento('factServicios', 'Facturacion'));
+
+    $this->postJson('/api/facturacion/servicios', cuerpoServicioCombustible([
+        'nombre' => 'Combustible JET A-1 Plus',
+    ]))->assertCreated();
+
+    expect(FactServicio::pluck('nombre')->all())->toBe(['Combustible JET A-1 Plus']);
+});

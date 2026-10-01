@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Facturacion;
 
 use App\Models\FactCategoriaServicio;
+use App\Models\FactPrecioCombustible;
 use App\Models\FactServicio;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -76,7 +77,12 @@ class StoreServicioRequest extends FormRequest
      */
     public function after(): array
     {
-        return [function (Validator $validator) {
+        return [$this->reglaDeTerceroYMargen(), $this->reglaDelNombreReservado()];
+    }
+
+    private function reglaDeTerceroYMargen(): callable
+    {
+        return function (Validator $validator) {
             if ($validator->errors()->hasAny(['es_de_tercero', 'margen'])) {
                 return;
             }
@@ -97,7 +103,70 @@ class StoreServicioRequest extends FormRequest
                     "Combinación no válida: el servicio no es de tercero y trae margen {$margen}. Si no es de tercero, el margen debe ser 0."
                 );
             }
-        }];
+        };
+    }
+
+    /**
+     * El nombre del servicio de combustible está reservado: ningún otro registro
+     * puede llevarlo, ni por alta ni por edición.
+     *
+     * `FactPrecioCombustible` sincroniza el precio buscando POR NOMBRE y
+     * actualizando TODOS los servicios activos que casen, porque la columna solo
+     * tiene `->index()` y el nombre no es único. Así que traer otro servicio a ese
+     * nombre no lo "esconde": lo mete dentro de la sincronía. Un 'Slot MMTO' de
+     * 19,250.0000 renombrado así pasaría a cobrar el precio del combustible en la
+     * siguiente captura, y eso sí cambia un cobro, hacia abajo y en silencio.
+     *
+     * Es el complemento de la guarda de `UpdateServicioRequest`, que cubre el
+     * sentido contrario (sacar al servicio de combustible de ese nombre). Las dos
+     * son excluyentes: esta solo dispara cuando el nombre GUARDADO no es el del
+     * combustible, y aquella solo cuando sí lo es.
+     */
+    private function reglaDelNombreReservado(): callable
+    {
+        return function (Validator $validator) {
+            if ($validator->errors()->has('nombre')) {
+                return;
+            }
+
+            if (! self::esNombreDeCombustible((string) $this->input('nombre'))) {
+                return;
+            }
+
+            $id = $this->route('id');
+            $actual = $id === null ? null : FactServicio::query()->find($id);
+
+            // Editar un id que no existe responde 404 en el controlador; la guarda
+            // no debe adelantarse con un 422 que diría algo falso.
+            if ($id !== null && $actual === null) {
+                return;
+            }
+
+            // Es el propio servicio de combustible conservando su nombre: pasa.
+            if ($actual !== null && self::esNombreDeCombustible($actual->nombre)) {
+                return;
+            }
+
+            $validator->errors()->add(
+                'nombre',
+                'Ese nombre está reservado al servicio que sigue el precio del combustible: su precio se actualiza solo '
+                .'cada vez que se registra un precio nuevo, y cualquier otro servicio que se llame igual quedaría dentro '
+                .'de esa actualización y cobraría el precio del combustible. Usa un nombre distinto.'
+            );
+        };
+    }
+
+    /**
+     * Comparación insensible a la caja, que es como la resuelve MySQL con la
+     * collation de la columna (`utf8mb4_unicode_ci`). Así las guardas protegen los
+     * mismos nombres que la sincronía llegaría a actualizar, nunca menos.
+     *
+     * El `trim` aplica al nombre GUARDADO: el recibido ya viene recortado por
+     * `prepareForValidation` y por el middleware `TrimStrings`.
+     */
+    protected static function esNombreDeCombustible(string $nombre): bool
+    {
+        return mb_strtolower(trim($nombre)) === mb_strtolower(FactPrecioCombustible::SERVICIO_COMBUSTIBLE);
     }
 
     public function messages(): array
