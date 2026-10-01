@@ -17,6 +17,7 @@ test('registrar un precio nuevo actualiza el servicio de combustible', function 
     $usuario = User::factory()->create();
     $servicio = FactServicio::create([
         'nombre' => 'Combustible JET A-1',
+        'concepto' => FactServicio::CONCEPTO_COMBUSTIBLE,
         'precio_unitario' => 21.6122,
     ]);
 
@@ -28,7 +29,7 @@ test('registrar un precio nuevo actualiza el servicio de combustible', function 
 
 test('el servicio sigue el precio Eolo sobrescrito, no el calculado', function () {
     $usuario = User::factory()->create();
-    $servicio = FactServicio::create(['nombre' => 'Combustible JET A-1', 'precio_unitario' => 0]);
+    $servicio = FactServicio::create(['nombre' => 'Combustible JET A-1', 'concepto' => FactServicio::CONCEPTO_COMBUSTIBLE, 'precio_unitario' => 0]);
 
     FactPrecioCombustible::registrar(22.1643, 30.0000, $usuario->id);
 
@@ -48,6 +49,7 @@ test('un servicio de combustible dado de baja no se toca', function () {
     $usuario = User::factory()->create();
     $servicio = FactServicio::create([
         'nombre' => 'Combustible JET A-1',
+        'concepto' => FactServicio::CONCEPTO_COMBUSTIBLE,
         'precio_unitario' => 21.6122,
         'status' => 'N',
     ]);
@@ -59,20 +61,20 @@ test('un servicio de combustible dado de baja no se toca', function () {
 
 test('solo cambia el servicio de combustible: los demás servicios activos conservan su precio', function () {
     $usuario = User::factory()->create();
-    FactServicio::create(['nombre' => 'Combustible JET A-1', 'precio_unitario' => 21.6122]);
+    FactServicio::create(['nombre' => 'Combustible JET A-1', 'concepto' => FactServicio::CONCEPTO_COMBUSTIBLE, 'precio_unitario' => 21.6122]);
     $otro = FactServicio::create(['nombre' => 'Hangaraje', 'precio_unitario' => 1500.0000]);
     $parecido = FactServicio::create(['nombre' => 'Combustible JET A-1 Plus', 'precio_unitario' => 99.0000]);
 
     FactPrecioCombustible::registrar(22.1643, null, $usuario->id);
 
-    // Un update sin el `where` por nombre cambiaría el cobro de todo el catálogo.
+    // Un update sin el `where` por concepto cambiaría el cobro de todo el catálogo.
     expect((float) $otro->fresh()->precio_unitario)->toBe(1500.0000)
         ->and((float) $parecido->fresh()->precio_unitario)->toBe(99.0000);
 });
 
 test('la sincronía deja rastro en la bitácora con el precio anterior y el nuevo', function () {
     $usuario = User::factory()->create();
-    $servicio = FactServicio::create(['nombre' => 'Combustible JET A-1', 'precio_unitario' => 21.6122]);
+    $servicio = FactServicio::create(['nombre' => 'Combustible JET A-1', 'concepto' => FactServicio::CONCEPTO_COMBUSTIBLE, 'precio_unitario' => 21.6122]);
 
     FactPrecioCombustible::registrar(22.1643, null, $usuario->id);
 
@@ -95,7 +97,7 @@ test('sin cambio real de precio, o sin servicio, la sincronía no escribe en la 
     FactPrecioCombustible::registrar(22.1643, null, $usuario->id);
 
     // Con el servicio ya en el precio que saldrá.
-    FactServicio::create(['nombre' => 'Combustible JET A-1', 'precio_unitario' => 26.0639]);
+    FactServicio::create(['nombre' => 'Combustible JET A-1', 'concepto' => FactServicio::CONCEPTO_COMBUSTIBLE, 'precio_unitario' => 26.0639]);
     FactPrecioCombustible::registrar(22.1643, null, $usuario->id);
 
     expect(Bitacora::where('accion', Bitacora::ACCION_ACTUALIZAR)->count())->toBe(0);
@@ -120,7 +122,7 @@ test('sin cambio real de precio, o sin servicio, la sincronía no escribe en la 
  */
 test('si falla el rastro en la bitácora, se deshace todo: el precio nuevo y la sincronía', function () {
     $usuario = User::factory()->create();
-    $servicio = FactServicio::create(['nombre' => 'Combustible JET A-1', 'precio_unitario' => 21.6122]);
+    $servicio = FactServicio::create(['nombre' => 'Combustible JET A-1', 'concepto' => FactServicio::CONCEPTO_COMBUSTIBLE, 'precio_unitario' => 21.6122]);
     $anterior = FactPrecioCombustible::registrar(20.0000, null, $usuario->id);
     $precioServicio = (float) $servicio->fresh()->precio_unitario;
 

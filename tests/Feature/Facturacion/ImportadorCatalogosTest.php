@@ -550,13 +550,13 @@ function origenCombustible(): void
         ['id_combustible' => 1, 'p_combustible' => '26.0640', 'f_ini' => '2022-09-26', 'f_fin' => '2028-09-26', 'pasa' => '22.1643'],
     ]);
     DB::connection('remota')->table('tb_servicio')->insert([
-        ['id_servicio' => 7, 'servicio' => FactPrecioCombustible::SERVICIO_COMBUSTIBLE, 'precio_u' => '26.0640', 'id_categorias' => 0],
+        ['id_servicio' => 7, 'servicio' => 'Combustible JET A-1', 'precio_u' => '26.0640', 'id_categorias' => 0],
     ]);
 }
 
 function servicioCombustibleImportado(): FactServicio
 {
-    return FactServicio::where('nombre', FactPrecioCombustible::SERVICIO_COMBUSTIBLE)->firstOrFail();
+    return FactServicio::where('nombre', 'Combustible JET A-1')->firstOrFail();
 }
 
 test('una segunda importacion conserva el precio de combustible capturado despues, no el del origen', function () {
@@ -589,7 +589,7 @@ test('corregir el precio del servicio de combustible sale como hallazgo con los 
 
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
-    $hallazgo = collect($resultado->hallazgos)->first(fn ($h) => str_contains($h, FactPrecioCombustible::SERVICIO_COMBUSTIBLE));
+    $hallazgo = collect($resultado->hallazgos)->first(fn ($h) => str_contains($h, 'Combustible JET A-1'));
 
     expect($hallazgo)->not->toBeNull()
         ->and($hallazgo)->toContain('26.0640')
@@ -643,4 +643,47 @@ test('la simulacion de la correccion del precio de combustible no escribe nada',
     expect(collect($resultado->hallazgos)->contains(fn ($h) => str_contains($h, '28.1750')))->toBeTrue()
         ->and((float) $servicio->fresh()->precio_unitario)->toBe(28.1750)
         ->and(Bitacora::count())->toBe(0);
+});
+
+test('el importador asigna el concepto por el id viejo', function () {
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 2, 'servicio' => 'Transito 02 hrs', 'precio_u' => '99.0000', 'id_categorias' => 1],
+        ['id_servicio' => 7, 'servicio' => 'Combustible JET A-1', 'precio_u' => '26.0640', 'id_categorias' => 1],
+        ['id_servicio' => 9, 'servicio' => 'DSMES - salida', 'precio_u' => '4060.5000', 'id_categorias' => 1],
+        ['id_servicio' => 50, 'servicio' => 'Comisariato', 'precio_u' => '100.0000', 'id_categorias' => 1],
+    ]);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactServicio::porConcepto(FactServicio::CONCEPTO_COMBUSTIBLE)->sole()->nombre)->toBe('Combustible JET A-1')
+        ->and(FactServicio::porConcepto(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H)->sole()->nombre)->toBe('Transito 02 hrs')
+        ->and(FactServicio::where('nombre', 'DSMES - salida')->sole()->en_paquete_internacional)->toBeTrue()
+        ->and(FactServicio::where('nombre', 'Comisariato')->sole()->concepto)->toBeNull()
+        ->and(FactServicio::where('nombre', 'Comisariato')->sole()->en_paquete_internacional)->toBeFalse();
+});
+
+test('el importador asigna los siete conceptos y una segunda corrida no los duplica', function () {
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 2, 'servicio' => 'Transito 02 hrs', 'precio_u' => '1', 'id_categorias' => 1],
+        ['id_servicio' => 3, 'servicio' => 'Transito 12 hrs', 'precio_u' => '1', 'id_categorias' => 1],
+        ['id_servicio' => 4, 'servicio' => 'Transito 24 hrs - pernocta', 'precio_u' => '1', 'id_categorias' => 1],
+        ['id_servicio' => 7, 'servicio' => 'Combustible JET A-1', 'precio_u' => '1', 'id_categorias' => 1],
+        ['id_servicio' => 9, 'servicio' => 'DSMES - salida', 'precio_u' => '1', 'id_categorias' => 1],
+        ['id_servicio' => 10, 'servicio' => 'DSM - salida', 'precio_u' => '1', 'id_categorias' => 1],
+        ['id_servicio' => 14, 'servicio' => 'Mex-eAPI - salida', 'precio_u' => '1', 'id_categorias' => 1],
+        ['id_servicio' => 93, 'servicio' => 'Servicios Internacionales - salida', 'precio_u' => '1', 'id_categorias' => 1],
+        ['id_servicio' => 50, 'servicio' => 'Comisariato', 'precio_u' => '1', 'id_categorias' => 1],
+    ]);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactServicio::whereNotNull('concepto')->pluck('nombre', 'concepto')->all())->toBe([
+        FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H => 'Transito 02 hrs',
+        FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H => 'Transito 12 hrs',
+        FactServicio::CONCEPTO_ESTANCIA_PERNOCTA => 'Transito 24 hrs - pernocta',
+        FactServicio::CONCEPTO_COMBUSTIBLE => 'Combustible JET A-1',
+    ])
+        ->and(FactServicio::where('en_paquete_internacional', true)->count())->toBe(4)
+        ->and(FactServicio::count())->toBe(9);
 });

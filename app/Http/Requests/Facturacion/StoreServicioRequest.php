@@ -3,10 +3,8 @@
 namespace App\Http\Requests\Facturacion;
 
 use App\Models\FactCategoriaServicio;
-use App\Models\FactPrecioCombustible;
 use App\Models\FactServicio;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Exists;
 use Illuminate\Validation\Validator;
@@ -78,7 +76,7 @@ class StoreServicioRequest extends FormRequest
      */
     public function after(): array
     {
-        return [$this->reglaDeTerceroYMargen(), $this->reglaDelNombreReservado()];
+        return [$this->reglaDeTerceroYMargen()];
     }
 
     private function reglaDeTerceroYMargen(): callable
@@ -105,83 +103,6 @@ class StoreServicioRequest extends FormRequest
                 );
             }
         };
-    }
-
-    /**
-     * El nombre del servicio de combustible está reservado: ningún otro registro
-     * puede llevarlo, ni por alta ni por edición.
-     *
-     * `FactPrecioCombustible` sincroniza el precio buscando POR NOMBRE y
-     * actualizando TODOS los servicios activos que casen, porque la columna solo
-     * tiene `->index()` y el nombre no es único. Así que traer otro servicio a ese
-     * nombre no lo "esconde": lo mete dentro de la sincronía. Un 'Slot MMTO' de
-     * 19,250.0000 renombrado así pasaría a cobrar el precio del combustible en la
-     * siguiente captura, y eso sí cambia un cobro, hacia abajo y en silencio.
-     *
-     * Es el complemento de la guarda de `UpdateServicioRequest`, que cubre el
-     * sentido contrario (sacar al servicio de combustible de ese nombre). Las dos
-     * son excluyentes: esta solo dispara cuando el nombre GUARDADO no es el del
-     * combustible, y aquella solo cuando sí lo es.
-     */
-    private function reglaDelNombreReservado(): callable
-    {
-        return function (Validator $validator) {
-            if ($validator->errors()->has('nombre')) {
-                return;
-            }
-
-            if (! self::esNombreDeCombustible((string) $this->input('nombre'))) {
-                return;
-            }
-
-            $id = $this->route('id');
-            $actual = $id === null ? null : FactServicio::query()->find($id);
-
-            // Editar un id que no existe responde 404 en el controlador; la guarda
-            // no debe adelantarse con un 422 que diría algo falso.
-            if ($id !== null && $actual === null) {
-                return;
-            }
-
-            // Es el propio servicio de combustible conservando su nombre: pasa.
-            if ($actual !== null && self::esNombreDeCombustible($actual->nombre)) {
-                return;
-            }
-
-            $validator->errors()->add(
-                'nombre',
-                'Ese nombre está reservado al servicio que sigue el precio del combustible: su precio se actualiza solo '
-                .'cada vez que se registra un precio nuevo, y cualquier otro servicio que se llame igual quedaría dentro '
-                .'de esa actualización y cobraría el precio del combustible. Usa un nombre distinto.'
-            );
-        };
-    }
-
-    /**
-     * Comparación insensible a la caja Y a los acentos, que es como la resuelve
-     * MySQL con la collation de la columna (`utf8mb4_unicode_ci`). Así las guardas
-     * protegen los mismos nombres que la sincronía llegaría a actualizar, nunca
-     * menos.
-     *
-     * Los acentos importan y no es teórico: `utf8mb4_unicode_ci` pliega el primer
-     * nivel de la UCA, así que para MySQL 'Combustíble JET A-1' ES
-     * 'Combustible JET A-1' (comprobado: la comparación devuelve 1). Con solo
-     * `mb_strtolower`, renombrar un servicio con un acento de más burlaba la
-     * guarda y la sincronía igual le fijaba el precio del combustible: un
-     * servicio de 19,250.00 pasaba a cobrar 26.0639. De ahí el `Str::ascii`, que
-     * es la misma normalización que usa `ImportadorMatriculas::llaveNombre()`.
-     *
-     * El `trim` aplica al nombre GUARDADO: el recibido ya viene recortado por
-     * `prepareForValidation` y por el middleware `TrimStrings`.
-     */
-    protected static function esNombreDeCombustible(string $nombre): bool
-    {
-        return self::llaveComparable($nombre) === self::llaveComparable(FactPrecioCombustible::SERVICIO_COMBUSTIBLE);
-    }
-
-    private static function llaveComparable(string $nombre): string
-    {
-        return mb_strtolower(Str::ascii(trim($nombre)));
     }
 
     public function messages(): array

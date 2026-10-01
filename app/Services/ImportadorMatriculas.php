@@ -49,6 +49,22 @@ class ImportadorMatriculas
 
     private const SERVICIO_COMISION_131 = 113;
 
+    /**
+     * Ids del origen que llevan concepto. Son estables: el sistema viejo los usa
+     * hardcodeados (`$id_servicio=7`, `$Permocta=4`, `$trans2h=2`, `$trans12h=3`).
+     *
+     * @var array<int,string>
+     */
+    private const CONCEPTOS_POR_ID_VIEJO = [
+        7 => FactServicio::CONCEPTO_COMBUSTIBLE,
+        2 => FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H,
+        3 => FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H,
+        4 => FactServicio::CONCEPTO_ESTANCIA_PERNOCTA,
+    ];
+
+    /** Los cuatro que `insert22.php` agrega juntos cuando el destino es internacional. */
+    private const SERVICIOS_PAQUETE_INTERNACIONAL = [9, 10, 14, 93];
+
     private ResultadoImportacion $resultado;
 
     /** @var array<int,string> id_categoria viejo => nombre, para los hallazgos */
@@ -786,6 +802,8 @@ class ImportadorMatriculas
                     // 0 en silencio: solo evita un null en la columna si el
                     // origen cambiara.
                     'precio_unitario' => $fila->precio_u ?? 0,
+                    'concepto' => self::CONCEPTOS_POR_ID_VIEJO[$idViejo] ?? null,
+                    'en_paquete_internacional' => in_array($idViejo, self::SERVICIOS_PAQUETE_INTERNACIONAL, true),
                     'es_de_tercero' => $esDeTercero,
                     'margen' => $esDeTercero ? self::MARGEN_TERCERO : 0,
                     'ajuste_precio' => match ($idViejo) {

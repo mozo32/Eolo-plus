@@ -24,11 +24,30 @@ class FactServicio extends Model
     /** Servicio 113: (precio ÷ 1.31) × 1.15. */
     public const AJUSTE_COMISION_131 = ImporteServicio::AJUSTE_COMISION_131;
 
+    /** El servicio cuyo precio sigue al precio Eolo del combustible. */
+    public const CONCEPTO_COMBUSTIBLE = 'combustible';
+
+    /** Los tres de estancia: su precio NO sale del catálogo, sale de la tarifa de la matrícula. */
+    public const CONCEPTO_ESTANCIA_PERNOCTA = 'estancia_pernocta';
+
+    public const CONCEPTO_ESTANCIA_TRANSITO_2H = 'estancia_transito_2h';
+
+    public const CONCEPTO_ESTANCIA_TRANSITO_12H = 'estancia_transito_12h';
+
+    /** @var list<string> */
+    public const CONCEPTOS_ESTANCIA = [
+        self::CONCEPTO_ESTANCIA_PERNOCTA,
+        self::CONCEPTO_ESTANCIA_TRANSITO_2H,
+        self::CONCEPTO_ESTANCIA_TRANSITO_12H,
+    ];
+
     protected $table = 'fact_servicios';
 
     protected $fillable = [
         'categoria_servicio_id',
         'nombre',
+        'concepto',
+        'en_paquete_internacional',
         'precio_unitario',
         'es_de_tercero',
         'margen',
@@ -40,11 +59,17 @@ class FactServicio extends Model
         'precio_unitario' => 'decimal:4',
         'margen' => 'decimal:2',
         'es_de_tercero' => 'boolean',
+        'en_paquete_internacional' => 'boolean',
     ];
 
     public function scopeActivos(Builder $query): Builder
     {
         return $query->where('status', self::STATUS_ACTIVO);
+    }
+
+    public function scopePorConcepto($query, string $concepto)
+    {
+        return $query->where('concepto', $concepto);
     }
 
     public function categoria()

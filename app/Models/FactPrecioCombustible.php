@@ -7,17 +7,6 @@ use Illuminate\Support\Facades\DB;
 
 class FactPrecioCombustible extends Model
 {
-    /**
-     * Nombre del servicio cuyo precio sigue al precio Eolo del combustible.
-     *
-     * El sistema viejo lo apunta por id fijo (`actualizar_combustible.php` hace
-     * `WHERE id_servicio='7'`, y el 7 es esta fila). Aqui no hay un id estable que
-     * sobreviva a la importacion, asi que el vinculo es el nombre; por eso
-     * `UpdateServicioRequest` impide renombrarlo: si se renombra, la sincronia deja
-     * de encontrarlo y el combustible se cobraria al precio anterior sin aviso.
-     */
-    public const SERVICIO_COMBUSTIBLE = 'Combustible JET A-1';
-
     protected $table = 'fact_precios_combustible';
 
     protected $fillable = [
@@ -102,13 +91,11 @@ class FactPrecioCombustible extends Model
      * registrado y deja rastro del cambio, con el valor anterior.
      *
      * Es el único precio que el bloque 1b cambia a propósito, así que es el que
-     * hay que poder explicar después. Se busca por nombre (ver
-     * SERVICIO_COMBUSTIBLE) y solo entre los activos: si no existe o está dado de
-     * baja no actualiza nada y tampoco falla. El `where` por nombre es lo que
-     * impide tocar el cobro de cualquier otro servicio. Lo resuelve MySQL con la
-     * collation de la columna, la misma comparación insensible a la caja que
-     * aplica la guarda de `UpdateServicioRequest`. Como el nombre no es único,
-     * se recorren todos los que coincidan.
+     * hay que poder explicar después. Se busca por su concepto
+     * (`FactServicio::CONCEPTO_COMBUSTIBLE`, columna única) y no por su nombre, así
+     * que el servicio se puede renombrar sin romper la sincronía, y ningún otro
+     * servicio puede quedar dentro de ella por llamarse igual. Solo entre los
+     * activos: si no existe o está dado de baja no actualiza nada y tampoco falla.
      *
      * @return list<array{servicio: string, anterior: string, nuevo: string}> lo que cambió
      */
@@ -117,7 +104,7 @@ class FactPrecioCombustible extends Model
         $cambios = [];
 
         $servicios = FactServicio::query()
-            ->where('nombre', self::SERVICIO_COMBUSTIBLE)
+            ->porConcepto(FactServicio::CONCEPTO_COMBUSTIBLE)
             ->where('status', FactServicio::STATUS_ACTIVO)
             ->get();
 
