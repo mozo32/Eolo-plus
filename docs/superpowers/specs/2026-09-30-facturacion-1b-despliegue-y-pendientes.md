@@ -61,6 +61,9 @@ composer install --no-dev --optimize-autoloader
 
 # Todas las migraciones crean tablas nuevas; ninguna toca datos existentes.
 php artisan migrate
+# Bloque 2 sobre una base que ya tenía el 1b: la migración deja `concepto` en NULL
+# y hay que asignarlo (sección «Precio del combustible»: reimportar PISA precios;
+# hay un UPDATE dirigido que no los toca). Si 1b y 2 van juntos, no hace falta.
 
 # 1. Simulación del importador: lee fact-fbo, escribe y revierte.
 #    LEER ENTERA la salida: la lista de tablas que --forzar va a pisar, los
@@ -103,7 +106,7 @@ sale de `SOBREESCRIBEN` en `ImportarMatriculasPrefactura.php`):
 | `fact_tipos_motor` | tarifa de aterrizaje |
 | `fact_precios_combustible` | el precio vigente, solo si coincide la fecha de inicio |
 | `fact_clientes` | RFC, correo y teléfono |
-| `fact_servicios` | categoría, precio, margen y ajuste de precio |
+| `fact_servicios` | nombre, concepto, marca de paquete internacional, categoría, precio, margen y ajuste de precio |
 
 Cualquier tarifa, RFC o precio **editado a mano desde las pantallas** desde el
 último import se revierte al valor del sistema viejo, y eso cambia cobros.
@@ -246,21 +249,75 @@ al del combustible. El sistema viejo lo apunta por id fijo (`id_servicio = 7`).
 > (valor `combustible`, única), y la sincronía busca con
 > `FactServicio::porConcepto(FactServicio::CONCEPTO_COMBUSTIBLE)`. Las guardas de
 > `StoreServicioRequest` / `UpdateServicioRequest` se retiraron junto con sus 16
-> pruebas (`NombreServicioCombustibleTest`): el servicio **se puede renombrar**
-> libremente y ningún otro servicio queda dentro de la sincronía por llamarse igual.
+> pruebas (`NombreServicioCombustibleTest`).
 >
-> **Obligatorio al desplegar el bloque 2: después de `php artisan migrate`, volver
-> a correr el importador** (`--aplicar`; `--forzar` si hace falta). La migración
-> deja `concepto` en NULL en las filas ya importadas, y mientras esté NULL **la
-> sincronía del precio de combustible no encuentra ningún servicio y no actualiza
-> nada**, sin error ni rastro. El importador asigna el concepto por el id viejo y,
-> a las filas existentes sin concepto, se lo pone sin duplicarlas. Comprobar
-> después que `SELECT id, nombre FROM fact_servicios WHERE concepto = 'combustible'`
-> devuelve una fila.
+> **Renombrar ya no rompe la sincronía del precio, pero tampoco se conserva.** El
+> importador identifica estas filas por su concepto y, en cada corrida, les
+> devuelve el nombre del origen. Un renombre hecho en pantalla aguanta hasta el
+> siguiente `--forzar`.
+>
+> ### Obligatorio al desplegar el bloque 2 sobre una base que ya tenía el 1b
+>
+> La migración agrega `concepto` y `en_paquete_internacional`, y deja **`concepto`
+> en NULL y la marca en 0 en las filas ya importadas**. Mientras sea así:
+>
+> - **la sincronía del precio de combustible no encuentra ningún servicio y no
+>   actualiza nada**, sin error ni rastro;
+> - los cargos de estancia (Tasks 4 y 5) no encuentran sus tres servicios y el
+>   paquete internacional no agrega nada.
+>
+> **Este paso solo hace falta si el bloque 1b ya estaba aplicado.** Si el 1b y el 2
+> se despliegan juntos, la primera `--aplicar` ya asigna los conceptos y las marcas
+> y no hay nada que hacer.
+>
+> Hay dos caminos. **Elegir uno antes de correr nada:**
+>
+> **A. Volver a correr el importador (pisa precios).**
+> `php artisan facturacion:importar-matriculas --aplicar --forzar`. El `--forzar`
+> **no es opcional**: `fact_servicios` ya tiene filas y el comando se niega sin él.
+> Y **`--forzar` reescribe nombre, concepto, marca de paquete, categoría, precio,
+> margen y ajuste de TODOS los servicios desde el origen**: un precio que alguien
+> corrigió a mano en la pantalla de servicios **vuelve al del sistema viejo y eso
+> cambia cobros**. Leer antes la tabla de «Qué pisa `--forzar`» (arriba) y la
+> lista que imprime la simulación. Solo es sensato si nadie ha editado servicios
+> desde la importación.
+>
+> **B. Asignar solo los siete a mano (no toca ningún precio).** Es la vía para una
+> base en producción con precios editados. Pegar tal cual en MySQL; cada `UPDATE`
+> solo toca filas que aún no tienen concepto:
+>
+> ```sql
+> UPDATE fact_servicios SET concepto = 'combustible'           WHERE concepto IS NULL AND nombre = 'Combustible JET A-1';
+> UPDATE fact_servicios SET concepto = 'estancia_transito_2h'  WHERE concepto IS NULL AND nombre = 'Tránsito 02 hrs';
+> UPDATE fact_servicios SET concepto = 'estancia_transito_12h' WHERE concepto IS NULL AND nombre = 'Tránsito 12 hrs';
+> UPDATE fact_servicios SET concepto = 'estancia_pernocta'     WHERE concepto IS NULL AND nombre = 'Tránsito 24 hrs - pernocta';
+>
+> UPDATE fact_servicios SET en_paquete_internacional = 1
+>  WHERE nombre IN ('DSMES - salida', 'DSM - salida', 'Mex-eAPI - salida', 'Servicios Internacionales - salida');
+> ```
+>
+> Los ids de `fact_servicios` **no** son los ids del sistema viejo (se asignan al
+> importar), por eso se filtra por nombre; la comparación de MySQL ignora la caja y
+> los acentos. Si alguno de los nombres se corrigió a mano, el `UPDATE` no afecta
+> ninguna fila: la verificación de abajo lo delata. En ese caso usar
+> `WHERE id = <id>` con el id que dé `SELECT id, nombre FROM fact_servicios`.
+>
+> ### Verificación (cubre los siete, haya sido A o B)
+>
+> ```sql
+> SELECT concepto, nombre FROM fact_servicios WHERE concepto IS NOT NULL;      -- 4 filas
+> SELECT COUNT(*) FROM fact_servicios WHERE en_paquete_internacional = 1;       -- 4
+> ```
+>
+> Deben salir **cuatro** filas con los conceptos `combustible`, `estancia_pernocta`,
+> `estancia_transito_2h` y `estancia_transito_12h`, y **cuatro** marcas. Si falta
+> alguno, los cargos de estancia fallan y el paquete internacional no agrega nada.
 >
 > El importador casa los servicios con concepto **por su concepto** y los demás por
-> nombre, así que renombrar el combustible y reimportar con `--forzar` no choca con
-> el índice único.
+> nombre, así que reimportar tras renombrar el combustible no choca con el índice
+> único. Si coexisten la fila con concepto renombrada y otra sin concepto con el
+> nombre del origen, la corrida lo reporta como hallazgo (los dos ids) en lugar de
+> dejar dos filas iguales en silencio.
 
 - La sincronía solo toca el servicio **activo**. Dado de baja, o inexistente,
   registrar un precio nuevo funciona igual y no cambia nada en servicios. **Ojo con
