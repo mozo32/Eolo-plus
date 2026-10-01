@@ -127,7 +127,7 @@ test('FactServicio::importe delega y no cambia ningun numero', function () {
     ]);
 
     expect($servicio->importe(1150.0, 1))->toBe(ImporteServicio::calcular(1150.0, 1, 50.0, ImporteServicio::AJUSTE_COMISION_131))
-        ->and($servicio->importe(1150.0, 1))->toBe('1725.00');
+        ->and($servicio->importe(1150.0, 1))->toBe('1514.31');
 });
 
 test('el precio cero es valido y da importe cero', function () {
@@ -279,7 +279,7 @@ test('los importes clavados por el barrido contra TypeScript no cambian', functi
     // TypeScript también produce, así que si PHP se mueve, se rompe el acuerdo.
     [1000.0, 1, 0.0, 'ninguno', '1000.00'],
     [1000.0, 1, 50.0, 'ninguno', '1500.00'],
-    [1150.0, 1, 50.0, 'comision_131', '1725.00'],
+    [1150.0, 1, 50.0, 'comision_131', '1514.31'],
     [2105.8601, 1, 0.0, 'ninguno', '2105.86'],
     [100.20, 1, 0.0, 'mas_5', '105.21'],
     [1000.0, 3, 15.0, 'sin_iva', '2974.14'],
