@@ -108,3 +108,114 @@ function esRutaFacturacion1b(string $uri): bool
 {
     return preg_match('#^api/facturacion/(clientes|servicios|categorias-servicio|formas-pago|proveedores)(/|$)#', $uri) === 1;
 }
+
+/*
+|--------------------------------------------------------------------------
+| Ayudantes de prefactura (bloque 2, Tasks 3 a 6)
+|--------------------------------------------------------------------------
+|
+| Viven aquí y no en los archivos de prueba porque una función declarada en un
+| archivo de prueba es global al cargarse: dos archivos que declaren la misma
+| revientan por redeclaración. Las firmas son contrato de las Tasks 4, 5 y 6.
+*/
+
+/**
+ * Una prefactura en borrador con su matrícula en Tránsito.
+ */
+function prefacturaBorrador(): App\Models\FactPrefactura
+{
+    // Matrícula distinta en cada llamada: `aeronaves.matricula` es única desde el
+    // bloque 1a y varias pruebas crean dos borradores en la misma prueba.
+    $aeronave = App\Models\Aeronave::create(['matricula' => 'XA-'.substr(uniqid(), -4)]);
+    App\Models\FactAeronave::create(['aeronave_id' => $aeronave->id, 'estatus' => App\Models\FactAeronave::ESTATUS_TRANSITO]);
+
+    return App\Models\FactPrefactura::create([
+        'aeronave_id' => $aeronave->id,
+        'estado' => App\Models\FactPrefactura::ESTADO_BORRADOR,
+        'tipo_destino' => App\Models\FactPrefactura::DESTINO_NACIONAL,
+        'user_id' => App\Models\User::factory()->create()->id,
+    ]);
+}
+
+/**
+ * Agrega a la prefactura un renglón con los valores congelados indicados.
+ */
+function renglonDe(App\Models\FactPrefactura $p, float $precio, int $cantidad, float $margen = 0, string $ajuste = 'ninguno'): App\Models\FactPrefacturaRenglon
+{
+    $servicio = App\Models\FactServicio::create(['nombre' => 'Servicio '.uniqid(), 'precio_unitario' => $precio]);
+
+    return $p->renglones()->create([
+        'servicio_id' => $servicio->id,
+        'nombre_servicio' => $servicio->nombre,
+        'precio_unitario' => $precio,
+        'cantidad' => $cantidad,
+        'es_de_tercero' => $margen > 0,
+        'margen' => $margen,
+        'ajuste_precio' => $ajuste,
+        'orden' => 1,
+    ]);
+}
+
+/**
+ * Devuelve [$prefactura, $usuario]: con cliente y un renglón, lista para cerrar.
+ */
+function prefacturaCompleta(float $precio = 100.0, int $cantidad = 1): array
+{
+    $usuario = App\Models\User::factory()->create();
+    $aeronave = App\Models\Aeronave::create(['matricula' => 'XA-'.substr(uniqid(), -4)]);
+    App\Models\FactAeronave::create(['aeronave_id' => $aeronave->id, 'estatus' => App\Models\FactAeronave::ESTATUS_TRANSITO]);
+    $cliente = App\Models\FactCliente::create(['nombre' => 'Cliente '.uniqid()]);
+    $servicio = App\Models\FactServicio::create(['nombre' => 'Servicio '.uniqid(), 'precio_unitario' => $precio]);
+
+    $p = App\Models\FactPrefactura::create([
+        'aeronave_id' => $aeronave->id,
+        'cliente_id' => $cliente->id,
+        'estado' => App\Models\FactPrefactura::ESTADO_BORRADOR,
+        'tipo_destino' => App\Models\FactPrefactura::DESTINO_NACIONAL,
+        'user_id' => $usuario->id,
+    ]);
+
+    $p->renglones()->create([
+        'servicio_id' => $servicio->id,
+        'nombre_servicio' => $servicio->nombre,
+        'precio_unitario' => $precio,
+        'cantidad' => $cantidad,
+        'es_de_tercero' => false,
+        'margen' => 0,
+        'ajuste_precio' => 'ninguno',
+        'orden' => 1,
+    ]);
+
+    return [$p->fresh(), $usuario];
+}
+
+/**
+ * Prefactura en borrador con los tres servicios de estancia creados con su
+ * `concepto` y una matrícula con las tres tarifas.
+ */
+function conEstancia(string $estatus = App\Models\FactAeronave::ESTATUS_TRANSITO): App\Models\FactPrefactura
+{
+    foreach ([
+        App\Models\FactServicio::CONCEPTO_ESTANCIA_PERNOCTA => 'Transito 24 hrs - pernocta',
+        App\Models\FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H => 'Transito 02 hrs',
+        App\Models\FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H => 'Transito 12 hrs',
+    ] as $concepto => $nombre) {
+        App\Models\FactServicio::firstOrCreate(['nombre' => $nombre], ['precio_unitario' => 99.0, 'concepto' => $concepto]);
+    }
+
+    $aeronave = App\Models\Aeronave::create(['matricula' => 'XA-'.substr(uniqid(), -4)]);
+    App\Models\FactAeronave::create([
+        'aeronave_id' => $aeronave->id,
+        'estatus' => $estatus,
+        'tarifa_pernocta' => 4676.00,
+        'tarifa_transito_2h' => 1144.50,
+        'tarifa_transito_12h' => 2338.00,
+    ]);
+
+    return App\Models\FactPrefactura::create([
+        'aeronave_id' => $aeronave->id,
+        'estado' => App\Models\FactPrefactura::ESTADO_BORRADOR,
+        'tipo_destino' => App\Models\FactPrefactura::DESTINO_NACIONAL,
+        'user_id' => App\Models\User::factory()->create()->id,
+    ]);
+}
