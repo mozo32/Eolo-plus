@@ -261,8 +261,9 @@ y los vuelve a poner, sin tocar nada capturado a mano. Es lo que hoy hace
 `DELETE ... WHERE id_servicio BETWEEN 2 AND 4`, pero sin ids hardcodeados.
 
 Con una aeronave en Guarda el recálculo no produce renglones **y la pantalla
-dice por qué**, en lugar de quedarse callada. Si hay que cobrar estancia de todos
-modos, se agrega el servicio a mano como cualquier otro.
+dice por qué**, en lugar de quedarse callada. Si corresponde cobrar estancia, hay que corregir el estatus de la aeronave a
+Tránsito y volver a recalcular: el servicio de estancia no se agrega a mano, porque
+su precio sale de la tarifa de la matrícula y no del catálogo.
 
 ### El paquete internacional
 

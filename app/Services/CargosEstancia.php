@@ -83,7 +83,7 @@ class CargosEstancia
 
                 return [
                     'renglones' => 0,
-                    'motivo' => 'La aeronave está en Guarda y una aeronave en Guarda no paga estancia. Si hay que cobrarla, agrega el servicio a mano.'.$this->nota($quitados),
+                    'motivo' => 'La aeronave está en Guarda y una aeronave en Guarda no paga estancia. Si corresponde cobrarla, corrige el estatus de la aeronave a Tránsito y vuelve a recalcular.'.$this->nota($quitados),
                 ];
             }
 
