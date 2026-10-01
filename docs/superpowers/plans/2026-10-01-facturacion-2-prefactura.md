@@ -309,8 +309,16 @@ git commit -m "La formula del importe vive en un solo lugar"
 
 ## Task 2: `concepto` en los servicios, y el importador lo asigna
 
+> **La fecha de las migraciones de este plan es `2026_09_29_0920xx` a propósito, y
+> no la de hoy.** `tests/Feature/Facturacion/MatriculaUnicaTest.php:149` tiene una
+> prueba que exige que `2026_09_29_099000_add_unique_matricula_to_aeronaves.php` sea
+> **la última** migración por orden de nombre: su índice único lleva guardia y debe
+> correr después de todo lo que pueda crear matrículas. Una migración fechada hoy
+> ordenaría después y rompería esa prueba. `0920xx` está libre y ordena entre las del
+> bloque 1b (`091400`) y el índice único. **No las renombres a la fecha de hoy.**
+
 **Files:**
-- Create: `database/migrations/2026_10_01_100000_add_concepto_to_fact_servicios_table.php`
+- Create: `database/migrations/2026_09_29_092000_add_concepto_to_fact_servicios_table.php`
 - Modify: `app/Models/FactServicio.php`, `app/Services/ImportadorMatriculas.php`, `app/Models/FactPrecioCombustible.php`, `app/Http/Requests/Facturacion/StoreServicioRequest.php`
 - Delete: `tests/Feature/Facturacion/NombreServicioCombustibleTest.php`
 - Test: `tests/Feature/Facturacion/ConceptoServicioTest.php`
@@ -566,7 +574,7 @@ git commit -m "Los servicios especiales se identifican por concepto, no por su n
 ## Task 3: Las dos tablas y la derivación de totales
 
 **Files:**
-- Create: `database/migrations/2026_10_01_100100_create_fact_prefacturas_table.php`, `database/migrations/2026_10_01_100200_create_fact_prefactura_renglones_table.php`, `app/Models/FactPrefactura.php`, `app/Models/FactPrefacturaRenglon.php`
+- Create: `database/migrations/2026_09_29_092100_create_fact_prefacturas_table.php`, `database/migrations/2026_09_29_092200_create_fact_prefactura_renglones_table.php`, `app/Models/FactPrefactura.php`, `app/Models/FactPrefacturaRenglon.php`
 - Modify: `tests/Pest.php` (los cuatro ayudantes que comparten las Tasks 3 a 6)
 - Test: `tests/Feature/Facturacion/PrefacturaTotalesTest.php`
 
@@ -583,9 +591,15 @@ junto a `usuarioConSubdepartamento`, que ya está ahí por la misma razón.
 
 - [ ] **Step 1: Write the failing test**
 
+**Los dos ayudantes de abajo NO se declaran en este archivo.** Van en
+`tests/Pest.php` (Step 6), porque las Tasks 4, 5 y 6 también los usan y dos archivos
+que declaren la misma función revientan por redeclaración. Aquí se muestran sus
+cuerpos porque es donde se leen junto a las pruebas que los usan.
+
 ```php
 <?php
 // tests/Feature/Facturacion/PrefacturaTotalesTest.php
+// (prefacturaBorrador y renglonDe viven en tests/Pest.php, no aquí)
 
 use App\Models\FactConfiguracion;
 use App\Models\FactPrefactura;
@@ -1763,12 +1777,16 @@ test('recalcular estancia en una aeronave en Guarda responde 200 y dice el motiv
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $p = conEstancia(App\Models\FactAeronave::ESTATUS_GUARDA);
 
-    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/estancia", [
+    $respuesta = $this->patchJson("/api/facturacion/prefacturas/{$p->id}/estancia", [
         'pernoctas' => 2, 'transitos_2h' => 0, 'transitos_12h' => 0,
     ])
         ->assertOk()
-        ->assertJsonPath('renglones', 0)
-        ->assertJsonFragment(['motivo' => 'La aeronave está en Guarda y una aeronave en Guarda no paga estancia. Si hay que cobrarla, agrega el servicio a mano.']);
+        ->assertJsonPath('renglones', 0);
+
+    // Se afirma que el motivo LLEGA y menciona Guarda, no su redacción exacta: de
+    // la redacción es dueña la Task 5, y clavarla aquí haría que mejorar el texto
+    // rompiera una prueba de endpoints.
+    expect($respuesta->json('motivo'))->toContain('Guarda');
 });
 
 test('descartar un borrador lo saca de la lista y responde 409 la segunda vez', function () {
@@ -1956,7 +1974,33 @@ class StoreRenglonRequest extends FormRequest
 }
 ```
 
-- [ ] **Step 4: Write the controllers**
+- [ ] **Step 4: Write the shared guard as a trait**
+
+Los dos controladores necesitan rechazar cualquier escritura sobre una prefactura
+cerrada. El cuerpo es el mismo, así que va una vez:
+
+```php
+<?php
+
+namespace App\Http\Controllers\Api\Facturacion\Concerns;
+
+use App\Models\FactPrefactura;
+use Illuminate\Http\JsonResponse;
+
+/**
+ * Una prefactura cerrada es un documento que ya salió al cliente: no se edita.
+ * Lo hace cumplir el endpoint, no solo la pantalla.
+ */
+trait RechazaPrefacturaCerrada
+{
+}
+```
+
+Los dos controladores lo usan con `use RechazaPrefacturaCerrada;` y **ninguno
+declara el método**. En el código de los controladores que sigue, donde aparece
+`private function rechazarSiCerrada(...)`, bórralo: está aquí.
+
+- [ ] **Step 5: Write the controllers**
 
 `PrefacturaController.php` — lista, ficha, alta, edición y cierre. La guarda de "cerrada no se edita" es un método privado que los dos controladores usan:
 
@@ -1979,6 +2023,8 @@ use Illuminate\Support\Facades\DB;
 
 class PrefacturaController extends Controller
 {
+    use \App\Http\Controllers\Api\Facturacion\Concerns\RechazaPrefacturaCerrada;
+
     private const PER_PAGE_PERMITIDOS = [10, 20, 50, 100];
 
     public function index(Request $request): JsonResponse
@@ -2136,22 +2182,6 @@ class PrefacturaController extends Controller
         return response()->json(['message' => 'Borrador descartado.']);
     }
 
-    /**
-     * Una prefactura cerrada es un documento que ya salió al cliente: no se
-     * edita. Lo hace cumplir el endpoint, no solo la pantalla.
-     */
-    private function rechazarSiCerrada(FactPrefactura $prefactura): ?JsonResponse
-    {
-        if (! $prefactura->estaCerrada()) {
-            return null;
-        }
-
-        return response()->json([
-            'message' => 'Esta prefactura ya está cerrada y no se puede modificar.',
-            'codigo' => 'ya_cerrada',
-        ], 409);
-    }
-
     private function presentar(FactPrefactura $p, bool $conRenglones): array
     {
         $datos = [
@@ -2194,7 +2224,7 @@ class PrefacturaController extends Controller
 }
 ```
 
-`PrefacturaRenglonController.php` — alta y baja de renglones, y los dos recálculos. Reutiliza la misma guarda replicando el método privado (el controlador anterior lo tiene `private`; aquí va una copia con el mismo cuerpo, porque dos controladores no comparten estado):
+`PrefacturaRenglonController.php` — alta y baja de renglones, y los dos recálculos. **Usa el trait, no una copia**: el cuerpo de `rechazarSiCerrada()` sería idéntico en los dos controladores, y duplicar un bloque de lógica es un defecto. Borra el método `private` de `PrefacturaController` y pon el trait en los dos.
 
 ```php
 <?php
@@ -2212,6 +2242,8 @@ use Illuminate\Http\Request;
 
 class PrefacturaRenglonController extends Controller
 {
+    use \App\Http\Controllers\Api\Facturacion\Concerns\RechazaPrefacturaCerrada;
+
     public function store(StoreRenglonRequest $request, int $id): JsonResponse
     {
         $prefactura = FactPrefactura::findOrFail($id);
@@ -2330,21 +2362,10 @@ class PrefacturaRenglonController extends Controller
         return response()->json(['message' => 'Paquete internacional agregado.', 'renglones' => $agregados]);
     }
 
-    private function rechazarSiCerrada(FactPrefactura $prefactura): ?JsonResponse
-    {
-        if (! $prefactura->estaCerrada()) {
-            return null;
-        }
-
-        return response()->json([
-            'message' => 'Esta prefactura ya está cerrada y no se puede modificar.',
-            'codigo' => 'ya_cerrada',
-        ], 409);
-    }
 }
 ```
 
-- [ ] **Step 5: Register the routes**
+- [ ] **Step 6: Register the routes**
 
 En `routes/api.php`, dentro del grupo `prefix('facturacion')` que ya existe, las lecturas:
 
@@ -2375,21 +2396,21 @@ En `routes/web.php`, junto a las otras de Facturación:
     Route::get('facturacion/prefacturas/{id}', fn ($id) => Inertia::render('Facturacion/EditorPrefactura', ['id' => (int) $id]))->whereNumber('id')->name('facturacionEditorPrefactura');
 ```
 
-- [ ] **Step 6: Add the subdepartamento to the seeder**
+- [ ] **Step 7: Add the subdepartamento to the seeder**
 
 En `database/seeders/FacturacionSubdepartamentosSeeder.php`, agregar `'factPrefacturas'` al arreglo.
 
-- [ ] **Step 7: Run the tests**
+- [ ] **Step 8: Run the tests**
 
 Run: `php artisan test tests/Feature/Facturacion/EndpointsPrefacturaTest.php`
 Expected: PASS, 15 pruebas.
 
-- [ ] **Step 8: Run the full suite**
+- [ ] **Step 9: Run the full suite**
 
 Run: `php artisan test`
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add app/Http/Controllers/Api/Facturacion app/Http/Requests/Facturacion routes database/seeders tests/Feature/Facturacion/EndpointsPrefacturaTest.php
