@@ -183,3 +183,38 @@ export function importeVistaPrevia(precio: number, margen: number, ajuste: Ajust
 
     return redondear2(conMargen * cantidad);
 }
+
+/**
+ * Fecha y hora que el servidor guarda SIN zona ("2026-09-30 14:30:00"): se muestran tal cual, sin pasar por `Date`,
+ * que las interpretaría en la zona del navegador y correría la hora. "30/09/2026 14:30", o "—" si no hay.
+ */
+export function fechaHoraSinZona(valor: string | null | undefined): string {
+    const partes = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(valor ?? '');
+
+    return partes ? `${partes[3]}/${partes[2]}/${partes[1]} ${partes[4]}:${partes[5]}` : '—';
+}
+
+/** De "2026-09-30 14:30:00" al valor de un `<input type="datetime-local">` ("2026-09-30T14:30"); '' si no hay. */
+export function aCampoFechaHora(valor: string | null | undefined): string {
+    const partes = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/.exec(valor ?? '');
+
+    return partes ? `${partes[1]}T${partes[2]}` : '';
+}
+
+/** Del `<input type="datetime-local">` a lo que recibe el servidor ("2026-09-30 14:30:00"); null si está vacío. */
+export function deCampoFechaHora(texto: string): string | null {
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(texto) ? `${texto.replace('T', ' ')}:00` : null;
+}
+
+/**
+ * Los cargos de estancia (pernocta y los dos tránsitos) los pone «Recalcular estancia» con la tarifa de la matrícula; el
+ * precio del catálogo es relleno. Por eso no se agregan a mano y, en un renglón, se marcan: el recálculo los reemplaza.
+ */
+export const esConceptoDeEstancia = (concepto: string | null | undefined): boolean => typeof concepto === 'string' && concepto.startsWith('estancia_');
+
+/** "0.1600" es "16 %". */
+export function formatearTasa(tasa: string | null | undefined): string {
+    if (tasa === null || tasa === undefined || tasa === '' || Number.isNaN(Number(tasa))) return '—';
+
+    return `${(Number(tasa) * 100).toLocaleString('es-MX', { maximumFractionDigits: 2 })} %`;
+}

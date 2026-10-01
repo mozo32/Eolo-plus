@@ -46,7 +46,7 @@ async function leer<T>(res: Response): Promise<T> {
 
 const LECTURA: RequestInit = { headers: { Accept: 'application/json' }, credentials: 'same-origin' };
 
-function escritura(method: 'POST' | 'PUT' | 'PATCH', cuerpo?: unknown): RequestInit {
+function escritura(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', cuerpo?: unknown): RequestInit {
     return {
         method,
         headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() },
@@ -152,6 +152,8 @@ export type Servicio = {
     /** Porcentaje ("50.00"). Es de tercero si y solo si es mayor a 0. */
     margen: string;
     ajuste_precio: AjustePrecio;
+    /** Clave interna del servicio especial (combustible, cargos de estancia…); null en los comunes. */
+    concepto: string | null;
     status: StatusCatalogo;
 };
 
@@ -352,3 +354,106 @@ export type CambiosAeronave = {
 export async function actualizarAeronaveFacturableApi(id: number, cambios: CambiosAeronave): Promise<{ message: string; aeronave: AeronaveFacturable }> {
     return leer(await fetch(`${BASE}/aeronaves/${id}`, escritura('PUT', cambios)));
 }
+
+// ---------------------------------------------------------------------------
+// Prefacturas (bloque 2)
+// ---------------------------------------------------------------------------
+
+interface OpcionesPedir {
+    method?: 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+    body?: Record<string, unknown>;
+}
+
+/** Una petición a la API: sin `method` es una lectura; con él, una escritura con el token CSRF. Lanza `ErrorApi`. */
+async function pedir<T>(url: string, { method, body }: OpcionesPedir = {}): Promise<T> {
+    return leer<T>(await fetch(url, method ? escritura(method, body) : LECTURA));
+}
+
+/** Un renglón de prefactura: congela el precio, el margen y el ajuste que tenía el servicio al agregarse. */
+export interface RenglonPrefactura {
+    id: number;
+    servicio_id: number;
+    nombre_servicio: string;
+    precio_unitario: string;
+    cantidad: number;
+    margen: string;
+    ajuste_precio: AjustePrecio;
+    /** Los cargos de estancia empiezan por `estancia_`: los reemplaza "Recalcular estancia". */
+    concepto: string | null;
+    remision: string | null;
+    /** null si el servidor no pudo calcularlo (`importe_error` dice por qué). */
+    importe: string | null;
+    importe_error: string | null;
+}
+
+/** Lo que el sello guardó contra lo que derivan hoy los renglones, por campo. */
+export interface DiscrepanciaSello {
+    sellado: string | null;
+    derivado: string;
+}
+
+export interface Prefactura {
+    id: number;
+    /** null mientras es borrador: el folio se consume al cerrar. */
+    folio: number | null;
+    estado: 'borrador' | 'cerrada';
+    /** 'N' es un borrador descartado. */
+    status: StatusCatalogo;
+    matricula: string | null;
+    cliente: string | null;
+    cliente_id: number | null;
+    aeronave_id: number;
+    /** "2026-09-30 14:30:00", sin zona: tal como la guarda el servidor. */
+    llegada_at: string | null;
+    salida_at: string | null;
+    origen: string | null;
+    destino: string | null;
+    tipo_destino: 'nacional' | 'internacional';
+    /** Los totales los calcula siempre el servidor; null si no pudo (`totales_error` dice por qué). */
+    subtotal: string | null;
+    iva: string | null;
+    iva_tasa: string | null;
+    total: string | null;
+    totales_error: string | null;
+    /** true: el sello de una cerrada ya no coincide con sus renglones. null: no se pudo verificar (ver `sello_error`). */
+    sello_discrepa: boolean | null;
+    /** El servidor lo serializa como `[]` cuando no hay discrepancias y como objeto cuando las hay. */
+    sello_discrepancias: Record<string, DiscrepanciaSello> | never[];
+    sello_error: string | null;
+    cerrada_at: string | null;
+    /** Solo en la ficha, no en el listado. */
+    renglones?: RenglonPrefactura[];
+}
+
+export interface FiltrosPrefactura {
+    /** Matrícula, cliente o folio. */
+    q: string;
+    estado: '' | 'borrador' | 'cerrada';
+    desde: string;
+    hasta: string;
+}
+
+/** La lista abre con los borradores, que es el trabajo pendiente. */
+export const FILTROS_PREFACTURA_VACIOS: FiltrosPrefactura = { q: '', estado: 'borrador', desde: '', hasta: '' };
+
+export async function obtenerPrefacturasApi(filtros: FiltrosPrefactura, pagina: number, porPagina: number): Promise<Pagina<Prefactura>> {
+    const params = new URLSearchParams({ page: String(pagina), per_page: String(porPagina) });
+
+    if (filtros.q.trim() !== '') params.set('q', filtros.q.trim());
+    if (filtros.estado) params.set('estado', filtros.estado);
+    if (filtros.desde) params.set('desde', filtros.desde);
+    if (filtros.hasta) params.set('hasta', filtros.hasta);
+
+    return pedir<Pagina<Prefactura>>(`${BASE}/prefacturas?${params.toString()}`);
+}
+
+export const apiPrefacturas = {
+    ficha: (id: number) => pedir<{ prefactura: Prefactura }>(`${BASE}/prefacturas/${id}`),
+    crear: (datos: Record<string, unknown>) => pedir<{ prefactura: Prefactura }>(`${BASE}/prefacturas`, { method: 'POST', body: datos }),
+    editar: (id: number, datos: Record<string, unknown>) => pedir<{ prefactura: Prefactura }>(`${BASE}/prefacturas/${id}`, { method: 'PUT', body: datos }),
+    cerrar: (id: number) => pedir<{ prefactura: Prefactura; message: string }>(`${BASE}/prefacturas/${id}/cerrar`, { method: 'PATCH' }),
+    agregarRenglon: (id: number, datos: Record<string, unknown>) => pedir<{ renglon_id: number }>(`${BASE}/prefacturas/${id}/renglones`, { method: 'POST', body: datos }),
+    quitarRenglon: (id: number, renglon: number) => pedir<{ message: string }>(`${BASE}/prefacturas/${id}/renglones/${renglon}`, { method: 'DELETE' }),
+    estancia: (id: number, datos: Record<string, unknown>) => pedir<{ renglones: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/estancia`, { method: 'PATCH', body: datos }),
+    internacional: (id: number) => pedir<{ renglones: number }>(`${BASE}/prefacturas/${id}/internacional`, { method: 'PATCH' }),
+};

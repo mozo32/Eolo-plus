@@ -1,0 +1,752 @@
+import AppLayout from '@/layouts/app-layout';
+import { facturacionPrefacturas } from '@/routes';
+import { ErrorApi, apiPrefacturas, type DiscrepanciaSello, type Prefactura } from '@/stores/apiFacturacionCatalogos';
+import { type BreadcrumbItem } from '@/types';
+import { Head, router } from '@inertiajs/react';
+import { ArrowLeft, Globe, Lock, Plus, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import Swal from 'sweetalert2';
+import CabeceraPantalla from './components/CabeceraPantalla';
+import { BOTON_PRIMARIO, BOTON_SECUNDARIO, TD, TH, campoConError, errorStyle, labelStyle, sectionTitle, toast } from './components/estilos';
+import { aCampoFechaHora, deCampoFechaHora, esConceptoDeEstancia, fechaHoraSinZona, formatearMonto, formatearTasa } from './components/formato';
+import ModalEstancia, { type CantidadesEstancia } from './components/ModalEstancia';
+import ModalRenglon, { type DatosRenglon } from './components/ModalRenglon';
+import SelectorCliente from './components/SelectorCliente';
+
+const TEXTO_MAX = 120;
+
+/** Los cuatro códigos de negocio que dicen que el estado que se ve ya no es el del servidor (o que el cierre se abortó). */
+const CODIGOS_DE_ESTADO = ['incompleta', 'ya_cerrada', 'ya_descartada', 'sello_inconsistente'];
+
+interface FormularioEncabezado {
+    clienteId: number | null;
+    clienteNombre: string | null;
+    llegada: string;
+    salida: string;
+    origen: string;
+    destino: string;
+}
+
+type CampoEncabezado = 'cliente_id' | 'llegada_at' | 'salida_at' | 'origen' | 'destino';
+
+const CAMPOS_DEL_ENCABEZADO: CampoEncabezado[] = ['cliente_id', 'llegada_at', 'salida_at', 'origen', 'destino'];
+
+const formularioDe = (p: Prefactura): FormularioEncabezado => ({
+    clienteId: p.cliente_id,
+    clienteNombre: p.cliente,
+    llegada: aCampoFechaHora(p.llegada_at),
+    salida: aCampoFechaHora(p.salida_at),
+    origen: p.origen ?? '',
+    destino: p.destino ?? '',
+});
+
+const sonIguales = (a: FormularioEncabezado, b: FormularioEncabezado): boolean =>
+    a.clienteId === b.clienteId && a.llegada === b.llegada && a.salida === b.salida && a.origen === b.origen && a.destino === b.destino;
+
+const ETIQUETA_CAMPO_SELLO: Record<string, string> = { subtotal: 'Subtotal', iva: 'IVA', total: 'Total', iva_tasa: 'Tasa de IVA' };
+
+/** Un valor del sello: dinero, o la tasa como porcentaje; "Sin sello" si la columna estaba vacía. */
+function valorSello(campo: string, valor: string | null): string {
+    if (valor === null) return 'Sin sello';
+
+    return campo === 'iva_tasa' ? formatearTasa(valor) : formatearMonto(valor);
+}
+
+/**
+ * Lo que dicen el sello y los totales del servidor. Una discrepancia entre el
+ * total sellado y la derivación de los renglones se VE, no se calla: es el
+ * defecto que tenían 37 prefacturas del sistema viejo (la peor, por 29,000
+ * pesos). Una verificación que no se pudo hacer tampoco se esconde.
+ */
+function AvisosDelServidor({ prefactura }: { prefactura: Prefactura }) {
+    // `[]` cuando no hay discrepancias, objeto cuando las hay: Object.entries tolera las dos formas.
+    const discrepancias = Object.entries(prefactura.sello_discrepancias as Record<string, DiscrepanciaSello>);
+
+    return (
+        <>
+            {prefactura.sello_discrepa === true && (
+                <div role="alert" className="rounded-lg border-2 border-red-300 bg-red-50 p-4">
+                    <p className="flex items-center gap-2 text-sm font-black uppercase text-red-700">
+                        <ShieldAlert size={18} />
+                        El total sellado no coincide con los renglones
+                    </p>
+                    <p className="mt-1 text-[12px] font-semibold text-red-700">
+                        Esta prefactura se cerró con cifras que ya no corresponden a lo que suman sus renglones. No la uses como documento hasta aclarar la diferencia.
+                    </p>
+
+                    {discrepancias.length > 0 && (
+                        <table className="mt-3 w-full max-w-xl border-collapse text-left text-[11px]">
+                            <thead>
+                                <tr className="border-b border-red-200 text-[9px] font-black uppercase text-red-500">
+                                    <th className="py-1 pr-4">Concepto</th>
+                                    <th className="py-1 pr-4">Sellado al cerrar</th>
+                                    <th className="py-1">Lo que suman los renglones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {discrepancias.map(([campo, d]) => (
+                                    <tr key={campo} className="border-b border-red-100 font-bold text-red-800">
+                                        <td className="py-1 pr-4">{ETIQUETA_CAMPO_SELLO[campo] ?? campo}</td>
+                                        <td className="py-1 pr-4">{valorSello(campo, d.sellado)}</td>
+                                        <td className="py-1">{valorSello(campo, d.derivado)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            )}
+
+            {prefactura.sello_error && (
+                <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-[12px] font-bold text-amber-800">
+                    <TriangleAlert size={16} className="mt-0.5 shrink-0" />
+                    <span>
+                        No se pudo verificar el sello de esta prefactura. {prefactura.sello_error}
+                    </span>
+                </div>
+            )}
+
+            {prefactura.totales_error && (
+                <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-[12px] font-bold text-amber-800">
+                    <TriangleAlert size={16} className="mt-0.5 shrink-0" />
+                    <span>{prefactura.totales_error}</span>
+                </div>
+            )}
+        </>
+    );
+}
+
+interface Props {
+    id: number;
+}
+
+/**
+ * Editor de una prefactura: un documento, no un catálogo. Encabezado, renglones
+ * y totales.
+ *
+ *  - Los totales y el importe de cada renglón son SIEMPRE los del servidor; esta
+ *    pantalla no suma nada. La única cuenta local es la vista previa del
+ *    renglón dentro de `ModalRenglon`.
+ *  - Una prefactura cerrada es un documento emitido: ni siquiera se ofrece
+ *    editarla (el endpoint también lo hace cumplir).
+ *  - Los códigos de error de negocio (incompleta, ya_cerrada, ya_descartada,
+ *    sello_inconsistente) piden cada uno una reacción distinta: ver `manejarError`.
+ */
+export default function EditorPrefactura({ id }: Props) {
+    const [prefactura, setPrefactura] = useState<Prefactura | null>(null);
+    const [cargando, setCargando] = useState(true);
+    const [errorCarga, setErrorCarga] = useState<string | null>(null);
+
+    const [form, setForm] = useState<FormularioEncabezado | null>(null);
+    const [erroresForm, setErroresForm] = useState<Partial<Record<CampoEncabezado, string>>>({});
+    const [guardandoEncabezado, setGuardandoEncabezado] = useState(false);
+
+    const [modal, setModal] = useState<'renglon' | 'estancia' | null>(null);
+    const [accionando, setAccionando] = useState<string | null>(null);
+    const [avisoEstancia, setAvisoEstancia] = useState<string | null>(null);
+
+    const peticionRef = useRef(0);
+    const prefacturaRef = useRef<Prefactura | null>(null);
+
+    /** Pone la ficha del servidor. El encabezado a medio capturar no se pisa con una recarga que no lo toca. */
+    const aplicar = useCallback((nueva: Prefactura) => {
+        const previa = prefacturaRef.current;
+        prefacturaRef.current = nueva;
+        setPrefactura(nueva);
+        setForm(actual => (actual === null || previa === null || sonIguales(actual, formularioDe(previa)) ? formularioDe(nueva) : actual));
+    }, []);
+
+    const cargar = useCallback(async () => {
+        const numero = ++peticionRef.current;
+
+        try {
+            const { prefactura: ficha } = await apiPrefacturas.ficha(id);
+            // Una respuesta vieja no pisa la más reciente.
+            if (numero !== peticionRef.current) return;
+            aplicar(ficha);
+            setErrorCarga(null);
+        } catch (e) {
+            if (numero !== peticionRef.current) return;
+            setErrorCarga(e instanceof Error ? e.message : 'No se pudo cargar la prefactura.');
+        } finally {
+            if (numero === peticionRef.current) setCargando(false);
+        }
+    }, [id, aplicar]);
+
+    useEffect(() => {
+        void cargar();
+    }, [cargar]);
+
+    const breadcrumbs: BreadcrumbItem[] = [{ title: 'Prefacturas', href: facturacionPrefacturas().url }, { title: prefactura ? (prefactura.folio === null ? `Borrador ${prefactura.matricula ?? ''}`.trim() : `Folio ${prefactura.folio}`) : 'Prefactura' }];
+
+    const volverALista = () => router.visit(facturacionPrefacturas().url);
+
+    /**
+     * Cada código de negocio pide algo distinto:
+     *  - incompleta (422): falta cliente o renglones; se dice, no se recarga (nada cambió).
+     *  - ya_cerrada (409): alguien la cerró o ya estaba: lo que se ve está viejo, se recarga.
+     *  - ya_descartada (409): el borrador ya no existe para trabajar: se recarga y se vuelve a la lista.
+     *  - sello_inconsistente (409): el cierre se abortó; nada se guardó y reintentar es seguro.
+     */
+    const manejarError = useCallback(
+        async (e: unknown, titulo: string) => {
+            if (e instanceof ErrorApi && e.codigo === 'incompleta') {
+                await Swal.fire({ icon: 'warning', titleText: 'Falta información para cerrar', text: e.message, confirmButtonColor: '#4f46e5' });
+                return;
+            }
+
+            if (e instanceof ErrorApi && e.codigo === 'ya_cerrada') {
+                await Swal.fire({ icon: 'info', titleText: 'La prefactura ya está cerrada', text: e.message, confirmButtonColor: '#4f46e5' });
+                await cargar();
+                return;
+            }
+
+            if (e instanceof ErrorApi && e.codigo === 'ya_descartada') {
+                await Swal.fire({ icon: 'info', titleText: 'El borrador fue descartado', text: e.message, confirmButtonColor: '#4f46e5' });
+                router.visit(facturacionPrefacturas().url);
+                return;
+            }
+
+            if (e instanceof ErrorApi && e.codigo === 'sello_inconsistente') {
+                await Swal.fire({
+                    icon: 'warning',
+                    titleText: 'El cierre se canceló',
+                    text: 'Los totales cambiaron mientras se cerraba la prefactura. Nada se guardó y el folio no se consumió: puedes volver a intentar el cierre con seguridad.',
+                    confirmButtonColor: '#4f46e5',
+                });
+                await cargar();
+                return;
+            }
+
+            const detalle = e instanceof ErrorApi && Object.keys(e.errors).length > 0 ? Object.values(e.errors).flat().join(' ') : e instanceof Error ? e.message : 'Error inesperado';
+            await Swal.fire({ icon: 'error', titleText: titulo, text: detalle, confirmButtonColor: '#4f46e5' });
+        },
+        [cargar],
+    );
+
+    /** Una acción de un botón: una a la vez, y los errores van por `manejarError`. */
+    const ejecutar = async (clave: string, tituloError: string, accion: () => Promise<void>) => {
+        if (accionando !== null) return;
+        setAccionando(clave);
+
+        try {
+            await accion();
+        } catch (e) {
+            await manejarError(e, tituloError);
+        } finally {
+            setAccionando(null);
+        }
+    };
+
+    if (cargando && prefactura === null) {
+        return (
+            <AppLayout breadcrumbs={breadcrumbs}>
+                <Head title="Prefactura" />
+                <div className="p-6 bg-[#f3f4f6] min-h-screen">
+                    <p className="py-20 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">Cargando…</p>
+                </div>
+            </AppLayout>
+        );
+    }
+
+    if (prefactura === null || form === null) {
+        return (
+            <AppLayout breadcrumbs={breadcrumbs}>
+                <Head title="Prefactura" />
+                <div className="p-6 bg-[#f3f4f6] min-h-screen">
+                    <div className="py-16 text-center">
+                        <p className="text-sm font-medium text-red-600">{errorCarga ?? 'No se pudo cargar la prefactura.'}</p>
+                        <div className="mt-3 flex justify-center gap-4">
+                            <button type="button" onClick={() => void cargar()} className="text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800">
+                                Reintentar
+                            </button>
+                            <button type="button" onClick={volverALista} className="text-[10px] font-black uppercase text-slate-500 hover:text-slate-700">
+                                Volver a la lista
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </AppLayout>
+        );
+    }
+
+    const cerrada = prefactura.estado === 'cerrada';
+    const descartada = prefactura.status === 'N';
+    // Una cerrada es un documento emitido y un descartado ya no existe para trabajar: ninguno de los dos se ofrece editar.
+    const soloLectura = cerrada || descartada;
+    const renglones = prefactura.renglones ?? [];
+    const encabezadoModificado = !sonIguales(form, formularioDe(prefactura));
+    const ocupado = accionando !== null || guardandoEncabezado;
+
+    const cambiar = <K extends keyof FormularioEncabezado>(clave: K, valor: FormularioEncabezado[K], campo: CampoEncabezado) => {
+        setForm(previo => (previo === null ? previo : { ...previo, [clave]: valor }));
+        setErroresForm(previos => (previos[campo] ? { ...previos, [campo]: undefined } : previos));
+    };
+
+    const guardarEncabezado = async () => {
+        if (ocupado) return;
+
+        const nuevos: Partial<Record<CampoEncabezado, string>> = {};
+        if (form.llegada !== '' && form.salida !== '' && form.salida < form.llegada) nuevos.salida_at = 'La salida no puede ser anterior a la llegada.';
+        if (form.origen.trim().length > TEXTO_MAX) nuevos.origen = `El origen no puede pasar de ${TEXTO_MAX} caracteres.`;
+        if (form.destino.trim().length > TEXTO_MAX) nuevos.destino = `El destino no puede pasar de ${TEXTO_MAX} caracteres.`;
+
+        setErroresForm(nuevos);
+        if (Object.keys(nuevos).length > 0) return;
+
+        setGuardandoEncabezado(true);
+
+        try {
+            // La matrícula y el tipo de destino no se editan aquí (el destino internacional lo marca su botón), pero el servidor los exige.
+            const { prefactura: guardada } = await apiPrefacturas.editar(prefactura.id, {
+                aeronave_id: prefactura.aeronave_id,
+                tipo_destino: prefactura.tipo_destino,
+                cliente_id: form.clienteId,
+                llegada_at: deCampoFechaHora(form.llegada),
+                salida_at: deCampoFechaHora(form.salida),
+                origen: form.origen.trim() === '' ? null : form.origen.trim(),
+                destino: form.destino.trim() === '' ? null : form.destino.trim(),
+            });
+
+            aplicar(guardada);
+            setForm(formularioDe(guardada));
+            toast.fire({ icon: 'success', titleText: 'Encabezado guardado.' });
+        } catch (e) {
+            const delCampo = e instanceof ErrorApi && e.codigo === null ? Object.entries(e.errors).filter(([campo]) => CAMPOS_DEL_ENCABEZADO.includes(campo as CampoEncabezado)) : [];
+
+            if (delCampo.length > 0) {
+                // Errores por campo del servidor, junto a cada campo.
+                setErroresForm(Object.fromEntries(delCampo.map(([campo, mensajes]) => [campo, mensajes[0]])));
+            } else {
+                await manejarError(e, 'No se pudo guardar el encabezado');
+            }
+        } finally {
+            setGuardandoEncabezado(false);
+        }
+    };
+
+    /** Los códigos de estado se resuelven aquí (cerrando el modal); lo demás vuelve al modal para mostrarse junto a sus campos. */
+    const resolverEnModal = async (e: unknown): Promise<void> => {
+        if (e instanceof ErrorApi && e.codigo !== null && CODIGOS_DE_ESTADO.includes(e.codigo)) {
+            setModal(null);
+            await manejarError(e, 'No se pudo completar la acción');
+            return;
+        }
+
+        throw e;
+    };
+
+    const agregarRenglon = async (datos: DatosRenglon) => {
+        try {
+            await apiPrefacturas.agregarRenglon(prefactura.id, { ...datos });
+        } catch (e) {
+            await resolverEnModal(e);
+            return;
+        }
+
+        setModal(null);
+        toast.fire({ icon: 'success', titleText: 'Servicio agregado.' });
+        await cargar();
+    };
+
+    const recalcularEstancia = async (cantidades: CantidadesEstancia) => {
+        let resultado;
+
+        try {
+            resultado = await apiPrefacturas.estancia(prefactura.id, { ...cantidades });
+        } catch (e) {
+            await resolverEnModal(e);
+            return;
+        }
+
+        setModal(null);
+        // Se recarga siempre: aunque no se genere ningún renglón, el servidor pudo quitar los cargos previos.
+        await cargar();
+        setAvisoEstancia(resultado.motivo);
+
+        if (resultado.renglones === 0) {
+            // El caso principal es una aeronave en Guarda, que no paga estancia: sin explicación, el operador no entiende qué pasó.
+            await Swal.fire({
+                icon: 'info',
+                titleText: 'No se generó ningún cargo de estancia',
+                text: resultado.motivo ?? 'Con las cantidades indicadas no corresponde ningún cargo.',
+                confirmButtonColor: '#4f46e5',
+            });
+        } else {
+            toast.fire({ icon: 'success', titleText: `Estancia recalculada: ${resultado.renglones} ${resultado.renglones === 1 ? 'cargo' : 'cargos'}.` });
+        }
+    };
+
+    const quitarRenglon = (renglonId: number, nombre: string) =>
+        ejecutar(`quitar-${renglonId}`, 'No se pudo quitar el servicio', async () => {
+            const confirmacion = await Swal.fire({
+                // El nombre sale del catálogo y lo capturó un usuario: titleText (texto plano), nunca title, que SweetAlert2 interpreta como HTML.
+                titleText: `Quitar "${nombre}"`,
+                text: 'El renglón sale de la prefactura y los totales se recalculan.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, quitar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#dc2626',
+                reverseButtons: true,
+            });
+            if (!confirmacion.isConfirmed) return;
+
+            await apiPrefacturas.quitarRenglon(prefactura.id, renglonId);
+            toast.fire({ icon: 'success', titleText: 'Servicio quitado.' });
+            await cargar();
+        });
+
+    const marcarInternacional = () =>
+        ejecutar('internacional', 'No se pudo marcar como internacional', async () => {
+            const confirmacion = await Swal.fire({
+                titleText: 'Marcar como internacional',
+                text: 'Se agregan a la prefactura los servicios del paquete internacional. No hay forma de deshacerlo desde esta pantalla.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, marcar internacional',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#4f46e5',
+                reverseButtons: true,
+            });
+            if (!confirmacion.isConfirmed) return;
+
+            const { renglones: agregados } = await apiPrefacturas.internacional(prefactura.id);
+            toast.fire({ icon: 'success', titleText: `Paquete internacional agregado: ${agregados} ${agregados === 1 ? 'servicio' : 'servicios'}.` });
+            await cargar();
+        });
+
+    const cerrar = () =>
+        ejecutar('cerrar', 'No se pudo cerrar la prefactura', async () => {
+            // El servidor cierra lo que tiene guardado: un encabezado a medio capturar quedaría fuera del documento sellado.
+            if (encabezadoModificado) {
+                await Swal.fire({ icon: 'warning', titleText: 'Hay cambios sin guardar', text: 'Guarda los cambios del encabezado antes de cerrar la prefactura.', confirmButtonColor: '#4f46e5' });
+                return;
+            }
+
+            const confirmacion = await Swal.fire({
+                titleText: 'Cerrar la prefactura',
+                text: `Se le asignará un folio: el folio se consume y no se puede reutilizar. Una vez cerrada, la prefactura ya no se podrá editar. Total: ${formatearMonto(prefactura.total)}.`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, cerrar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#059669',
+                reverseButtons: true,
+            });
+            if (!confirmacion.isConfirmed) return;
+
+            const { prefactura: cerradaAhora, message } = await apiPrefacturas.cerrar(prefactura.id);
+            aplicar(cerradaAhora);
+            setAvisoEstancia(null);
+            toast.fire({ icon: 'success', titleText: message });
+        });
+
+    return (
+        <AppLayout breadcrumbs={breadcrumbs}>
+            <Head title={prefactura.folio === null ? 'Prefactura en borrador' : `Prefactura ${prefactura.folio}`} />
+
+            <div className="p-6 bg-[#f3f4f6] min-h-screen">
+                <div className="space-y-4 animate-in fade-in duration-500">
+                    <CabeceraPantalla titulo={`Prefactura ${prefactura.matricula ?? ''}`.trim()} descripcion={cerrada ? 'Documento cerrado: solo lectura' : descartada ? 'Borrador descartado: solo lectura' : 'Borrador: captura el encabezado, agrega servicios y cierra'}>
+                        <button type="button" onClick={volverALista} className={BOTON_SECUNDARIO}>
+                            <span className="flex items-center gap-2">
+                                <ArrowLeft size={14} />
+                                VOLVER A LA LISTA
+                            </span>
+                        </button>
+                    </CabeceraPantalla>
+
+                    {cerrada && (
+                        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3" role="status">
+                            <Lock size={18} className="text-emerald-700" />
+                            <p className="text-sm font-black uppercase text-emerald-800">Cerrada con folio {prefactura.folio ?? '—'}</p>
+                            <p className="text-[11px] font-bold text-emerald-700">el {fechaHoraSinZona(prefactura.cerrada_at)}. Un documento emitido no se modifica.</p>
+                        </div>
+                    )}
+
+                    {descartada && (
+                        <div role="alert" className="flex items-start gap-2 rounded-lg border border-slate-300 bg-slate-100 p-4 text-[12px] font-bold text-slate-600">
+                            <Lock size={16} className="mt-0.5 shrink-0" />
+                            <span>Este borrador está descartado: ya no se puede modificar ni cerrar.</span>
+                        </div>
+                    )}
+
+                    <AvisosDelServidor prefactura={prefactura} />
+
+                    {cerrada && prefactura.sello_discrepa === false && (
+                        <p className="flex items-center gap-2 text-[11px] font-bold text-emerald-700">
+                            <ShieldCheck size={14} />
+                            El sello coincide con lo que suman los renglones.
+                        </p>
+                    )}
+
+                    {/* Encabezado */}
+                    <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm" aria-labelledby="seccion-encabezado">
+                        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                            <h3 id="seccion-encabezado" className={`${sectionTitle} mb-0`}>
+                                Encabezado
+                            </h3>
+
+                            <span className={`flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-black uppercase ${prefactura.tipo_destino === 'internacional' ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-600'}`}>
+                                <Globe size={12} />
+                                {prefactura.tipo_destino === 'internacional' ? 'Internacional' : 'Nacional'}
+                            </span>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div>
+                                <label htmlFor="encabezado-matricula" className={labelStyle}>
+                                    Matrícula
+                                </label>
+                                <input id="encabezado-matricula" type="text" value={prefactura.matricula ?? ''} disabled readOnly className={campoConError(false)} />
+                                <p className="mt-1 text-[10px] font-bold text-slate-400 italic">La matrícula no se cambia una vez creada la prefactura.</p>
+                            </div>
+
+                            <div>
+                                <label htmlFor="encabezado-cliente" className={labelStyle}>
+                                    Cliente
+                                </label>
+                                <SelectorCliente
+                                    id="encabezado-cliente"
+                                    valor={soloLectura ? prefactura.cliente_id : form.clienteId}
+                                    nombreActual={soloLectura ? prefactura.cliente : form.clienteNombre}
+                                    onChange={cliente => {
+                                        setForm(previo => (previo === null ? previo : { ...previo, clienteId: cliente?.id ?? null, clienteNombre: cliente?.nombre ?? null }));
+                                        setErroresForm(previos => (previos.cliente_id ? { ...previos, cliente_id: undefined } : previos));
+                                    }}
+                                    disabled={soloLectura}
+                                    error={erroresForm.cliente_id}
+                                />
+                                {erroresForm.cliente_id && <p className={errorStyle}>{erroresForm.cliente_id}</p>}
+                            </div>
+
+                            <div>
+                                <label htmlFor="encabezado-llegada" className={labelStyle}>
+                                    Llegada
+                                </label>
+                                <input
+                                    id="encabezado-llegada"
+                                    type="datetime-local"
+                                    value={soloLectura ? aCampoFechaHora(prefactura.llegada_at) : form.llegada}
+                                    disabled={soloLectura}
+                                    onChange={e => cambiar('llegada', e.target.value, 'llegada_at')}
+                                    className={campoConError(!!erroresForm.llegada_at)}
+                                    aria-invalid={erroresForm.llegada_at ? true : undefined}
+                                />
+                                {erroresForm.llegada_at && <p className={errorStyle}>{erroresForm.llegada_at}</p>}
+                            </div>
+
+                            <div>
+                                <label htmlFor="encabezado-salida" className={labelStyle}>
+                                    Salida
+                                </label>
+                                <input
+                                    id="encabezado-salida"
+                                    type="datetime-local"
+                                    value={soloLectura ? aCampoFechaHora(prefactura.salida_at) : form.salida}
+                                    min={soloLectura ? undefined : form.llegada || undefined}
+                                    disabled={soloLectura}
+                                    onChange={e => cambiar('salida', e.target.value, 'salida_at')}
+                                    className={campoConError(!!erroresForm.salida_at)}
+                                    aria-invalid={erroresForm.salida_at ? true : undefined}
+                                />
+                                {erroresForm.salida_at && <p className={errorStyle}>{erroresForm.salida_at}</p>}
+                            </div>
+
+                            <div>
+                                <label htmlFor="encabezado-origen" className={labelStyle}>
+                                    Origen
+                                </label>
+                                <input
+                                    id="encabezado-origen"
+                                    type="text"
+                                    autoComplete="off"
+                                    maxLength={TEXTO_MAX}
+                                    value={soloLectura ? (prefactura.origen ?? '') : form.origen}
+                                    disabled={soloLectura}
+                                    onChange={e => cambiar('origen', e.target.value, 'origen')}
+                                    className={campoConError(!!erroresForm.origen)}
+                                    aria-invalid={erroresForm.origen ? true : undefined}
+                                />
+                                {erroresForm.origen && <p className={errorStyle}>{erroresForm.origen}</p>}
+                            </div>
+
+                            <div>
+                                <label htmlFor="encabezado-destino" className={labelStyle}>
+                                    Destino
+                                </label>
+                                <input
+                                    id="encabezado-destino"
+                                    type="text"
+                                    autoComplete="off"
+                                    maxLength={TEXTO_MAX}
+                                    value={soloLectura ? (prefactura.destino ?? '') : form.destino}
+                                    disabled={soloLectura}
+                                    onChange={e => cambiar('destino', e.target.value, 'destino')}
+                                    className={campoConError(!!erroresForm.destino)}
+                                    aria-invalid={erroresForm.destino ? true : undefined}
+                                />
+                                {erroresForm.destino && <p className={errorStyle}>{erroresForm.destino}</p>}
+                            </div>
+                        </div>
+
+                        {!soloLectura && (
+                            <div className="mt-4 flex items-center justify-end gap-3">
+                                {encabezadoModificado && <span className="text-[10px] font-bold uppercase text-amber-600">Cambios sin guardar</span>}
+                                <button type="button" onClick={() => void guardarEncabezado()} disabled={!encabezadoModificado || ocupado} className={BOTON_PRIMARIO}>
+                                    <Save size={14} />
+                                    {guardandoEncabezado ? 'GUARDANDO…' : 'GUARDAR ENCABEZADO'}
+                                </button>
+                            </div>
+                        )}
+                    </section>
+
+                    {/* Renglones */}
+                    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" aria-labelledby="seccion-renglones">
+                        <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
+                            <h3 id="seccion-renglones" className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                {renglones.length} {renglones.length === 1 ? 'renglón' : 'renglones'}
+                            </h3>
+
+                            {!soloLectura && (
+                                <div className="flex flex-wrap gap-2">
+                                    <button type="button" onClick={() => setModal('renglon')} disabled={ocupado} className={BOTON_PRIMARIO}>
+                                        <Plus size={14} />
+                                        AGREGAR SERVICIO
+                                    </button>
+                                    <button type="button" onClick={() => setModal('estancia')} disabled={ocupado} className={BOTON_SECUNDARIO}>
+                                        <span className="flex items-center gap-2">
+                                            <RefreshCw size={14} />
+                                            RECALCULAR ESTANCIA
+                                        </span>
+                                    </button>
+                                    {prefactura.tipo_destino === 'nacional' && (
+                                        <button type="button" onClick={() => void marcarInternacional()} disabled={ocupado} className={BOTON_SECUNDARIO}>
+                                            <span className="flex items-center gap-2">
+                                                <Globe size={14} />
+                                                MARCAR INTERNACIONAL
+                                            </span>
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {avisoEstancia && (
+                            <div role="status" className="flex items-start justify-between gap-3 border-b border-sky-100 bg-sky-50 px-6 py-3 text-[12px] font-bold text-sky-800">
+                                <span>{avisoEstancia}</span>
+                                <button type="button" onClick={() => setAvisoEstancia(null)} className="shrink-0 text-sky-500 hover:text-sky-700" aria-label="Cerrar aviso">
+                                    <X size={14} />
+                                </button>
+                            </div>
+                        )}
+
+                        <div className="overflow-x-auto custom-scrollbar">
+                            <table className="w-full min-w-[720px] border-collapse text-left">
+                                <thead>
+                                    <tr className="border-b border-slate-100 bg-white">
+                                        <th className="px-6 py-4 text-left text-[9px] font-black uppercase text-slate-400">Servicio</th>
+                                        <th className={`${TH} text-right`}>Precio unitario</th>
+                                        <th className={TH}>Cantidad</th>
+                                        <th className={`${TH} text-right`}>Importe</th>
+                                        {!soloLectura && <th className="px-6 py-4 text-right text-[9px] font-black uppercase text-slate-400">Acciones</th>}
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+                                    {renglones.length === 0 && (
+                                        <tr>
+                                            <td colSpan={soloLectura ? 4 : 5} className="px-6 py-16 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                                Sin renglones
+                                            </td>
+                                        </tr>
+                                    )}
+
+                                    {renglones.map(renglon => (
+                                        <tr key={renglon.id} className={`border-b border-slate-50 ${esConceptoDeEstancia(renglon.concepto) ? 'bg-sky-50/40' : ''}`}>
+                                            <td className="px-6 py-4">
+                                                <p className="text-[11px] font-black uppercase text-slate-800">
+                                                    {renglon.nombre_servicio}
+                                                    {esConceptoDeEstancia(renglon.concepto) && (
+                                                        <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-[9px] font-black text-sky-700" title="Cargo de estancia: lo reemplaza «Recalcular estancia».">
+                                                            ESTANCIA
+                                                        </span>
+                                                    )}
+                                                </p>
+                                                {(renglon.remision || Number(renglon.margen) > 0) && (
+                                                    <p className="text-[10px] font-bold text-slate-400">
+                                                        {renglon.remision ? `Remisión ${renglon.remision}` : ''}
+                                                        {renglon.remision && Number(renglon.margen) > 0 ? ' · ' : ''}
+                                                        {Number(renglon.margen) > 0 ? `Margen ${Number(renglon.margen)} %` : ''}
+                                                    </p>
+                                                )}
+                                            </td>
+                                            <td className={`${TD} text-right text-[11px] font-bold text-slate-600`}>{formatearMonto(renglon.precio_unitario, 4)}</td>
+                                            <td className={`${TD} text-[11px] font-bold text-slate-600`}>{renglon.cantidad}</td>
+                                            <td className={`${TD} text-right text-[11px] font-black text-slate-800`}>
+                                                {renglon.importe === null ? (
+                                                    <span className="text-red-600" title={renglon.importe_error ?? undefined}>
+                                                        No se pudo calcular
+                                                    </span>
+                                                ) : (
+                                                    formatearMonto(renglon.importe)
+                                                )}
+                                            </td>
+                                            {!soloLectura && (
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center justify-end">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void quitarRenglon(renglon.id, renglon.nombre_servicio)}
+                                                            disabled={ocupado}
+                                                            title="Quitar"
+                                                            aria-label={`Quitar ${renglon.nombre_servicio}`}
+                                                            className="rounded p-2 text-slate-400 transition-colors hover:text-red-600 disabled:opacity-50"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            )}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    {/* Totales: siempre los del servidor */}
+                    <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm" aria-labelledby="seccion-totales">
+                        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                            <div>
+                                <h3 id="seccion-totales" className={sectionTitle}>
+                                    Totales
+                                </h3>
+                                <dl className="grid grid-cols-[auto_auto] gap-x-8 gap-y-1 text-sm">
+                                    <dt className="text-[11px] font-bold uppercase text-slate-500">Subtotal</dt>
+                                    <dd className="text-right font-bold text-slate-700">{formatearMonto(prefactura.subtotal)}</dd>
+                                    <dt className="text-[11px] font-bold uppercase text-slate-500">IVA ({formatearTasa(prefactura.iva_tasa)})</dt>
+                                    <dd className="text-right font-bold text-slate-700">{formatearMonto(prefactura.iva)}</dd>
+                                    <dt className="text-[11px] font-black uppercase text-slate-800">Total</dt>
+                                    <dd className="text-right text-2xl font-black text-slate-900">{formatearMonto(prefactura.total)}</dd>
+                                </dl>
+                                <p className="mt-2 text-[10px] font-bold italic text-slate-400">Las cifras las calcula el sistema; esta pantalla no suma nada.</p>
+                            </div>
+
+                            {!soloLectura && (
+                                <button type="button" onClick={() => void cerrar()} disabled={ocupado} className={`${BOTON_PRIMARIO} !bg-emerald-600 hover:!bg-emerald-700 !px-6 !py-3`}>
+                                    <Lock size={14} />
+                                    {accionando === 'cerrar' ? 'CERRANDO…' : 'CERRAR PREFACTURA'}
+                                </button>
+                            )}
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            {modal === 'renglon' && <ModalRenglon onCerrar={() => setModal(null)} onGuardar={agregarRenglon} />}
+            {modal === 'estancia' && <ModalEstancia onCerrar={() => setModal(null)} onGuardar={recalcularEstancia} />}
+        </AppLayout>
+    );
+}
