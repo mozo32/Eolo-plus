@@ -2654,10 +2654,33 @@ git commit -m "Pantallas de prefacturas: lista y editor"
 
 | Clase | Esperado |
 |---|---|
-| Idénticas (≤ 2 centavos) | ~3,034 |
-| Redondeo (≤ 1 peso) | ~422 |
-| Estructurales (> 1 peso) | ~38 |
+| Idénticas (≤ 2 centavos) | **2,962** |
+| Redondeo (≤ 1 peso) | **419** |
+| Estructurales (> 1 peso) | **113** |
 | Folio duplicado, excluidas | 207 folios, 290 filas |
+
+**Estos números están medidos contra el volcado de producción con la lógica que el
+comando va a usar**, es decir recalculando el importe de cada renglón como
+`precio_u × cantidad` redondeado a dos decimales y sumándolos. **Si la corrida real
+da otra cosa, es un hallazgo: dilo, no ajustes las tolerancias para que cuadre.**
+
+Cuidado con una trampa aquí, porque ya me costó un error: comparar contra la **suma
+de los importes guardados** en lugar de contra la **recalculada** da
+3,034 / 422 / **38**, que es muy distinto. La diferencia son los **238 renglones de
+10,310 cuyo `importe` guardado no corresponde a su propio `precio_u × cantidad`**,
+con un caso de 13,644 pesos. O sea que el sistema viejo tiene inconsistencias en dos
+niveles, y hay que distinguirlas.
+
+**Por eso el comando reporta las dos comparaciones, no una.** Son diagnósticos
+distintos y conviene no mezclarlos:
+
+| Comparación | Qué revela |
+|---|---|
+| Subtotal guardado contra la suma **recalculada** | Si el encabezado cuadra con la aritmética de sus renglones |
+| `importe` guardado de cada renglón contra su `precio_u × cantidad` | Si el renglón cuadra consigo mismo |
+
+La segunda se reporta como un conteo de renglones (238 esperados) con sus peores
+casos, no como una clase de prefactura.
 
 **Dos trampas verificadas que el implementador debe conocer:**
 1. **`tb_venta` cuelga del folio, no del id del encabezado.** Agrupar renglones por folio sin excluir los folios duplicados suma los renglones de todos los encabezados repetidos y contamina la comparación. Los duplicados se detectan con `GROUP BY fol_prefactura HAVING COUNT(*) > 1` y se reportan aparte.
