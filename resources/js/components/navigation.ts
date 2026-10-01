@@ -29,7 +29,8 @@ import {
     facturacionClientes,
     facturacionServicios,
     facturacionFormasPago,
-    facturacionProveedores
+    facturacionProveedores,
+    facturacionPrefacturas
 } from '@/routes'
 import { LayoutGrid, type LucideIcon } from 'lucide-react'
 
@@ -196,6 +197,10 @@ const ROUTE_CONFIG: Record<
         href: facturacionProveedores,
         title: 'Proveedores',
     },
+    factprefacturas: {
+        href: facturacionPrefacturas,
+        title: 'Prefacturas',
+    },
 }
 
 
@@ -290,6 +295,7 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
                 items: [
                     { id: 'facturacion-aeronaves', title: 'Aeronaves facturables', href: facturacionAeronaves(), icon: LayoutGrid },
                     { id: 'facturacion-clientes', title: 'Clientes', href: facturacionClientes(), icon: LayoutGrid },
+                    { id: 'facturacion-prefacturas', title: 'Prefacturas', href: facturacionPrefacturas(), icon: LayoutGrid },
 
                     {
                         id: 'facturacion-catalogos',
@@ -362,8 +368,9 @@ export function getNavModules(user: AuthUser | null): NavModule[] {
 
             // 2. Definimos las rutas a agrupar
             const combustibleRoutes = ['reporteentregaturno', 'remision', 'inspeccioncombustible'];
-            // Clientes (`factclientes`) queda fuera a propósito: es de uso diario y va en
-            // el primer nivel, junto a Aeronaves facturables.
+            // Clientes (`factclientes`) y Prefacturas (`factprefacturas`) quedan fuera a
+            // propósito: son de uso diario y van en el primer nivel, junto a Aeronaves
+            // facturables.
             const catalogosFacturacionRoutes = [
                 'factcategoriasaeronave',
                 'facttiposmotor',
