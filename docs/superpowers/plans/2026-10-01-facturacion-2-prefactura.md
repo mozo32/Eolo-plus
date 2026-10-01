@@ -1550,11 +1550,33 @@ class CargosEstancia
             return ['renglones' => 0, 'motivo' => 'La matrícula no tiene ficha de facturación, así que no hay tarifas de estancia que aplicar.'];
         }
 
+        // OJO con el orden: en el original el DELETE de los servicios de estancia va en
+        // la linea 82 de `insert22.php` y el `if($estatus == 1)` empieza en la 114, o sea
+        // que el borrado es INCONDICIONAL. Una aeronave en Guarda pierde sus cargos de
+        // estancia previos y no recibe ninguno nuevo.
+        //
+        // Devolver aqui sin borrar seria peor que un detalle: el motivo diria «no paga
+        // estancia» y `renglones: 0` mientras los cargos viejos siguen en la prefactura,
+        // asi que el operador cerraria creyendo que no hay estancia y se facturaria a una
+        // aeronave que no la paga.
         if ($satelite->estatus === FactAeronave::ESTATUS_GUARDA) {
-            return [
-                'renglones' => 0,
-                'motivo' => 'La aeronave está en Guarda y una aeronave en Guarda no paga estancia. Si hay que cobrarla, agrega el servicio a mano.',
-            ];
+            $quitados = $prefactura->renglones()
+                ->whereIn('concepto', FactServicio::CONCEPTOS_ESTANCIA)
+                ->count();
+
+            if ($quitados > 0) {
+                $prefactura->renglones()->whereIn('concepto', FactServicio::CONCEPTOS_ESTANCIA)->delete();
+            }
+
+            $motivo = 'La aeronave está en Guarda y una aeronave en Guarda no paga estancia.';
+
+            if ($quitados > 0) {
+                $motivo .= " Se quitaron {$quitados} renglones de estancia que la prefactura ya tenía.";
+            }
+
+            $motivo .= ' Si hay que cobrarla de todos modos, agrega el servicio a mano.';
+
+            return ['renglones' => 0, 'motivo' => $motivo];
         }
 
         $conceptos = [
