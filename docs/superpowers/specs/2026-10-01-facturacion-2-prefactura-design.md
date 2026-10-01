@@ -332,10 +332,19 @@ operación no bloquea nada.**
 **Los renglones** se agregan desde el catálogo con su cantidad. Tres acciones
 aparte: recalcular estancia, marcar internacional, y quitar un renglón.
 
-**Los totales se derivan en vivo** con `importeVistaPrevia`, que ya existe y está
-verificado contra el PHP. El navegador da respuesta inmediata; **el servidor es
-la autoridad** y el total que se sella lo calcula él. Es el mismo patrón del
-precio de combustible sugerido del 1a.
+**Los totales salen siempre del servidor.** La pantalla no suma ni calcula
+ningún total: muestra `subtotal`, `iva` y `total` tal como los devuelve la API, que
+los toma de los métodos del modelo (`subtotal()`, `iva()`, `total()`) o, en una
+cerrada, del sello. `importeVistaPrevia` existe y está verificado contra el PHP,
+pero se usa **solo** para la vista previa del renglón que se está tecleando en el
+modal: el navegador da respuesta inmediata al capturar, y en cuanto el renglón se
+guarda, la cifra que vale es la que devuelve el servidor. Es el mismo patrón del
+precio de combustible sugerido del 1a: el cliente propone, el servidor decide.
+
+La razón: la cifra que se cobra no puede depender de que dos implementaciones de la
+fórmula (PHP y TypeScript) coincidan en el último centavo ni de aritmética de coma
+flotante en el navegador. Si la pantalla sumara por su cuenta, un redondeo distinto
+mostraría un total que no es el que se sella.
 
 ### Cerrar
 
