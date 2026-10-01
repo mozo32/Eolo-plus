@@ -456,4 +456,32 @@ export const apiPrefacturas = {
     quitarRenglon: (id: number, renglon: number) => pedir<{ message: string }>(`${BASE}/prefacturas/${id}/renglones/${renglon}`, { method: 'DELETE' }),
     estancia: (id: number, datos: Record<string, unknown>) => pedir<{ renglones: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/estancia`, { method: 'PATCH', body: datos }),
     internacional: (id: number) => pedir<{ renglones: number }>(`${BASE}/prefacturas/${id}/internacional`, { method: 'PATCH' }),
+    /** Baja lógica de un borrador. 409 (ErrorApi.codigo ya_cerrada o ya_descartada) si ya no es un borrador activo. */
+    descartar: (id: number) => pedir<{ message: string }>(`${BASE}/prefacturas/${id}/descartar`, { method: 'PATCH' }),
 };
+
+/** Una llegada de Operaciones Diarias, la que la prefactura puede ofrecer para precargar fecha, hora y lugar. */
+export interface LlegadaOperacion {
+    id: number;
+    matricula: string;
+    /** Instante UTC (el servidor castea la fecha): ver `fechaIsoMexico`. */
+    fecha: string;
+    /** "14:30:00". */
+    hora: string;
+    /** De dónde venía; null si no se capturó. */
+    lugar: string | null;
+}
+
+/**
+ * Las llegadas más recientes de una matrícula en `operaciones_diarias` (las activas; las canceladas no salen del servidor).
+ *
+ * LÍMITE CONOCIDO: el endpoint de Operaciones Diarias no sabe qué operaciones ya tienen prefactura, así que aquí NO se
+ * puede decir "sin facturar". Cuando exista un endpoint de facturación que lo filtre, solo cambia esta función.
+ */
+export async function obtenerLlegadasDeMatriculaApi(matricula: string, maximo = 5): Promise<LlegadaOperacion[]> {
+    const params = new URLSearchParams({ buscar: matricula, tipo: 'llegada' });
+    const pagina = await pedir<{ data: LlegadaOperacion[] }>(`/api/OperacionesDiarias?${params.toString()}`);
+
+    // `buscar` es un LIKE: "XA-AB" traería "XA-ABC". Solo cuenta la matrícula exacta.
+    return pagina.data.filter(o => o.matricula.toUpperCase() === matricula.toUpperCase()).slice(0, maximo);
+}

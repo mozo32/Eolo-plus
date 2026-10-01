@@ -218,3 +218,16 @@ export function formatearTasa(tasa: string | null | undefined): string {
 
     return `${(Number(tasa) * 100).toLocaleString('es-MX', { maximumFractionDigits: 2 })} %`;
 }
+
+/**
+ * "2026-09-30" en hora de México, a partir de lo que serializa el servidor para una fecha (instante UTC, o ya "aaaa-mm-dd").
+ * Es la forma de armar el valor de un campo de fecha sin correr un día; null si no hay una fecha válida.
+ */
+export function fechaIsoMexico(valor: string | null | undefined): string | null {
+    if (!valor) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(valor)) return valor;
+
+    const fecha = new Date(valor);
+
+    return Number.isNaN(fecha.getTime()) ? null : FORMATO_FECHA_MX.format(fecha);
+}

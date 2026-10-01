@@ -3,7 +3,7 @@ import { facturacionPrefacturas } from '@/routes';
 import { ErrorApi, apiPrefacturas, type DiscrepanciaSello, type Prefactura } from '@/stores/apiFacturacionCatalogos';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { ArrowLeft, Globe, Lock, Plus, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, X } from 'lucide-react';
+import { ArrowLeft, Ban, Globe, Lock, Plus, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import CabeceraPantalla from './components/CabeceraPantalla';
@@ -416,6 +416,25 @@ export default function EditorPrefactura({ id }: Props) {
             await cargar();
         });
 
+    const descartar = () =>
+        ejecutar('descartar', 'No se pudo descartar el borrador', async () => {
+            const confirmacion = await Swal.fire({
+                titleText: `Descartar el borrador de ${prefactura.matricula ?? 'esta prefactura'}`,
+                text: 'El borrador sale de la lista y ya no se podrá editar ni cerrar. Úsalo para quitar un borrador abierto por error; no se puede deshacer desde esta pantalla.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, descartar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#dc2626',
+                reverseButtons: true,
+            });
+            if (!confirmacion.isConfirmed) return;
+
+            await apiPrefacturas.descartar(prefactura.id);
+            toast.fire({ icon: 'success', titleText: 'Borrador descartado.' });
+            router.visit(facturacionPrefacturas().url);
+        });
+
     const cerrar = () =>
         ejecutar('cerrar', 'No se pudo cerrar la prefactura', async () => {
             // El servidor cierra lo que tiene guardado: un encabezado a medio capturar quedaría fuera del documento sellado.
@@ -735,10 +754,16 @@ export default function EditorPrefactura({ id }: Props) {
                             </div>
 
                             {!soloLectura && (
-                                <button type="button" onClick={() => void cerrar()} disabled={ocupado} className={`${BOTON_PRIMARIO} !bg-emerald-600 hover:!bg-emerald-700 !px-6 !py-3`}>
-                                    <Lock size={14} />
-                                    {accionando === 'cerrar' ? 'CERRANDO…' : 'CERRAR PREFACTURA'}
-                                </button>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <button type="button" onClick={() => void descartar()} disabled={ocupado} className="flex items-center justify-center gap-2 rounded border border-red-200 bg-white px-4 py-3 text-[10px] font-black text-red-600 transition-all hover:bg-red-50 disabled:opacity-50">
+                                        <Ban size={14} />
+                                        {accionando === 'descartar' ? 'DESCARTANDO…' : 'DESCARTAR BORRADOR'}
+                                    </button>
+                                    <button type="button" onClick={() => void cerrar()} disabled={ocupado} className={`${BOTON_PRIMARIO} !bg-emerald-600 hover:!bg-emerald-700 !px-6 !py-3`}>
+                                        <Lock size={14} />
+                                        {accionando === 'cerrar' ? 'CERRANDO…' : 'CERRAR PREFACTURA'}
+                                    </button>
+                                </div>
                             )}
                         </div>
                     </section>

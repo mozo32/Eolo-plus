@@ -3,10 +3,12 @@ import { facturacionEditorPrefactura } from '@/routes';
 import { FILTROS_PREFACTURA_VACIOS, obtenerPrefacturasApi, type FiltrosPrefactura, type Prefactura } from '@/stores/apiFacturacionCatalogos';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
+import { useState } from 'react';
 import CabeceraPantalla from './components/CabeceraPantalla';
-import { FILTRO, TD, TH } from './components/estilos';
+import { BOTON_PRIMARIO, FILTRO, TD, TH } from './components/estilos';
 import { fechaHoraSinZona, formatearMonto } from './components/formato';
+import ModalNuevaPrefactura from './components/ModalNuevaPrefactura';
 import PiePaginacion from './components/PiePaginacion';
 import { useListaPaginada } from './components/useListaPaginada';
 
@@ -43,6 +45,8 @@ export default function Prefacturas() {
     const lista = useListaPaginada<Prefactura, FiltrosPrefactura>({ obtener: obtenerPrefacturasApi, vacios: FILTROS_PREFACTURA_VACIOS, mensajeError: 'No se pudieron cargar las prefacturas.' });
     const { registros, total, pagina, totalPaginas, porPagina, cargando, error, filtros, busqueda, setBusqueda, setFiltros, limpiarFiltros, hayFiltros, cambiarPagina, cambiarPorPagina, recargar } = lista;
 
+    const [creando, setCreando] = useState(false);
+
     const abrir = (prefactura: Prefactura) => router.visit(facturacionEditorPrefactura(prefactura.id).url);
 
     return (
@@ -51,7 +55,12 @@ export default function Prefacturas() {
 
             <div className="p-6 bg-[#f3f4f6] min-h-screen">
                 <div className="space-y-4 animate-in fade-in duration-500">
-                    <CabeceraPantalla titulo="Prefacturas" descripcion="Borradores por cerrar y prefacturas con folio" />
+                    <CabeceraPantalla titulo="Prefacturas" descripcion="Borradores por cerrar y prefacturas con folio">
+                        <button type="button" onClick={() => setCreando(true)} className={BOTON_PRIMARIO}>
+                            <Plus size={14} />
+                            NUEVA PREFACTURA
+                        </button>
+                    </CabeceraPantalla>
 
                     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div className="px-6 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
@@ -81,7 +90,7 @@ export default function Prefacturas() {
                                 </select>
 
                                 <label className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400">
-                                    Creada desde
+                                    Llegada desde
                                     <input type="date" value={filtros.desde} max={filtros.hasta || undefined} onChange={e => setFiltros({ desde: e.target.value })} className={`${FILTRO} lg:w-36`} />
                                 </label>
 
@@ -191,6 +200,8 @@ export default function Prefacturas() {
                     <PiePaginacion pagina={pagina} totalPaginas={totalPaginas} total={total} porPagina={porPagina} onPagina={cambiarPagina} onPorPagina={cambiarPorPagina} />
                 </div>
             </div>
+
+            {creando && <ModalNuevaPrefactura onCerrar={() => setCreando(false)} onCreada={id => router.visit(facturacionEditorPrefactura(id).url)} />}
         </AppLayout>
     );
 }
