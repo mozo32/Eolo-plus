@@ -841,7 +841,20 @@ class ImportadorMatriculas
      */
     private function importarServicioConConcepto(string $concepto, string $nombre, array $valores): void
     {
-        $servicio = FactServicio::porConcepto($concepto)->first()
+        $porConcepto = FactServicio::porConcepto($concepto)->first();
+
+        // La fila con concepto se renombró en pantalla y otra SIN concepto lleva
+        // el nombre del origen: al devolverle su nombre a la primera quedan dos
+        // filas iguales, y no hay forma de saber cuál es la que se quiere.
+        if ($porConcepto !== null) {
+            $gemela = FactServicio::whereNull('concepto')->where('nombre', $nombre)->where('id', '!=', $porConcepto->id)->first();
+
+            if ($gemela !== null) {
+                $this->resultado->hallazgo("Servicio '{$nombre}': la fila con concepto '{$concepto}' (id {$porConcepto->id}, hoy '{$porConcepto->nombre}') y otra sin concepto (id {$gemela->id}) van a quedar con el mismo nombre. La importación actualiza la que lleva concepto y deja la otra intacta; decide a mano cuál conservar.");
+            }
+        }
+
+        $servicio = $porConcepto
             ?? FactServicio::whereNull('concepto')->where('nombre', $nombre)->first()
             ?? new FactServicio;
 
