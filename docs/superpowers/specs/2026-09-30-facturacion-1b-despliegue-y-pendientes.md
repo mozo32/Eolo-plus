@@ -314,3 +314,105 @@ aquí no hay un id estable tras la importación, así que el vínculo es el
   importador **deriva** `es_de_tercero` de ese mismo id (`$idViejo >
   ULTIMO_SERVICIO_PROPIO`), así que la comprobación no podría fallar nunca: se
   estaría comparando el dato consigo mismo.
+
+## Hallazgos menores que se dejaron fuera a propósito
+
+Las siete tasks y la revisión final de la rama adjudicaron estos hallazgos y
+decidieron no arreglarlos ahora. **Ninguno toca un cobro ni un permiso.** Se
+anotan aquí porque son la mejor lista de arranque del bloque 2, y porque el
+registro de ejecución donde vivían no se versiona.
+
+### Para unificar en el bloque 2
+
+- **Dos patrones de bitácora en la misma rama.** `FactPrecioCombustible::registrar()`
+  escribe su bitácora **dentro** de la transacción, con prueba de atomicidad; los 30
+  `Bitacora::log` de los nueve controladores la escriben **fuera** y sin transacción,
+  así que un fallo después del `UPDATE` dejaría la fila escrita sin rastro. La
+  escritura más importante del bloque es atómica con su rastro y las demás no.
+  Unificar hacia el patrón de `registrar()`.
+- **Dos altas simultáneas del mismo nombre dan 500 en lugar de 422.** Las dos pasan
+  la validación y la segunda revienta contra el índice único. Solo alcanza a
+  categorías de servicio, formas de pago y proveedores (los tres con `nombre`
+  único), exige dos POST en la misma ventana de milisegundos sobre catálogos de 13,
+  7 y 5 filas, y la consecuencia es ruido: el reintento da el 422 correcto y ningún
+  dato se pierde. Arreglarlo bien son cinco controladores, incluidos dos del 1a.
+- **Identificar el servicio de combustible con una columna propia** en lugar de por
+  su nombre. Hoy el vínculo es el nombre, sostenido por una guarda de validación en
+  las dos direcciones (no se puede renombrar ese servicio, ni nombrar otro así) y
+  por la sincronía final del importador. El bloque 2 va a necesitar reconocer ese
+  servicio igual, así que la columna se paga dos veces. Mientras no exista, **el
+  invariante depende de que la sincronía corra**, no de una restricción de la base:
+  si el bloque 2 añade otra ruta que escriba `fact_servicios.precio_unitario` en
+  masa, el hueco se reabre.
+- **`FactServicio::importe()` no tiene ningún llamador en producción todavía.** Hoy
+  solo lo ejercitan las pruebas, así que ninguna imprecisión de redondeo puede
+  llegar a una factura antes del bloque 2 — que es cuando además hará falta un
+  `precioUnitarioFinal()` que hoy no existe.
+- **Cinco modelos del módulo repiten las mismas constantes de estatus, `$fillable`
+  y scope `activos()`.** Un trait los uniría.
+
+### Rastro de la sincronía del importador
+
+- La bitácora de la corrección dice «pasó de 26.0640 a 28.1750» aunque el valor
+  previo a la corrida ya era 28.1750: `importarServicios` lo pisó antes, dentro de
+  la misma transacción. El rastro describe la secuencia real pero **sobre-reporta el
+  cambio neto**, y se repite en cada `--forzar`.
+- Ese rastro se atribuye al **usuario de menor id**, no a quien corrió el comando.
+  Es la misma convención que ya usaba `importarCombustible`.
+
+### Pruebas que no prueban lo que su título promete
+
+Se dejaron con la limitación escrita en un comentario, en lugar de borrarlas o de
+fingir que cubren más:
+
+- Las de «el ajuste va antes del margen» **no pueden distinguir el orden**, porque
+  ajuste, margen y cantidad son todos multiplicativos y conmutan (verificado sobre
+  200 mil precios: el importe es idéntico invertido).
+- Las de longitud y de collation **no las puede hacer cumplir sqlite**, que ignora
+  `varchar(N)` y compara texto en binario. La garantía real es el modo estricto de
+  MySQL más la collation de las columnas.
+- La de «desactivar y reactivar es atómico» hace peticiones secuenciales: prueba el
+  409 y la transición, no la atomicidad, que no se puede demostrar en un proceso
+  sqlite sin concurrencia real.
+- La de idempotencia del importador **no distinguiría un `updateOrCreate` con los
+  mismos valores**, porque Eloquent no ejecuta UPDATE sobre un modelo limpio y
+  `updated_at` no se movería.
+- Ninguna prueba fija el `->index()` del RFC ni el desempate por `id` de la
+  paginación de clientes: quitarlos no rompería nada.
+
+### Frontend
+
+- La pila de Escape de `ModalBase` depende de la identidad de los callbacks. En el
+  caso apilado los dos modales se re-registran en el mismo commit y en orden de
+  árbol, así que hoy funciona; no se encontró ningún camino de fallo. Además
+  `splice(indexOf(yo), 1)` borraría el último elemento si `yo` no estuviera en la
+  pila, y la guarda cuesta una línea.
+- El texto del estado vacío de Clientes diría «Aún no hay clientes» cuando todos
+  estuvieran de baja, porque la pantalla abre en «activas» y ese es el filtro vacío.
+- **El apilado de modales y la búsqueda con espera no se probaron en navegador.**
+
+### Otros
+
+- No se escapan `%` ni `_` en el parámetro de búsqueda `q`, igual que en la pantalla
+  de aeronaves del 1a: un `%` tecleado actúa como comodín. Sin riesgo de inyección
+  (el valor va enlazado). Si molesta, se corrige en los dos controladores a la vez
+  con una cláusula `ESCAPE` explícita.
+- `q` llegando como arreglo (`?q[]=x`) pasaría `filled` y el `(string)` daría 500.
+  Mismo patrón exacto en el controlador de aeronaves del 1a.
+- El respaldo de `llaveCatalogo` cuando el ASCII queda vacío solo pliega caja, así
+  que un par de nombres cirílicos que difieran solo en acento contaría dos veces
+  aunque MySQL deje una fila. No ocurre con nombres en español.
+- **El comando se sigue llamando `facturacion:importar-matriculas`** aunque ya
+  importe cinco catálogos que no son matrículas. Renombrarlo rompería esta guía.
+- **La conexión legada de solo lectura que pedía la especificación no existe.** El
+  importador usa `remota`, que en los entornos actuales es `root`. Ningún
+  controlador ni modelo la usa (hay una prueba que falla si alguien la
+  reintroduce), pero la nota de seguridad de la spec —crear un usuario de solo
+  lectura y rotar credenciales— sigue pendiente.
+
+## Nota de entorno
+
+`php artisan test --parallel` produce **22 fallos falsos** en la máquina de
+desarrollo actual, también en la rama sin tocar y en pruebas ajenas a facturación
+(`ControlMedicamento`). **La suite se corre en serie.** Si se monta integración
+continua con `--parallel`, va a desconfiar de la suite sin motivo.
