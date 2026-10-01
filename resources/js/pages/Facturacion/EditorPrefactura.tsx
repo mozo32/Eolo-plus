@@ -136,6 +136,8 @@ export default function EditorPrefactura({ id }: Props) {
     const [prefactura, setPrefactura] = useState<Prefactura | null>(null);
     const [cargando, setCargando] = useState(true);
     const [errorCarga, setErrorCarga] = useState<string | null>(null);
+    // Una recarga que falla cuando ya hay una ficha en pantalla: lo que se ve puede estar viejo y hay que decirlo.
+    const [recargaFallida, setRecargaFallida] = useState(false);
 
     const [form, setForm] = useState<FormularioEncabezado | null>(null);
     const [erroresForm, setErroresForm] = useState<Partial<Record<CampoEncabezado, string>>>({});
@@ -165,9 +167,15 @@ export default function EditorPrefactura({ id }: Props) {
             if (numero !== peticionRef.current) return;
             aplicar(ficha);
             setErrorCarga(null);
+            setRecargaFallida(false);
         } catch (e) {
             if (numero !== peticionRef.current) return;
             setErrorCarga(e instanceof Error ? e.message : 'No se pudo cargar la prefactura.');
+            // `errorCarga` solo se pinta cuando no hay ficha. Con una ficha ya cargada, la pantalla seguiría mostrando lo de antes como si fuera lo vigente.
+            if (prefacturaRef.current !== null) {
+                setRecargaFallida(true);
+                toast.fire({ icon: 'error', titleText: 'No se pudo actualizar la prefactura.' });
+            }
         } finally {
             if (numero === peticionRef.current) setCargando(false);
         }
@@ -488,6 +496,16 @@ export default function EditorPrefactura({ id }: Props) {
                         <div role="alert" className="flex items-start gap-2 rounded-lg border border-slate-300 bg-slate-100 p-4 text-[12px] font-bold text-slate-600">
                             <Lock size={16} className="mt-0.5 shrink-0" />
                             <span>Este borrador está descartado: ya no se puede modificar ni cerrar.</span>
+                        </div>
+                    )}
+
+                    {recargaFallida && (
+                        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-300 bg-red-50 p-4 text-[12px] font-bold text-red-700">
+                            <TriangleAlert size={16} className="shrink-0" />
+                            <span className="flex-1">No se pudo actualizar la prefactura desde el servidor. Lo que ves puede estar desactualizado: no confíes en estos datos hasta recargar.</span>
+                            <button type="button" onClick={() => void cargar()} className="text-[10px] font-black uppercase text-red-800 underline hover:text-red-900">
+                                Reintentar
+                            </button>
                         </div>
                     )}
 
