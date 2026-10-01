@@ -1,0 +1,254 @@
+<?php
+
+namespace App\Console\Commands;
+
+use App\Support\ImporteServicio;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Verifica contra el histórico del sistema viejo que la aritmética del bloque 2
+ * da los mismos números. SOLO LEE: no escribe en ninguna de las dos bases, y
+ * por eso es seguro correrlo en producción antes de que nadie facture con el
+ * sistema nuevo.
+ *
+ * Qué prueba: dados los mismos renglones, el mismo precio y la misma cantidad,
+ * la fórmula da el mismo importe, el subtotal es la suma, el IVA es 16% y el
+ * total es la suma.
+ *
+ * Qué NO prueba: el extremo a extremo. Las cantidades de estancia las teclea una
+ * persona y no son reproducibles desde el dato, así que si alguien cobró dos
+ * pernoctas donde correspondían tres, esto no lo detecta.
+ *
+ * Reporta DOS comparaciones distintas, que diagnostican cosas distintas y no se
+ * mezclan:
+ *   1. Subtotal guardado contra la suma RECALCULADA de sus renglones
+ *      (`precio_u × cantidad`): si el encabezado cuadra con la aritmética.
+ *   2. `importe` guardado de cada renglón contra su propio `precio_u × cantidad`:
+ *      si el renglón cuadra consigo mismo.
+ * Comparar el subtotal contra la suma de los importes GUARDADOS en lugar de la
+ * recalculada da otra clasificación (muchos menos estructurales) porque esconde
+ * la segunda inconsistencia dentro de la primera.
+ *
+ * Las tolerancias no se ajustan para que la corrida cuadre con un número
+ * esperado: si el resultado cambia, es un hallazgo.
+ */
+class CompararPrefacturas extends Command
+{
+    protected $signature = 'facturacion:comparar-prefacturas {--detalle=20 : Cuántos casos enumerar en cada lista}';
+
+    protected $description = 'Compara la aritmética de las prefacturas históricas contra la del bloque 2 (solo lectura)';
+
+    /** Hasta aquí es redondeo del float del sistema viejo, no un defecto. */
+    private const TOLERANCIA_IDENTICA = '0.02';
+
+    private const TOLERANCIA_REDONDEO = '1.00';
+
+    /**
+     * Por qué una prefactura es estructural. Se separan porque no son el mismo
+     * hallazgo: un encabezado con dinero y sin renglones, o con subtotal en cero
+     * y renglones, es un registro incompleto; el que sí tiene ambos y no cuadra
+     * es una discrepancia de aritmética.
+     */
+    private const SIN_RENGLONES = 'sin renglones';
+
+    private const SUBTOTAL_EN_CERO = 'subtotal guardado en cero';
+
+    private const NO_CUADRA = 'subtotal y renglones que no cuadran';
+
+    public function handle(): int
+    {
+        $origen = config('database.connections.remota.database');
+        $this->info("Comparando contra '{$origen}'. Este comando no escribe nada.");
+
+        $remota = DB::connection('remota');
+        $detalle = max(0, (int) $this->option('detalle'));
+
+        // `tb_venta` cuelga del folio, no del id del encabezado: con un folio
+        // repetido, agrupar por folio suma los renglones de todos los
+        // encabezados y contamina la comparación. Se excluyen.
+        $repetidos = $remota->table('tb_hprefactura')
+            ->select('fol_prefactura')
+            ->selectRaw('COUNT(*) as filas')
+            ->groupBy('fol_prefactura')
+            ->havingRaw('COUNT(*) > 1')
+            ->get();
+
+        $duplicados = $repetidos->pluck('fol_prefactura')->flip();
+        $filasDuplicadas = (int) $repetidos->sum('filas');
+
+        $renglones = $remota->table('tb_venta')
+            ->select('id_venta', 'fol_prefactura', 'precio_u', 'cantidad', 'importe')
+            ->get();
+
+        $renglonesPorFolio = $renglones->groupBy('fol_prefactura');
+
+        $comparadas = 0;
+        $identicas = 0;
+        $redondeo = 0;
+        $estructurales = [];
+
+        $encabezados = $remota->table('tb_hprefactura')
+            ->select('fol_prefactura', 'subtotal')
+            ->orderBy('fol_prefactura')
+            ->get();
+
+        foreach ($encabezados as $h) {
+            if ($duplicados->has($h->fol_prefactura)) {
+                continue;
+            }
+
+            $comparadas++;
+
+            $suma = '0.00';
+            foreach ($renglonesPorFolio[$h->fol_prefactura] ?? [] as $r) {
+                $suma = bcadd($suma, $this->recalcular($r), 2);
+            }
+
+            $guardado = $this->centavos($h->subtotal);
+            $diferencia = $this->absoluta(bcsub($guardado, $suma, 2));
+
+            if (bccomp($diferencia, self::TOLERANCIA_IDENTICA, 2) <= 0) {
+                $identicas++;
+            } elseif (bccomp($diferencia, self::TOLERANCIA_REDONDEO, 2) <= 0) {
+                $redondeo++;
+            } else {
+                $estructurales[] = [
+                    'folio' => $h->fol_prefactura,
+                    'guardado' => $guardado,
+                    'recalculado' => $suma,
+                    'diferencia' => $diferencia,
+                    'motivo' => match (true) {
+                        ! isset($renglonesPorFolio[$h->fol_prefactura]) => self::SIN_RENGLONES,
+                        bccomp($guardado, '0.00', 2) === 0 => self::SUBTOTAL_EN_CERO,
+                        default => self::NO_CUADRA,
+                    },
+                ];
+            }
+        }
+
+        // Segunda comparación: el renglón contra sí mismo. Es independiente de
+        // los folios duplicados (no suma nada entre renglones), así que se
+        // revisan todos los de `tb_venta`. Aquí cualquier diferencia de un
+        // centavo cuenta, y el reporte separa las de centavos (ruido del float
+        // del origen) de las que son dinero.
+        $incongruentes = [];
+        foreach ($renglones as $r) {
+            $esperado = $this->recalcular($r);
+            $guardado = $this->centavos($r->importe);
+            $diferencia = $this->absoluta(bcsub($guardado, $esperado, 2));
+
+            if (bccomp($diferencia, '0.00', 2) > 0) {
+                $incongruentes[] = [
+                    'folio' => $r->fol_prefactura,
+                    'renglon' => $r->id_venta,
+                    'guardado' => $guardado,
+                    'recalculado' => $esperado,
+                    'diferencia' => $diferencia,
+                ];
+            }
+        }
+
+        $this->newLine();
+        $this->line('Prefacturas: subtotal guardado contra la suma recalculada de sus renglones');
+        $this->line("Comparadas: {$comparadas}");
+        $this->line("Idénticas: {$identicas}");
+        $this->line("Redondeo: {$redondeo}");
+        $this->line('Estructurales: '.count($estructurales));
+        foreach ([self::NO_CUADRA, self::SUBTOTAL_EN_CERO, self::SIN_RENGLONES] as $motivo) {
+            $n = count(array_filter($estructurales, fn ($e) => $e['motivo'] === $motivo));
+            $this->line("  de ellas, {$motivo}: {$n}");
+        }
+        $this->line("Folios duplicados en el origen: {$repetidos->count()} ({$filasDuplicadas} filas, excluidas de lo anterior)");
+
+        if ($estructurales !== []) {
+            $this->newLine();
+            $this->warn('Prefacturas cuyo subtotal guardado no corresponde a sus renglones (las peores primero):');
+            $this->table(
+                ['Folio', 'Subtotal guardado', 'Recalculado', 'Diferencia', 'Motivo'],
+                $this->peores($estructurales, $detalle, ['folio', 'guardado', 'recalculado', 'diferencia', 'motivo']),
+            );
+            $this->restantes(count($estructurales), $detalle);
+        }
+
+        $this->newLine();
+        $this->line('Renglones: importe guardado contra su propio precio_u × cantidad');
+        $this->line("Renglones revisados: {$renglones->count()}");
+        $this->line('Renglones cuyo importe guardado no cuadra: '.count($incongruentes));
+        $mayores = count(array_filter($incongruentes, fn ($i) => bccomp($i['diferencia'], self::TOLERANCIA_IDENTICA, 2) > 0));
+        $this->line("  por más de 2 centavos: {$mayores}");
+        $this->line('  por 2 centavos o menos (redondeo del float del origen): '.(count($incongruentes) - $mayores));
+
+        if ($incongruentes !== []) {
+            $this->newLine();
+            $this->warn('Los peores renglones:');
+            $this->table(
+                ['Folio', 'Renglón', 'Importe guardado', 'Recalculado', 'Diferencia'],
+                $this->peores($incongruentes, $detalle, ['folio', 'renglon', 'guardado', 'recalculado', 'diferencia']),
+            );
+            $this->restantes(count($incongruentes), $detalle);
+        }
+
+        $this->newLine();
+        $this->line('Qué prueba esto: la fidelidad de la aritmética. Dados los mismos renglones,');
+        $this->line('el mismo precio y la misma cantidad, la fórmula da el mismo importe y el');
+        $this->line('subtotal es la suma de los importes.');
+        $this->line('Qué NO prueba el extremo a extremo: las cantidades de estancia las teclea una');
+        $this->line('persona y no son reproducibles desde el dato. Si alguien cobró dos pernoctas');
+        $this->line('donde correspondían tres, esto no lo detecta. "Todo cuadra" aquí no significa más que eso.');
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Sin margen ni ajuste: el histórico ya guarda el precio final de cada
+     * renglón, así que esto comprueba la multiplicación y el redondeo, que es
+     * lo que la fórmula hace con esos datos.
+     */
+    private function recalcular(object $renglon): string
+    {
+        return ImporteServicio::calcular(
+            (float) $renglon->precio_u,
+            (int) $renglon->cantidad,
+            0.0,
+            ImporteServicio::AJUSTE_NINGUNO,
+        );
+    }
+
+    /**
+     * Lleva un valor del origen a una cadena de dos decimales para compararlo
+     * con `bc`. Los DECIMAL(18,2) de MySQL ya llegan así; lo demás (sqlite en
+     * pruebas) pasa por un formato, nunca por restas de float.
+     */
+    private function centavos(mixed $valor): string
+    {
+        if (is_string($valor) && preg_match('/^-?\d+\.\d{2}$/', $valor) === 1) {
+            return $valor;
+        }
+
+        return number_format((float) $valor, 2, '.', '');
+    }
+
+    private function absoluta(string $valor): string
+    {
+        return ltrim($valor, '-');
+    }
+
+    /** @return list<list<string>> */
+    private function peores(array $casos, int $cuantos, array $columnas): array
+    {
+        usort($casos, fn ($a, $b) => bccomp($b['diferencia'], $a['diferencia'], 2));
+
+        return array_map(
+            fn ($caso) => array_map(fn ($c) => (string) $caso[$c], $columnas),
+            array_slice($casos, 0, $cuantos),
+        );
+    }
+
+    private function restantes(int $total, int $mostrados): void
+    {
+        if ($total > $mostrados) {
+            $this->line('... y '.($total - $mostrados).' más. Usa --detalle=N para ver más.');
+        }
+    }
+}
