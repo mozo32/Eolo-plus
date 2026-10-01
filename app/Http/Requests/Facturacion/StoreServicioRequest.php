@@ -6,6 +6,7 @@ use App\Models\FactCategoriaServicio;
 use App\Models\FactPrecioCombustible;
 use App\Models\FactServicio;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Exists;
 use Illuminate\Validation\Validator;
@@ -157,16 +158,30 @@ class StoreServicioRequest extends FormRequest
     }
 
     /**
-     * Comparación insensible a la caja, que es como la resuelve MySQL con la
-     * collation de la columna (`utf8mb4_unicode_ci`). Así las guardas protegen los
-     * mismos nombres que la sincronía llegaría a actualizar, nunca menos.
+     * Comparación insensible a la caja Y a los acentos, que es como la resuelve
+     * MySQL con la collation de la columna (`utf8mb4_unicode_ci`). Así las guardas
+     * protegen los mismos nombres que la sincronía llegaría a actualizar, nunca
+     * menos.
+     *
+     * Los acentos importan y no es teórico: `utf8mb4_unicode_ci` pliega el primer
+     * nivel de la UCA, así que para MySQL 'Combustíble JET A-1' ES
+     * 'Combustible JET A-1' (comprobado: la comparación devuelve 1). Con solo
+     * `mb_strtolower`, renombrar un servicio con un acento de más burlaba la
+     * guarda y la sincronía igual le fijaba el precio del combustible: un
+     * servicio de 19,250.00 pasaba a cobrar 26.0639. De ahí el `Str::ascii`, que
+     * es la misma normalización que usa `ImportadorMatriculas::llaveNombre()`.
      *
      * El `trim` aplica al nombre GUARDADO: el recibido ya viene recortado por
      * `prepareForValidation` y por el middleware `TrimStrings`.
      */
     protected static function esNombreDeCombustible(string $nombre): bool
     {
-        return mb_strtolower(trim($nombre)) === mb_strtolower(FactPrecioCombustible::SERVICIO_COMBUSTIBLE);
+        return self::llaveComparable($nombre) === self::llaveComparable(FactPrecioCombustible::SERVICIO_COMBUSTIBLE);
+    }
+
+    private static function llaveComparable(string $nombre): string
+    {
+        return mb_strtolower(Str::ascii(trim($nombre)));
     }
 
     public function messages(): array

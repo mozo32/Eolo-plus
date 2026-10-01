@@ -216,3 +216,55 @@ test('dar de alta un servicio con otro nombre sigue respondiendo 201', function 
 
     expect(FactServicio::pluck('nombre')->all())->toBe(['Combustible JET A-1 Plus']);
 });
+
+/*
+ * El acento no es un detalle cosmetico: `utf8mb4_unicode_ci` pliega el primer
+ * nivel de la UCA, asi que para MySQL 'Combustible JET A-1' y
+ * 'Combustíble JET A-1' son el MISMO nombre. Lo comprobe contra la base real:
+ * la comparacion con esa collation devuelve 1.
+ *
+ * Por eso la guarda tiene que plegar acentos tambien. Si solo plegara la caja,
+ * renombrar un servicio poniendole un acento de mas pasaria la validacion, y la
+ * sincronia del precio de combustible --que compara en MySQL-- igual lo
+ * encontraria y le fijaria el precio del combustible. Con `Slot MMTO`
+ * (19,250.00, de tercero, margen 50) eso convierte un cobro de 28,875.00 en uno
+ * de 39.10.
+ *
+ * LIMITACION: en sqlite la sincronia compara binario, asi que estas pruebas
+ * demuestran la GUARDA, no la equivalencia con MySQL. La garantia de que la
+ * guarda nunca protege menos de lo que la sincronia alcanza vive en que las dos
+ * normalizan igual: `Str::ascii` mas minusculas, la misma que usa
+ * `ImportadorMatriculas::llaveNombre()`.
+ */
+test('un acento de mas no burla el nombre reservado', function () {
+    $this->actingAs(usuarioConSubdepartamento('factServicios', 'Facturacion'));
+    $otro = FactServicio::create(['nombre' => 'Slot MMTO', 'precio_unitario' => 19250.0000]);
+
+    $this->putJson("/api/facturacion/servicios/{$otro->id}", cuerpoServicioCombustible([
+        'nombre' => 'Combust'.\chr(0xC3).\chr(0xAD).'ble JET A-1',
+        'precio_unitario' => 19250.0000,
+    ]))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['nombre']);
+
+    expect($otro->fresh()->nombre)->toBe('Slot MMTO');
+});
+
+test('un acento de mas tampoco pasa por el alta', function () {
+    $this->actingAs(usuarioConSubdepartamento('factServicios', 'Facturacion'));
+
+    $this->postJson('/api/facturacion/servicios', cuerpoServicioCombustible([
+        'nombre' => 'Combust'.\chr(0xC3).\chr(0xAD).'ble JET A-1',
+    ]))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['nombre']);
+});
+
+test('al servicio de combustible no le estorba el acento en su propio nombre', function () {
+    $this->actingAs(usuarioConSubdepartamento('factServicios', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+
+    $this->putJson("/api/facturacion/servicios/{$servicio->id}", cuerpoServicioCombustible([
+        'nombre' => 'Combust'.\chr(0xC3).\chr(0xAD).'ble JET A-1',
+    ]))->assertOk();
+});
