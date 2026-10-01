@@ -214,3 +214,72 @@ test('un renglon que difiere un solo centavo cuenta, separado de los que son din
         ->expectsOutputToContain('por 2 centavos o menos (redondeo del float del origen): 1')
         ->assertExitCode(0);
 });
+
+test('el IVA guardado se compara contra el 16% del subtotal GUARDADO, redondeado', function () {
+    // 26.06 × 0.16 = 4.1696: redondeado 4.17, truncado 4.16.
+    legacyPref(1, 26.06, 4.17, 30.23);
+    legacyVenta(1, 26.06, 1, 26.06);
+    // Subtotal guardado 100.00 pero renglones suman 90.00: el IVA se juzga contra
+    // el 16% de lo guardado (16.00), no de lo recalculado (14.40).
+    legacyPref(2, 100.00, 16.00, 116.00);
+    legacyVenta(2, 90.00, 1, 90.00);
+
+    $this->artisan('facturacion:comparar-prefacturas')
+        ->expectsOutputToContain('IVA idénticas: 2')
+        ->expectsOutputToContain('  de ellas, exactas al centavo: 2')
+        ->expectsOutputToContain('IVA estructurales: 0')
+        ->assertExitCode(0);
+});
+
+test('el IVA que no es el 16% se clasifica por tamano de la diferencia', function () {
+    legacyPref(1, 1000.00, 160.40, 1160.40);   // 40 centavos de más: redondeo
+    legacyVenta(1, 1000.00, 1, 1000.00);
+    legacyPref(2, 1000.00, 150.00, 1150.00);   // diez pesos de menos: estructural
+    legacyVenta(2, 1000.00, 1, 1000.00);
+
+    $this->artisan('facturacion:comparar-prefacturas')
+        ->expectsOutputToContain('IVA idénticas: 0')
+        ->expectsOutputToContain('IVA redondeo: 1')
+        ->expectsOutputToContain('IVA estructurales: 1')
+        ->assertExitCode(0);
+});
+
+test('un IVA truncado un centavo no se confunde con uno exacto', function () {
+    legacyPref(1, 26.06, 4.16, 30.22);
+    legacyVenta(1, 26.06, 1, 26.06);
+
+    $this->artisan('facturacion:comparar-prefacturas')
+        ->expectsOutputToContain('IVA idénticas: 1')
+        ->expectsOutputToContain('  de ellas, exactas al centavo: 0')
+        ->assertExitCode(0);
+});
+
+test('el total guardado se compara contra subtotal guardado mas IVA guardado', function () {
+    legacyPref(1, 2000.00, 320.00, 2320.00);          // cuadra
+    legacyVenta(1, 2000.00, 1, 2000.00);
+    legacyPref(2, 2000.00, 320.00, 2320.50);          // 50 centavos: redondeo
+    legacyVenta(2, 2000.00, 1, 2000.00);
+    legacyPref(3, 2000.00, 320.00, 9999.00);          // estructural
+    legacyVenta(3, 2000.00, 1, 2000.00);
+
+    $this->artisan('facturacion:comparar-prefacturas')
+        ->expectsOutputToContain('Total idénticas: 1')
+        ->expectsOutputToContain('Total redondeo: 1')
+        ->expectsOutputToContain('Total estructurales: 1')
+        ->expectsOutputToContain('9999.00')
+        ->assertExitCode(0);
+});
+
+test('IVA y total no cuentan dos veces a las prefacturas sin renglones o con subtotal en cero', function () {
+    legacyPref(1, 500.00, 1.00, 1.00);   // dinero y sin renglones: ya es estructural arriba
+    legacyPref(2, 0.00, 5.00, 9.00);     // subtotal en cero con renglones
+    legacyVenta(2, 300.00, 1, 300.00);
+    legacyPref(3, 100.00, 16.00, 116.00);
+    legacyVenta(3, 100.00, 1, 100.00);
+
+    $this->artisan('facturacion:comparar-prefacturas')
+        ->expectsOutputToContain('IVA y total comparados: 1')
+        ->expectsOutputToContain('IVA idénticas: 1')
+        ->expectsOutputToContain('Total idénticas: 1')
+        ->assertExitCode(0);
+});

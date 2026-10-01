@@ -20,12 +20,23 @@ use Illuminate\Support\Facades\DB;
  * persona y no son reproducibles desde el dato, así que si alguien cobró dos
  * pernoctas donde correspondían tres, esto no lo detecta.
  *
- * Reporta DOS comparaciones distintas, que diagnostican cosas distintas y no se
- * mezclan:
+ * Reporta CUATRO comparaciones distintas, que diagnostican cosas distintas y no se
+ * mezclan (las dos primeras son las del subtotal y los renglones; las otras dos
+ * cierran el resto de la aritmética que promete el comando):
  *   1. Subtotal guardado contra la suma RECALCULADA de sus renglones
  *      (`precio_u × cantidad`): si el encabezado cuadra con la aritmética.
  *   2. `importe` guardado de cada renglón contra su propio `precio_u × cantidad`:
  *      si el renglón cuadra consigo mismo.
+ *   3. IVA guardado contra el 16% del subtotal GUARDADO (no del recalculado, para
+ *      aislar el IVA de la diferencia del subtotal).
+ *   4. Total guardado contra subtotal guardado + IVA guardado.
+ * La 3 y la 4 no cuentan las prefacturas sin renglones ni las de subtotal en cero.
+ *
+ * `precio_u` e `iva` son FLOAT en el origen y se pueden leer de dos maneras: SQL
+ * multiplica el float32 binario, y PDO entrega el texto corto que PHP vuelve double.
+ * Son dos lecturas del mismo dato y ninguna es «la verdadera»; esta usa la de PDO,
+ * y por eso difiere en unos centavos de una medición hecha dentro de SQL.
+ *
  * Comparar el subtotal contra la suma de los importes GUARDADOS en lugar de la
  * recalculada da otra clasificación (muchos menos estructurales) porque esconde
  * la segunda inconsistencia dentro de la primera.
@@ -55,6 +66,14 @@ class CompararPrefacturas extends Command
     private const SUBTOTAL_EN_CERO = 'subtotal guardado en cero';
 
     private const NO_CUADRA = 'subtotal y renglones que no cuadran';
+
+    /**
+     * La tasa con la que se recalcula el IVA. Es la del sistema viejo
+     * (`$caja * 0.16`), no la de `fact_configuracion`: aquí se mide si lo guardado
+     * es el 16%. La fórmula es la de `FactPrefactura::ivaDerivado()` (privada, por
+     * eso la copia): medio centavo antes de truncar, o sea redondeo, no truncamiento.
+     */
+    private const IVA_TASA = '0.16';
 
     public function handle(): int
     {
@@ -87,9 +106,12 @@ class CompararPrefacturas extends Command
         $identicas = 0;
         $redondeo = 0;
         $estructurales = [];
+        $iva = $this->acumulador();
+        $total = $this->acumulador();
+        $comparadasIvaTotal = 0;
 
         $encabezados = $remota->table('tb_hprefactura')
-            ->select('fol_prefactura', 'subtotal')
+            ->select('fol_prefactura', 'subtotal', 'iva', 'Total')
             ->orderBy('fol_prefactura')
             ->get();
 
@@ -108,9 +130,10 @@ class CompararPrefacturas extends Command
             $guardado = $this->centavos($h->subtotal);
             $diferencia = $this->absoluta(bcsub($guardado, $suma, 2));
 
-            if (bccomp($diferencia, self::TOLERANCIA_IDENTICA, 2) <= 0) {
+            $clase = $this->clasificar($diferencia);
+            if ($clase === 'identica') {
                 $identicas++;
-            } elseif (bccomp($diferencia, self::TOLERANCIA_REDONDEO, 2) <= 0) {
+            } elseif ($clase === 'redondeo') {
                 $redondeo++;
             } else {
                 $estructurales[] = [
@@ -124,6 +147,22 @@ class CompararPrefacturas extends Command
                         default => self::NO_CUADRA,
                     },
                 ];
+            }
+
+            // IVA y total se juzgan solo en las prefacturas que tienen renglones y
+            // subtotal: las demás ya están contadas arriba por motivo, y volver a
+            // contarlas aquí las contaría dos veces.
+            if (isset($renglonesPorFolio[$h->fol_prefactura]) && bccomp($guardado, '0.00', 2) > 0) {
+                $comparadasIvaTotal++;
+                $ivaGuardado = $this->centavos($h->iva);
+
+                // El IVA se recalcula desde el subtotal GUARDADO, no desde el
+                // recalculado: así aísla el IVA y no arrastra la diferencia del subtotal.
+                $ivaRecalculado = bcadd(bcmul($guardado, self::IVA_TASA, 6), '0.005', 2);
+                $this->acumular($iva, $h->fol_prefactura, $ivaGuardado, $ivaRecalculado);
+
+                // El total que el sistema viejo dice calcular: subtotal + IVA, ambos guardados.
+                $this->acumular($total, $h->fol_prefactura, $this->centavos($h->Total), bcadd($guardado, $ivaGuardado, 2));
             }
         }
 
@@ -170,6 +209,14 @@ class CompararPrefacturas extends Command
             );
             $this->restantes(count($estructurales), $detalle);
         }
+
+        $this->newLine();
+        $this->line('IVA y total: el IVA guardado contra el 16% del subtotal guardado, y el total');
+        $this->line('guardado contra subtotal guardado + IVA guardado (sin las prefacturas ya contadas');
+        $this->line('arriba como sin renglones o con subtotal en cero).');
+        $this->line("IVA y total comparados: {$comparadasIvaTotal}");
+        $this->reportar('IVA', $iva, $detalle, 'IVA guardado', 'IVA recalculado');
+        $this->reportar('Total', $total, $detalle, 'Total guardado', 'Subtotal + IVA guardados');
 
         $this->newLine();
         $this->line('Renglones: importe guardado contra su propio precio_u × cantidad');
@@ -227,6 +274,68 @@ class CompararPrefacturas extends Command
         }
 
         return number_format((float) $valor, 2, '.', '');
+    }
+
+    /** @return 'identica'|'redondeo'|'estructural' */
+    private function clasificar(string $diferencia): string
+    {
+        if (bccomp($diferencia, self::TOLERANCIA_IDENTICA, 2) <= 0) {
+            return 'identica';
+        }
+
+        return bccomp($diferencia, self::TOLERANCIA_REDONDEO, 2) <= 0 ? 'redondeo' : 'estructural';
+    }
+
+    private function acumulador(): array
+    {
+        return ['identicas' => 0, 'exactas' => 0, 'redondeo' => 0, 'estructurales' => []];
+    }
+
+    private function acumular(array &$acumulador, mixed $folio, string $guardado, string $esperado): void
+    {
+        $diferencia = $this->absoluta(bcsub($guardado, $esperado, 2));
+
+        switch ($this->clasificar($diferencia)) {
+            case 'identica':
+                $acumulador['identicas']++;
+                if (bccomp($diferencia, '0.00', 2) === 0) {
+                    $acumulador['exactas']++;
+                }
+                break;
+            case 'redondeo':
+                $acumulador['redondeo']++;
+                break;
+            default:
+                $acumulador['estructurales'][] = [
+                    'folio' => $folio,
+                    'guardado' => $guardado,
+                    'recalculado' => $esperado,
+                    'diferencia' => $diferencia,
+                ];
+        }
+    }
+
+    /**
+     * Las «idénticas» admiten hasta 2 centavos, que es el ruido del float del
+     * origen; un truncamiento de un centavo caería ahí. Por eso se informa aparte
+     * cuántas son exactas al centavo, para que una desviación sistemática de un
+     * centavo no quede escondida dentro de «idénticas».
+     */
+    private function reportar(string $nombre, array $a, int $detalle, string $colGuardado, string $colEsperado): void
+    {
+        $this->line("{$nombre} idénticas: {$a['identicas']}");
+        $this->line("  de ellas, exactas al centavo: {$a['exactas']}");
+        $this->line("{$nombre} redondeo: {$a['redondeo']}");
+        $this->line("{$nombre} estructurales: ".count($a['estructurales']));
+
+        if ($a['estructurales'] !== []) {
+            $this->warn("{$nombre}: las peores diferencias:");
+            $this->table(
+                ['Folio', $colGuardado, $colEsperado, 'Diferencia'],
+                $this->peores($a['estructurales'], $detalle, ['folio', 'guardado', 'recalculado', 'diferencia']),
+            );
+            $this->restantes(count($a['estructurales']), $detalle);
+        }
     }
 
     private function absoluta(string $valor): string
