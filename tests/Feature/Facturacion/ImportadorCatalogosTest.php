@@ -1,11 +1,14 @@
 <?php
 // tests/Feature/Facturacion/ImportadorCatalogosTest.php
 
+use App\Models\Bitacora;
 use App\Models\FactCliente;
 use App\Models\FactCategoriaServicio;
 use App\Models\FactFormaPago;
+use App\Models\FactPrecioCombustible;
 use App\Models\FactProveedor;
 use App\Models\FactServicio;
+use App\Models\User;
 use App\Services\ImportadorMatriculas;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -347,8 +350,14 @@ test('la simulacion de servicios y categorias tampoco escribe', function () {
 });
 
 /*
- * Normalizacion de nombres. Dos filas reales del origen vienen sucias: una
- * categoria con espacio final y un proveedor con U+00A0 (espacio duro) en medio.
+ * Normalizacion de nombres. CINCO filas reales del origen vienen sucias, no dos:
+ * tb_categoria_serv id 3 y tb_servicio ids 15 y 37 con espacio final, tb_proveedor
+ * id 4 con U+00A0 (espacio duro) en medio, y tb_clientes id 28 con nombre, RFC,
+ * correo y telefono todos vacios (esa se omite, no se normaliza).
+ *
+ * El "dos" venia de medirlas con `servicio <> TRIM(servicio)`: la collation de
+ * MySQL es PAD SPACE, asi que 'X ' y 'X' son iguales y esa consulta devuelve
+ * siempre 0. Hay que comparar CHAR_LENGTH, no usar TRIM.
  */
 test('un espacio final en el nombre se recorta y se reporta con su id y los dos valores', function () {
     DB::connection('remota')->table('tb_categoria_serv')->insert([['id_categorias' => 3, 'categoras' => 'Combustible & Servicios ']]);
@@ -521,4 +530,117 @@ test('un servicio cuya categoria existe pero no tiene nombre lo dice asi, no "no
     expect($servicio)->toContain('sin nombre')
         ->and($servicio)->not->toContain('no existe')
         ->and(FactServicio::first()->categoria_servicio_id)->toBeNull();
+});
+
+/*
+ * Cruce del importador con la sincronía del precio del combustible.
+ *
+ * `importarServicios()` reescribe el precio de TODOS los servicios con el valor
+ * del origen, y `Combustible JET A-1` es uno de ellos. `importarCombustible()`
+ * protege el precio Eolo vigente, pero corre ANTES y no protege el precio del
+ * servicio: sin la sincronía final, una corrida con `--forzar` dejaba el vigente
+ * en el precio capturado en pantalla y el catálogo cobrando el del origen. Es un
+ * cobro, y era silencioso.
+ */
+
+/** La foto de `tb_combustible` de producción: ASA 22.1643, precio Eolo 26.0640. */
+function origenCombustible(): void
+{
+    DB::connection('remota')->table('tb_combustible')->insert([
+        ['id_combustible' => 1, 'p_combustible' => '26.0640', 'f_ini' => '2022-09-26', 'f_fin' => '2028-09-26', 'pasa' => '22.1643'],
+    ]);
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 7, 'servicio' => FactPrecioCombustible::SERVICIO_COMBUSTIBLE, 'precio_u' => '26.0640', 'id_categorias' => 0],
+    ]);
+}
+
+function servicioCombustibleImportado(): FactServicio
+{
+    return FactServicio::where('nombre', FactPrecioCombustible::SERVICIO_COMBUSTIBLE)->firstOrFail();
+}
+
+test('una segunda importacion conserva el precio de combustible capturado despues, no el del origen', function () {
+    $usuario = User::factory()->create();
+    origenCombustible();
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+    $servicio = servicioCombustibleImportado();
+
+    expect((float) $servicio->precio_unitario)->toBe(26.0640);
+
+    // Alguien captura ASA 24.0000 en la pantalla de Combustible: (24 + 0.50) × 1.15 = 28.1750.
+    FactPrecioCombustible::registrar(24.0000, null, $usuario->id);
+
+    expect((float) $servicio->fresh()->precio_unitario)->toBe(28.1750);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    // Sin la sincronía final el servicio volvía a 26.0640 y cobraba ~$10,555 de
+    // menos sobre 5,000 L mientras la pantalla seguía mostrando 28.1750.
+    expect((float) $servicio->fresh()->precio_unitario)->toBe(28.1750);
+});
+
+test('corregir el precio del servicio de combustible sale como hallazgo con los dos valores', function () {
+    $usuario = User::factory()->create();
+    origenCombustible();
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+    FactPrecioCombustible::registrar(24.0000, null, $usuario->id);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    $hallazgo = collect($resultado->hallazgos)->first(fn ($h) => str_contains($h, FactPrecioCombustible::SERVICIO_COMBUSTIBLE));
+
+    expect($hallazgo)->not->toBeNull()
+        ->and($hallazgo)->toContain('26.0640')
+        ->and($hallazgo)->toContain('28.1750')
+        ->and($hallazgo)->toContain('origen');
+});
+
+test('la correccion del precio del servicio de combustible queda en la bitacora', function () {
+    $usuario = User::factory()->create();
+    origenCombustible();
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+    FactPrecioCombustible::registrar(24.0000, null, $usuario->id);
+    $servicio = servicioCombustibleImportado();
+    Bitacora::query()->delete();
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    $entrada = Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_CATALOGOS)
+        ->where('accion', Bitacora::ACCION_ACTUALIZAR)
+        ->where('registro_id', $servicio->id)
+        ->first();
+
+    expect($entrada)->not->toBeNull()
+        ->and((float) $entrada->datos_anteriores['precio_unitario'])->toBe(26.0640)
+        ->and((float) $entrada->datos_nuevos['precio_unitario'])->toBe(28.1750);
+});
+
+test('en la primera importacion el precio ya coincide: ni hallazgo ni bitacora', function () {
+    User::factory()->create();
+    origenCombustible();
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect((float) servicioCombustibleImportado()->precio_unitario)->toBe(26.0640)
+        ->and($resultado->hallazgos)->toBe([])
+        ->and(Bitacora::where('accion', Bitacora::ACCION_ACTUALIZAR)->count())->toBe(0);
+});
+
+test('la simulacion de la correccion del precio de combustible no escribe nada', function () {
+    $usuario = User::factory()->create();
+    origenCombustible();
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+    FactPrecioCombustible::registrar(24.0000, null, $usuario->id);
+    $servicio = servicioCombustibleImportado();
+    Bitacora::query()->delete();
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
+
+    expect(collect($resultado->hallazgos)->contains(fn ($h) => str_contains($h, '28.1750')))->toBeTrue()
+        ->and((float) $servicio->fresh()->precio_unitario)->toBe(28.1750)
+        ->and(Bitacora::count())->toBe(0);
 });

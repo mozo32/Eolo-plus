@@ -93,6 +93,7 @@ class ImportadorMatriculas
             $this->importarServicios($categoriasServicio, $categoriasSinNombre);
             $this->importarFormasPago();
             $this->importarProveedores();
+            $this->sincronizarPrecioDelServicioCombustible();
 
             $aplicar ? DB::commit() : DB::rollBack();
         } catch (\Throwable $e) {
@@ -797,6 +798,42 @@ class ImportadorMatriculas
             );
 
             $this->resultado->contar('servicios');
+        }
+    }
+
+    /**
+     * Restablece, al final de la corrida, el invariante «el precio del servicio
+     * `Combustible JET A-1` es igual al precio Eolo vigente».
+     *
+     * Hace falta porque `importarServicios()` escribe el precio del origen en
+     * TODOS los servicios, incluido ese, y así deshacía la sincronía que la
+     * pantalla de Combustible ya había hecho: el vigente decía 28.1750 y el
+     * catálogo cobraba el 26.0640 del sistema viejo, sin aviso.
+     * `importarCombustible()` protege el precio vigente, pero corre antes y no
+     * protege el del servicio. Va al final, después de los servicios, para que el
+     * invariante se cumpla tras cualquier corrida y sin depender del orden.
+     *
+     * Es el único cobro que este bloque cambia a propósito, así que no es
+     * silencioso: cada corrección sale como hallazgo y queda en la bitácora con el
+     * valor anterior, dentro de la misma transacción (una simulación lo revierte).
+     */
+    private function sincronizarPrecioDelServicioCombustible(): void
+    {
+        $usuario = User::query()->orderBy('id')->value('id');
+
+        if ($usuario === null) {
+            // Sin usuarios no hay a quién atribuir el rastro en la bitácora, y
+            // tampoco puede haber un precio capturado a mano que proteger: el
+            // único precio posible es el que el importador acaba de traer.
+            return;
+        }
+
+        foreach (FactPrecioCombustible::sincronizarConVigente($usuario) as $cambio) {
+            $this->resultado->hallazgo(
+                "El precio del servicio '{$cambio['servicio']}' se corrigió de {$cambio['anterior']} a {$cambio['nuevo']}: "
+                ."el origen traía {$cambio['anterior']}, pero el precio Eolo vigente en Eolo-plus es {$cambio['nuevo']} "
+                .'y el precio de ese servicio debe seguirlo. Se conserva el vigente, no el del origen.'
+            );
         }
     }
 

@@ -74,6 +74,30 @@ class FactPrecioCombustible extends Model
     }
 
     /**
+     * Restablece el invariante «el precio del servicio de combustible es igual al
+     * precio Eolo vigente» sin registrar ningún precio nuevo.
+     *
+     * Existe para el importador: `ImportadorMatriculas::importarServicios()`
+     * reescribe el precio de TODOS los servicios con el valor del origen, y este
+     * servicio es uno de ellos. `importarCombustible()` protege el precio Eolo
+     * vigente, pero corre antes y no protege el precio del servicio, así que una
+     * corrida con `--forzar` dejaba la pantalla de Combustible mostrando el precio
+     * capturado y el catálogo cobrando el del sistema viejo. Llamar a esto al
+     * final de la importación deja el invariante cumplido sin depender del orden.
+     *
+     * Misma guarda y mismo rastro que la sincronía de `registrar()`: si el precio
+     * ya coincide no escribe nada ni reporta nada.
+     *
+     * @return list<array{servicio: string, anterior: string, nuevo: string}> lo que hubo que corregir
+     */
+    public static function sincronizarConVigente(int $userId): array
+    {
+        $vigente = static::vigente();
+
+        return $vigente === null ? [] : static::sincronizarServicio($vigente, $userId);
+    }
+
+    /**
      * Fija el precio del servicio de combustible al precio Eolo recién
      * registrado y deja rastro del cambio, con el valor anterior.
      *
@@ -85,9 +109,13 @@ class FactPrecioCombustible extends Model
      * collation de la columna, la misma comparación insensible a la caja que
      * aplica la guarda de `UpdateServicioRequest`. Como el nombre no es único,
      * se recorren todos los que coincidan.
+     *
+     * @return list<array{servicio: string, anterior: string, nuevo: string}> lo que cambió
      */
-    private static function sincronizarServicio(self $precio, int $userId): void
+    private static function sincronizarServicio(self $precio, int $userId): array
     {
+        $cambios = [];
+
         $servicios = FactServicio::query()
             ->where('nombre', self::SERVICIO_COMBUSTIBLE)
             ->where('status', FactServicio::STATUS_ACTIVO)
@@ -111,7 +139,15 @@ class FactPrecioCombustible extends Model
                 datosAnteriores: ['precio_unitario' => $anterior],
                 datosNuevos: ['precio_unitario' => $servicio->precio_unitario],
             );
+
+            $cambios[] = [
+                'servicio' => $servicio->nombre,
+                'anterior' => (string) $anterior,
+                'nuevo' => (string) $servicio->precio_unitario,
+            ];
         }
+
+        return $cambios;
     }
 
     public function capturadoPor()
