@@ -53,12 +53,60 @@ function filaCatalogo1b(string $ruta, string $status = 'A'): Illuminate\Database
     };
 }
 
+/** Crea una fila del catalogo indicado con el nombre dado. */
+function filaCatalogo1bLlamada(string $ruta, string $nombre): Illuminate\Database\Eloquent\Model
+{
+    return match ($ruta) {
+        'clientes' => FactCliente::create(clienteValido(['nombre' => $nombre])),
+        'servicios' => FactServicio::create(servicioValido(['nombre' => $nombre])),
+        'categorias-servicio' => FactCategoriaServicio::create(['nombre' => $nombre]),
+        'formas-pago' => FactFormaPago::create(['nombre' => $nombre]),
+        'proveedores' => FactProveedor::create(['nombre' => $nombre]),
+    };
+}
+
+/** La llave del JSON donde cada catalogo devuelve sus filas (clientes es el unico paginado). */
+function llaveFilas1b(string $ruta): string
+{
+    return match ($ruta) {
+        'clientes' => 'data',
+        'categorias-servicio' => 'categorias',
+        default => str_replace('-', '_', $ruta),
+    };
+}
+
 dataset('catalogos1b', ['clientes', 'servicios', 'categorias-servicio', 'formas-pago', 'proveedores']);
 
-test('sin sesion no se puede consultar ni escribir', function () {
-    $this->getJson('/api/facturacion/clientes')->assertUnauthorized();
-    $this->postJson('/api/facturacion/clientes', clienteValido())->assertUnauthorized();
-});
+/*
+ * El 401 se prueba para los cinco, y por los dos verbos.
+ *
+ * La prueba de "cada ruta de escritura de 1b lleva su subdepartamento" excluye
+ * GET y HEAD, asi que sacar un GET del grupo ['api','auth:sanctum'] no rompia
+ * nada: el listado de clientes trae nombre, RFC, correo y telefono, datos
+ * personales, y el resto expone los precios del catalogo.
+ */
+test('sin sesion no se puede consultar ni escribir ninguno de los cinco catalogos', function (string $ruta) {
+    $this->getJson("/api/facturacion/{$ruta}")->assertUnauthorized();
+    $this->postJson("/api/facturacion/{$ruta}", cuerpoValido1b($ruta))->assertUnauthorized();
+})->with('catalogos1b');
+
+/*
+ * El orden alfabetico lo pone SOLO el servidor: ni `useCatalogo.visibles` ni
+ * `Servicios.tsx` reordenan, solo filtran. Sin el `orderBy('nombre')` del
+ * controlador las tablas saldrian en orden de insercion y nadie se enteraria.
+ */
+test('el listado de cada catalogo viene ordenado por nombre, no en orden de insercion', function (string $ruta) {
+    $this->actingAs(usuarioSinAcceso());
+
+    foreach (['Zeta', 'Alfa', 'Media'] as $nombre) {
+        filaCatalogo1bLlamada($ruta, $nombre);
+    }
+
+    $respuesta = $this->getJson("/api/facturacion/{$ruta}")->assertOk();
+
+    expect(collect($respuesta->json(llaveFilas1b($ruta)))->pluck('nombre')->all())
+        ->toBe(['Alfa', 'Media', 'Zeta']);
+})->with('catalogos1b');
 
 test('consultar es abierto a autenticados pero escribir exige el subdepartamento', function () {
     $this->actingAs(usuarioSinAcceso());
@@ -279,12 +327,7 @@ test('consultar permite filtrar solo las activas', function (string $ruta) {
     $this->actingAs(usuarioSinAcceso());
     $activa = filaCatalogo1b($ruta, 'A');
     filaCatalogo1b($ruta, 'N');
-    // Clientes es el único paginado: sus filas vienen en `data`.
-    $llave = match ($ruta) {
-        'clientes' => 'data',
-        'categorias-servicio' => 'categorias',
-        default => str_replace('-', '_', $ruta),
-    };
+    $llave = llaveFilas1b($ruta);
 
     $this->getJson("/api/facturacion/{$ruta}")->assertOk()->assertJsonCount(2, $llave);
     $this->getJson("/api/facturacion/{$ruta}?activas=1")->assertOk()->assertJsonCount(1, $llave)
