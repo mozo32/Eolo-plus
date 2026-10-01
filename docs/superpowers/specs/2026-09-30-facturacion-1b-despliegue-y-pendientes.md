@@ -237,19 +237,31 @@ corregir el origen o decidir a mano cuál conserva el dato.
 
 ## Precio del combustible
 
-El servicio `Combustible JET A-1` es el único cuyo precio sigue al del
-combustible. El sistema viejo lo apunta por id fijo (`id_servicio = 7`);
-aquí no hay un id estable tras la importación, así que el vínculo es el
-**nombre**, definido en `FactPrecioCombustible::SERVICIO_COMBUSTIBLE`.
+El servicio de combustible (`Combustible JET A-1`) es el único cuyo precio sigue
+al del combustible. El sistema viejo lo apunta por id fijo (`id_servicio = 7`).
 
-- `UpdateServicioRequest` **impide renombrar** ese servicio: si se renombrara, la
-  sincronía dejaría de encontrarlo y no fallaría, simplemente no actualizaría
-  nada.
-- `UpdateServicioRequest` y `StoreServicioRequest` **impiden también traer
-  cualquier otro servicio a ese nombre**, por alta o por edición: la sincronía
-  actualiza TODOS los servicios activos que casen el nombre (la columna no es
-  única), así que un servicio renombrado así pasaría a cobrar el precio del
-  combustible.
+> **Actualización del bloque 2.** Este apartado describía un vínculo por **nombre**
+> (`FactPrecioCombustible::SERVICIO_COMBUSTIBLE`) sostenido por dos guardas de
+> validación. Eso ya no existe: el vínculo es la columna `fact_servicios.concepto`
+> (valor `combustible`, única), y la sincronía busca con
+> `FactServicio::porConcepto(FactServicio::CONCEPTO_COMBUSTIBLE)`. Las guardas de
+> `StoreServicioRequest` / `UpdateServicioRequest` se retiraron junto con sus 16
+> pruebas (`NombreServicioCombustibleTest`): el servicio **se puede renombrar**
+> libremente y ningún otro servicio queda dentro de la sincronía por llamarse igual.
+>
+> **Obligatorio al desplegar el bloque 2: después de `php artisan migrate`, volver
+> a correr el importador** (`--aplicar`; `--forzar` si hace falta). La migración
+> deja `concepto` en NULL en las filas ya importadas, y mientras esté NULL **la
+> sincronía del precio de combustible no encuentra ningún servicio y no actualiza
+> nada**, sin error ni rastro. El importador asigna el concepto por el id viejo y,
+> a las filas existentes sin concepto, se lo pone sin duplicarlas. Comprobar
+> después que `SELECT id, nombre FROM fact_servicios WHERE concepto = 'combustible'`
+> devuelve una fila.
+>
+> El importador casa los servicios con concepto **por su concepto** y los demás por
+> nombre, así que renombrar el combustible y reimportar con `--forzar` no choca con
+> el índice único.
+
 - La sincronía solo toca el servicio **activo**. Dado de baja, o inexistente,
   registrar un precio nuevo funciona igual y no cambia nada en servicios. **Ojo con
   la reactivación**: mientras está de baja, cada precio que se registre lo deja
@@ -273,11 +285,9 @@ aquí no hay un id estable tras la importación, así que el vínculo es el
 
 1. **Los dos pasos de la collation descritos arriba**, antes y después de
    `--aplicar`. Son obligatorios.
-2. **El `where` por nombre de la sincronía** se resuelve con la collation de la
-   columna (insensible a la caja). En las pruebas, sobre SQLite, es binario; la
-   guarda de `UpdateServicioRequest` usa comparación insensible a la caja para
-   proteger al menos los mismos nombres. Vale confirmar en MySQL que registrar un
-   precio actualiza el servicio.
+2. **La sincronía busca por `concepto`** (bloque 2), ya no por nombre: no depende
+   de la collation. Vale confirmar en MySQL, tras volver a correr el importador,
+   que registrar un precio actualiza el servicio.
 3. **Transacción del importador**: sigue siendo una sola transacción, ahora con
    más tablas. La guía del 1a pide medir cuánto tarda; repetir la medición con
    los cinco catálogos incluidos.
@@ -336,14 +346,11 @@ registro de ejecución donde vivían no se versiona.
   único), exige dos POST en la misma ventana de milisegundos sobre catálogos de 13,
   7 y 5 filas, y la consecuencia es ruido: el reintento da el 422 correcto y ningún
   dato se pierde. Arreglarlo bien son cinco controladores, incluidos dos del 1a.
-- **Identificar el servicio de combustible con una columna propia** en lugar de por
-  su nombre. Hoy el vínculo es el nombre, sostenido por una guarda de validación en
-  las dos direcciones (no se puede renombrar ese servicio, ni nombrar otro así) y
-  por la sincronía final del importador. El bloque 2 va a necesitar reconocer ese
-  servicio igual, así que la columna se paga dos veces. Mientras no exista, **el
-  invariante depende de que la sincronía corra**, no de una restricción de la base:
-  si el bloque 2 añade otra ruta que escriba `fact_servicios.precio_unitario` en
-  masa, el hueco se reabre.
+- ~~Identificar el servicio de combustible con una columna propia~~ **Resuelto en el
+  bloque 2** (columna `concepto`). Sigue siendo cierto que el invariante «el precio
+  del servicio es el precio Eolo vigente» depende de que la sincronía corra, no de
+  una restricción de la base: si una ruta nueva escribe `fact_servicios.precio_unitario`
+  en masa, el hueco se reabre.
 - **`FactServicio::importe()` no tiene ningún llamador en producción todavía.** Hoy
   solo lo ejercitan las pruebas, así que ninguna imprecisión de redondeo puede
   llegar a una factura antes del bloque 2 — que es cuando además hará falta un
