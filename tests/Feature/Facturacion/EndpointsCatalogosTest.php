@@ -528,8 +528,8 @@ test('toda ruta de escritura de facturacion lleva el subdepartamento de su panta
         // Las rutas del bloque 1b las cubre EndpointsCatalogos1bTest.php; la lista de prefijos
         // vive en esRutaFacturacion1b() (tests/Pest.php), la misma que usa esa prueba para incluirlas.
         ->reject(fn ($ruta) => esRutaFacturacion1b($ruta->uri()))
-        // Las de prefacturas (bloque 2) las cubre EndpointsPrefacturaTest.php.
-        ->reject(fn ($ruta) => str_starts_with($ruta->uri(), 'api/facturacion/prefacturas'))
+        // Las de prefacturas (bloque 2) las cubre EndpointsPrefacturaTest.php; el prefijo vive en esRutaPrefacturas() (tests/Pest.php).
+        ->reject(fn ($ruta) => esRutaPrefacturas($ruta->uri()))
         ->flatMap(fn ($ruta) => collect($ruta->methods())
             ->reject(fn ($metodo) => in_array($metodo, ['GET', 'HEAD'], true))
             ->mapWithKeys(fn ($metodo) => [$metodo.' '.$ruta->uri() => collect($ruta->gatherMiddleware())->first(fn ($m) => is_string($m) && str_starts_with($m, 'subdep:'))]));

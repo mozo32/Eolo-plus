@@ -45,6 +45,14 @@ class PrefacturaController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'desde' => ['nullable', 'date'],
+            'hasta' => ['nullable', 'date'],
+        ], [
+            'desde.date' => 'La fecha «desde» no es una fecha válida.',
+            'hasta.date' => 'La fecha «hasta» no es una fecha válida.',
+        ]);
+
         $perPage = (int) $request->query('per_page', 20);
         if (! in_array($perPage, self::PER_PAGE_PERMITIDOS, true)) {
             $perPage = 20;

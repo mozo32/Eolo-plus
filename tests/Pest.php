@@ -109,6 +109,20 @@ function esRutaFacturacion1b(string $uri): bool
     return preg_match('#^api/facturacion/(clientes|servicios|categorias-servicio|formas-pago|proveedores)(/|$)#', $uri) === 1;
 }
 
+/**
+ * Rutas de prefacturas (bloque 2).
+ *
+ * ÚNICO prefijo de esas rutas, con la misma lógica de complemento que
+ * `esRutaFacturacion1b()`: EndpointsPrefacturaTest.php INCLUYE solo estas rutas y
+ * EndpointsCatalogosTest.php (bloque 1a) las EXCLUYE. Un literal propio en cada
+ * archivo se desalinearía en silencio (por ejemplo, una barra final dejaría
+ * `POST api/facturacion/prefacturas` fuera de una prueba y sin entrar en la otra).
+ */
+function esRutaPrefacturas(string $uri): bool
+{
+    return str_starts_with($uri, 'api/facturacion/prefacturas');
+}
+
 /*
 |--------------------------------------------------------------------------
 | Ayudantes de prefactura (bloque 2, Tasks 3 a 6)

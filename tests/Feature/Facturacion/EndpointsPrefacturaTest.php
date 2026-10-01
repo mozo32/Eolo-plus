@@ -168,7 +168,7 @@ test('cada ruta de escritura de prefacturas lleva su subdepartamento', function 
     $real = [];
 
     foreach (app('router')->getRoutes() as $ruta) {
-        if (! str_starts_with($ruta->uri(), 'api/facturacion/prefacturas')) {
+        if (! esRutaPrefacturas($ruta->uri())) {
             continue;
         }
 
@@ -582,4 +582,160 @@ test('un cliente dado de baja no se acepta en una prefactura', function () {
     $this->postJson('/api/facturacion/prefacturas', cuerpoPrefactura(['cliente_id' => $cliente->id]))
         ->assertStatus(422)
         ->assertJsonValidationErrors(['cliente_id']);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Ronda de arreglos 1
+|--------------------------------------------------------------------------
+*/
+
+test('los servicios de estancia no se agregan a mano: dan 422 y no crean renglon', function (string $concepto) {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $id = $this->postJson('/api/facturacion/prefacturas', cuerpoPrefactura())->json('prefactura.id');
+    $servicio = FactServicio::create(['nombre' => 'Estancia '.$concepto, 'precio_unitario' => 99.0, 'concepto' => $concepto]);
+
+    $respuesta = $this->postJson("/api/facturacion/prefacturas/{$id}/renglones", ['servicio_id' => $servicio->id, 'cantidad' => 1])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['servicio_id']);
+
+    expect($respuesta->json('errors.servicio_id.0'))->toContain('Recalcular estancia')
+        ->and(FactPrefacturaRenglon::count())->toBe(0);
+})->with([
+    'pernocta' => FactServicio::CONCEPTO_ESTANCIA_PERNOCTA,
+    'transito 2 h' => FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H,
+    'transito 12 h' => FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H,
+]);
+
+test('un servicio normal sigue agregandose a mano', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $id = $this->postJson('/api/facturacion/prefacturas', cuerpoPrefactura())->json('prefactura.id');
+
+    $this->postJson("/api/facturacion/prefacturas/{$id}/renglones", cuerpoRenglon())->assertCreated();
+});
+
+test('los mensajes de validacion estan en espanol y no son claves crudas', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $id = $this->postJson('/api/facturacion/prefacturas', cuerpoPrefactura())->json('prefactura.id');
+
+    $renglon = $this->postJson("/api/facturacion/prefacturas/{$id}/renglones", ['servicio_id' => cuerpoRenglon()['servicio_id'], 'cantidad' => 'x'])
+        ->assertStatus(422);
+    expect($renglon->json('errors.cantidad'))->toContain('La cantidad debe ser un número entero.');
+
+    $this->postJson("/api/facturacion/prefacturas/{$id}/renglones", [])
+        ->assertJsonPath('errors.servicio_id.0', 'Elige el servicio que se va a agregar.')
+        ->assertJsonPath('errors.cantidad.0', 'La cantidad es obligatoria.');
+
+    $this->postJson('/api/facturacion/prefacturas', [])
+        ->assertJsonPath('errors.aeronave_id.0', 'La matrícula es obligatoria.')
+        ->assertJsonPath('errors.tipo_destino.0', 'Indica si el destino es nacional o internacional.');
+
+    $this->postJson('/api/facturacion/prefacturas', cuerpoPrefactura(['tipo_destino' => 'luna', 'llegada_at' => 'ayer-ish']))
+        ->assertJsonPath('errors.tipo_destino.0', 'El tipo de destino debe ser nacional o internacional.')
+        ->assertJsonPath('errors.llegada_at.0', 'La fecha de llegada no es una fecha válida.');
+
+    $this->patchJson("/api/facturacion/prefacturas/{$id}/estancia", ['pernoctas' => -1, 'transitos_12h' => 'x'])
+        ->assertJsonPath('errors.pernoctas.0', 'La cantidad de las pernoctas no puede ser negativa.')
+        ->assertJsonPath('errors.transitos_2h.0', 'Indica la cantidad de los tránsitos de 2 horas (puede ser 0).')
+        ->assertJsonPath('errors.transitos_12h.0', 'La cantidad de los tránsitos de 12 horas debe ser un número entero.');
+});
+
+test('el listado valida desde y hasta como fechas', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->getJson('/api/facturacion/prefacturas?desde=nunca')
+        ->assertStatus(422)
+        ->assertJsonPath('errors.desde.0', 'La fecha «desde» no es una fecha válida.');
+    $this->getJson('/api/facturacion/prefacturas?hasta=nunca')->assertStatus(422)->assertJsonValidationErrors(['hasta']);
+    $this->getJson('/api/facturacion/prefacturas?desde=2026-01-01&hasta=2026-12-31')->assertOk();
+});
+
+/** Llama al endpoint de escritura de renglones indicado, sobre la prefactura dada. */
+function llamarEscrituraDeRenglones(Tests\TestCase $prueba, string $endpoint, int $id, int $renglonId = 0): Illuminate\Testing\TestResponse
+{
+    $base = "/api/facturacion/prefacturas/{$id}";
+
+    return match ($endpoint) {
+        'store' => $prueba->postJson("{$base}/renglones", cuerpoRenglon()),
+        'destroy' => $prueba->deleteJson("{$base}/renglones/{$renglonId}"),
+        'estancia' => $prueba->patchJson("{$base}/estancia", ['pernoctas' => 1, 'transitos_2h' => 0, 'transitos_12h' => 0]),
+        'internacional' => $prueba->patchJson("{$base}/internacional"),
+    };
+}
+
+test('un borrador descartado no recibe ninguna escritura de renglones', function (string $endpoint) {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = conEstancia();
+    $renglon = renglonDe($p, 100.0, 1);
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/descartar")->assertOk();
+    $bitacora = Bitacora::count();
+
+    llamarEscrituraDeRenglones($this, $endpoint, $p->id, $renglon->id)
+        ->assertStatus(409)
+        ->assertJsonPath('codigo', 'ya_descartada');
+
+    expect($p->renglones()->count())->toBe(1)
+        ->and($p->fresh()->tipo_destino)->toBe(FactPrefactura::DESTINO_NACIONAL)
+        ->and(Bitacora::count())->toBe($bitacora);
+})->with(['store', 'destroy', 'estancia', 'internacional']);
+
+test('si se descarta entre el chequeo y el candado, la escritura de renglones responde 409 ya_descartada', function (string $endpoint) {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    FactServicio::create(['nombre' => 'Migracion', 'precio_unitario' => 300.0, 'en_paquete_internacional' => true]);
+    $p = conEstancia();
+    $renglon = renglonDe($p, 100.0, 1);
+
+    // Otra sesion descarta DESPUES de que el controlador leyo la prefactura (aun activa).
+    $hecho = false;
+    DB::listen(function ($consulta) use ($p, &$hecho) {
+        if (! $hecho && str_contains($consulta->sql, 'from "fact_prefacturas"')) {
+            $hecho = true;
+            DB::table('fact_prefacturas')->where('id', $p->id)->update(['status' => FactPrefactura::STATUS_INACTIVO]);
+        }
+    });
+
+    llamarEscrituraDeRenglones($this, $endpoint, $p->id, $renglon->id)
+        ->assertStatus(409)
+        ->assertJsonPath('codigo', 'ya_descartada');
+
+    expect($p->renglones()->count())->toBe(1)
+        ->and($p->fresh()->tipo_destino)->toBe(FactPrefactura::DESTINO_NACIONAL)
+        ->and(Bitacora::count())->toBe(0);
+})->with(['store', 'destroy', 'estancia', 'internacional']);
+
+test('la bitacora va en la misma transaccion tambien al quitar un renglon, recalcular estancia y marcar internacional', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    FactServicio::create(['nombre' => 'Migracion', 'precio_unitario' => 300.0, 'en_paquete_internacional' => true]);
+    $p = conEstancia();
+    $renglon = renglonDe($p, 100.0, 1);
+
+    Bitacora::creating(fn () => throw new RuntimeException('bitacora caida'));
+
+    llamarEscrituraDeRenglones($this, 'destroy', $p->id, $renglon->id)->assertStatus(500);
+    llamarEscrituraDeRenglones($this, 'estancia', $p->id)->assertStatus(500);
+    llamarEscrituraDeRenglones($this, 'internacional', $p->id)->assertStatus(500);
+
+    expect(FactPrefacturaRenglon::whereKey($renglon->id)->exists())->toBeTrue()
+        ->and($p->renglones()->count())->toBe(1)
+        ->and($p->fresh()->tipo_destino)->toBe(FactPrefactura::DESTINO_NACIONAL);
+});
+
+test('un renglon con ajuste desconocido dentro de una cerrada no tumba la ficha: se ve el sello y el aviso', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    [$p, $usuario] = prefacturaCompleta(precio: 1000.0, cantidad: 1);
+    app(CierrePrefactura::class)->cerrar($p, $usuario->id);
+    DB::table('fact_prefactura_renglones')->where('prefactura_id', $p->id)->update(['ajuste_precio' => 'raro']);
+
+    $ficha = $this->getJson("/api/facturacion/prefacturas/{$p->id}")->assertOk();
+
+    // Lo que se cobra es el sello; lo que no se puede verificar se dice, sin inventar un "todo bien".
+    expect($ficha->json('prefactura.total'))->toBe('1160.00')
+        ->and($ficha->json('prefactura.totales_error'))->toBeNull()
+        ->and($ficha->json('prefactura.sello_discrepa'))->toBeNull()
+        ->and($ficha->json('prefactura.sello_error'))->toBeString()
+        ->and($ficha->json('prefactura.renglones.0.importe'))->toBeNull()
+        ->and($ficha->json('prefactura.renglones.0.importe_error'))->toBeString();
+
+    $lista = $this->getJson('/api/facturacion/prefacturas')->assertOk()->json('data');
+    expect($lista[0]['sello_error'])->toBeString();
 });
