@@ -1489,7 +1489,8 @@ test('el paquete internacional agrega las cuatro con el precio del catalogo', fu
     $agregados = app(CargosEstancia::class)->agregarPaqueteInternacional($p);
 
     expect($agregados)->toBe(4)
-        ->and($p->fresh()->subtotal())->toBe('6059.00');
+        // 4060.50 + 348.00 + 900.00 + 750.00 = 6058.50
+        ->and($p->fresh()->subtotal())->toBe('6058.50');
 });
 
 test('el paquete internacional no se duplica si ya esta', function () {
