@@ -59,11 +59,19 @@ Consecuencias para el despliegue:
 git pull
 composer install --no-dev --optimize-autoloader
 
-# Todas las migraciones crean tablas nuevas; ninguna toca datos existentes.
+# Las migraciones del 1a y el 1b crean tablas nuevas. La del bloque 2
+# (`2026_09_29_092000_add_concepto_to_fact_servicios_table`) ALTERA `fact_servicios`:
+# agrega `concepto` y `en_paquete_internacional`, sin tocar los datos existentes.
 php artisan migrate
-# Bloque 2 sobre una base que ya tenía el 1b: la migración deja `concepto` en NULL
-# y hay que asignarlo (sección «Precio del combustible»: reimportar PISA precios;
-# hay un UPDATE dirigido que no los toca). Si 1b y 2 van juntos, no hace falta.
+
+# +- ¿QUÉ BASE ES ESTA? Los pasos 1 a 3 dependen de la respuesta ----------------+
+# | (a) Primer despliegue del 1b (y el 2 juntos): hacer los pasos 1 a 3 tal como |
+# |     están; la primera --aplicar ya asigna los conceptos y las marcas.        |
+# | (b) El 1b YA ESTABA aplicado y solo se despliega el bloque 2: los pasos 1 a  |
+# |     3 son la OPCIÓN A de la sección «Precio del combustible» y PISAN PRECIOS |
+# |     editados a mano. Para no tocarlos, OMITIR los pasos 1 a 3 y correr en su |
+# |     lugar el SQL de la OPCIÓN B (misma sección), con su verificación.        |
+# +------------------------------------------------------------------------------+
 
 # 1. Simulación del importador: lee fact-fbo, escribe y revierte.
 #    LEER ENTERA la salida: la lista de tablas que --forzar va a pisar, los
@@ -106,13 +114,19 @@ sale de `SOBREESCRIBEN` en `ImportarMatriculasPrefactura.php`):
 | `fact_tipos_motor` | tarifa de aterrizaje |
 | `fact_precios_combustible` | el precio vigente, solo si coincide la fecha de inicio |
 | `fact_clientes` | RFC, correo y teléfono |
-| `fact_servicios` | nombre, concepto, marca de paquete internacional, categoría, precio, margen y ajuste de precio |
+| `fact_servicios` | es de tercero, categoría, precio, margen y ajuste de precio; el nombre solo en los cuatro con concepto (ver abajo) |
 
 Cualquier tarifa, RFC o precio **editado a mano desde las pantallas** desde el
 último import se revierte al valor del sistema viejo, y eso cambia cobros.
 Además, `fact_categorias_servicio`, `fact_formas_pago` y `fact_proveedores` solo
 agregan lo que falta: si en pantalla se renombró una fila, la original se recrea
-y quedan dos.
+y quedan dos. **Lo mismo pasa con 50 de los 54 servicios**: salvo los cuatro con
+concepto, el nombre es la llave, así que renombrar uno en pantalla y reimportar
+recrea el original sin ningún hallazgo. Los cuatro con concepto se identifican por
+él y el importador les devuelve el nombre del origen. `concepto` y
+`en_paquete_internacional` no están en la tabla porque no se editan desde la
+aplicación (solo un SQL a mano los altera) y el importador nunca cambia un
+concepto: solo se lo asigna a una fila que lo tiene en NULL.
 
 **La simulación imprime esa lista de tablas con su número de filas** ("Se
 sobreescriben (lo editado desde la aplicación se pierde)"). Hay que leerla antes
@@ -268,7 +282,8 @@ al del combustible. El sistema viejo lo apunta por id fijo (`id_servicio = 7`).
 >
 > **Este paso solo hace falta si el bloque 1b ya estaba aplicado.** Si el 1b y el 2
 > se despliegan juntos, la primera `--aplicar` ya asigna los conceptos y las marcas
-> y no hay nada que hacer.
+> y no hay nada que hacer. **El script de «Orden de despliegue» hace la opción A**
+> (pasos 1 a 3): con la opción B esos pasos se omiten.
 >
 > Hay dos caminos. **Elegir uno antes de correr nada:**
 >
@@ -282,36 +297,69 @@ al del combustible. El sistema viejo lo apunta por id fijo (`id_servicio = 7`).
 > lista que imprime la simulación. Solo es sensato si nadie ha editado servicios
 > desde la importación.
 >
-> **B. Asignar solo los siete a mano (no toca ningún precio).** Es la vía para una
-> base en producción con precios editados. Pegar tal cual en MySQL; cada `UPDATE`
-> solo toca filas que aún no tienen concepto:
+> **B. Asignar a mano los ocho (no toca ningún precio).** Son cuatro conceptos y
+> cuatro marcas de paquete: **ocho servicios**. Es la vía para una base en
+> producción con precios editados.
+>
+> **B.0 Comprobar antes de escribir** (con `SET NAMES utf8mb4;`, ver abajo). Deben
+> salir **ocho filas, una por nombre**; si un nombre sale dos veces (el alta permite
+> repetirlos) o no sale, decidir a mano antes de seguir:
 >
 > ```sql
+> SET NAMES utf8mb4;
+> SELECT id, nombre, concepto, en_paquete_internacional, status FROM fact_servicios
+>  WHERE nombre IN ('Combustible JET A-1', 'Tránsito 02 hrs', 'Tránsito 12 hrs', 'Tránsito 24 hrs - pernocta',
+>                   'DSMES - salida', 'DSM - salida', 'Mex-eAPI - salida', 'Servicios Internacionales - salida')
+>  ORDER BY nombre, id;
+> ```
+>
+> **B.1 Asignar.** Pegar tal cual:
+>
+> ```sql
+> SET NAMES utf8mb4;
+>
 > UPDATE fact_servicios SET concepto = 'combustible'           WHERE concepto IS NULL AND nombre = 'Combustible JET A-1';
 > UPDATE fact_servicios SET concepto = 'estancia_transito_2h'  WHERE concepto IS NULL AND nombre = 'Tránsito 02 hrs';
 > UPDATE fact_servicios SET concepto = 'estancia_transito_12h' WHERE concepto IS NULL AND nombre = 'Tránsito 12 hrs';
 > UPDATE fact_servicios SET concepto = 'estancia_pernocta'     WHERE concepto IS NULL AND nombre = 'Tránsito 24 hrs - pernocta';
 >
 > UPDATE fact_servicios SET en_paquete_internacional = 1
->  WHERE nombre IN ('DSMES - salida', 'DSM - salida', 'Mex-eAPI - salida', 'Servicios Internacionales - salida');
+>  WHERE en_paquete_internacional = 0
+>    AND BINARY nombre IN ('DSMES - salida', 'DSM - salida', 'Mex-eAPI - salida', 'Servicios Internacionales - salida');
 > ```
 >
-> Los ids de `fact_servicios` **no** son los ids del sistema viejo (se asignan al
-> importar), por eso se filtra por nombre; la comparación de MySQL ignora la caja y
-> los acentos. Si alguno de los nombres se corrigió a mano, el `UPDATE` no afecta
-> ninguna fila: la verificación de abajo lo delata. En ese caso usar
-> `WHERE id = <id>` con el id que dé `SELECT id, nombre FROM fact_servicios`.
+> - **`SET NAMES utf8mb4;` es obligatorio.** El cliente `mysql` de Windows arranca
+>   con `character_set_client` cp850 (y otros con latin1): sin esa línea, las
+>   **tres sentencias con «Tránsito» afectan 0 filas, sin error**, y solo el
+>   combustible y las marcas (nombres ASCII) quedan asignados. Si las tres de
+>   Tránsito no afectan filas, **lo primero que hay que descartar es la
+>   codificación del cliente**, antes de pensar en un nombre editado a mano.
+> - El `mysql` en lote **aborta el resto del script al primer error** (por ejemplo,
+>   un `concepto` que ya lleva otra fila, por el índice único): lo que sigue no se
+>   ejecuta y la verificación lo refleja con menos filas.
+> - Las cuatro sentencias de `concepto` solo tocan filas que aún lo tienen en NULL
+>   y comparan sin distinguir caja ni acentos (collation de la columna). La de las
+>   marcas compara el nombre **exacto** (`BINARY`) y solo filas sin marca, pero
+>   **no mira `concepto` ni `status`**: si B.0 mostró un duplicado exacto de uno de
+>   esos nombres, el duplicado también quedaría marcado.
+> - Los ids de `fact_servicios` **no** son los del sistema viejo (se asignan al
+>   importar), por eso se filtra por nombre. Si B.0 muestra que un nombre se
+>   corrigió a mano, usar `WHERE id = <id>` con el id que dé esa consulta.
 >
-> ### Verificación (cubre los siete, haya sido A o B)
+> ### Verificación (cubre los ocho, haya sido A o B)
 >
 > ```sql
+> SET NAMES utf8mb4;
 > SELECT concepto, nombre FROM fact_servicios WHERE concepto IS NOT NULL;      -- 4 filas
-> SELECT COUNT(*) FROM fact_servicios WHERE en_paquete_internacional = 1;       -- 4
+> SELECT id, nombre FROM fact_servicios WHERE en_paquete_internacional = 1;     -- 4 filas
 > ```
 >
 > Deben salir **cuatro** filas con los conceptos `combustible`, `estancia_pernocta`,
-> `estancia_transito_2h` y `estancia_transito_12h`, y **cuatro** marcas. Si falta
-> alguno, los cargos de estancia fallan y el paquete internacional no agrega nada.
+> `estancia_transito_2h` y `estancia_transito_12h`, y **cuatro** marcas con los
+> nombres `DSMES`, `DSM`, `Mex-eAPI` y `Servicios Internacionales`, todos
+> «- salida». Contar no basta: un nombre sin marcar más un duplicado marcado
+> también da cuatro, por eso se listan. Si falta alguno, los cargos de estancia
+> fallan y el paquete internacional no agrega nada.
 >
 > El importador casa los servicios con concepto **por su concepto** y los demás por
 > nombre, así que reimportar tras renombrar el combustible no choca con el índice
@@ -343,8 +391,9 @@ al del combustible. El sistema viejo lo apunta por id fijo (`id_servicio = 7`).
 1. **Los dos pasos de la collation descritos arriba**, antes y después de
    `--aplicar`. Son obligatorios.
 2. **La sincronía busca por `concepto`** (bloque 2), ya no por nombre: no depende
-   de la collation. Vale confirmar en MySQL, tras volver a correr el importador,
-   que registrar un precio actualiza el servicio.
+   de la collation. Vale confirmar en MySQL, una vez asignados los conceptos (por el
+   importador o por el SQL de la opción B), que registrar un precio actualiza el
+   servicio.
 3. **Transacción del importador**: sigue siendo una sola transacción, ahora con
    más tablas. La guía del 1a pide medir cuánto tarda; repetir la medición con
    los cinco catálogos incluidos.
