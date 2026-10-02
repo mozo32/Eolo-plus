@@ -424,6 +424,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(functio
         Route::post('/prefacturas', [PrefacturaController::class, 'store']);
         Route::put('/prefacturas/{id}', [PrefacturaController::class, 'update'])->whereNumber('id');
         Route::patch('/prefacturas/{id}/cerrar', [PrefacturaController::class, 'cerrar'])->whereNumber('id');
+        Route::patch('/prefacturas/{id}/notas', [PrefacturaController::class, 'notas'])->whereNumber('id');
         Route::post('/prefacturas/{id}/renglones', [PrefacturaRenglonController::class, 'store'])->whereNumber('id');
         Route::delete('/prefacturas/{id}/renglones/{renglon}', [PrefacturaRenglonController::class, 'destroy'])->whereNumber('id')->whereNumber('renglon');
         Route::patch('/prefacturas/{id}/renglones/{renglon}/cortesia', [PrefacturaRenglonController::class, 'cortesia'])->whereNumber('id')->whereNumber('renglon');

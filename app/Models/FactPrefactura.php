@@ -27,6 +27,7 @@ class FactPrefactura extends Model
     protected $fillable = [
         'folio', 'estado', 'aeronave_id', 'cliente_id', 'llegada_at', 'salida_at',
         'origen', 'destino', 'operacion_llegada_id', 'operacion_salida_id', 'tipo_destino',
+        'nota_interna', 'nota_externa', 'nota_factura',
         'subtotal_sellado', 'iva_sellado', 'total_sellado', 'iva_tasa_sellada',
         'cerrada_at', 'cerrada_por', 'user_id', 'status',
     ];

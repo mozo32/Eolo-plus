@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 test('la primera prefactura cerrada se lleva el folio 10000', function () {
     [$p, $usuario] = prefacturaCompleta();
 
-    $cerrada = app(CierrePrefactura::class)->cerrar($p, $usuario->id);
+    $cerrada = app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true);
 
     expect($cerrada->folio)->toBe(10000)
         ->and($cerrada->estado)->toBe(FactPrefactura::ESTADO_CERRADA);
@@ -24,21 +24,21 @@ test('el folio avanza de uno en uno', function () {
     [$p1, $usuario] = prefacturaCompleta();
     [$p2] = prefacturaCompleta();
 
-    expect(app(CierrePrefactura::class)->cerrar($p1, $usuario->id)->folio)->toBe(10000)
-        ->and(app(CierrePrefactura::class)->cerrar($p2, $usuario->id)->folio)->toBe(10001);
+    expect(app(CierrePrefactura::class)->cerrar($p1, $usuario->id, confirmarSinCobro: true)->folio)->toBe(10000)
+        ->and(app(CierrePrefactura::class)->cerrar($p2, $usuario->id, confirmarSinCobro: true)->folio)->toBe(10001);
 });
 
 test('el folio nuevo nunca cae en el rango del sistema viejo', function () {
     [$p, $usuario] = prefacturaCompleta();
 
     // El mayor folio del origen es 4121 y sus borradores llegan a 4123.
-    expect(app(CierrePrefactura::class)->cerrar($p, $usuario->id)->folio)->toBeGreaterThan(4123);
+    expect(app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true)->folio)->toBeGreaterThan(4123);
 });
 
 test('al cerrar se sella el subtotal, el IVA, el total y la tasa', function () {
     [$p, $usuario] = prefacturaCompleta(precio: 1000.0, cantidad: 2);
 
-    $cerrada = app(CierrePrefactura::class)->cerrar($p, $usuario->id);
+    $cerrada = app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true);
 
     expect((string) $cerrada->subtotal_sellado)->toBe('2000.00')
         ->and((string) $cerrada->iva_sellado)->toBe('320.00')
@@ -48,7 +48,7 @@ test('al cerrar se sella el subtotal, el IVA, el total y la tasa', function () {
 
 test('el sello no se mueve si despues cambia la tasa de IVA', function () {
     [$p, $usuario] = prefacturaCompleta(precio: 1000.0, cantidad: 1);
-    $cerrada = app(CierrePrefactura::class)->cerrar($p, $usuario->id);
+    $cerrada = app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true);
 
     // `iva_tasa` no esta sembrada, asi que esto INSERTA y `descripcion` es NOT NULL.
     FactConfiguracion::updateOrCreate(['clave' => 'iva_tasa'], ['valor' => '0.08', 'descripcion' => 'Tasa de IVA']);
@@ -58,7 +58,7 @@ test('el sello no se mueve si despues cambia la tasa de IVA', function () {
 
 test('cerrar dos veces la misma prefactura falla y no consume dos folios', function () {
     [$p, $usuario] = prefacturaCompleta();
-    app(CierrePrefactura::class)->cerrar($p, $usuario->id);
+    app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true);
 
     expect(fn () => app(CierrePrefactura::class)->cerrar($p->fresh(), $usuario->id))
         ->toThrow(PrefacturaYaCerradaException::class);
@@ -83,7 +83,7 @@ test('no se puede cerrar sin renglones', function () {
 test('el cierre deja rastro en bitacora con el folio y el total', function () {
     [$p, $usuario] = prefacturaCompleta(precio: 1000.0, cantidad: 1);
 
-    app(CierrePrefactura::class)->cerrar($p, $usuario->id);
+    app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true);
 
     $entrada = Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)
         ->where('accion', Bitacora::ACCION_FINALIZAR)->sole();
@@ -118,7 +118,7 @@ test('una instancia vieja de una prefactura ya cerrada por otra sesion no vuelve
     [$p, $usuario] = prefacturaCompleta();
     $vieja = FactPrefactura::find($p->id);
 
-    app(CierrePrefactura::class)->cerrar($p, $usuario->id);
+    app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true);
 
     // `$vieja` todavia dice `borrador`: la guarda tiene que estar dentro, con candado.
     expect(fn () => app(CierrePrefactura::class)->cerrar($vieja, $usuario->id))
@@ -145,7 +145,7 @@ test('el IVA se redondea al sellar, no se trunca', function () {
     // 26.06 * 0.16 = 4.1696: redondeado 4.17, truncado 4.16.
     [$p, $usuario] = prefacturaCompleta(precio: 26.06, cantidad: 1);
 
-    $cerrada = app(CierrePrefactura::class)->cerrar($p, $usuario->id);
+    $cerrada = app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true);
 
     expect((string) $cerrada->iva_sellado)->toBe('4.17')
         ->and((string) $cerrada->total_sellado)->toBe('30.23');
@@ -155,7 +155,7 @@ test('el folio sale del contador y no del maximo de los folios', function () {
     FactConfiguracion::where('clave', 'prefactura_folio_siguiente')->update(['valor' => '20000']);
     [$p, $usuario] = prefacturaCompleta();
 
-    $cerrada = app(CierrePrefactura::class)->cerrar($p, $usuario->id);
+    $cerrada = app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true);
 
     expect($cerrada->folio)->toBe(20000)
         ->and(FactConfiguracion::valor('prefactura_folio_siguiente'))->toBe('20001');
@@ -165,7 +165,7 @@ test('un contador corrupto no entrega folio 0: el cierre se aborta', function ()
     FactConfiguracion::where('clave', 'prefactura_folio_siguiente')->update(['valor' => 'abc']);
     [$p, $usuario] = prefacturaCompleta();
 
-    expect(fn () => app(CierrePrefactura::class)->cerrar($p, $usuario->id))
+    expect(fn () => app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true))
         ->toThrow(UnexpectedValueException::class);
 
     expect($p->fresh()->estado)->toBe(FactPrefactura::ESTADO_BORRADOR)
@@ -176,7 +176,7 @@ test('si la bitacora falla al final, el cierre entero se revierte', function () 
     [$p, $usuario] = prefacturaCompleta();
     Bitacora::creating(fn () => throw new RuntimeException('bitacora caida'));
 
-    expect(fn () => app(CierrePrefactura::class)->cerrar($p, $usuario->id))->toThrow(RuntimeException::class);
+    expect(fn () => app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true))->toThrow(RuntimeException::class, 'bitacora caida');
 
     $p = $p->fresh();
     expect($p->estado)->toBe(FactPrefactura::ESTADO_BORRADOR)
@@ -205,7 +205,7 @@ test('si el sello no coincide con los renglones tras escribirlo, el cierre se re
         }
     });
 
-    expect(fn () => app(CierrePrefactura::class)->cerrar($p, $usuario->id))
+    expect(fn () => app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true))
         ->toThrow(SelloInconsistenteException::class);
 
     $p = $p->fresh();

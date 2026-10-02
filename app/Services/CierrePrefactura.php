@@ -24,7 +24,13 @@ class CierrePrefactura
     /** La serie propia arranca aquí: el mayor folio del sistema viejo es 4121 y sus borradores llegan a 4123. */
     public const FOLIO_INICIAL = 10000;
 
-    public function cerrar(FactPrefactura $prefactura, int $userId): FactPrefactura
+    /**
+     * `$confirmarSinCobro` es la confirmación explícita de cerrar con los pagos por debajo
+     * del total. Por defecto NO: quien cierra sin cobro completo tiene que decirlo.
+     *
+     * @throws PrefacturaSinCobroException si los pagos no cubren el total y no se confirmó.
+     */
+    public function cerrar(FactPrefactura $prefactura, int $userId, bool $confirmarSinCobro = false): FactPrefactura
     {
         // Falla rápido sin abrir transacción; se REPITE adentro, ya con candado,
         // porque la instancia recibida pudo quedar vieja.
@@ -32,7 +38,7 @@ class CierrePrefactura
             throw new PrefacturaYaCerradaException('Esta prefactura ya está cerrada.');
         }
 
-        return DB::transaction(function () use ($prefactura, $userId) {
+        return DB::transaction(function () use ($prefactura, $userId, $confirmarSinCobro) {
             // CANDADO antes de leer los renglones. Sin él, un renglón que otra sesión
             // agregue durante el cierre queda fuera del sello: el documento se emite
             // cobrando menos de lo que tiene, y el folio ya se consumió.
@@ -66,6 +72,19 @@ class CierrePrefactura
             $tasa = $prefactura->ivaTasa();
             $iva = $prefactura->iva();
             $total = $prefactura->total();
+
+            // El aviso del cobro va DESPUÉS de los totales (necesita el total) y ANTES
+            // del folio (si lanza, no se gasta). El sistema viejo deja imprimir sin
+            // cobrar —289 de sus 3,764 cerradas no tienen pago— así que esto NO bloquea:
+            // pide una confirmación explícita, que es lo que el viejo no hacía. Solo la
+            // FALTA de cobro la pide: una prefactura sobrepagada cierra sin confirmar.
+            if (! $confirmarSinCobro) {
+                $pagado = $prefactura->pagado();
+
+                if (bccomp($pagado, $total, 2) < 0) {
+                    throw new PrefacturaSinCobroException(bcsub($total, $pagado, 2));
+                }
+            }
 
             $folio = $this->siguienteFolio();
 

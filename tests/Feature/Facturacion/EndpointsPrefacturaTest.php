@@ -74,7 +74,7 @@ test('cerrar responde 409 la segunda vez', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     [$p] = prefacturaCompleta();
 
-    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar")->assertOk();
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar", ['confirmar_sin_cobro' => true])->assertOk();
     $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar")
         ->assertStatus(409)
         ->assertJsonPath('codigo', 'ya_cerrada');
@@ -93,7 +93,7 @@ test('cerrar sin cliente responde 422 con el motivo', function () {
 test('una prefactura cerrada no se puede editar: lo hace cumplir el endpoint', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     [$p] = prefacturaCompleta();
-    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar")->assertOk();
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar", ['confirmar_sin_cobro' => true])->assertOk();
 
     $this->putJson("/api/facturacion/prefacturas/{$p->id}", cuerpoPrefactura())
         ->assertStatus(409)
@@ -104,7 +104,7 @@ test('a una cerrada no se le pueden agregar ni quitar renglones', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     [$p] = prefacturaCompleta();
     $renglon = $p->renglones()->sole();
-    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar")->assertOk();
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar", ['confirmar_sin_cobro' => true])->assertOk();
 
     $this->postJson("/api/facturacion/prefacturas/{$p->id}/renglones", cuerpoRenglon())->assertStatus(409);
     $this->deleteJson("/api/facturacion/prefacturas/{$p->id}/renglones/{$renglon->id}")->assertStatus(409);
@@ -144,7 +144,7 @@ test('descartar un borrador lo saca de la lista y responde 409 la segunda vez', 
 test('una prefactura cerrada no se descarta: ya es un documento emitido', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     [$p] = prefacturaCompleta();
-    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar")->assertOk();
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar", ['confirmar_sin_cobro' => true])->assertOk();
 
     $this->patchJson("/api/facturacion/prefacturas/{$p->id}/descartar")
         ->assertStatus(409)
@@ -158,6 +158,7 @@ test('cada ruta de escritura de prefacturas lleva su subdepartamento', function 
         'POST api/facturacion/prefacturas' => 'subdep:factPrefacturas',
         'PUT api/facturacion/prefacturas/{id}' => 'subdep:factPrefacturas',
         'PATCH api/facturacion/prefacturas/{id}/cerrar' => 'subdep:factPrefacturas',
+        'PATCH api/facturacion/prefacturas/{id}/notas' => 'subdep:factPrefacturas',
         'POST api/facturacion/prefacturas/{id}/renglones' => 'subdep:factPrefacturas',
         'DELETE api/facturacion/prefacturas/{id}/renglones/{renglon}' => 'subdep:factPrefacturas',
         'PATCH api/facturacion/prefacturas/{id}/renglones/{renglon}/cortesia' => 'subdep:factPrefacturas',
@@ -227,7 +228,7 @@ function cierraTrasLaComprobacion(FactPrefactura $p, int $usuarioId): void
     DB::listen(function ($consulta) use ($p, $usuarioId, &$hecho) {
         if (! $hecho && str_contains($consulta->sql, 'from "fact_prefacturas"')) {
             $hecho = true;
-            app(CierrePrefactura::class)->cerrar($p->fresh(), $usuarioId);
+            app(CierrePrefactura::class)->cerrar($p->fresh(), $usuarioId, confirmarSinCobro: true);
         }
     });
 }
@@ -326,7 +327,7 @@ test('los cuatro endpoints de renglones responden 409 ya_cerrada cuando el trait
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     [$p] = prefacturaCompleta();
     $renglon = $p->renglones()->sole();
-    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar")->assertOk();
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar", ['confirmar_sin_cobro' => true])->assertOk();
 
     $cuerpoEstancia = ['pernoctas' => 1, 'transitos_2h' => 0, 'transitos_12h' => 0];
 
@@ -357,7 +358,7 @@ test('si el sello no coincide al cerrar, el endpoint responde 409 sello_inconsis
         }
     });
 
-    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar")
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar", ['confirmar_sin_cobro' => true])
         ->assertStatus(409)
         ->assertJsonPath('codigo', 'sello_inconsistente');
 
@@ -370,6 +371,8 @@ test('si el sello no coincide al cerrar, el endpoint responde 409 sello_inconsis
 test('una cerrada responde con folio y el sello sin discrepancias', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     [$p] = prefacturaCompleta(precio: 1000.0, cantidad: 1);
+    // El cierre normal: cobrada por completo, sin confirmar nada.
+    pagoDe($p, formasDePago()['Visa'], '1160.00');
 
     $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar")
         ->assertOk()
@@ -383,7 +386,7 @@ test('una cerrada responde con folio y el sello sin discrepancias', function () 
 test('si el sello de una cerrada ya no coincide con sus renglones, la ficha y el listado lo dicen', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     [$p, $usuario] = prefacturaCompleta(precio: 1000.0, cantidad: 1);
-    app(CierrePrefactura::class)->cerrar($p, $usuario->id);
+    app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true);
 
     // Un renglon que cambia por debajo del sello (escritura cruda: la guarda del modelo no la ve).
     DB::table('fact_prefactura_renglones')->where('prefactura_id', $p->id)->update(['precio_unitario' => 5000]);
@@ -468,7 +471,7 @@ test('cerrar deja una sola entrada en bitacora, la del servicio de cierre', func
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     [$p] = prefacturaCompleta();
 
-    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar")->assertOk();
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar", ['confirmar_sin_cobro' => true])->assertOk();
 
     expect(bitacoraDePrefacturas(Bitacora::ACCION_FINALIZAR))->toBe(1)
         ->and(Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)->count())->toBe(1);
@@ -589,7 +592,7 @@ test('el listado filtra por estado y por matricula sin que el OR de la busqueda 
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     [$abierta] = prefacturaCompleta();
     [$cerrada, $usuario] = prefacturaCompleta();
-    app(CierrePrefactura::class)->cerrar($cerrada, $usuario->id);
+    app(CierrePrefactura::class)->cerrar($cerrada, $usuario->id, confirmarSinCobro: true);
 
     $this->getJson('/api/facturacion/prefacturas?estado=cerrada')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $cerrada->id);
     $this->getJson('/api/facturacion/prefacturas?estado=borrador')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $abierta->id);
@@ -748,7 +751,7 @@ test('la bitacora va en la misma transaccion tambien al quitar un renglon, recal
 test('un renglon con ajuste desconocido dentro de una cerrada no tumba la ficha: se ve el sello y el aviso', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     [$p, $usuario] = prefacturaCompleta(precio: 1000.0, cantidad: 1);
-    app(CierrePrefactura::class)->cerrar($p, $usuario->id);
+    app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true);
     DB::table('fact_prefactura_renglones')->where('prefactura_id', $p->id)->update(['ajuste_precio' => 'raro']);
 
     $ficha = $this->getJson("/api/facturacion/prefacturas/{$p->id}")->assertOk();

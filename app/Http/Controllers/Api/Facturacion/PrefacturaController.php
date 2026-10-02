@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Facturacion;
 use App\Http\Controllers\Api\Facturacion\Concerns\RechazaPrefacturaCerrada;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Facturacion\StorePrefacturaRequest;
+use App\Http\Requests\Facturacion\UpdateNotasRequest;
 use App\Http\Requests\Facturacion\UpdatePrefacturaRequest;
 use App\Models\Bitacora;
 use App\Models\FactPrefactura;
@@ -13,6 +14,7 @@ use App\Models\OperacionDiaria;
 use App\Services\CierrePrefactura;
 use App\Services\PrefacturaDescartadaException;
 use App\Services\PrefacturaIncompletaException;
+use App\Services\PrefacturaSinCobroException;
 use App\Services\PrefacturaYaCerradaException;
 use App\Services\RenglonDePrefacturaCerradaException;
 use App\Services\SelloInconsistenteException;
@@ -219,8 +221,13 @@ class PrefacturaController extends Controller
 
     public function cerrar(Request $request, int $id, CierrePrefactura $cierre): JsonResponse
     {
+        // En dos sentencias: con `(bool) $datos['x'] ?? false` en una sola, la
+        // precedencia del cast se come al `??` y la clave ausente revienta.
+        $datos = $request->validate(['confirmar_sin_cobro' => ['sometimes', 'boolean']]);
+        $confirmar = (bool) ($datos['confirmar_sin_cobro'] ?? false);
+
         try {
-            $resultado = DB::transaction(function () use ($request, $id, $cierre) {
+            $resultado = DB::transaction(function () use ($request, $id, $cierre, $confirmar) {
                 // El candado se toma aquí, antes de decidir, para que descartar y
                 // cerrar se serialicen: sin él, un borrador descartado entre la
                 // lectura y el cierre consumiría un folio para un documento oculto.
@@ -232,7 +239,7 @@ class PrefacturaController extends Controller
                     return $respuesta;
                 }
 
-                return $cierre->cerrar($prefactura, $request->user()->id);
+                return $cierre->cerrar($prefactura, $request->user()->id, $confirmar);
             });
         } catch (PrefacturaYaCerradaException|RenglonDePrefacturaCerradaException $e) {
             return response()->json(['message' => $e->getMessage(), 'codigo' => 'ya_cerrada'], 409);
@@ -240,6 +247,14 @@ class PrefacturaController extends Controller
             return response()->json(['message' => $e->getMessage(), 'codigo' => 'ya_descartada'], 409);
         } catch (PrefacturaIncompletaException $e) {
             return response()->json(['message' => $e->getMessage(), 'codigo' => 'incompleta'], 422);
+        } catch (PrefacturaSinCobroException $e) {
+            // No es un fallo: es la confirmación que falta. Nada quedó escrito y el folio
+            // no se consumió; la pantalla vuelve a llamar con `confirmar_sin_cobro`.
+            return response()->json([
+                'message' => $e->getMessage(),
+                'codigo' => 'sin_cobro',
+                'faltante' => $e->faltante,
+            ], 422);
         } catch (SelloInconsistenteException) {
             // El cierre se abortó porque el sello no coincidía con la derivación, casi
             // siempre porque otra sesión tocó los renglones. Nada quedó escrito y el folio
@@ -258,6 +273,51 @@ class PrefacturaController extends Controller
             'message' => "Prefactura cerrada con folio {$resultado->folio}.",
             'prefactura' => $this->presentar($resultado, conRenglones: true),
         ]);
+    }
+
+    /**
+     * Las tres notas. Solo en borrador: al cerrar, el documento ya salió, y la nota
+     * externa se imprime en él.
+     */
+    public function notas(UpdateNotasRequest $request, int $id): JsonResponse
+    {
+        $prefactura = FactPrefactura::findOrFail($id);
+
+        if ($respuesta = $this->rechazoRapido($prefactura)) {
+            return $respuesta;
+        }
+
+        $resultado = DB::transaction(function () use ($request, $id) {
+            // La guarda se REPITE con candado: entre el chequeo rápido y aquí otra
+            // sesión pudo cerrar o descartar.
+            $actual = FactPrefactura::query()->whereKey($id)->lockForUpdate()->firstOrFail();
+
+            if ($respuesta = $this->rechazoRapido($actual)) {
+                return $respuesta;
+            }
+
+            $campos = ['nota_interna', 'nota_externa', 'nota_factura'];
+            $antes = $actual->only($campos);
+            $actual->update($request->validated());
+
+            Bitacora::log(
+                modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
+                accion: Bitacora::ACCION_ACTUALIZAR,
+                descripcion: "Se guardaron las notas de la prefactura {$actual->id}.",
+                usuarioId: $request->user()->id,
+                registroId: $actual->id,
+                datosAnteriores: $antes,
+                datosNuevos: $actual->fresh()->only($campos),
+            );
+
+            return $actual;
+        });
+
+        if ($resultado instanceof JsonResponse) {
+            return $resultado;
+        }
+
+        return response()->json(['message' => 'Notas guardadas.', 'prefactura' => $this->fichaDe($id)]);
     }
 
     /**
@@ -359,6 +419,9 @@ class PrefacturaController extends Controller
             'origen' => $p->origen,
             'destino' => $p->destino,
             'tipo_destino' => $p->tipo_destino,
+            'nota_interna' => $p->nota_interna,
+            'nota_externa' => $p->nota_externa,
+            'nota_factura' => $p->nota_factura,
             'cerrada_at' => $p->cerrada_at?->toDateTimeString(),
         ] + $this->totales($p) + $this->verificacionDelSello($p);
 
