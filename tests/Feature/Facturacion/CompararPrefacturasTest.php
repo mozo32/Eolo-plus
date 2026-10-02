@@ -226,7 +226,7 @@ test('el IVA guardado se compara contra el 16% del subtotal GUARDADO, redondeado
 
     $this->artisan('facturacion:comparar-prefacturas')
         ->expectsOutputToContain('IVA idénticas: 2')
-        ->expectsOutputToContain('  de ellas, exactas al centavo: 2')
+        ->expectsOutputToContain('IVA, exactas al centavo: 2')
         ->expectsOutputToContain('IVA estructurales: 0')
         ->assertExitCode(0);
 });
@@ -250,7 +250,7 @@ test('un IVA truncado un centavo no se confunde con uno exacto', function () {
 
     $this->artisan('facturacion:comparar-prefacturas')
         ->expectsOutputToContain('IVA idénticas: 1')
-        ->expectsOutputToContain('  de ellas, exactas al centavo: 0')
+        ->expectsOutputToContain('IVA, exactas al centavo: 0')
         ->assertExitCode(0);
 });
 
@@ -308,6 +308,82 @@ test('el comando y el modelo calculan el IVA con la misma funcion, en los casos 
 
     $this->artisan('facturacion:comparar-prefacturas')
         ->expectsOutputToContain('IVA idénticas: 3')
-        ->expectsOutputToContain('  de ellas, exactas al centavo: 3')
+        ->expectsOutputToContain('IVA, exactas al centavo: 3')
+        ->assertExitCode(0);
+});
+
+test('la linea de exactas lleva su propia etiqueta: la del Total no tapa a la del IVA', function () {
+    // IVA con un centavo de desviación (4.18 contra 4.17) y total consistente con
+    // ese IVA: el IVA tiene 0 exactas y el Total 1. Con un rótulo común, la
+    // línea del Total satisfaría una aserción sobre el IVA.
+    legacyPref(1, 26.06, 4.18, 30.24);
+    legacyVenta(1, 26.06, 1, 26.06);
+
+    $this->artisan('facturacion:comparar-prefacturas')
+        ->expectsOutputToContain('IVA idénticas: 1')
+        ->expectsOutputToContain('IVA, exactas al centavo: 0')
+        ->expectsOutputToContain('Total idénticas: 1')
+        ->expectsOutputToContain('Total, exactas al centavo: 1')
+        ->assertExitCode(0);
+});
+
+test('los folios duplicados tampoco entran en IVA ni en total', function () {
+    legacyPref(7, 100.00, 16.00, 116.00);
+    legacyPref(7, 100.00, 16.00, 116.00);
+    legacyVenta(7, 100.00, 1, 100.00);
+    legacyPref(8, 100.00, 16.00, 116.00);
+    legacyVenta(8, 100.00, 1, 100.00);
+
+    $this->artisan('facturacion:comparar-prefacturas')
+        ->expectsOutputToContain('Comparadas: 1')
+        ->expectsOutputToContain('IVA y total comparados: 1')
+        ->expectsOutputToContain('IVA idénticas: 1')
+        ->expectsOutputToContain('Total idénticas: 1')
+        ->assertExitCode(0);
+});
+
+test('el total se compara contra el subtotal GUARDADO mas el IVA guardado, no contra la suma recalculada', function () {
+    // Subtotal guardado 100.00, renglones suman 90.00. El total (116.00) es
+    // consistente con lo guardado. Si el total se juzgara contra la suma
+    // recalculada (90 + 16), el defecto del subtotal saldría también como
+    // estructural de total y nadie sabría por qué.
+    legacyPref(1, 100.00, 16.00, 116.00);
+    legacyVenta(1, 90.00, 1, 90.00);
+
+    $this->artisan('facturacion:comparar-prefacturas')
+        ->expectsOutputToContain('Estructurales: 1')
+        ->expectsOutputToContain('Total idénticas: 1')
+        ->expectsOutputToContain('Total, exactas al centavo: 1')
+        ->expectsOutputToContain('Total estructurales: 0')
+        ->assertExitCode(0);
+});
+
+test('las peores primero y --detalle limita cuantas se enumeran', function () {
+    legacyPref(7771, 2000.00, 320.00, 2320.00);   // diferencia 1000
+    legacyVenta(7771, 1000.00, 1, 1000.00);
+    legacyPref(7772, 5000.00, 800.00, 5800.00);   // diferencia 4000
+    legacyVenta(7772, 1000.00, 1, 1000.00);
+    legacyPref(7773, 9000.00, 1440.00, 10440.00); // diferencia 8000
+    legacyVenta(7773, 1000.00, 1, 1000.00);
+
+    Illuminate\Support\Facades\Artisan::call('facturacion:comparar-prefacturas', ['--detalle' => 2]);
+    $salida = Illuminate\Support\Facades\Artisan::output();
+
+    // La tabla de estructurales de subtotal: 7773 antes que 7772, y 7771 fuera.
+    $peor = strpos($salida, '7773');
+    $segunda = strpos($salida, '7772');
+    expect($peor)->not->toBeFalse()
+        ->and($segunda)->not->toBeFalse()
+        ->and($peor)->toBeLessThan($segunda)
+        ->and(strpos($salida, '7771'))->toBeFalse()
+        ->and($salida)->toContain('... y 1 más');
+});
+
+test('el aviso final dice que tambien se comprueban el IVA y el total', function () {
+    legacyPref(1, 2000.00, 320.00, 2320.00);
+    legacyVenta(1, 1000.00, 2, 2000.00);
+
+    $this->artisan('facturacion:comparar-prefacturas')
+        ->expectsOutputToContain('el IVA es el 16% del subtotal guardado y el total es subtotal + IVA')
         ->assertExitCode(0);
 });

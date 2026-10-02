@@ -38,6 +38,22 @@ use Illuminate\Support\Facades\DB;
  * Son dos lecturas del mismo dato y ninguna es «la verdadera»; esta usa la de PDO,
  * y por eso difiere en unos centavos de una medición hecha dentro de SQL.
  *
+ * Hay además un tercer mecanismo, latente: MySQL entrega un FLOAT por texto con
+ * unos 6 dígitos significativos (el IVA 46316.8984375 llega como «46316.9»), así
+ * que a partir de un IVA de 10,000 se pierde resolución de centavo, y a partir de
+ * 100,000 la resolución es de un peso. El máximo de este volcado es 98,215.4, o
+ * sea que todavía no cruza ese umbral; si lo cruza, la comparación del IVA dejará
+ * de ser confiable al peso y habrá que leer el valor binario (`iva + 0e0`). Este
+ * mecanismo NO explica los IVA de «redondeo» ni los totales de «redondeo» de la
+ * corrida: salen idénticos con ambas lecturas.
+ *
+ * Lo que sí los explica: el encabezado guarda un subtotal redondeado mientras
+ * que el total y el IVA salen de la suma exacta de los renglones (folio 5:
+ * subtotal guardado 289,480.00, renglones 289,480.50, total = 1.16 × 289,480.50).
+ * Por eso el IVA y el total se juzgan contra el subtotal GUARDADO y no contra el
+ * recalculado. Las diferencias se inclinan algo hacia positivo (230 contra 187)
+ * (un truncamiento iría a la baja, así que esto no lo esconde).
+ *
  * Comparar el subtotal contra la suma de los importes GUARDADOS en lugar de la
  * recalculada da otra clasificación (muchos menos estructurales) porque esconde
  * la segunda inconsistencia dentro de la primera.
@@ -241,7 +257,7 @@ class CompararPrefacturas extends Command
         $this->newLine();
         $this->line('Qué prueba esto: la fidelidad de la aritmética. Dados los mismos renglones,');
         $this->line('el mismo precio y la misma cantidad, la fórmula da el mismo importe y el');
-        $this->line('subtotal es la suma de los importes.');
+        $this->line('subtotal es la suma de los importes, el IVA es el 16% del subtotal guardado y el total es subtotal + IVA.');
         $this->line('Qué NO prueba el extremo a extremo: las cantidades de estancia las teclea una');
         $this->line('persona y no son reproducibles desde el dato. Si alguien cobró dos pernoctas');
         $this->line('donde correspondían tres, esto no lo detecta. "Todo cuadra" aquí no significa más que eso.');
@@ -326,7 +342,7 @@ class CompararPrefacturas extends Command
     private function reportar(string $nombre, array $a, int $detalle, string $colGuardado, string $colEsperado): void
     {
         $this->line("{$nombre} idénticas: {$a['identicas']}");
-        $this->line("  de ellas, exactas al centavo: {$a['exactas']}");
+        $this->line("{$nombre}, exactas al centavo: {$a['exactas']}");
         $this->line("{$nombre} redondeo: {$a['redondeo']}");
         $this->line("{$nombre} estructurales: ".count($a['estructurales']));
 
