@@ -10,12 +10,24 @@ class FactFormaPago extends Model
     public const STATUS_ACTIVO = 'A';
     public const STATUS_INACTIVO = 'N';
 
+    /** Las tres que el código reconoce: cada una tiene su propia regla de cobro. */
+    public const CONCEPTO_EFECTIVO = 'efectivo';
+
+    public const CONCEPTO_AMEX = 'amex';
+
+    public const CONCEPTO_AVCARD = 'avcard';
+
     protected $table = 'fact_formas_pago';
 
-    protected $fillable = ['nombre', 'status'];
+    protected $fillable = ['nombre', 'concepto', 'status'];
 
     public function scopeActivos(Builder $query): Builder
     {
         return $query->where('status', self::STATUS_ACTIVO);
+    }
+
+    public function scopePorConcepto(Builder $query, string $concepto): Builder
+    {
+        return $query->where('concepto', $concepto);
     }
 }

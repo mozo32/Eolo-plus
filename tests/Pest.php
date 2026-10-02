@@ -264,3 +264,33 @@ function cerrarConSello(App\Models\FactPrefactura $p, string $subtotal, string $
     return $p->fresh();
 }
 
+/**
+ * Las siete formas de pago del catálogo, con el concepto de las tres que el
+ * código reconoce. Devuelve [concepto o nombre => modelo] para poder tomar una
+ * por su concepto sin otra consulta.
+ *
+ * @return array<string, App\Models\FactFormaPago>
+ */
+function formasDePago(): array
+{
+    $definicion = [
+        'Visa' => null,
+        'Mastercard' => null,
+        'Amex' => App\Models\FactFormaPago::CONCEPTO_AMEX,
+        'Efectivo' => App\Models\FactFormaPago::CONCEPTO_EFECTIVO,
+        'AvCard by WFS' => App\Models\FactFormaPago::CONCEPTO_AVCARD,
+        'Transferencia' => null,
+        'Tarjeta Remota' => null,
+    ];
+
+    $formas = [];
+
+    foreach ($definicion as $nombre => $concepto) {
+        $formas[$concepto ?? $nombre] = App\Models\FactFormaPago::firstOrCreate(
+            ['nombre' => $nombre],
+            ['concepto' => $concepto],
+        );
+    }
+
+    return $formas;
+}

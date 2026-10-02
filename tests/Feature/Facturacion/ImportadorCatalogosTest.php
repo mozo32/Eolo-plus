@@ -231,9 +231,9 @@ test('un nombre de cliente repetido en el origen da un hallazgo y se importa una
     expect(FactCliente::count())->toBe(2)
         ->and(FactCliente::where('nombre', 'Aeroservicios')->value('rfc'))->toBe('AAA010101AAA')
         ->and($resultado->conteos['clientes'])->toBe(2)
-        ->and($resultado->hallazgos)->toHaveCount(2)
-        ->and($resultado->hallazgos[0])->toContain('AEROSERVICIOS')
-        ->and($resultado->hallazgos[1])->toContain('Aeroservícios');
+        ->and(hallazgosDelCatalogo($resultado))->toHaveCount(2)
+        ->and(hallazgosDelCatalogo($resultado)[0])->toContain('AEROSERVICIOS')
+        ->and(hallazgosDelCatalogo($resultado)[1])->toContain('Aeroservícios');
 });
 
 test('un nombre de servicio repetido en el origen da un hallazgo y no se cuenta dos veces', function () {
@@ -249,7 +249,7 @@ test('un nombre de servicio repetido en el origen da un hallazgo y no se cuenta 
         ->and((float) FactServicio::first()->precio_unitario)->toBe(100.0)
         ->and($resultado->conteos['servicios'])->toBe(1)
         ->and($resultado->conteos['servicios_sin_categoria'])->toBe(1)
-        ->and($resultado->hallazgos)->toHaveCount(1);
+        ->and(hallazgosDelCatalogo($resultado))->toHaveCount(1);
 });
 
 test('un cliente sin nombre no se importa y se reporta', function () {
@@ -261,7 +261,7 @@ test('un cliente sin nombre no se importa y se reporta', function () {
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
     expect(FactCliente::count())->toBe(1)
-        ->and($resultado->hallazgos)->toHaveCount(1);
+        ->and(hallazgosDelCatalogo($resultado))->toHaveCount(1);
 });
 
 test('las categorias de servicio se importan por nombre, sin la categoria cero', function () {
@@ -286,8 +286,8 @@ test('un servicio que apunta a una categoria inexistente queda sin clasificar y 
 
     expect(FactServicio::first()->categoria_servicio_id)->toBeNull()
         ->and($resultado->conteos['servicios_sin_categoria'])->toBe(1)
-        ->and($resultado->hallazgos)->toHaveCount(1)
-        ->and($resultado->hallazgos[0])->toContain('42');
+        ->and(hallazgosDelCatalogo($resultado))->toHaveCount(1)
+        ->and(hallazgosDelCatalogo($resultado)[0])->toContain('42');
 });
 
 /*
@@ -365,11 +365,11 @@ test('un espacio final en el nombre se recorta y se reporta con su id y los dos 
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
     expect(FactCategoriaServicio::pluck('nombre')->all())->toBe(['Combustible & Servicios'])
-        ->and($resultado->hallazgos)->toHaveCount(1)
-        ->and($resultado->hallazgos[0])->toContain('tb_categoria_serv')
-        ->and($resultado->hallazgos[0])->toContain('id 3')
-        ->and($resultado->hallazgos[0])->toContain("'Combustible & Servicios '")
-        ->and($resultado->hallazgos[0])->toContain("'Combustible & Servicios'");
+        ->and(hallazgosDelCatalogo($resultado))->toHaveCount(1)
+        ->and(hallazgosDelCatalogo($resultado)[0])->toContain('tb_categoria_serv')
+        ->and(hallazgosDelCatalogo($resultado)[0])->toContain('id 3')
+        ->and(hallazgosDelCatalogo($resultado)[0])->toContain("'Combustible & Servicios '")
+        ->and(hallazgosDelCatalogo($resultado)[0])->toContain("'Combustible & Servicios'");
 });
 
 test('un espacio duro U+00A0 en el nombre se vuelve espacio normal y se reporta', function () {
@@ -380,10 +380,10 @@ test('un espacio duro U+00A0 en el nombre se vuelve espacio normal y se reporta'
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
     expect(FactProveedor::pluck('nombre')->all())->toBe(['ARTURO GARDUÑO'])
-        ->and($resultado->hallazgos)->toHaveCount(1)
-        ->and($resultado->hallazgos[0])->toContain('tb_proveedor')
-        ->and($resultado->hallazgos[0])->toContain('id 4')
-        ->and($resultado->hallazgos[0])->toContain('ARTURO GARDUÑO');
+        ->and(hallazgosDelCatalogo($resultado))->toHaveCount(1)
+        ->and(hallazgosDelCatalogo($resultado)[0])->toContain('tb_proveedor')
+        ->and(hallazgosDelCatalogo($resultado)[0])->toContain('id 4')
+        ->and(hallazgosDelCatalogo($resultado)[0])->toContain('ARTURO GARDUÑO');
 });
 
 test('la normalizacion colapsa corridas de espacios y aplica a clientes, servicios y formas de pago', function () {
@@ -396,7 +396,7 @@ test('la normalizacion colapsa corridas de espacios y aplica a clientes, servici
     expect(FactCliente::pluck('nombre')->all())->toBe(['Hipotecaria Arbi'])
         ->and(FactServicio::pluck('nombre')->all())->toBe(['Uso de hangar'])
         ->and(FactFormaPago::pluck('nombre')->all())->toBe(['Efectivo'])
-        ->and($resultado->hallazgos)->toHaveCount(3);
+        ->and(hallazgosDelCatalogo($resultado))->toHaveCount(3);
 });
 
 test('un nombre ya limpio no genera hallazgo de normalizacion', function () {
@@ -404,7 +404,7 @@ test('un nombre ya limpio no genera hallazgo de normalizacion', function () {
 
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
-    expect($resultado->hallazgos)->toBe([]);
+    expect(hallazgosDelCatalogo($resultado))->toBe([]);
 });
 
 /*
@@ -425,9 +425,9 @@ test('formas de pago y proveedores con nombre repetido no se cuentan dos veces y
 
     expect($resultado->conteos['formas_pago'])->toBe(2)
         ->and($resultado->conteos['proveedores'])->toBe(1)
-        ->and($resultado->hallazgos)->toHaveCount(2)
-        ->and(implode(' ', $resultado->hallazgos))->toContain('EFECTIVO')
-        ->and(implode(' ', $resultado->hallazgos))->toContain('Eolo');
+        ->and(hallazgosDelCatalogo($resultado))->toHaveCount(2)
+        ->and(implode(' ', hallazgosDelCatalogo($resultado)))->toContain('EFECTIVO')
+        ->and(implode(' ', hallazgosDelCatalogo($resultado)))->toContain('Eolo');
 });
 
 test('dos categorias de servicio con el mismo nombre: un solo conteo, hallazgo, y los servicios de la segunda no quedan huerfanos', function () {
@@ -446,8 +446,8 @@ test('dos categorias de servicio con el mismo nombre: un solo conteo, hallazgo, 
         ->and($resultado->conteos['servicios_sin_categoria'])->toBe(0)
         ->and(FactServicio::where('nombre', 'Dos')->value('categoria_servicio_id'))
         ->toBe(FactServicio::where('nombre', 'Uno')->value('categoria_servicio_id'))
-        ->and($resultado->hallazgos)->toHaveCount(1)
-        ->and($resultado->hallazgos[0])->toContain('HÁNDLING');
+        ->and(hallazgosDelCatalogo($resultado))->toHaveCount(1)
+        ->and(hallazgosDelCatalogo($resultado)[0])->toContain('HÁNDLING');
 });
 
 /*
@@ -467,7 +467,7 @@ test('dos nombres enteramente no latinos y distintos se importan los dos', funct
     expect($resultado->conteos['clientes'])->toBe(2)
         ->and($resultado->conteos['proveedores'])->toBe(2)
         ->and(FactCliente::count())->toBe(2)
-        ->and($resultado->hallazgos)->toBe([]);
+        ->and(hallazgosDelCatalogo($resultado))->toBe([]);
 });
 
 test('correrlo dos veces no cambia categoria de los servicios ni toca las filas de firstOrCreate', function () {
@@ -513,10 +513,10 @@ test('categorias, formas de pago y proveedores con nombre vacio se omiten y se r
     expect($resultado->conteos['categorias_servicio'])->toBe(1)
         ->and($resultado->conteos['formas_pago'])->toBe(1)
         ->and($resultado->conteos['proveedores'])->toBe(1)
-        ->and($resultado->hallazgos)->toHaveCount(3)
-        ->and(implode(' ', $resultado->hallazgos))->toContain('tb_categoria_serv')
-        ->and(implode(' ', $resultado->hallazgos))->toContain('tb_tip_fpago')
-        ->and(implode(' ', $resultado->hallazgos))->toContain('tb_proveedor');
+        ->and(hallazgosDelCatalogo($resultado))->toHaveCount(3)
+        ->and(implode(' ', hallazgosDelCatalogo($resultado)))->toContain('tb_categoria_serv')
+        ->and(implode(' ', hallazgosDelCatalogo($resultado)))->toContain('tb_tip_fpago')
+        ->and(implode(' ', hallazgosDelCatalogo($resultado)))->toContain('tb_proveedor');
 });
 
 test('un servicio cuya categoria existe pero no tiene nombre lo dice asi, no "no existe"', function () {
@@ -525,7 +525,7 @@ test('un servicio cuya categoria existe pero no tiene nombre lo dice asi, no "no
 
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
-    $servicio = collect($resultado->hallazgos)->first(fn ($h) => str_contains($h, "'Suelto'"));
+    $servicio = collect(hallazgosDelCatalogo($resultado))->first(fn ($h) => str_contains($h, "'Suelto'"));
 
     expect($servicio)->toContain('sin nombre')
         ->and($servicio)->not->toContain('no existe')
@@ -589,7 +589,7 @@ test('corregir el precio del servicio de combustible sale como hallazgo con los 
 
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
-    $hallazgo = collect($resultado->hallazgos)->first(fn ($h) => str_contains($h, 'Combustible JET A-1'));
+    $hallazgo = collect(hallazgosDelCatalogo($resultado))->first(fn ($h) => str_contains($h, 'Combustible JET A-1'));
 
     expect($hallazgo)->not->toBeNull()
         ->and($hallazgo)->toContain('26.0640')
@@ -625,7 +625,7 @@ test('en la primera importacion el precio ya coincide: ni hallazgo ni bitacora',
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
     expect((float) servicioCombustibleImportado()->precio_unitario)->toBe(26.0640)
-        ->and($resultado->hallazgos)->toBe([])
+        ->and(hallazgosDelCatalogo($resultado))->toBe([])
         ->and(Bitacora::where('accion', Bitacora::ACCION_ACTUALIZAR)->count())->toBe(0);
 });
 
@@ -640,7 +640,7 @@ test('la simulacion de la correccion del precio de combustible no escribe nada',
 
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
 
-    expect(collect($resultado->hallazgos)->contains(fn ($h) => str_contains($h, '28.1750')))->toBeTrue()
+    expect(collect(hallazgosDelCatalogo($resultado))->contains(fn ($h) => str_contains($h, '28.1750')))->toBeTrue()
         ->and((float) $servicio->fresh()->precio_unitario)->toBe(28.1750)
         ->and(Bitacora::count())->toBe(0);
 });
@@ -759,7 +759,7 @@ test('el nombre repetido sigue dando hallazgo en los servicios sin concepto, y e
 
     expect(FactServicio::whereNull('concepto')->count())->toBe(1)
         ->and(FactServicio::porConcepto(FactServicio::CONCEPTO_COMBUSTIBLE)->count())->toBe(1)
-        ->and(collect($resultado->hallazgos)->filter(fn ($h) => str_contains($h, 'Handl'))->count())->toBe(1);
+        ->and(collect(hallazgosDelCatalogo($resultado))->filter(fn ($h) => str_contains($h, 'Handl'))->count())->toBe(1);
 });
 
 test('un servicio sin concepto no pisa a uno con concepto que se renombro a su mismo nombre', function () {
@@ -806,7 +806,7 @@ test('si la fila con concepto renombrada y otra sin concepto comparten el nombre
 
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
-    $hallazgo = collect($resultado->hallazgos)->first(fn ($h) => str_contains($h, "id {$conConcepto->id}") && str_contains($h, "id {$sinConcepto->id}"));
+    $hallazgo = collect(hallazgosDelCatalogo($resultado))->first(fn ($h) => str_contains($h, "id {$conConcepto->id}") && str_contains($h, "id {$sinConcepto->id}"));
 
     expect($hallazgo)->not->toBeNull()
         ->and($hallazgo)->toContain('concepto')
@@ -823,7 +823,7 @@ test('sin una segunda fila con el mismo nombre no hay hallazgo de duplicado al r
 
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
-    expect($resultado->hallazgos)->toBe([]);
+    expect(hallazgosDelCatalogo($resultado))->toBe([]);
 });
 
 test('el hallazgo de la fila gemela lista todas las filas sin concepto que comparten el nombre', function () {
@@ -836,7 +836,105 @@ test('el hallazgo de la fila gemela lista todas las filas sin concepto que compa
 
     $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
-    expect($resultado->hallazgos)->toHaveCount(1)
-        ->and($resultado->hallazgos[0])->toContain("id {$conConcepto->id}")
-        ->and($resultado->hallazgos[0])->toContain("ids {$uno->id}, {$dos->id}");
+    expect(hallazgosDelCatalogo($resultado))->toHaveCount(1)
+        ->and(hallazgosDelCatalogo($resultado)[0])->toContain("id {$conConcepto->id}")
+        ->and(hallazgosDelCatalogo($resultado)[0])->toContain("ids {$uno->id}, {$dos->id}");
+});
+
+/**
+ * Los hallazgos del importador sin los que avisan de que el origen simulado no trae
+ * las formas de pago 3, 4 y 5 (las del concepto, Task 2 del bloque 3). Estas pruebas
+ * son de otros catálogos y no siembran esas filas: sin el filtro cada una contaría
+ * tres hallazgos que no son suyos. Las pruebas del concepto sí los miran, al final.
+ *
+ * @return list<string>
+ */
+function hallazgosDelCatalogo(App\Services\ResultadoImportacion $resultado): array
+{
+    return array_values(array_filter(
+        $resultado->hallazgos,
+        fn (string $h) => ! str_starts_with($h, 'El origen no tiene la forma de pago con id'),
+    ));
+}
+
+/*
+ * El concepto de las formas de pago (bloque 3, Task 2). Los ids 3, 4 y 5 de
+ * `tb_tip_fpago` son los que el sistema viejo usa hardcodeados (Amex, Efectivo,
+ * AvCard by WFS); aquí se siembran con esos ids a propósito.
+ */
+function sembrarFormasDePagoLegacy(): void
+{
+    DB::connection('remota')->table('tb_tip_fpago')->insert([
+        ['id_tipo_formas' => 1, 'tipo_forma' => 'Visa'],
+        ['id_tipo_formas' => 3, 'tipo_forma' => 'Amex'],
+        ['id_tipo_formas' => 4, 'tipo_forma' => 'Efectivo'],
+        ['id_tipo_formas' => 5, 'tipo_forma' => 'AvCard by WFS'],
+    ]);
+}
+
+test('el importador asigna a las formas de pago 3, 4 y 5 su concepto', function () {
+    sembrarFormasDePagoLegacy();
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactFormaPago::whereNotNull('concepto')->pluck('nombre', 'concepto')->all())->toBe([
+        FactFormaPago::CONCEPTO_AMEX => 'Amex',
+        FactFormaPago::CONCEPTO_EFECTIVO => 'Efectivo',
+        FactFormaPago::CONCEPTO_AVCARD => 'AvCard by WFS',
+    ])
+        ->and(FactFormaPago::where('nombre', 'Visa')->sole()->concepto)->toBeNull();
+});
+
+test('las formas de pago ya importadas sin concepto lo reciben al reimportar, sin duplicarse', function () {
+    // El estado de produccion al migrar: las filas existen, sin concepto.
+    $efectivo = FactFormaPago::create(['nombre' => 'Efectivo']);
+    sembrarFormasDePagoLegacy();
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactFormaPago::count())->toBe(4)
+        ->and($efectivo->fresh()->concepto)->toBe(FactFormaPago::CONCEPTO_EFECTIVO);
+});
+
+test('correr el importador dos veces con conceptos no choca con el indice unico ni duplica', function () {
+    sembrarFormasDePagoLegacy();
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactFormaPago::count())->toBe(4)
+        ->and(FactFormaPago::whereNotNull('concepto')->count())->toBe(3)
+        ->and($resultado->hallazgos)->toBe([]);
+});
+
+test('una forma de pago renombrada en pantalla sigue siendo la misma tras reimportar, sin crear otra', function () {
+    sembrarFormasDePagoLegacy();
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+    $amex = FactFormaPago::porConcepto(FactFormaPago::CONCEPTO_AMEX)->sole();
+    $amex->update(['nombre' => 'American Express']);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactFormaPago::count())->toBe(4)
+        ->and(FactFormaPago::porConcepto(FactFormaPago::CONCEPTO_AMEX)->sole()->id)->toBe($amex->id)
+        ->and($amex->fresh()->nombre)->toBe('American Express')
+        ->and(FactFormaPago::where('nombre', 'Amex')->exists())->toBeFalse();
+});
+
+test('si el origen no trae las formas 3, 4 y 5 el importador lo reporta en espanol', function () {
+    DB::connection('remota')->table('tb_tip_fpago')->insert([['id_tipo_formas' => 1, 'tipo_forma' => 'Visa']]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect($resultado->hallazgos)->toHaveCount(3)
+        ->and($resultado->hallazgos[0])->toContain("concepto 'amex'")
+        ->and(FactFormaPago::whereNotNull('concepto')->count())->toBe(0);
+});
+
+test('una simulacion no deja el concepto asignado', function () {
+    sembrarFormasDePagoLegacy();
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
+
+    expect(FactFormaPago::count())->toBe(0);
 });

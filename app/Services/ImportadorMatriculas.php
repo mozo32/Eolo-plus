@@ -62,6 +62,18 @@ class ImportadorMatriculas
         4 => FactServicio::CONCEPTO_ESTANCIA_PERNOCTA,
     ];
 
+    /**
+     * Ids de `tb_tip_fpago` que llevan concepto. Son estables: el sistema viejo los
+     * usa hardcodeados (`$id_fp=3` en mpamex.php, `$id_fp==4` y `==5` en mpago.php).
+     *
+     * @var array<int,string>
+     */
+    private const CONCEPTOS_FORMA_POR_ID_VIEJO = [
+        3 => FactFormaPago::CONCEPTO_AMEX,
+        4 => FactFormaPago::CONCEPTO_EFECTIVO,
+        5 => FactFormaPago::CONCEPTO_AVCARD,
+    ];
+
     /** Los cuatro que `insert22.php` agrega juntos cuando el destino es internacional. */
     private const SERVICIOS_PAQUETE_INTERNACIONAL = [9, 10, 14, 93];
 
@@ -904,7 +916,48 @@ class ImportadorMatriculas
     {
         $this->importarCatalogoSimple(
             'tb_tip_fpago', 'id_tipo_formas', 'tipo_forma', 'Forma de pago', FactFormaPago::class, 'formas_pago',
+            // Una forma con concepto que ya existe se reconoce por él: si alguien la
+            // renombró en pantalla, `firstOrCreate` por nombre crearía una segunda.
+            yaTieneFila: fn (int|string $idViejo) => isset(self::CONCEPTOS_FORMA_POR_ID_VIEJO[$idViejo])
+                && FactFormaPago::porConcepto(self::CONCEPTOS_FORMA_POR_ID_VIEJO[$idViejo])->exists(),
         );
+
+        $this->asignarConceptosDeFormasPago();
+    }
+
+    /**
+     * El concepto se asigna DESPUÉS de importar, por el id del origen, y no dentro
+     * de `importarCatalogoSimple()`, que comparten los proveedores y no tienen
+     * concepto.
+     *
+     * Se busca la fila por su concepto primero y por su nombre después: si alguien
+     * ya la renombró en pantalla, el concepto manda y el nombre no se toca (el
+     * catálogo es editable a propósito).
+     */
+    private function asignarConceptosDeFormasPago(): void
+    {
+        foreach (self::CONCEPTOS_FORMA_POR_ID_VIEJO as $idViejo => $concepto) {
+            $nombre = $this->legacy('tb_tip_fpago')->where('id_tipo_formas', $idViejo)->value('tipo_forma');
+
+            if ($nombre === null) {
+                $this->resultado->hallazgo("El origen no tiene la forma de pago con id {$idViejo}, que es la que lleva el concepto '{$concepto}'. Las reglas de cobro que dependen de ese concepto no se van a aplicar a ninguna fila.");
+
+                continue;
+            }
+
+            $forma = FactFormaPago::porConcepto($concepto)->first()
+                ?? FactFormaPago::whereNull('concepto')->where('nombre', trim((string) $nombre))->first();
+
+            if ($forma === null) {
+                $this->resultado->hallazgo("No se encontró en Eolo-plus la forma de pago '{$nombre}' para asignarle el concepto '{$concepto}'.");
+
+                continue;
+            }
+
+            if ($forma->concepto !== $concepto) {
+                $forma->update(['concepto' => $concepto]);
+            }
+        }
     }
 
     private function importarProveedores(): void
@@ -919,9 +972,12 @@ class ImportadorMatriculas
      * con collation que no distingue caja ni acentos, así que 'EOLO' y 'Eolo'
      * serían la misma fila: el segundo se omite y se reporta en lugar de contarse.
      *
+     * `$yaTieneFila` recibe el id del origen y, si devuelve true, la fila ya existe
+     * por otra vía que el nombre y no se vuelve a crear (sí se cuenta).
+     *
      * @param  class-string<\Illuminate\Database\Eloquent\Model>  $modelo
      */
-    private function importarCatalogoSimple(string $tabla, string $llavePrimaria, string $columna, string $etiqueta, string $modelo, string $conteo): void
+    private function importarCatalogoSimple(string $tabla, string $llavePrimaria, string $columna, string $etiqueta, string $modelo, string $conteo, ?\Closure $yaTieneFila = null): void
     {
         $vistos = [];
 
@@ -943,7 +999,10 @@ class ImportadorMatriculas
 
             $vistos[$llave] = $nombre;
 
-            $modelo::firstOrCreate(['nombre' => $nombre]);
+            if ($yaTieneFila === null || ! $yaTieneFila($id)) {
+                $modelo::firstOrCreate(['nombre' => $nombre]);
+            }
+
             $this->resultado->contar($conteo);
         }
     }
