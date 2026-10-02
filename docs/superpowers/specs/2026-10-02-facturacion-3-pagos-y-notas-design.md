@@ -210,24 +210,50 @@ los hechos medidos.
 
    El renglón de comisión se guarda con dos decimales, porque es dinero que el
    cliente ve impreso y un precio con cuatro decimales en el PDF es peor. Pero ese
-   redondeo, más el del IVA, hace que el total no siempre caiga en el monto tecleado:
-   **medido contra los 771 pagos Amex reales del histórico, cae exacto en 476, por
-   debajo en 161 y por encima en 134**, con desvíos de hasta cuatro centavos. Un tope
-   que rechace lo que exceda a lo que falta por cobrar rechazaría esos 161, o sea una
-   quinta parte de los pagos Amex reales.
+   redondeo, más el del IVA, hace que el total no siempre caiga en el monto tecleado.
+
+   **Las cifras, medidas bien.** Una primera medición daba «476 exactos, 161 por debajo
+   y 134 por encima de 771», con desvíos de hasta cuatro centavos. **Era ruido**: derivó
+   el subtotal de partida restando la comisión al `subtotal` guardado, que es un `float`
+   en el origen. Tomando la partida como `SUM(tb_venta.importe)` sin el servicio 100, que
+   son decimales exactos, el reparto real sobre **718 folios** con un solo pago Amex y una
+   sola comisión es:
+
+   | | |
+   |---|---|
+   | caen exactos con la fórmula sola | **690** |
+   | necesitan ajuste (de 1 a **3 centavos**) | **21** |
+   | sin candidato en la ventana | **7** |
+
+   Lo que **sí** justifica el ajuste no es el histórico, es el uso futuro: los documentos
+   viejos se armaron **por diferencia** —`monto/1.16 − partida` reproduce la comisión del
+   viejo en 712 de 718 folios, mejor que la fórmula `0.06/1.2296`, que acierta en 695— así
+   que siempre cerraban. Con un monto **nominal**, el que un operador teclea hoy
+   (`round(partida × 1.2296, 2)`), el **13.6%** de los totales es inalcanzable, y sin
+   absorber el redondeo **unas 7 de cada 100** prefacturas pagadas completas con Amex se
+   rechazarían por un centavo.
 
    Así que la comisión se ajusta unos centavos hasta que el total cuadre:
    `ComisionAmex::calcular()` sigue siendo la **autoridad y el punto de partida**, y
    `registrarAmex()` busca, en una ventana acotada y documentada alrededor de ese
    valor, la comisión cuyo total dé exactamente el monto tecleado.
 
-   **Esto es una excepción consciente a «ningún cobro puede cambiar»**, y la única del
-   bloque: el renglón de comisión puede diferir del que calculó el sistema viejo en
-   unos centavos. Se acepta porque la alternativa es peor de las dos maneras —o el
-   documento queda por debajo del cargo real a la tarjeta, o la pantalla marca «se
-   cobró de más» en uno de cada cinco pagos Amex, que es ruido que el operador
-   aprendería a ignorar—. **El comando de comparación tiene que reportar este ajuste
-   como una diferencia esperada, nombrada y contada, no esconderla.**
+   **En principio es una excepción a «ningún cobro puede cambiar» — y medida, no cambia
+   ninguno.** En **las 21 comisiones ajustadas del histórico, la comisión que cuadra
+   coincide al centavo con la que guardó el sistema viejo**, y en las 690 que no se ajustan
+   también. El ajuste no aleja del viejo: **acerca**. La razón es que el total crece de
+   forma estrictamente monótona con la comisión (1 o 2 centavos de total por centavo de
+   comisión), así que para un documento viejo coherente solo existe una comisión posible y
+   es la que el ajuste encuentra.
+
+   **La ventana de ±5 centavos es una guarda deliberada que el viejo no tenía.** El viejo
+   absorbía cualquier desvío, de cualquier tamaño, porque calculaba por diferencia; un
+   monto mal tecleado se tragaba entero en la comisión. Aquí, pasados unos 6 centavos, no
+   hay candidato: se queda la fórmula y el tope rechaza. Eso es intencionado.
+
+   **El comando de comparación tiene que reportar el ajuste nombrado y contado** —los 21 y
+   su desvío máximo— y **contar aparte los 7 folios sin candidato** (47, 200, 587, 1732,
+   2061, 2062 y 2235), que se quedan con la fórmula y por tanto sí difieren del viejo.
 7. **Borrar un pago Amex borra la comisión que ese pago creó**, no todas las de la
    prefactura, que es lo que hace `eliminar_f.php`.
 

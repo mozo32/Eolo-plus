@@ -1880,10 +1880,18 @@ de 771 pagos reales y haría imposible pagar una prefactura completa con una sol
 
 **La comisión ABSORBE el redondeo** (decisión del usuario, 2026-10-02). El renglón se
 guarda con dos decimales —es dinero que el cliente ve impreso— pero ese redondeo más el
-del IVA hacen que el total no caiga siempre en el monto tecleado: medido contra los 771
-pagos Amex reales del histórico, cae exacto en 476, **por debajo en 161** y por encima en
-134, con desvíos de hasta cuatro centavos. Sin absorber, el tope rechazaría esos 161, o
-sea una quinta parte de los pagos Amex reales.
+del IVA hacen que el total no caiga siempre en el monto tecleado.
+
+Medido bien —con la partida como `SUM(tb_venta.importe)` sin el servicio 100, que son
+decimales exactos— sobre **718 folios** con un solo pago Amex y una sola comisión: **690
+caen exactos** con la fórmula sola, **21 necesitan ajuste** (de 1 a 3 centavos) y **7 no
+tienen candidato**. Una medición anterior decía «161 de 771 por debajo»; era **ruido**,
+porque derivaba la partida del `subtotal` guardado, que es un `float`.
+
+Lo que justifica el ajuste es el **uso futuro**, no el histórico: los documentos viejos se
+armaron por diferencia y siempre cerraban, pero con un monto nominal
+(`round(partida × 1.2296, 2)`) el **13.6%** de los totales es inalcanzable y **unas 7 de
+cada 100** prefacturas pagadas completas con Amex se rechazarían por un centavo.
 
 `ComisionAmex::calcular()` sigue siendo la **autoridad y el punto de partida**, y
 `registrarAmex()` busca en una **ventana acotada y documentada** alrededor de ese valor la
@@ -1892,9 +1900,14 @@ mueve el total en aproximadamente `1.16 × d`, así que sumar la diferencia tal 
 pasa de largo. Si ningún candidato de la ventana cuadra, se queda el valor de
 `ComisionAmex::calcular()` y el tope decide; eso tiene que estar escrito.
 
-Es la **única excepción consciente a «ningún cobro puede cambiar»** del bloque: el
-renglón puede diferir del que calculó el sistema viejo en unos centavos. La Task 9 lo
-reporta como diferencia esperada.
+**En principio es una excepción a «ningún cobro puede cambiar» — y medida, no cambia
+ninguno:** en las 21 ajustadas, la comisión que cuadra **coincide al centavo con la del
+sistema viejo**. El ajuste acerca, no aleja. Y la ventana de ±5 centavos es una guarda
+deliberada que el viejo no tenía: él absorbía cualquier desvío porque calculaba por
+diferencia, así que un monto mal tecleado se lo tragaba entero.
+
+La Task 9 reporta los 21 ajustes con su desvío máximo, y **cuenta aparte los 7 folios sin
+candidato** (47, 200, 587, 1732, 2061, 2062 y 2235), que sí difieren del viejo.
 
 **Hace falta un servicio de catálogo para la comisión.** En el origen es
 `id_servicio = 100`, «Comisión AMEX». Se reconoce por concepto, como los de
@@ -2972,13 +2985,23 @@ compartían etiqueta en la salida.
    no siguen ninguna. **Los folios de los dos últimos grupos se listan uno por uno**:
    el bloque 6 tiene que decidir qué hacer con ellos al importar.
 
-   **Y una cuarta cuenta, obligatoria:** cuántas comisiones difieren porque
-   `registrarAmex()` **absorbió el redondeo** para que el total cuadrara con el cargo a la
-   tarjeta. Es la única excepción consciente a «ningún cobro puede cambiar» del bloque
-   (decisión del usuario del 2026-10-02) y **tiene que salir nombrada y contada, con su
-   propia etiqueta y con el desvío máximo**, no escondida dentro de «exactas al centavo»
-   ni de «sin explicación». Medido sobre los 771 pagos reales, el total cae exacto en 476,
-   por debajo en 161 y por encima en 134, con desvíos de hasta cuatro centavos.
+   **Y dos cuentas más, obligatorias, con etiqueta propia cada una** — no escondidas
+   dentro de «exactas al centavo» ni de «sin explicación»:
+
+   - **Las comisiones que `registrarAmex()` AJUSTA** para que el total cuadre con el cargo
+     a la tarjeta (decisión del usuario del 2026-10-02), con su **desvío máximo**. Medido
+     sobre 718 folios con un solo pago Amex y una sola comisión: **21 ajustes, de 1 a 3
+     centavos**, y en los 21 la comisión ajustada **coincide al centavo con la del sistema
+     viejo**. Esta cuenta existe para demostrar esa coincidencia, no para excusar una
+     diferencia.
+   - **Los folios sin candidato en la ventana de ±5 centavos**, que se quedan con la
+     fórmula y **sí difieren del viejo**: son **7** — 47, 200, 587, 1732, 2061, 2062 y
+     2235. **El 200 es un caso distinto de los otros seis y hay que contarlo aparte:** es
+     un pago completo (su total viejo cuadra exactamente con el monto) pero el operador
+     tecleó unos 34 pesos menos que `partida × 1.2296`, así que la comisión del viejo se
+     aleja unos 28 pesos de la fórmula y ningún ajuste de ±5 centavos la alcanza. Con la
+     fórmula quedan **32.69 por cobrar**. Los otros seis sí son pagos que no son la
+     prefactura completa.
 3. **El sobrepago derivado** contra el `Cambio` guardado, **en dos listas**: los
    folios sobrepagados con `Cambio = 0` (se esperan **12**) y los que tienen
    `Cambio ≠ 0` sin estar sobrepagados (se esperan **3**).
