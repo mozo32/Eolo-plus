@@ -1865,10 +1865,18 @@ git commit -m "Los pagos, con la regla de cada forma: el efectivo excede, AvCard
   La Task 8 lo llama; la Task 9 verifica la fórmula contra el histórico.
 
 **Lo que hace y por qué:** el operador teclea **lo que se le va a cargar a la
-tarjeta**. El servicio agrega un renglón con el servicio de concepto
-`comision_amex` por `ComisionAmex::calcular(monto, tasa)`, y registra el pago por el
-monto tecleado. Rechaza cuando el monto **supera el subtotal** de la prefactura,
-como `mpamex.php:106`.
+tarjeta**, que es el total final del documento. El servicio agrega un renglón con el
+servicio de concepto `comision_amex` por `ComisionAmex::calcular(monto, tasa)`, y registra
+el pago por el monto tecleado.
+
+**El tope es «lo que falta por cobrar», contando ya la comisión**, y se llama
+`amex_supera_lo_que_falta`. Ese es el que el sistema viejo aplicaba de verdad: en
+`mpago.php`, Amex caía en la rama `else`, la de Visa y Mastercard.
+
+**NO hay tope por el subtotal.** Medido contra el histórico: de los 771 folios Amex con un
+solo pago, **769 tienen un monto que supera el subtotal guardado** y 764 lo tienen igual al
+`Total`, con `Total / subtotal = 1.16` exacto. Un tope por el subtotal habría rechazado 769
+de 771 pagos reales y haría imposible pagar una prefactura completa con una sola pasada.
 
 **Hace falta un servicio de catálogo para la comisión.** En el origen es
 `id_servicio = 100`, «Comisión AMEX». Se reconoce por concepto, como los de
@@ -1948,13 +1956,17 @@ test('la comision usa la tasa de IVA vigente, no un literal', function () {
         ->assertJsonPath('comision', '52.41');
 });
 
-test('el monto Amex no puede superar el subtotal', function () {
+test('el monto Amex no puede superar lo que falta por cobrar, contando su comision', function () {
+    // El operador teclea el total final que se carga a la tarjeta. Medido en el historico:
+    // en 764 de 771 folios Amex el monto coincide con el Total guardado, y 769 de 771 SUPERAN
+    // el subtotal, asi que un tope por el subtotal rechazaria casi todos los pagos reales.
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $p = paraAmex();
+    pagoDe($p, formasDePago()['Visa'], '115000.00');
 
-    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '100000.01'])
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '5000.00'])
         ->assertStatus(422)
-        ->assertJsonPath('codigo', 'comision_supera_subtotal');
+        ->assertJsonPath('codigo', 'amex_supera_lo_que_falta');
 
     expect($p->fresh()->pagos()->count())->toBe(0)
         ->and($p->fresh()->renglones()->count())->toBe(1);
@@ -2089,7 +2101,7 @@ class ServicioDeComisionNoDisponibleException extends RuntimeException {}
             if (bccomp($montoBruto, $subtotal, 2) > 0) {
                 throw new PagoNoPermitidoException(
                     "El monto Amex no puede superar el subtotal de la prefactura, que es {$subtotal}.",
-                    'comision_supera_subtotal',
+                    'amex_supera_lo_que_falta',
                 );
             }
 
@@ -2829,7 +2841,7 @@ Usa los estilos compartidos de `./components/estilos` (`BOTON_PRIMARIO`,
 Los errores del servidor se muestran con el patrón que ya usa el editor: `ErrorApi`
 con `codigo` conocido recarga la ficha y muestra el mensaje del servidor. Los
 códigos nuevos a contemplar son `supera_lo_que_falta`, `avcard_con_combustible`,
-`comision_supera_subtotal`, `servicio_comision_no_disponible` y
+`amex_supera_lo_que_falta`, `servicio_comision_no_disponible` y
 `amex_por_su_endpoint`. Los cinco traen el mensaje en español ya escrito: **muéstralo
 tal cual**, no lo reescribas en el cliente.
 

@@ -287,8 +287,22 @@ cortesía devuelve el importe exacto, con su margen y su ajuste.
 | Amex | Por `registrarAmex()`, que además crea el renglón de comisión |
 | Visa, Mastercard, Transferencia, Tarjeta Remota | Rechazada si el monto supera lo que falta por cobrar |
 
-`registrarAmex()` rechaza con un mensaje propio cuando el bruto tecleado supera el
-subtotal, como hace `mpamex.php` («La comisión supera el monto del subtotal»).
+`registrarAmex()` rechaza cuando el bruto tecleado **supera lo que falta por cobrar**,
+contando ya la comisión que va a añadir. Ese es el tope que el sistema viejo aplicaba de
+verdad: en `mpago.php`, Amex caía en la rama `else`, la de Visa y Mastercard.
+
+**NO se rechaza por superar el subtotal.** Una versión anterior de esta especificación lo
+pedía, copiando la guarda `monto < ftotal` de `mpamex.php:106`, y **está medido que es
+incompatible con el dato real**: de los 771 folios Amex del histórico con un solo pago,
+**769 tienen un monto que supera el subtotal guardado**, así que esa guarda los habría
+rechazado casi todos. El tope de «lo que falta», en cambio, acepta 769 de los 771 — 764 de
+ellos justo en el borde.
+
+La razón es que **el operador teclea el total final que se carga a la tarjeta**, no el
+subtotal: en 764 de 771 folios el monto coincide con el `Total` guardado, y
+`Total / subtotal = 1.16` exacto, lo que confirma que el subtotal guardado ya incluye la
+comisión. Con la guarda del subtotal, pagar una prefactura completa con una sola pasada de
+Amex sería imposible; es justo lo que esos 764 folios hicieron.
 
 El combustible se detecta por **concepto**, no por id: `FactServicio::CONCEPTO_COMBUSTIBLE`
 existe desde el bloque 2 justo para no depender del `id_servicio = 7` del viejo.
@@ -316,7 +330,7 @@ Todos bajo `subdep:factPrefacturas`, el mismo del bloque 2.
 Códigos de error, siguiendo el patrón del bloque 2 (un `codigo` propio junto al
 mensaje en español): `ya_cerrada` (409), `ya_descartada` (409),
 `avcard_con_combustible` (422), `supera_lo_que_falta` (422),
-`comision_supera_subtotal` (422), `sin_cobro` (422, solo al cerrar sin confirmar).
+`amex_supera_lo_que_falta` (422), `sin_cobro` (422, solo al cerrar sin confirmar).
 
 La ficha de la prefactura (`show`) gana `pagos`, `pagado`, `por_cobrar` y
 `sobrepago`, `cambio` y `cobrado_de_mas`, todos como cadenas, como los totales del
