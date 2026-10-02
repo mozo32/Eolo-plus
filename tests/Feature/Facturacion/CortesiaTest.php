@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Bitacora;
+use App\Models\FactAeronave;
 use App\Models\FactPrefactura;
 use App\Models\FactServicio;
 use App\Services\CargosEstancia;
@@ -288,4 +289,132 @@ test('por el endpoint, recalcular la estancia conserva la cortesia y el mensaje 
         ->assertJsonPath('motivo', 'Se conservó la cortesía de 1 renglón de estancia: pernocta (no se cobran 14028.00).');
 
     expect($p->fresh()->renglones()->sole()->es_cortesia)->toBeTrue();
+});
+
+/** Marca como cortesia los renglones de estancia de los conceptos dados. */
+function marcarCortesiaDeEstancia(FactPrefactura $p, string ...$conceptos): void
+{
+    foreach ($conceptos as $concepto) {
+        $p->fresh()->renglones()->where('concepto', $concepto)->sole()->update(['es_cortesia' => true]);
+    }
+}
+
+test('una cortesia que pasa a cantidad 0 se avisa como perdida aunque otro concepto se recree, y al volver nace cobrada', function () {
+    $p = conEstancia();
+    $cargos = app(CargosEstancia::class);
+
+    $cargos->recalcular($p, pernoctas: 1, transitos2h: 1, transitos12h: 0);
+    marcarCortesiaDeEstancia($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA);
+
+    $resultado = $cargos->recalcular($p->fresh(), pernoctas: 0, transitos2h: 2, transitos12h: 0);
+
+    // El motivo ya no es null: un renglon se recreo, pero otro perdio su cortesia.
+    expect($resultado['renglones'])->toBe(1)
+        ->and($resultado['motivo'])->toBe('Se perdió la cortesía de 1 renglón de estancia que dejó de existir: pernocta. Si ese concepto vuelve a tener cantidad, se cobrará completo.');
+
+    // Y el aviso no mintio: al volver la cantidad, nace cobrado completo.
+    $cargos->recalcular($p->fresh(), pernoctas: 3, transitos2h: 2, transitos12h: 0);
+    $pernocta = $p->fresh()->renglones()->where('concepto', FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->sole();
+
+    expect($pernocta->es_cortesia)->toBeFalse()
+        ->and($pernocta->importe())->toBe('14028.00');
+});
+
+test('una aeronave en Guarda con una cortesia previa dice que se perdio, junto a lo que ya decia', function () {
+    $p = conEstancia();
+    $cargos = app(CargosEstancia::class);
+
+    $cargos->recalcular($p, pernoctas: 1, transitos2h: 1, transitos12h: 0);
+    marcarCortesiaDeEstancia($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA);
+    FactAeronave::where('aeronave_id', $p->aeronave_id)->update(['estatus' => FactAeronave::ESTATUS_GUARDA]);
+
+    $resultado = $cargos->recalcular($p->fresh(), pernoctas: 1, transitos2h: 1, transitos12h: 0);
+
+    expect($resultado['renglones'])->toBe(0)
+        ->and($resultado['motivo'])->toStartWith('La aeronave está en Guarda')
+        ->toContain(' Se quitaron 2 renglones de estancia que ya tenía la prefactura. Se perdió la cortesía de 1 renglón de estancia que dejó de existir: pernocta.');
+});
+
+test('una aeronave sin ficha con una cortesia previa tambien dice que se perdio', function () {
+    $p = conEstancia();
+    $cargos = app(CargosEstancia::class);
+
+    $cargos->recalcular($p, pernoctas: 1, transitos2h: 1, transitos12h: 1);
+    marcarCortesiaDeEstancia($p, FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H, FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H);
+    FactAeronave::where('aeronave_id', $p->aeronave_id)->delete();
+
+    $resultado = $cargos->recalcular($p->fresh(), pernoctas: 1, transitos2h: 1, transitos12h: 1);
+
+    expect($resultado['motivo'])->toStartWith('La matrícula no tiene ficha')
+        ->toContain('Se quitaron 3 renglones')
+        ->toEndWith('Se perdió la cortesía de 2 renglones de estancia que dejaron de existir: tránsito de 2 horas, tránsito de 12 horas. Si esos conceptos vuelven a tener cantidad, se cobrarán completos.');
+});
+
+test('Guarda sin ninguna cortesia previa no menciona cortesias', function () {
+    $p = conEstancia();
+    $cargos = app(CargosEstancia::class);
+
+    $cargos->recalcular($p, pernoctas: 1, transitos2h: 0, transitos12h: 0);
+    FactAeronave::where('aeronave_id', $p->aeronave_id)->update(['estatus' => FactAeronave::ESTATUS_GUARDA]);
+
+    $resultado = $cargos->recalcular($p->fresh(), pernoctas: 1, transitos2h: 0, transitos12h: 0);
+
+    expect($resultado['motivo'])->not->toContain('cortesía');
+});
+
+test('caso mixto: una cortesia se conserva, otra se pierde, y un concepto nuevo nace sin cortesia sin nombrarse', function () {
+    $p = conEstancia();
+    $cargos = app(CargosEstancia::class);
+
+    $cargos->recalcular($p, pernoctas: 1, transitos2h: 1, transitos12h: 0);
+    marcarCortesiaDeEstancia($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA, FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H);
+
+    // Pernocta se recrea (conserva); transito 2 h pasa a 0 (pierde); transito 12 h NO existia antes.
+    $resultado = $cargos->recalcular($p->fresh(), pernoctas: 1, transitos2h: 0, transitos12h: 2);
+
+    $porConcepto = $p->fresh()->renglones->keyBy('concepto');
+
+    expect($porConcepto[FactServicio::CONCEPTO_ESTANCIA_PERNOCTA]->es_cortesia)->toBeTrue()
+        ->and($porConcepto->has(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H))->toBeFalse()
+        ->and($porConcepto[FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H]->es_cortesia)->toBeFalse()
+        ->and($p->fresh()->subtotal())->toBe('4676.00')
+        ->and($resultado['motivo'])->toBe(
+            'Se conservó la cortesía de 1 renglón de estancia: pernocta (no se cobran 4676.00). '
+            .'Se perdió la cortesía de 1 renglón de estancia que dejó de existir: tránsito de 2 horas. Si ese concepto vuelve a tener cantidad, se cobrará completo.'
+        );
+});
+
+test('los avisos se concatenan al motivo previo, en orden: motivo, conservadas, perdidas', function () {
+    $p = conEstancia();
+    $cargos = app(CargosEstancia::class);
+
+    $cargos->recalcular($p, pernoctas: 1, transitos2h: 1, transitos12h: 0);
+    marcarCortesiaDeEstancia($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA, FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H);
+
+    // Ya no hay tarifa de pernocta: su renglon no se recrea y pierde la cortesia.
+    FactAeronave::where('aeronave_id', $p->aeronave_id)->update(['tarifa_pernocta' => null]);
+
+    $resultado = $cargos->recalcular($p->fresh(), pernoctas: 1, transitos2h: 1, transitos12h: 0);
+
+    expect($resultado['motivo'])->toBe(
+        'No hay tarifa de pernocta ni en la matrícula ni en su categoría, así que no se cobró. '
+        .'Se conservó la cortesía de 1 renglón de estancia: tránsito de 2 horas (no se cobran 1144.50). '
+        .'Se perdió la cortesía de 1 renglón de estancia que dejó de existir: pernocta. Si ese concepto vuelve a tener cantidad, se cobrará completo.'
+    );
+});
+
+test('sin tarifa y sin conservar nada, la cortesia perdida se avisa pegada al motivo de la tarifa', function () {
+    $p = conEstancia();
+    $cargos = app(CargosEstancia::class);
+
+    $cargos->recalcular($p, pernoctas: 1, transitos2h: 0, transitos12h: 0);
+    marcarCortesiaDeEstancia($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA);
+    FactAeronave::where('aeronave_id', $p->aeronave_id)->update(['tarifa_pernocta' => null]);
+
+    $resultado = $cargos->recalcular($p->fresh(), pernoctas: 1, transitos2h: 0, transitos12h: 0);
+
+    expect($resultado['motivo'])->toBe(
+        'No hay tarifa de pernocta ni en la matrícula ni en su categoría, así que no se cobró. '
+        .'Se perdió la cortesía de 1 renglón de estancia que dejó de existir: pernocta. Si ese concepto vuelve a tener cantidad, se cobrará completo.'
+    );
 });

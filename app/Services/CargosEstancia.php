@@ -73,27 +73,29 @@ class CargosEstancia
             // haría que el operador cerrara creyendo que no hay estancia y se facturara
             // a una aeronave que no la paga.
             if ($satelite === null) {
+                $perdidas = $this->conceptosEnCortesia($actual);
                 $quitados = $this->quitarEstancia($actual);
 
                 return [
                     'renglones' => 0,
-                    'motivo' => 'La matrícula no tiene ficha de facturación, así que no hay tarifas de estancia que aplicar.'.$this->nota($quitados),
+                    'motivo' => 'La matrícula no tiene ficha de facturación, así que no hay tarifas de estancia que aplicar.'.$this->nota($quitados).$this->avisoDePerdidas($perdidas),
                 ];
             }
 
             if ($satelite->estatus === FactAeronave::ESTATUS_GUARDA) {
+                $perdidas = $this->conceptosEnCortesia($actual);
                 $quitados = $this->quitarEstancia($actual);
 
                 return [
                     'renglones' => 0,
-                    'motivo' => 'La aeronave está en Guarda y una aeronave en Guarda no paga estancia. Si corresponde cobrarla, corrige el estatus de la aeronave a Tránsito y vuelve a recalcular.'.$this->nota($quitados),
+                    'motivo' => 'La aeronave está en Guarda y una aeronave en Guarda no paga estancia. Si corresponde cobrarla, corrige el estatus de la aeronave a Tránsito y vuelve a recalcular.'.$this->nota($quitados).$this->avisoDePerdidas($perdidas),
                 ];
             }
 
             $conceptos = [
-                [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA, 'pernocta', $pernoctas, $satelite->tarifaPernocta()],
-                [FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H, 'tránsito de 2 horas', $transitos2h, $satelite->tarifaTransito2h()],
-                [FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H, 'tránsito de 12 horas', $transitos12h, $satelite->tarifaTransito12h()],
+                [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA, $this->etiquetaDe(FactServicio::CONCEPTO_ESTANCIA_PERNOCTA), $pernoctas, $satelite->tarifaPernocta()],
+                [FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H, $this->etiquetaDe(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H), $transitos2h, $satelite->tarifaTransito2h()],
+                [FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H, $this->etiquetaDe(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H), $transitos12h, $satelite->tarifaTransito12h()],
             ];
 
             // Se reemplazan solo los de estancia. Este borrado es masivo y no pasa
@@ -113,6 +115,7 @@ class CargosEstancia
             $creados = 0;
             $sinTarifa = [];
             $conservadas = [];
+            $conceptosConservados = [];
 
             foreach ($conceptos as [$concepto, $etiqueta, $cantidad, $tarifa]) {
                 if ($cantidad === 0) {
@@ -150,6 +153,7 @@ class CargosEstancia
 
                 if ($renglon->es_cortesia) {
                     $conservadas[] = "{$etiqueta} (no se cobran {$renglon->importeSinCortesia()})";
+                    $conceptosConservados[] = $concepto;
                 }
 
                 $creados++;
@@ -170,6 +174,20 @@ class CargosEstancia
                 $aviso = ($cuantos === 1 ? 'Se conservó la cortesía de 1 renglón de estancia: ' : "Se conservó la cortesía de {$cuantos} renglones de estancia: ")
                     .implode(', ', $conservadas).'.';
                 $motivo = $motivo === null ? $aviso : $motivo.' '.$aviso;
+            }
+
+            // El aviso espejo: una cortesía cuyo renglón no se recreó (cantidad 0 o sin tarifa)
+            // se pierde, y su ausencia en el mensaje se leería como «no se perdió ninguna».
+            $perdidas = [];
+
+            foreach (FactServicio::CONCEPTOS_ESTANCIA as $concepto) {
+                if ($cortesias->get($concepto) && ! in_array($concepto, $conceptosConservados, true)) {
+                    $perdidas[] = $this->etiquetaDe($concepto);
+                }
+            }
+
+            if ($perdidas !== []) {
+                $motivo = trim(($motivo ?? '').$this->avisoDePerdidas($perdidas));
             }
 
             return ['renglones' => $creados, 'motivo' => $motivo];
@@ -281,6 +299,55 @@ class CargosEstancia
     private function quitarEstancia(FactPrefactura $prefactura): int
     {
         return $prefactura->renglones()->whereIn('concepto', FactServicio::CONCEPTOS_ESTANCIA)->delete();
+    }
+
+    private function etiquetaDe(string $concepto): string
+    {
+        return match ($concepto) {
+            FactServicio::CONCEPTO_ESTANCIA_PERNOCTA => 'pernocta',
+            FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H => 'tránsito de 2 horas',
+            FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H => 'tránsito de 12 horas',
+        };
+    }
+
+    /**
+     * Las etiquetas de los conceptos de estancia que hoy son cortesía, en el orden
+     * canónico. Se lee ANTES de borrar: después ya no hay de dónde.
+     *
+     * @return list<string>
+     */
+    private function conceptosEnCortesia(FactPrefactura $prefactura): array
+    {
+        $marcados = $prefactura->renglones()
+            ->whereIn('concepto', FactServicio::CONCEPTOS_ESTANCIA)
+            ->where('es_cortesia', true)
+            ->pluck('concepto')
+            ->all();
+
+        return array_map(
+            $this->etiquetaDe(...),
+            array_values(array_intersect(FactServicio::CONCEPTOS_ESTANCIA, $marcados)),
+        );
+    }
+
+    /**
+     * La cortesía vive en el renglón: si el renglón desaparece, se va con él. Sin cifra
+     * (ya no hay renglón, así que no hay importe que no se cobre). Va con un espacio
+     * delante, como `nota()`, para concatenarse a un motivo.
+     *
+     * @param  list<string>  $etiquetas
+     */
+    private function avisoDePerdidas(array $etiquetas): string
+    {
+        if ($etiquetas === []) {
+            return '';
+        }
+
+        $lista = implode(', ', $etiquetas);
+
+        return count($etiquetas) === 1
+            ? " Se perdió la cortesía de 1 renglón de estancia que dejó de existir: {$lista}. Si ese concepto vuelve a tener cantidad, se cobrará completo."
+            : ' Se perdió la cortesía de '.count($etiquetas)." renglones de estancia que dejaron de existir: {$lista}. Si esos conceptos vuelven a tener cantidad, se cobrarán completos.";
     }
 
     private function nota(int $quitados): string
