@@ -100,7 +100,7 @@ solo el importador**. Lo que pasa mientras falte, y qué tan visible es:
 | El concepto del servicio «Comisión AMEX» | El pago Amex responde **422** `servicio_comision_no_disponible`; la transacción se revierte y no queda nada escrito | Sí, en el primer pago Amex |
 | El concepto `amex` en la forma Amex | `registrarAmex()` responde **422** `forma_de_pago_no_disponible`. Peor: si el pago Amex se registra por el endpoint genérico, se trata como una tarjeta cualquiera, **sin comisión** | El 422, sí; el pago genérico, no |
 | El concepto `avcard` | **AvCard no se rechaza con combustible** (la regla de `mpago.php:48`) y se cobra sin ningún tope | **No: es silencioso** |
-| El concepto `efectivo` | El efectivo se trata como tarjeta: un monto mayor que lo que falta se rechaza (422 `supera_lo_que_falta`), así que **no se puede cobrar efectivo con cambio** (el histórico tiene 16 folios sobrepagados con efectivo) | Sí, en el primer efectivo con cambio |
+| El concepto `efectivo` | El efectivo se trata como tarjeta: un monto mayor que lo que falta se rechaza (422 `supera_lo_que_falta`), así que **no se puede cobrar efectivo con cambio** (el histórico tiene **17** folios sobrepagados que llevan un pago en efectivo; 16 de ellos con `Cambio` guardado) | Sí, en el primer efectivo con cambio |
 
 El importador asigna **cuatro conceptos nuevos** en este bloque: las
 tres formas (`tb_tip_fpago` ids 3 → `amex`, 4 → `efectivo`, 5 → `avcard`) y el servicio

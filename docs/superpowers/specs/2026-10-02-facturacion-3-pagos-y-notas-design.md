@@ -107,7 +107,8 @@ puede recalcular acaba contradiciendo a sus partes.
 
 ### 2b. Un sobrepago no siempre es cambio
 
-De los 27 folios sobrepagados, **16 tienen efectivo y 11 no**: 7 Visa, 4 Amex, 1
+De los folios sobrepagados, **17 llevan un pago en efectivo** (16 de ellos con `Cambio`
+guardado) y el resto no: 7 Visa, 4 Amex, 1
 Transferencia, 1 Mastercard y 1 AvCard. Y Visa, Mastercard y Transferencia **sí
 tienen tope** en `mpago.php`, que rechaza un monto mayor que lo que falta.
 
@@ -383,7 +384,9 @@ a los encabezados duplicados. La proporción es la misma, 99.7%, así que la dec
 cambia: solo las cifras absolutas estaban infladas.)
 
 La razón es que **el operador teclea el total final que se carga a la tarjeta**, no el
-subtotal: en **713 de 719** folios el monto coincide con el `Total` guardado, y
+subtotal: en **713 de 719** folios el monto coincide **a centavos** con el `Total`
+guardado —la igualdad exacta del `double` solo se da en 46, porque los montos Amex traen
+cuatro decimales—, y
 `Total / subtotal = 1.16` exacto, lo que confirma que el subtotal guardado ya incluye la
 comisión. Con la guarda del subtotal, pagar una prefactura completa con una sola pasada de
 Amex sería imposible; es justo lo que esos 713 folios hicieron.
