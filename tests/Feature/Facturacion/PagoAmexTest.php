@@ -88,20 +88,47 @@ test('la comision usa la tasa de IVA vigente, no un literal', function () {
         ->assertJsonPath('comision', '52.41');
 });
 
-test('el monto Amex no puede superar el subtotal', function () {
+test('la prefactura completa se paga de una sola pasada con Amex: el monto es el total y supera el subtotal', function () {
+    // Un folio real del historico (el 75): subtotal guardado 1942.98 y UN solo pago Amex de
+    // 2253.86. `Total / subtotal` es 1.16 exacto porque el subtotal guardado YA INCLUYE la
+    // comision. El operador teclea el total que se carga a la tarjeta.
+    //
+    // La prefactura de PARTIDA no puede tener 1942.98: la comision todavia no esta. Se deriva:
+    //   comision = ComisionAmex(2253.86, 16%) = 109.98
+    //   subtotal de partida = 1942.98 - 109.98 = 1833.00
+    // y al reves, 1833.00 + 109.98 = 1942.98, IVA 310.88, total 2253.86 = el monto tecleado.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = paraAmex(1833.00);
+
+    expect(ComisionAmex::calcular('2253.86', '0.1600'))->toBe('109.98');
+
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '2253.86'])
+        ->assertCreated()
+        ->assertJsonPath('comision', '109.98')
+        ->assertJsonPath('prefactura.subtotal', '1942.98')
+        ->assertJsonPath('prefactura.total', '2253.86')
+        ->assertJsonPath('prefactura.pagado', '2253.86')
+        ->assertJsonPath('prefactura.por_cobrar', '0.00')
+        ->assertJsonPath('prefactura.sobrepago', '0.00');
+
+    // El monto (2253.86) supera el subtotal de partida (1833.00) y tambien el final (1942.98).
+    expect($p->fresh()->total())->toBe('2253.86');
+});
+
+test('el borde del pago completo: con subtotal 100,000.00 el mayor Amex es 122,960.00', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $p = paraAmex();
 
-    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '100000.01'])
-        ->assertStatus(422)
-        ->assertJsonPath('codigo', 'comision_supera_subtotal')
-        ->assertJsonPath('message', fn ($m) => str_contains($m, 'subtotal'));
+    // 1.2296 x 100,000.00: la comision es 6,000.00 y el total 122,960.00 empata con el monto.
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '122960.01'])
+        ->assertStatus(422)->assertJsonPath('codigo', 'amex_supera_lo_que_falta');
 
-    expect($p->fresh()->pagos()->count())->toBe(0)
-        ->and($p->fresh()->renglones()->count())->toBe(1);
+    expect($p->fresh()->pagos()->count())->toBe(0);
 
-    // El monto igual al subtotal SI pasa.
-    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '100000.00'])->assertCreated();
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '122960.00'])
+        ->assertCreated()
+        ->assertJsonPath('comision', '6000.00')
+        ->assertJsonPath('prefactura.por_cobrar', '0.00');
 });
 
 test('el monto Amex tampoco puede superar lo que falta por cobrar, con su propio codigo', function () {
@@ -112,30 +139,15 @@ test('el monto Amex tampoco puede superar lo que falta por cobrar, con su propio
     $p = paraAmex();
     pagoDe($p, formasDePago()['Visa'], '115000.00');   // total 116,000.00: faltan 1,000.00
 
-    // 5,000 es MENOR que el subtotal (100,000): no es la comprobacion del subtotal.
     $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '5000.00'])
         ->assertStatus(422)
         ->assertJsonPath('codigo', 'amex_supera_lo_que_falta')
-        ->assertJsonPath('message', fn ($m) => str_contains($m, 'falta por cobrar') && ! str_contains($m, 'subtotal'));
+        ->assertJsonPath('message', fn ($m) => str_contains($m, 'falta por cobrar') && str_contains($m, 'comisi'));
 
     expect($p->fresh()->pagos()->count())->toBe(1)
         ->and($p->fresh()->renglones()->count())->toBe(1)
         ->and(comisionesDe($p)->count())->toBe(0)
         ->and(Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)->count())->toBe(0);
-});
-
-test('las dos comprobaciones de tope no son la misma: cada una rechaza lo que la otra deja pasar', function () {
-    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
-    $p = paraAmex();
-
-    // Sin pagos, solo el subtotal topa.
-    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '100000.01'])
-        ->assertStatus(422)->assertJsonPath('codigo', 'comision_supera_subtotal');
-
-    // Con la cuenta casi saldada, topa lo que falta aunque el subtotal sobre.
-    pagoDe($p, formasDePago()['Visa'], '115900.00');
-    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '1000.00'])
-        ->assertStatus(422)->assertJsonPath('codigo', 'amex_supera_lo_que_falta');
 });
 
 test('el tope de lo que falta se comprueba DESPUES de agregar la comision', function () {
@@ -180,25 +192,6 @@ test('una prefactura ya sobrepagada no admite otro pago Amex', function () {
     $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '100.00'])
         ->assertStatus(422)
         ->assertJsonPath('codigo', 'amex_supera_lo_que_falta');
-});
-
-test('el segundo pago Amex se compara contra un subtotal que YA incluye la comision del primero', function () {
-    // Como el viejo: `mpamex.php` lee `tb_prefcatura.subtotal`, que `prefactura.php`
-    // recalcula con todas las ventas, comisiones incluidas.
-    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
-    $p = paraAmex(1000.0);
-
-    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '10.00'])
-        ->assertCreated()->assertJsonPath('comision', '0.49');   // subtotal 1,000.49
-
-    // 1,000.50 supera el subtotal actual (1,000.49)...
-    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '1000.50'])
-        ->assertStatus(422)->assertJsonPath('codigo', 'comision_supera_subtotal');
-
-    // ...y 1,000.49 lo iguala. Contra el subtotal ORIGINAL (1,000.00) ya habria sobrado.
-    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '1000.49'])->assertCreated();
-
-    expect(comisionesDe($p)->count())->toBe(2);
 });
 
 test('si falta el servicio de comision responde 422 y NO escribe nada', function () {
@@ -424,43 +417,59 @@ test('el pago Amex por el endpoint generico sigue rechazado', function () {
 |--------------------------------------------------------------------------
 | El total cae donde debe
 |--------------------------------------------------------------------------
-| El servicio rechaza un monto mayor que el subtotal, y el caso exacto de la
-| formula (subtotal = monto / 1.2296, o sea monto > subtotal) queda fuera de lo
-| que el servicio acepta. Se mide entonces con el modelo: el renglon de comision
-| que el servicio crearia, sumado a un subtotal exacto.
+| Se mide por el servicio, que es el camino real. Con subtotal de partida
+| monto / 1.2296 el total tras la comision cae en el monto (la formula es exacta
+| salvo por el redondeo a centavos), y el tope de `amex_supera_lo_que_falta`
+| decide con ese mismo total.
 */
 
 test('con un subtotal de monto / 1.2296 el total tras la comision cae en el monto tecleado', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $p = paraAmex(813.27);
 
-    $comision = ComisionAmex::calcular('1000.00', $p->ivaTasa());
-    $servicio = FactServicio::porConcepto(FactServicio::CONCEPTO_COMISION_AMEX)->sole();
-    $p->renglones()->create([
-        'servicio_id' => $servicio->id, 'nombre_servicio' => $servicio->nombre, 'precio_unitario' => $comision,
-        'cantidad' => 1, 'es_de_tercero' => false, 'margen' => 0, 'ajuste_precio' => 'ninguno',
-        'concepto' => FactServicio::CONCEPTO_COMISION_AMEX, 'orden' => 2,
-    ]);
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '1000.00'])
+        ->assertCreated()
+        ->assertJsonPath('comision', '48.80');
 
-    expect($comision)->toBe('48.80')
-        ->and($p->fresh()->subtotal())->toBe('862.07')
+    expect($p->fresh()->subtotal())->toBe('862.07')
         ->and($p->fresh()->iva())->toBe('137.93')
-        ->and($p->fresh()->total())->toBe('1000.00');
+        ->and($p->fresh()->total())->toBe('1000.00')
+        ->and($p->fresh()->porCobrar())->toBe('0.00');
 });
 
-test('el redondeo de la comision desvia el total, como maximo, un centavo', function () {
-    $p = paraAmex(813.27);
+test('por el servicio, el desvio del total es de un centavo como maximo, y el centavo de menos se rechaza', function () {
+    $p = paraAmex(1.0);
+    $renglon = $p->renglones()->sole();
+    $servicio = app(PagosPrefactura::class);
     $tasa = $p->ivaTasa();
     $desvios = [];
+    $rechazados = 0;
 
-    for ($centavos = 100; $centavos <= 2_000_000; $centavos += 37) {
+    for ($centavos = 100_000; $centavos <= 2_000_000; $centavos += 7_919) {
         $monto = bcdiv((string) $centavos, '100', 2);
-        $subtotal = bcadd(bcdiv($monto, '1.2296', 6), '0.005', 2);
-        $conComision = bcadd($subtotal, ComisionAmex::calcular($monto, $tasa), 2);
-        $total = bcadd($conComision, FactPrefactura::calcularIva($conComision, $tasa), 2);
+        $partida = bcadd(bcdiv($monto, '1.2296', 6), '0.005', 2);
+        $renglon->update(['precio_unitario' => $partida]);
 
-        $desvios[bcsub($total, $monto, 2)] = true;
+        // Lo que DEBE pasar: el total con comision menos el monto. Negativo = el redondeo dejo
+        // el total por debajo de lo tecleado, y el tope lo rechaza.
+        $conComision = bcadd($partida, ComisionAmex::calcular($monto, $tasa), 2);
+        $desvio = bcsub(bcadd($conComision, FactPrefactura::calcularIva($conComision, $tasa), 2), $monto, 2);
+
+        try {
+            $pago = $servicio->registrarAmex($p, $monto, $p->user_id);
+            $aceptado = true;
+            $servicio->quitar($p, $pago->id, $p->user_id);
+        } catch (App\Services\PagoNoPermitidoException $e) {
+            expect($e->codigo)->toBe('amex_supera_lo_que_falta');
+            $aceptado = false;
+            $rechazados++;
+        }
+
+        $desvios[$desvio] = true;
+        expect($aceptado)->toBe(bccomp($desvio, '0.00', 2) >= 0, "monto {$monto}, desvio {$desvio}");
     }
 
-    // Solo hay tres desvios posibles: -0.01, 0.00 y 0.01. Nunca mas.
-    expect(array_keys($desvios))->each->toBeIn(['-0.01', '0.00', '0.01']);
+    // Solo hay tres desvios posibles y el negativo es el unico que se rechaza.
+    expect(array_keys($desvios))->each->toBeIn(['-0.01', '0.00', '0.01'])
+        ->and($rechazados)->toBeGreaterThan(0);
 });

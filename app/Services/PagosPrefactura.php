@@ -91,17 +91,13 @@ class PagosPrefactura
      * Este método NO pasa por `registrar()`: Amex tiene su propia regla, y la acción
      * del endpoint genérico la rechaza (`amex_por_su_endpoint`). Por eso el tope de «lo
      * que falta por cobrar», que el sistema viejo aplicaba a Amex porque caía en la
-     * rama `else` de `mpago.php`, se vuelve a escribir AQUÍ. Son DOS comprobaciones, y
-     * no son la misma:
+     * rama `else` de `mpago.php`, se vuelve a escribir AQUÍ. Es el ÚNICO tope de Amex
+     * (`amex_supera_lo_que_falta`): el pago no puede dejar la prefactura sobrepagada. No hay
+     * tope contra el subtotal: el operador teclea el TOTAL que se carga a la tarjeta, que
+     * casi siempre supera el subtotal (la prefactura completa pagada de una sola pasada es
+     * monto = total = 1.16 × el subtotal que ya incluye la comisión).
      *
-     * 1. `comision_supera_subtotal` — el monto no puede superar el SUBTOTAL de la
-     *    prefactura, como `mpamex.php:106`. Se compara contra el subtotal de AHORA, que
-     *    ya incluye las comisiones de pagos Amex anteriores: el viejo comparaba contra
-     *    `tb_prefcatura.subtotal`, que `prefactura.php` recalcula (sumando también las
-     *    comisiones) en cada carga. Es una cota gruesa, no una regla de negocio.
-     * 2. `amex_supera_lo_que_falta` — el pago no puede dejar la prefactura sobrepagada.
-     *
-     * ORDEN DE LA SEGUNDA: se comprueba DESPUÉS de sumar la comisión, contra lo que
+     * ORDEN: se comprueba DESPUÉS de sumar la comisión, contra lo que
      * faltaría ya con ella, y no contra lo que falta ahora. La comisión forma parte de
      * lo que el cliente debe tras este pago (el monto que se teclea la CUBRE, y por eso
      * es mayor que la deuda previa); comprobar antes rechazaría justo el pago que salda
@@ -115,7 +111,7 @@ class PagosPrefactura
      * @throws InvalidArgumentException si `$montoBruto` no es un decimal positivo de hasta dos decimales.
      * @throws RenglonDePrefacturaCerradaException si la prefactura ya está cerrada.
      * @throws PrefacturaDescartadaException si el borrador está descartado.
-     * @throws PagoNoPermitidoException si el monto supera el subtotal o lo que faltaría por cobrar, o si Amex o los totales no están disponibles.
+     * @throws PagoNoPermitidoException si el monto supera lo que faltaría por cobrar, o si Amex o los totales no están disponibles.
      * @throws ServicioDeComisionNoDisponibleException si falta el servicio de catálogo.
      */
     public function registrarAmex(FactPrefactura $prefactura, string $montoBruto, int $userId): FactPrefacturaPago
@@ -140,14 +136,6 @@ class PagosPrefactura
                 throw $this->totalesNoCalculables($e);
             }
 
-            // Comprobación 1: contra el subtotal de AHORA (con las comisiones previas).
-            if (bccomp($montoBruto, $subtotal, 2) > 0) {
-                throw new PagoNoPermitidoException(
-                    "El monto Amex ({$montoBruto}) no puede superar el subtotal de la prefactura, que es {$subtotal}.",
-                    'comision_supera_subtotal',
-                );
-            }
-
             $servicio = FactServicio::porConcepto(FactServicio::CONCEPTO_COMISION_AMEX)->activos()->first();
 
             if ($servicio === null) {
@@ -161,7 +149,7 @@ class PagosPrefactura
                 // La fórmula vive en `ComisionAmex`: aquí solo se llama.
                 $comision = ComisionAmex::calcular($montoBruto, $tasa);
 
-                // Comprobación 2: lo que faltaría DESPUÉS de agregar la comisión. Mismas
+                // El tope: lo que faltaría DESPUÉS de agregar la comisión. Mismas
                 // fórmulas que el modelo, sin escribir todavía.
                 $subtotalConComision = bcadd($subtotal, $comision, 2);
                 $totalConComision = bcadd($subtotalConComision, FactPrefactura::calcularIva($subtotalConComision, $tasa), 2);
