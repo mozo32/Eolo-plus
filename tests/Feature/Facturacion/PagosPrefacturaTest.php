@@ -207,16 +207,51 @@ test('una forma de pago dada de baja no se puede usar', function () {
         ->assertJsonValidationErrors(['forma_pago_id']);
 });
 
-test('cada pago y cada baja quedan en la bitacora, dentro de la transaccion', function () {
-    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+test('cada pago y cada baja quedan en la bitacora, apuntando a su prefactura y con su contenido', function () {
+    $this->actingAs($usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     [$p, $formas] = paraCobrar();
+    [$otra] = paraCobrar();
 
     $pago = $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos", ['forma_pago_id' => $formas['Visa']->id, 'monto' => '116.00'])
         ->assertCreated()->json('pago_id');
     $this->deleteJson("/api/facturacion/prefacturas/{$p->id}/pagos/{$pago}")->assertOk();
 
-    expect(Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)->where('accion', Bitacora::ACCION_CREAR)->count())->toBe(1)
-        ->and(Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)->where('accion', Bitacora::ACCION_ELIMINAR)->count())->toBe(1);
+    $porModulo = fn (string $accion) => Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)->where('accion', $accion);
+    $alta = $porModulo(Bitacora::ACCION_CREAR)->sole();
+    $baja = $porModulo(Bitacora::ACCION_ELIMINAR)->sole();
+
+    expect($alta->registro_id)->toBe($p->id)
+        ->and($alta->usuario_id)->toBe($usuario->id)
+        ->and($alta->datos_nuevos)->toBe(['pago_id' => $pago, 'forma_pago' => 'Visa', 'monto' => '116.00'])
+        ->and($alta->descripcion)->toContain('116.00')->toContain('Visa')->toContain("prefactura {$p->id}")
+        ->and($baja->registro_id)->toBe($p->id)
+        ->and($baja->usuario_id)->toBe($usuario->id)
+        ->and($baja->datos_anteriores)->toMatchArray(['pago_id' => $pago, 'forma_pago' => 'Visa', 'monto' => '116.00', 'comision_quitada' => false])
+        ->and($porModulo(Bitacora::ACCION_CREAR)->where('registro_id', $otra->id)->count())->toBe(0);
+});
+
+test('registrar es atomico: si la bitacora falla, el pago no queda', function () {
+    [$p, $formas] = paraCobrar();
+    Bitacora::creating(fn () => throw new RuntimeException('la bitacora fallo'));
+
+    expect(fn () => app(PagosPrefactura::class)->registrar($p, $formas['Visa']->id, '50.00', $p->user_id))
+        ->toThrow(RuntimeException::class, 'la bitacora fallo');
+
+    expect($p->fresh()->pagos()->count())->toBe(0);
+});
+
+test('quitar es atomico: si la bitacora falla, el pago sigue activo y su comision sigue en su sitio', function () {
+    [$p, $formas] = paraCobrar();
+    $comision = renglonDe($p, 10.0, 1);
+    $pago = pagoDe($p, $formas[FactFormaPago::CONCEPTO_AMEX], '116.00');
+    $pago->update(['renglon_comision_id' => $comision->id]);
+    Bitacora::creating(fn () => throw new RuntimeException('la bitacora fallo'));
+
+    expect(fn () => app(PagosPrefactura::class)->quitar($p, $pago->id, $p->user_id))
+        ->toThrow(RuntimeException::class, 'la bitacora fallo');
+
+    expect($pago->fresh()->status)->toBe(FactPrefacturaPago::STATUS_ACTIVO)
+        ->and(FactPrefacturaRenglon::find($comision->id))->not->toBeNull();
 });
 
 test('quitar un pago con comision borra su renglon en la misma operacion', function () {
@@ -323,17 +358,78 @@ test('un rechazo de regla no deja pago ni bitacora', function () {
         ->and(Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)->count())->toBe(0);
 });
 
-test('el servicio normaliza el monto a dos decimales y rechaza lo que no es un decimal positivo', function () {
+test('el servicio normaliza el monto a dos decimales, y la bitacora lo dice asi', function () {
     [$p, $formas] = paraCobrar();
     $servicio = app(PagosPrefactura::class);
 
-    $pago = $servicio->registrar($p, $formas['Visa']->id, '50.5', $p->user_id);
-    expect((string) $pago->fresh()->monto)->toBe('50.50');
+    $casos = ['50.5' => '50.50', '50' => '50.00', '.50' => '0.50', '5.' => '5.00', '+5.00' => '5.00', '+.5' => '0.50', '007.10' => '7.10'];
 
-    foreach (['0', '0.00', '-1', '1.234', 'x', '', '1e3'] as $malo) {
+    // Efectivo: no topa contra lo que falta, y los siete casos suman mas que el total.
+    foreach ($casos as $entrada => $esperado) {
+        $pago = $servicio->registrar($p, $formas[FactFormaPago::CONCEPTO_EFECTIVO]->id, (string) $entrada, $p->user_id);
+        $asiento = Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)
+            ->where('accion', Bitacora::ACCION_CREAR)->orderByDesc('id')->first();
+
+        expect($asiento->datos_nuevos['monto'])->toBe($esperado)
+            ->and($asiento->datos_nuevos['pago_id'])->toBe($pago->id)
+            ->and($asiento->descripcion)->toContain("pago de {$esperado} con");
+    }
+});
+
+test('el servicio rechaza lo que no es un decimal positivo', function () {
+    [$p, $formas] = paraCobrar();
+    $servicio = app(PagosPrefactura::class);
+
+    foreach (['0', '0.00', '.00', '-1', '-0.50', '1.234', 'x', '', '.', '+', '1e3', ' 5', '5 ', '1,5'] as $malo) {
         expect(fn () => $servicio->registrar($p, $formas['Visa']->id, $malo, $p->user_id))
             ->toThrow(InvalidArgumentException::class);
     }
+
+    expect($p->fresh()->pagos()->count())->toBe(0);
+});
+
+test('el monto acepta lo mismo que el Form Request: .50, +5.00 y 5. no dan error de servidor', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    [$p, $formas] = paraCobrar();
+
+    foreach (['.50' => '0.50', '+5.00' => '5.00', '5.' => '5.00'] as $entrada => $esperado) {
+        $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos", ['forma_pago_id' => $formas['Visa']->id, 'monto' => (string) $entrada])
+            ->assertCreated();
+
+        expect((string) $p->fresh()->pagos()->get()->last()->monto)->toBe($esperado);
+    }
+});
+
+test('el tope del monto es el de la columna: pasarse es un rechazo de dominio, no un error de base', function () {
+    [$p, $formas] = paraCobrar();
+    $servicio = app(PagosPrefactura::class);
+    $efectivo = $formas[FactFormaPago::CONCEPTO_EFECTIVO];
+
+    // Los dos lados del tope. El efectivo no tiene tope de cobro, asi que solo el de la columna.
+    $pago = $servicio->registrar($p, $efectivo->id, '9999999999.99', $p->user_id);
+    expect((string) $pago->fresh()->monto)->toBe('9999999999.99');
+
+    foreach (['10000000000.00', '10000000000', '10000000000.', '99999999999999.99'] as $demasiado) {
+        try {
+            $servicio->registrar($p, $efectivo->id, $demasiado, $p->user_id);
+            $this->fail("El monto {$demasiado} debio rechazarse.");
+        } catch (PagoNoPermitidoException $e) {
+            expect($e->codigo)->toBe('monto_fuera_de_rango');
+        }
+    }
+
+    expect($p->fresh()->pagos()->count())->toBe(1);
+});
+
+test('el Form Request y el servicio coinciden en el tope del monto', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    [$p, $formas] = paraCobrar();
+    $ruta = "/api/facturacion/prefacturas/{$p->id}/pagos";
+    $efectivo = $formas[FactFormaPago::CONCEPTO_EFECTIVO];
+
+    $this->postJson($ruta, ['forma_pago_id' => $efectivo->id, 'monto' => '9999999999.99'])->assertCreated();
+    $this->postJson($ruta, ['forma_pago_id' => $efectivo->id, 'monto' => '10000000000.00'])
+        ->assertStatus(422)->assertJsonValidationErrors(['monto']);
 });
 
 test('una forma de pago dada de baja se rechaza tambien desde el servicio', function () {
@@ -359,4 +455,65 @@ test('la ficha trae el bloque de cobro con sus cinco claves y la lista de pagos'
         ->assertJsonPath('prefactura.pagos.0.forma_pago', 'Visa')
         ->assertJsonPath('prefactura.pagos.0.monto', '100.00')
         ->assertJsonPath('prefactura.pagos.0.es_comision_amex', false);
+});
+
+test('quitar un pago cuya comision tiene un importe ilegible lo da de baja igual', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    [$p, $formas] = paraCobrar();
+    $comision = renglonDe($p, 10.0, 1);
+    $pago = pagoDe($p, $formas[FactFormaPago::CONCEPTO_AMEX], '116.00');
+    $pago->update(['renglon_comision_id' => $comision->id]);
+    DB::table('fact_prefactura_renglones')->where('id', $comision->id)->update(['ajuste_precio' => 'raro']);
+
+    $this->deleteJson("/api/facturacion/prefacturas/{$p->id}/pagos/{$pago->id}")
+        ->assertOk()
+        ->assertJsonPath('prefactura.pagado', '0.00');
+
+    expect($pago->fresh()->status)->toBe(FactPrefacturaPago::STATUS_INACTIVO)
+        ->and(FactPrefacturaRenglon::find($comision->id))->toBeNull();
+
+    $baja = Bitacora::where('accion', Bitacora::ACCION_ELIMINAR)->sole();
+    expect($baja->descripcion)->toContain('su importe no se pudo calcular')
+        ->and($baja->datos_anteriores)->toMatchArray(['comision' => null, 'comision_quitada' => true]);
+});
+
+test('un total que no se puede calcular rechaza la tarjeta con su propio codigo, no con un 500', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    [$p, $formas] = paraCobrar();
+    DB::table('fact_prefactura_renglones')->where('prefactura_id', $p->id)->update(['ajuste_precio' => 'raro']);
+
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos", ['forma_pago_id' => $formas['Visa']->id, 'monto' => '10.00'])
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'totales_no_calculables');
+
+    // El efectivo no topa contra el total: entra, y la ficha lo dice sin reventar.
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos", ['forma_pago_id' => $formas[FactFormaPago::CONCEPTO_EFECTIVO]->id, 'monto' => '10.00'])
+        ->assertCreated()
+        ->assertJsonPath('prefactura.pagado', '10.00');
+});
+
+test('la ficha con un total ilegible trae el cobro en null y su propio cobro_error', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    [$p, $formas] = paraCobrar();
+    pagoDe($p, $formas['Visa'], '30.00');
+    DB::table('fact_prefactura_renglones')->where('prefactura_id', $p->id)->update(['ajuste_precio' => 'raro']);
+
+    $ficha = $this->getJson("/api/facturacion/prefacturas/{$p->id}")->assertOk()->json('prefactura');
+
+    expect($ficha['pagado'])->toBe('30.00')
+        ->and($ficha['por_cobrar'])->toBeNull()
+        ->and($ficha['sobrepago'])->toBeNull()
+        ->and($ficha['cambio'])->toBeNull()
+        ->and($ficha['cobrado_de_mas'])->toBeNull()
+        ->and($ficha['cobro_error'])->toContain('No se puede calcular lo que falta por cobrar')
+        ->and($ficha['pagos'])->toHaveCount(1);
+});
+
+test('la ficha sana trae cobro_error en null', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    [$p] = paraCobrar();
+
+    $this->getJson("/api/facturacion/prefacturas/{$p->id}")
+        ->assertOk()
+        ->assertJsonPath('prefactura.cobro_error', null);
 });

@@ -8,7 +8,6 @@ use App\Http\Requests\Facturacion\StorePagoRequest;
 use App\Models\FactPrefactura;
 use App\Services\PagoNoPermitidoException;
 use App\Services\PagosPrefactura;
-use App\Services\PrefacturaDescartadaException;
 use App\Services\RenglonDePrefacturaCerradaException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,8 +16,9 @@ use Illuminate\Http\Request;
  * Los pagos de una prefactura. Solo en borrador: al cerrar quedan congelados como
  * los renglones y los totales, porque un documento emitido no cambia.
  *
- * `RenglonDePrefacturaCerradaException` tiene su propio `render()` y se traduce
- * sola a 409; aquí solo se atrapa lo que es propio de los pagos.
+ * `RenglonDePrefacturaCerradaException` y `PrefacturaDescartadaException` tienen su
+ * propio `render()` y se traducen solas a 409; aquí solo se atrapa lo que es propio
+ * de los pagos.
  */
 class PrefacturaPagoController extends Controller
 {
@@ -41,8 +41,6 @@ class PrefacturaPagoController extends Controller
             );
         } catch (PagoNoPermitidoException $e) {
             return response()->json(['message' => $e->getMessage(), 'codigo' => $e->codigo], 422);
-        } catch (PrefacturaDescartadaException $e) {
-            return $this->descartadaBajoCandado($e);
         }
 
         return response()->json([
@@ -60,21 +58,11 @@ class PrefacturaPagoController extends Controller
             return $respuesta;
         }
 
-        try {
-            $pagos->quitar($prefactura, $pago, $request->user()->id);
-        } catch (PrefacturaDescartadaException $e) {
-            return $this->descartadaBajoCandado($e);
-        }
+        $pagos->quitar($prefactura, $pago, $request->user()->id);
 
         return response()->json([
             'message' => 'Pago eliminado.',
             'prefactura' => app(PrefacturaController::class)->fichaDe($id),
         ]);
-    }
-
-    /** Se descartó entre el chequeo rápido y el candado: se responde igual que el chequeo rápido. */
-    private function descartadaBajoCandado(PrefacturaDescartadaException $e): JsonResponse
-    {
-        return response()->json(['message' => $e->getMessage(), 'codigo' => 'ya_descartada'], 409);
     }
 }

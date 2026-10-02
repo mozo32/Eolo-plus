@@ -440,12 +440,14 @@ class PrefacturaController extends Controller
      * pasar del efectivo que entró; `cobrado_de_mas` es el resto, que se corrige
      * cambiando el pago. Los dos pueden ser distintos de cero a la vez.
      *
-     * @return array{pagado: string, por_cobrar: ?string, sobrepago: ?string, cambio: ?string, cobrado_de_mas: ?string, pagos: array}
+     * @return array{pagado: string, por_cobrar: ?string, sobrepago: ?string, cambio: ?string, cobrado_de_mas: ?string, cobro_error: ?string, pagos: array}
      */
     private function cobro(FactPrefactura $p): array
     {
         // Si los totales no se pudieron calcular, tampoco lo que depende de ellos: lo
         // pagado sí, porque no depende de la tasa de IVA.
+        $error = null;
+
         try {
             $porCobrar = $p->porCobrar();
             $sobrepago = $p->sobrepago();
@@ -454,6 +456,7 @@ class PrefacturaController extends Controller
         } catch (UnexpectedValueException) {
             // Ya lo reportó `totales()`, que corre en la misma ficha.
             $porCobrar = $sobrepago = $cambio = $cobradoDeMas = null;
+            $error = 'No se puede calcular lo que falta por cobrar ni el cambio: un renglón o la tasa de IVA tienen un valor que no se reconoce.';
         }
 
         return [
@@ -462,6 +465,7 @@ class PrefacturaController extends Controller
             'sobrepago' => $sobrepago,
             'cambio' => $cambio,
             'cobrado_de_mas' => $cobradoDeMas,
+            'cobro_error' => $error,
             'pagos' => $p->pagos()->with('formaPago')->get()->map(fn ($pago) => [
                 'id' => $pago->id,
                 'forma_pago_id' => $pago->forma_pago_id,
