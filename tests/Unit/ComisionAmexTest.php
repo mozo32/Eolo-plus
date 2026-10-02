@@ -44,15 +44,23 @@ test('una tasa que haria cero el divisor lanza en lugar de dividir entre cero', 
 });
 
 test('el redondeo de medio centavo es exacto: 1.005 redondea a 1.01', function () {
-    // Cociente exacto 1.005000: 20.5958 / 1.2296 × 0.06 + 0.005 = 1.01
-    // Esta prueba mata la mutación bcadd(..., '0.006', 2) que daría 1.01 igual,
-    // pero también mata bcadd(..., '0.004', 2) que daría 1.00 en lugar de 1.01.
+    // Cociente exacto 1.005000: con 0.005 suma a 1.010 (trunca a 1.01).
+    // Mata quitar el + 0.005 (no redondea, trunca a 1.00) y bajarlo a 0.004
+    // (suma a 1.009, trunca a 1.00). No mata cambiar a 0.006 porque 1.005 + 0.006 = 1.011
+    // también trunca a 1.01. La mutación de 0.006 se mata por separado con 20.5856.
     expect(ComisionAmex::calcular('20.5958', '0.1600'))->toBe('1.01');
 });
 
 test('el redondeo de medio centavo es exacto: 100.005 redondea a 100.01', function () {
     // Segundo caso de exactitud de medio centavo: 2049.4358 / 1.2296 × 0.06 = 100.005000
     expect(ComisionAmex::calcular('2049.4358', '0.1600'))->toBe('100.01');
+});
+
+test('la constante de redondeo es 0.005 y no 0.006', function () {
+    // Cociente 1.004502: con 0.005 suma a 1.009502 (trunca a 1.00), con 0.006 suma a 1.010502
+    // (trunca a 1.01). La franja [0.004, 0.005) es donde 0.005 y 0.006 dan centavos distintos.
+    // El monto 20.5856 con tasa 0.1600 cae exactamente ahí. Mata la mutación 0.005 -> 0.006.
+    expect(ComisionAmex::calcular('20.5856', '0.1600'))->toBe('1.00');
 });
 
 test('la tasa se respeta con sus cuatro decimales', function () {
