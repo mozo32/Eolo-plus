@@ -224,13 +224,21 @@ class PrefacturaController extends Controller
     {
         // En dos sentencias: con `(bool) $datos['x'] ?? false` en una sola, la
         // precedencia del cast se come al `??` y la clave ausente revienta.
-        $datos = $request->validate(['confirmar_sin_cobro' => ['sometimes', 'boolean']], [
+        $datos = $request->validate([
+            'confirmar_sin_cobro' => ['sometimes', 'boolean'],
+            // La cifra que quien confirmó vio. Viaja como cadena y entra a `bc` sin pasar por float.
+            'faltante_confirmado' => ['sometimes', 'nullable', 'numeric', 'decimal:0,2', 'min:0'],
+        ], [
             'confirmar_sin_cobro.boolean' => 'La confirmación de cerrar sin cobro debe ser verdadera o falsa.',
+            'faltante_confirmado.numeric' => 'El faltante confirmado debe ser un importe numérico.',
+            'faltante_confirmado.decimal' => 'El faltante confirmado no puede tener más de dos decimales.',
+            'faltante_confirmado.min' => 'El faltante confirmado no puede ser negativo.',
         ]);
         $confirmar = (bool) ($datos['confirmar_sin_cobro'] ?? false);
+        $faltanteConfirmado = isset($datos['faltante_confirmado']) ? bcadd((string) $datos['faltante_confirmado'], '0', 2) : null;
 
         try {
-            $resultado = DB::transaction(function () use ($request, $id, $cierre, $confirmar) {
+            $resultado = DB::transaction(function () use ($request, $id, $cierre, $confirmar, $faltanteConfirmado) {
                 // El candado se toma aquí, antes de decidir, para que descartar y
                 // cerrar se serialicen: sin él, un borrador descartado entre la
                 // lectura y el cierre consumiría un folio para un documento oculto.
@@ -242,7 +250,7 @@ class PrefacturaController extends Controller
                     return $respuesta;
                 }
 
-                return $cierre->cerrar($prefactura, $request->user()->id, $confirmar);
+                return $cierre->cerrar($prefactura, $request->user()->id, $confirmar, $faltanteConfirmado);
             });
         } catch (PrefacturaYaCerradaException|RenglonDePrefacturaCerradaException $e) {
             return response()->json(['message' => $e->getMessage(), 'codigo' => 'ya_cerrada'], 409);

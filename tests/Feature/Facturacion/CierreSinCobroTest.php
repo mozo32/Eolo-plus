@@ -311,3 +311,100 @@ test('un confirmar_sin_cobro que no es booleano responde en espanol', function (
 
     expect($respuesta->json('errors.confirmar_sin_cobro.0'))->toBe('La confirmación de cerrar sin cobro debe ser verdadera o falsa.');
 });
+
+test('confirmar una cifra que ya no es el faltante real responde sin_cobro con el faltante nuevo y NO consume folio', function () {
+    // El operador vio «faltan 116.00» y dejo el dialogo abierto; mientras tanto otra sesion cobro 50.00:
+    // lo que falta ya es 66.00 y su confirmacion no vale para esa cifra.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    [$p] = prefacturaCompleta(100.0, 1);
+    pagoDe($p, formasDePago()['Visa'], '50.00');
+    $bitacoraAntes = Bitacora::count();
+
+    $tocadas = consultasAlContadorDelFolio(fn () => $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar", ['confirmar_sin_cobro' => true, 'faltante_confirmado' => '116.00'])
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'sin_cobro')
+        ->assertJsonPath('faltante', '66.00'));
+
+    // Se rechaza ANTES de leer el contador: ni lo lee ni lo bloquea. El valor final no lo probaria: la transaccion lo revierte igual.
+    expect($tocadas)->toBe([]);
+
+    expect($p->fresh()->estado)->toBe(FactPrefactura::ESTADO_BORRADOR)
+        ->and($p->fresh()->folio)->toBeNull()
+        ->and(FactConfiguracion::valor(CierrePrefactura::CLAVE_FOLIO))->toBe((string) CierrePrefactura::FOLIO_INICIAL)
+        ->and(Bitacora::count())->toBe($bitacoraAntes);
+});
+
+test('confirmar el faltante que si es el real cierra, con la cifra en cualquier formato', function (string $confirmado) {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    [$p] = prefacturaCompleta(100.0, 1);
+    pagoDe($p, formasDePago()['Visa'], '50.00');
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar", ['confirmar_sin_cobro' => true, 'faltante_confirmado' => $confirmado])
+        ->assertOk()
+        ->assertJsonPath('prefactura.estado', 'cerrada');
+
+    expect($p->fresh()->folio)->toBe(CierrePrefactura::FOLIO_INICIAL);
+})->with(['dos decimales' => ['66.00'], 'sin decimales de mas' => ['66'], 'un decimal' => ['66.0']]);
+
+test('el faltante confirmado se compara al centavo', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    [$p] = prefacturaCompleta(100.0, 1);
+    pagoDe($p, formasDePago()['Visa'], '50.00');
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar", ['confirmar_sin_cobro' => true, 'faltante_confirmado' => '66.01'])
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'sin_cobro')
+        ->assertJsonPath('faltante', '66.00');
+
+    expect($p->fresh()->folio)->toBeNull();
+});
+
+test('el servicio compara el faltante confirmado antes de tocar el contador', function () {
+    [$p, $usuario] = prefacturaCompleta(100.0, 1);
+
+    $tocadas = consultasAlContadorDelFolio(function () use ($p, $usuario) {
+        try {
+            app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true, faltanteConfirmado: '500.00');
+            $this->fail('Se esperaba PrefacturaSinCobroException.');
+        } catch (PrefacturaSinCobroException $e) {
+            expect($e->faltante)->toBe('116.00');
+        }
+    });
+
+    expect($tocadas)->toBe([])
+        ->and($p->fresh()->folio)->toBeNull();
+});
+
+test('sin faltante confirmado, la confirmacion vale para cualquier faltante, como antes', function () {
+    [$p, $usuario] = prefacturaCompleta(100.0, 1);
+
+    $cerrada = app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true);
+
+    expect($cerrada->estado)->toBe(FactPrefactura::ESTADO_CERRADA);
+});
+
+test('un faltante confirmado sin confirmar_sin_cobro no abre la puerta', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    [$p] = prefacturaCompleta(100.0, 1);
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar", ['faltante_confirmado' => '116.00'])
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'sin_cobro');
+
+    expect($p->fresh()->folio)->toBeNull();
+});
+
+test('un faltante confirmado que no es un importe responde en espanol', function (mixed $valor, string $mensaje) {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    [$p] = prefacturaCompleta(100.0, 1);
+
+    $respuesta = $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar", ['confirmar_sin_cobro' => true, 'faltante_confirmado' => $valor])
+        ->assertStatus(422);
+
+    expect($respuesta->json('errors.faltante_confirmado.0'))->toBe($mensaje)
+        ->and($p->fresh()->folio)->toBeNull();
+})->with([
+    'texto' => ['mucho', 'El faltante confirmado debe ser un importe numérico.'],
+    'tres decimales' => ['66.001', 'El faltante confirmado no puede tener más de dos decimales.'],
+    'negativo' => ['-1', 'El faltante confirmado no puede ser negativo.'],
+]);

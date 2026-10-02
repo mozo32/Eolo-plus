@@ -28,10 +28,19 @@ class CierrePrefactura
      * `$confirmarSinCobro` es la confirmación explícita de cerrar con los pagos por debajo
      * del total. Por defecto NO: quien cierra sin cobro completo tiene que decirlo.
      *
-     * @throws PrefacturaSinCobroException si los pagos no cubren el total y no se confirmó.
+     * `$faltanteConfirmado` es la cifra que quien confirmó VIO. Una confirmación sin cifra
+     * vale para cualquier faltante (los llamadores que no la mandan); con ella, vale solo
+     * para ESA cifra: si entre el aviso y el cierre otra sesión cobró o añadió un renglón,
+     * el faltante real ya es otro y se vuelve a pedir la confirmación con él. Se compara
+     * aquí, dentro de la transacción y con el candado, no en la pantalla: la pantalla solo
+     * sabe lo que leyó hace un rato, y una cerrada no se edita ni se le des-consume el folio.
+     *
+     * @param  ?string  $faltanteConfirmado  decimal de dos decimales, o null si no se comparará.
+     *
+     * @throws PrefacturaSinCobroException si los pagos no cubren el total y no se confirmó, o si se confirmó otra cifra que la del faltante real.
      * @throws TotalesNoCalculablesException si la tasa de IVA o un renglón no se reconocen.
      */
-    public function cerrar(FactPrefactura $prefactura, int $userId, bool $confirmarSinCobro = false): FactPrefactura
+    public function cerrar(FactPrefactura $prefactura, int $userId, bool $confirmarSinCobro = false, ?string $faltanteConfirmado = null): FactPrefactura
     {
         // Falla rápido sin abrir transacción; se REPITE adentro, ya con candado,
         // porque la instancia recibida pudo quedar vieja.
@@ -39,7 +48,7 @@ class CierrePrefactura
             throw new PrefacturaYaCerradaException('Esta prefactura ya está cerrada.');
         }
 
-        return DB::transaction(function () use ($prefactura, $userId, $confirmarSinCobro) {
+        return DB::transaction(function () use ($prefactura, $userId, $confirmarSinCobro, $faltanteConfirmado) {
             // CANDADO antes de leer los renglones. Sin él, un renglón que otra sesión
             // agregue durante el cierre queda fuera del sello: el documento se emite
             // cobrando menos de lo que tiene, y el folio ya se consumió.
@@ -93,11 +102,13 @@ class CierrePrefactura
             $faltante = null;
 
             if (bccomp($pagado, $total, 2) < 0) {
-                if (! $confirmarSinCobro) {
-                    throw new PrefacturaSinCobroException(bcsub($total, $pagado, 2));
-                }
-
                 $faltante = bcsub($total, $pagado, 2);
+
+                // La confirmación es de una cifra, y no de otra: si el faltante real ya no es el
+                // que se vio, no vale. Va ANTES de `siguienteFolio()`, como lo demás de aquí.
+                if (! $confirmarSinCobro || ($faltanteConfirmado !== null && bccomp($faltante, $faltanteConfirmado, 2) !== 0)) {
+                    throw new PrefacturaSinCobroException($faltante);
+                }
             }
 
             $folio = $this->siguienteFolio();
