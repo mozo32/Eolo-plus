@@ -2912,7 +2912,9 @@ export function comisionVistaPrevia(monto: string, tasaIva: string): number | nu
 ```
 
 El diálogo dice, en texto: que el monto es **lo que se carga a la tarjeta**, que la
-comisión se agrega como renglón, y cuál es el subtotal actual (el tope). Al
+comisión se agrega como renglón, y cuál es **lo que falta por cobrar**, que es el tope.
+(Una versión anterior de este plan decía «el subtotal actual (el tope)»; el tope por el
+subtotal se eliminó en `fef173b` porque habría rechazado 769 de 771 pagos Amex reales.) Al
 confirmar llama `apiPrefacturas.agregarPagoAmex` y muestra la comisión **que
 devolvió el servidor**, no la vista previa.
 
