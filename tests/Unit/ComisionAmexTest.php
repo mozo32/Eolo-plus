@@ -42,3 +42,29 @@ test('una tasa que haria cero el divisor lanza en lugar de dividir entre cero', 
     // guarda documenta por que nadie tiene que volver a preguntarselo.
     expect(fn () => ComisionAmex::calcular('100.00', '-1.0000'))->toThrow(UnexpectedValueException::class);
 });
+
+test('el redondeo de medio centavo es exacto: 1.005 redondea a 1.01', function () {
+    // Cociente exacto 1.005000: 20.5958 / 1.2296 × 0.06 + 0.005 = 1.01
+    // Esta prueba mata la mutación bcadd(..., '0.006', 2) que daría 1.01 igual,
+    // pero también mata bcadd(..., '0.004', 2) que daría 1.00 en lugar de 1.01.
+    expect(ComisionAmex::calcular('20.5958', '0.1600'))->toBe('1.01');
+});
+
+test('el redondeo de medio centavo es exacto: 100.005 redondea a 100.01', function () {
+    // Segundo caso de exactitud de medio centavo: 2049.4358 / 1.2296 × 0.06 = 100.005000
+    expect(ComisionAmex::calcular('2049.4358', '0.1600'))->toBe('100.01');
+});
+
+test('la tasa se respeta con sus cuatro decimales', function () {
+    // Tasa 0.0855 da divisor 1.0855 × 1.06 = 1.150630, cociente 1000 / 1.150630 = 869.08...
+    // Su 6% es 52.1448..., redondea a 52.15. Si se baja escala del bcadd('1', $tasaIva, 4)
+    // a 2, la tasa se trunca a 0.08, divisor es 1.1448, cociente da 52.41 incorrecto.
+    // Esta prueba mata esa mutación de escala a 2.
+    expect(ComisionAmex::calcular('1000.00', '0.0855'))->toBe('52.15');
+});
+
+test('entrada con espacios es válida: se recorta al entrar', function () {
+    // El trim en calcular() permite que la entrada web con espacios no lance ValueError
+    // en bcmul, sino que se acepte normalmente y dé el resultado correcto.
+    expect(ComisionAmex::calcular(' 105.28 ', '0.1600'))->toBe('5.14');
+});

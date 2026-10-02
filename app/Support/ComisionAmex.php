@@ -10,7 +10,7 @@ use UnexpectedValueException;
  * El sistema viejo escribe `$camex = $monto * (0.06 / 1.2296)`
  * (`Prefectura/mpamex.php:40`), y ese `1.2296` es `1.16 × 1.06` precalculado: la
  * tasa de IVA por el 6% de la comisión. La fórmula no es un parche, es exacta — si
- * el operador teclea lo que se le va a charger a la tarjeta:
+ * el operador teclea lo que se le va a cargar a la tarjeta:
  *
  *     base     = monto / ((1 + iva) × 1.06)
  *     comisión = base × 0.06
@@ -34,6 +34,12 @@ final class ComisionAmex
 
     public static function calcular(string $montoBruto, string $tasaIva): string
     {
+        // Recortar una sola vez y usar los valores limpios en todo el cálculo: los
+        // espacios no son decimales, son ruido de entrada. La validación los permite
+        // porque la entrada web casi siempre trae espacios sin saberlo.
+        $montoBruto = trim($montoBruto);
+        $tasaIva = trim($tasaIva);
+
         self::exigirDecimal($montoBruto, 'monto bruto');
         self::exigirDecimal($tasaIva, 'tasa de IVA');
 
@@ -49,10 +55,15 @@ final class ComisionAmex
         return bcadd(bcdiv(bcmul($montoBruto, self::TASA, 6), $divisor, 6), '0.005', 2);
     }
 
-    /** Un signo menos SÍ se acepta: lo rechaza el `bccomp` del divisor, con su propio mensaje. */
+    /**
+     * Valida que sea un decimal. Un signo menos SÍ se acepta: lo rechaza el
+     * `bccomp` del divisor con su propio mensaje. Se asume que el valor ya ha
+     * sido recortado en `calcular()`: esto previene que una entrada con espacios
+     * lance `ValueError` en `bcmul` en lugar de `UnexpectedValueException`.
+     */
     private static function exigirDecimal(string $valor, string $que): void
     {
-        if (preg_match('/^-?(\d+(\.\d+)?|\.\d+)$/', trim($valor)) !== 1) {
+        if (preg_match('/^-?(\d+(\.\d+)?|\.\d+)$/', $valor) !== 1) {
             throw new UnexpectedValueException("La comisión Amex necesita un decimal como {$que}, y recibió: '{$valor}'");
         }
     }
