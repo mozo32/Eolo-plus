@@ -204,12 +204,30 @@ los hechos medidos.
 4. **Las notas son tres columnas en `fact_prefacturas`**, no una tabla: el viejo ya
    es uno-a-uno.
 5. **El cambio se deriva.**
-6. **La comisión Amex se redondea a dos decimales** al crear el renglón. El viejo
-   la guarda sin redondear en un `float` y la suma así, por lo que el total puede
-   quedar **un centavo** por debajo de lo que se tecleó. Se elige el redondeo
-   porque el renglón es dinero que el cliente ve impreso, y un precio con cuatro
-   decimales en el PDF es peor que un centavo. El comando de comparación lo mide y
-   lo reporta en lugar de esconderlo.
+6. **La comisión Amex ABSORBE el redondeo, para que el total del documento caiga
+   exacto en lo que se carga a la tarjeta.** Decidido por el usuario el 2026-10-02,
+   después de medirlo.
+
+   El renglón de comisión se guarda con dos decimales, porque es dinero que el
+   cliente ve impreso y un precio con cuatro decimales en el PDF es peor. Pero ese
+   redondeo, más el del IVA, hace que el total no siempre caiga en el monto tecleado:
+   **medido contra los 771 pagos Amex reales del histórico, cae exacto en 476, por
+   debajo en 161 y por encima en 134**, con desvíos de hasta cuatro centavos. Un tope
+   que rechace lo que exceda a lo que falta por cobrar rechazaría esos 161, o sea una
+   quinta parte de los pagos Amex reales.
+
+   Así que la comisión se ajusta unos centavos hasta que el total cuadre:
+   `ComisionAmex::calcular()` sigue siendo la **autoridad y el punto de partida**, y
+   `registrarAmex()` busca, en una ventana acotada y documentada alrededor de ese
+   valor, la comisión cuyo total dé exactamente el monto tecleado.
+
+   **Esto es una excepción consciente a «ningún cobro puede cambiar»**, y la única del
+   bloque: el renglón de comisión puede diferir del que calculó el sistema viejo en
+   unos centavos. Se acepta porque la alternativa es peor de las dos maneras —o el
+   documento queda por debajo del cargo real a la tarjeta, o la pantalla marca «se
+   cobró de más» en uno de cada cinco pagos Amex, que es ruido que el operador
+   aprendería a ignorar—. **El comando de comparación tiene que reportar este ajuste
+   como una diferencia esperada, nombrada y contada, no esconderla.**
 7. **Borrar un pago Amex borra la comisión que ese pago creó**, no todas las de la
    prefactura, que es lo que hace `eliminar_f.php`.
 

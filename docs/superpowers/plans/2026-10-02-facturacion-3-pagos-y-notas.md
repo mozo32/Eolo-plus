@@ -1878,6 +1878,24 @@ solo pago, **769 tienen un monto que supera el subtotal guardado** y 764 lo tien
 `Total`, con `Total / subtotal = 1.16` exacto. Un tope por el subtotal habría rechazado 769
 de 771 pagos reales y haría imposible pagar una prefactura completa con una sola pasada.
 
+**La comisión ABSORBE el redondeo** (decisión del usuario, 2026-10-02). El renglón se
+guarda con dos decimales —es dinero que el cliente ve impreso— pero ese redondeo más el
+del IVA hacen que el total no caiga siempre en el monto tecleado: medido contra los 771
+pagos Amex reales del histórico, cae exacto en 476, **por debajo en 161** y por encima en
+134, con desvíos de hasta cuatro centavos. Sin absorber, el tope rechazaría esos 161, o
+sea una quinta parte de los pagos Amex reales.
+
+`ComisionAmex::calcular()` sigue siendo la **autoridad y el punto de partida**, y
+`registrarAmex()` busca en una **ventana acotada y documentada** alrededor de ese valor la
+comisión cuyo total dé exactamente el monto. Ojo con el paso: ajustar la comisión en `d`
+mueve el total en aproximadamente `1.16 × d`, así que sumar la diferencia tal cual se
+pasa de largo. Si ningún candidato de la ventana cuadra, se queda el valor de
+`ComisionAmex::calcular()` y el tope decide; eso tiene que estar escrito.
+
+Es la **única excepción consciente a «ningún cobro puede cambiar»** del bloque: el
+renglón puede diferir del que calculó el sistema viejo en unos centavos. La Task 9 lo
+reporta como diferencia esperada.
+
 **Hace falta un servicio de catálogo para la comisión.** En el origen es
 `id_servicio = 100`, «Comisión AMEX». Se reconoce por concepto, como los de
 estancia: añade `FactServicio::CONCEPTO_COMISION_AMEX = 'comision_amex'` y mete
@@ -2953,6 +2971,14 @@ compartían etiqueta en la salida.
    781 filas comparables), las 5 de la segunda rama (`monto × 0.06`), y las 11 que
    no siguen ninguna. **Los folios de los dos últimos grupos se listan uno por uno**:
    el bloque 6 tiene que decidir qué hacer con ellos al importar.
+
+   **Y una cuarta cuenta, obligatoria:** cuántas comisiones difieren porque
+   `registrarAmex()` **absorbió el redondeo** para que el total cuadrara con el cargo a la
+   tarjeta. Es la única excepción consciente a «ningún cobro puede cambiar» del bloque
+   (decisión del usuario del 2026-10-02) y **tiene que salir nombrada y contada, con su
+   propia etiqueta y con el desvío máximo**, no escondida dentro de «exactas al centavo»
+   ni de «sin explicación». Medido sobre los 771 pagos reales, el total cae exacto en 476,
+   por debajo en 161 y por encima en 134, con desvíos de hasta cuatro centavos.
 3. **El sobrepago derivado** contra el `Cambio` guardado, **en dos listas**: los
    folios sobrepagados con `Cambio = 0` (se esperan **12**) y los que tienen
    `Cambio ≠ 0` sin estar sobrepagados (se esperan **3**).
