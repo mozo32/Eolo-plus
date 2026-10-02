@@ -147,8 +147,9 @@ function redondear2(valor: number): number {
  * VISTA PREVIA del importe de un servicio, para que quien captura vea el efecto
  * del margen y del ajuste. No es la cifra oficial: la calcula el servidor.
  *
- * AUTORIDAD: `FactServicio::importe()` y `FactServicio::aplicarAjuste()` (app/Models/FactServicio.php).
- * Esta función es una copia de esa fórmula: quien cambie una tiene que cambiar la otra.
+ * AUTORIDAD: `App\Support\ImporteServicio::calcular()` (app/Support/ImporteServicio.php); `FactServicio::importe()`
+ * solo delega en ella. El IVA de la prefactura no se calcula aquí: su fórmula es `FactPrefactura::calcularIva()`.
+ * Esta función es una copia de la fórmula del importe: quien cambie una tiene que cambiar la otra.
  *
  *   ajustado = según el ajuste: ninguno → precio; mas_5 → precio × 1.05;
  *              sin_iva → precio ÷ 1.16; comision_131 → p1 = precio ÷ 1.31, p1 × 0.15 + p1
