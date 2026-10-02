@@ -121,6 +121,75 @@ class PrefacturaRenglonController extends Controller
         return $rechazo ?? response()->json(['message' => 'Renglón eliminado.']);
     }
 
+    /**
+     * Marca o desmarca un renglón como cortesía: se sigue viendo en el documento,
+     * pero su importe es 0.
+     *
+     * Escritura POR MODELO (`$fila->update()`), nunca masiva: así pasa por la guarda
+     * de `saving` que rechaza una prefactura cerrada.
+     *
+     * La bitácora dice la cifra que deja de cobrarse (al marcar) o que vuelve a
+     * cobrarse (al quitar): en los dos casos `importeSinCortesia()`, que no depende
+     * del estado del renglón. Tomar `importe()` antes del cambio al marcar y después
+     * al quitar da lo mismo solo si la petición cambia algo; si repite el valor
+     * actual, `importe()` ya es 0.00 y el registro diría «por 0.00».
+     */
+    public function cortesia(Request $request, int $id, int $renglon): JsonResponse
+    {
+        $datos = $request->validate(['es_cortesia' => ['required', 'boolean']]);
+        $marcar = (bool) $datos['es_cortesia'];
+
+        $prefactura = FactPrefactura::findOrFail($id);
+
+        if ($respuesta = $this->rechazoRapido($prefactura)) {
+            return $respuesta;
+        }
+
+        $resultado = DB::transaction(function () use ($request, $id, $renglon, $marcar) {
+            $actual = $this->bloquear($id);
+
+            if ($respuesta = $this->rechazarSiDescartada($actual)) {
+                return $respuesta;
+            }
+
+            $fila = $actual->renglones()->whereKey($renglon)->firstOrFail();
+
+            // Sin cambio no hay escritura ni bitácora. Se escribe igual por modelo
+            // cuando hay cambio, para que la guarda de cerrada se dispare.
+            if ($fila->es_cortesia === $marcar) {
+                return $actual;
+            }
+
+            $fila->update(['es_cortesia' => $marcar]);
+
+            $importe = $fila->importeSinCortesia();
+            $descripcion = $marcar
+                ? "Se marcó como cortesía el servicio {$fila->nombre_servicio} de la prefactura {$actual->id}: deja de cobrarse {$importe}."
+                : "Se quitó la cortesía del servicio {$fila->nombre_servicio} de la prefactura {$actual->id}: vuelve a cobrarse {$importe}.";
+
+            Bitacora::log(
+                modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
+                accion: Bitacora::ACCION_ACTUALIZAR,
+                descripcion: $descripcion,
+                usuarioId: $request->user()->id,
+                registroId: $actual->id,
+                datosAnteriores: ['renglon_id' => $fila->id, 'es_cortesia' => ! $marcar],
+                datosNuevos: ['renglon_id' => $fila->id, 'es_cortesia' => $marcar, 'importe' => $importe],
+            );
+
+            return $actual;
+        });
+
+        if ($resultado instanceof JsonResponse) {
+            return $resultado;
+        }
+
+        return response()->json([
+            'message' => $marcar ? 'Renglón marcado como cortesía.' : 'Cortesía quitada.',
+            'prefactura' => app(PrefacturaController::class)->fichaDe($resultado->id),
+        ]);
+    }
+
     public function estancia(Request $request, int $id, CargosEstancia $cargos): JsonResponse
     {
         $prefactura = FactPrefactura::findOrFail($id);

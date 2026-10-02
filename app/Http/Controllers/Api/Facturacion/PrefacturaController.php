@@ -309,6 +309,15 @@ class PrefacturaController extends Controller
     }
 
     /**
+     * La ficha completa de una prefactura, para que otro controlador del módulo
+     * devuelva el mismo cuerpo que `show()` sin copiar `presentar()`.
+     */
+    public function fichaDe(int $id): array
+    {
+        return $this->presentar(FactPrefactura::findOrFail($id)->fresh(), conRenglones: true);
+    }
+
+    /**
      * La cabecera tal como se registra en bitácora. Las fechas van como texto: un
      * objeto Carbon se serializaría con otro formato y el antes y el después no
      * serían comparables.
@@ -364,6 +373,7 @@ class PrefacturaController extends Controller
                 'ajuste_precio' => $r->ajuste_precio,
                 'concepto' => $r->concepto,
                 'remision' => $r->remision,
+                'es_cortesia' => $r->es_cortesia,
             ] + $this->importeDelRenglon($r))->all();
         }
 

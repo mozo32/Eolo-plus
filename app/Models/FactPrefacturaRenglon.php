@@ -12,7 +12,7 @@ class FactPrefacturaRenglon extends Model
 
     protected $fillable = [
         'prefactura_id', 'servicio_id', 'nombre_servicio', 'precio_unitario', 'cantidad',
-        'es_de_tercero', 'margen', 'ajuste_precio', 'concepto', 'proveedor_id', 'remision', 'orden',
+        'es_de_tercero', 'margen', 'ajuste_precio', 'concepto', 'proveedor_id', 'remision', 'orden', 'es_cortesia',
     ];
 
     protected $casts = [
@@ -20,6 +20,7 @@ class FactPrefacturaRenglon extends Model
         'margen' => 'decimal:2',
         'es_de_tercero' => 'boolean',
         'cantidad' => 'integer',
+        'es_cortesia' => 'boolean',
     ];
 
     protected $appends = ['importe'];
@@ -74,8 +75,30 @@ class FactPrefacturaRenglon extends Model
     /**
      * El importe se deriva de los valores CONGELADOS del renglón, nunca de los
      * del catálogo: el servicio pudo cambiar de precio después.
+     *
+     * Un renglón de cortesía no cobra. La comprobación va AQUÍ y no en
+     * `ImporteServicio::calcular()`: esa es la fórmula compartida —la usan también el
+     * catálogo y la vista previa de la pantalla— y no tiene por qué saber de
+     * cortesías. Los valores congelados no se tocan, así que quitar la cortesía
+     * devuelve el importe exacto, con su margen y su ajuste; el sistema viejo lo
+     * recalcula como `precio × cantidad` y pierde los dos (`cortecia.php:24`).
      */
     public function importe(): string
+    {
+        if ($this->es_cortesia) {
+            return '0.00';
+        }
+
+        return $this->importeSinCortesia();
+    }
+
+    /**
+     * Lo que el renglón cobraría si no fuera cortesía: la cifra que la cortesía
+     * deja de cobrar (o que vuelve a cobrar al quitarla). No depende de si
+     * `es_cortesia` está puesta, por eso sirve para registrar el cambio en la
+     * bitácora en los dos sentidos con la misma cifra.
+     */
+    public function importeSinCortesia(): string
     {
         return ImporteServicio::calcular(
             (float) $this->precio_unitario,

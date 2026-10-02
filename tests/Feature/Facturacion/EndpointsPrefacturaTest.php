@@ -160,6 +160,7 @@ test('cada ruta de escritura de prefacturas lleva su subdepartamento', function 
         'PATCH api/facturacion/prefacturas/{id}/cerrar' => 'subdep:factPrefacturas',
         'POST api/facturacion/prefacturas/{id}/renglones' => 'subdep:factPrefacturas',
         'DELETE api/facturacion/prefacturas/{id}/renglones/{renglon}' => 'subdep:factPrefacturas',
+        'PATCH api/facturacion/prefacturas/{id}/renglones/{renglon}/cortesia' => 'subdep:factPrefacturas',
         'PATCH api/facturacion/prefacturas/{id}/estancia' => 'subdep:factPrefacturas',
         'PATCH api/facturacion/prefacturas/{id}/internacional' => 'subdep:factPrefacturas',
         'PATCH api/facturacion/prefacturas/{id}/descartar' => 'subdep:factPrefacturas',
@@ -265,6 +266,24 @@ test('si se cierra entre el chequeo y el candado, quitar un renglon responde 409
 
     expect(FactPrefacturaRenglon::whereKey($renglon->id)->exists())->toBeTrue()
         ->and(bitacoraDePrefacturas(Bitacora::ACCION_ELIMINAR))->toBe(0);
+});
+
+test('si se cierra entre el chequeo y el candado, marcar una cortesia responde 409 por la excepcion y no escribe nada', function () {
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $this->actingAs($usuario);
+    [$p] = prefacturaCompleta();
+    $renglon = $p->renglones()->sole();
+    cierraTrasLaComprobacion($p, $usuario->id);
+    $bitacoraAntes = Bitacora::count();
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/renglones/{$renglon->id}/cortesia", ['es_cortesia' => true])
+        ->assertStatus(409)
+        ->assertJsonPath('codigo', 'ya_cerrada');
+
+    // La unica entrada nueva es la del cierre de la otra sesion: la de la cortesia se revirtio.
+    expect($p->fresh()->estaCerrada())->toBeTrue()
+        ->and($renglon->fresh()->es_cortesia)->toBeFalse()
+        ->and(Bitacora::count() - $bitacoraAntes)->toBe(1);
 });
 
 test('si se cierra entre el chequeo y el candado, recalcular estancia responde 409 por la excepcion', function () {
@@ -660,6 +679,7 @@ function llamarEscrituraDeRenglones(Tests\TestCase $prueba, string $endpoint, in
         'destroy' => $prueba->deleteJson("{$base}/renglones/{$renglonId}"),
         'estancia' => $prueba->patchJson("{$base}/estancia", ['pernoctas' => 1, 'transitos_2h' => 0, 'transitos_12h' => 0]),
         'internacional' => $prueba->patchJson("{$base}/internacional"),
+        'cortesia' => $prueba->patchJson("{$base}/renglones/{$renglonId}/cortesia", ['es_cortesia' => true]),
     };
 }
 
@@ -677,7 +697,7 @@ test('un borrador descartado no recibe ninguna escritura de renglones', function
     expect($p->renglones()->count())->toBe(1)
         ->and($p->fresh()->tipo_destino)->toBe(FactPrefactura::DESTINO_NACIONAL)
         ->and(Bitacora::count())->toBe($bitacora);
-})->with(['store', 'destroy', 'estancia', 'internacional']);
+})->with(['store', 'destroy', 'estancia', 'internacional', 'cortesia']);
 
 test('si se descarta entre el chequeo y el candado, la escritura de renglones responde 409 ya_descartada', function (string $endpoint) {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
@@ -701,7 +721,7 @@ test('si se descarta entre el chequeo y el candado, la escritura de renglones re
     expect($p->renglones()->count())->toBe(1)
         ->and($p->fresh()->tipo_destino)->toBe(FactPrefactura::DESTINO_NACIONAL)
         ->and(Bitacora::count())->toBe(0);
-})->with(['store', 'destroy', 'estancia', 'internacional']);
+})->with(['store', 'destroy', 'estancia', 'internacional', 'cortesia']);
 
 test('la bitacora va en la misma transaccion tambien al quitar un renglon, recalcular estancia y marcar internacional', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
@@ -714,8 +734,10 @@ test('la bitacora va en la misma transaccion tambien al quitar un renglon, recal
     llamarEscrituraDeRenglones($this, 'destroy', $p->id, $renglon->id)->assertStatus(500);
     llamarEscrituraDeRenglones($this, 'estancia', $p->id)->assertStatus(500);
     llamarEscrituraDeRenglones($this, 'internacional', $p->id)->assertStatus(500);
+    llamarEscrituraDeRenglones($this, 'cortesia', $p->id, $renglon->id)->assertStatus(500);
 
     expect(FactPrefacturaRenglon::whereKey($renglon->id)->exists())->toBeTrue()
+        ->and($renglon->fresh()->es_cortesia)->toBeFalse()
         ->and($p->renglones()->count())->toBe(1)
         ->and($p->fresh()->tipo_destino)->toBe(FactPrefactura::DESTINO_NACIONAL);
 });
