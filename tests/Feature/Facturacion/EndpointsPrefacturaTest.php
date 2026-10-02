@@ -1003,3 +1003,28 @@ test('el 422 de estancia revierte lo ya borrado: los renglones previos siguen', 
 
     expect($p->renglones()->sole()->cantidad)->toBe(1);
 });
+
+test('una prefactura ya internacional sigue guardando su encabezado al reenviar su destino', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    paqueteInternacionalCompleto();
+    $id = $this->postJson('/api/facturacion/prefacturas', cuerpoPrefactura())->assertCreated()->json('prefactura.id');
+    $this->patchJson("/api/facturacion/prefacturas/{$id}/internacional")->assertOk();
+
+    // El editor reenvia el destino que la prefactura ya tiene: si esto se rechaza, el
+    // encabezado deja de guardarse y, sin cliente, la prefactura nunca se puede cerrar.
+    $this->putJson("/api/facturacion/prefacturas/{$id}", cuerpoPrefactura(['tipo_destino' => 'internacional', 'origen' => 'MMMX']))
+        ->assertOk()
+        ->assertJsonPath('prefactura.origen', 'MMMX')
+        ->assertJsonPath('prefactura.tipo_destino', 'internacional');
+});
+
+test('editar el encabezado no cambia el destino a internacional: eso lo hace su propia accion', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+
+    $this->putJson("/api/facturacion/prefacturas/{$p->id}", cuerpoPrefactura(['tipo_destino' => 'internacional']))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['tipo_destino']);
+
+    expect($p->fresh()->tipo_destino)->toBe(FactPrefactura::DESTINO_NACIONAL);
+});

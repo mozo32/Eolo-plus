@@ -622,5 +622,5 @@ tocaron):
 ## Nota de entorno
 
 `php artisan test --parallel` produce falsos fallos en la máquina de desarrollo actual
-(ver la guía del 1b). **La suite se corre en serie.** Al cierre de este bloque son **749
+(ver la guía del 1b). **La suite se corre en serie.** Al cierre de este bloque son **751
 pruebas** en verde.

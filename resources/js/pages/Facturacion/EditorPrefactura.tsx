@@ -435,7 +435,14 @@ export default function EditorPrefactura({ id }: Props) {
                 return;
             }
 
-            toast.fire({ icon: 'success', titleText: `Paquete internacional agregado: ${agregados} ${agregados === 1 ? 'servicio' : 'servicios'}.` });
+            // Sin motivo y sin agregados, el paquete ya estaba completo en los renglones: decir «agregado: 0 servicios» sonaria a que algo fallo.
+            toast.fire({
+                icon: 'success',
+                titleText:
+                    agregados === 0
+                        ? 'Marcada internacional: el paquete ya estaba en los renglones.'
+                        : `Paquete internacional agregado: ${agregados} ${agregados === 1 ? 'servicio' : 'servicios'}.`,
+            });
         });
 
     const descartar = () =>
