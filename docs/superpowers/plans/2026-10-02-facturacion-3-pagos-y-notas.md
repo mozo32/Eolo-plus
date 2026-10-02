@@ -241,7 +241,7 @@ final class ComisionAmex
 - [ ] **Step 4: Córrela para verificar que pasa**
 
 Run: `php artisan test tests/Unit/ComisionAmexTest.php`
-Expected: PASS, 11 pruebas (6 del dataset contadas como 5 casos más las 6 sueltas).
+Expected: PASS, 11 pruebas (5 casos del dataset más 6 sueltas).
 
 - [ ] **Step 5: Verifica por mutación que la prueba de la tasa sirve**
 
@@ -288,20 +288,19 @@ para AvCard en `mpago.php:63` y `:48`.
 
 - [ ] **Step 1: Escribe la prueba que falla**
 
+**Nada de probar al ayudante.** Una prueba que siembra las formas con
+`formasDePago()` y luego afirma que llevan concepto no prueba el código: prueba al
+ayudante que acaba de escribirlas. Y el relleno por nombre de la migración es
+inverificable en la suite, porque las migraciones corren contra una tabla vacía.
+**El mecanismo que asigna el concepto en producción es el importador**, y eso se
+prueba en el Step 7, en el archivo del importador.
+
 ```php
 <?php
 
 use App\Models\FactFormaPago;
 
-test('las tres formas que el codigo reconoce llevan concepto y las demas no', function () {
-    foreach (['Efectivo' => 'efectivo', 'Amex' => 'amex', 'AvCard by WFS' => 'avcard'] as $nombre => $concepto) {
-        expect(FactFormaPago::where('nombre', $nombre)->value('concepto'))->toBe($concepto);
-    }
-
-    foreach (['Visa', 'Mastercard', 'Transferencia', 'Tarjeta Remota'] as $nombre) {
-        expect(FactFormaPago::where('nombre', $nombre)->value('concepto'))->toBeNull();
-    }
-});
+beforeEach(fn () => formasDePago());
 
 test('el concepto es unico: no puede haber dos formas de pago que sean Efectivo', function () {
     FactFormaPago::create(['nombre' => 'Caja chica', 'concepto' => null]);
@@ -318,8 +317,8 @@ test('el scope encuentra la forma por concepto y no por nombre', function () {
 });
 ```
 
-La prueba necesita las siete formas de pago sembradas. Siémbralas con un ayudante
-nuevo en `tests/Pest.php` (ver Step 3).
+El `beforeEach` usa el ayudante `formasDePago()`, que esta misma task añade a
+`tests/Pest.php` (Step 3) y que las Tasks 3, 5, 6 y 7 también van a usar.
 
 - [ ] **Step 2: Córrela para verificar que falla**
 
@@ -768,9 +767,8 @@ class FactPrefacturaPago extends Model
 
 - [ ] **Step 6: Los derivados en `FactPrefactura`**
 
-Añade `'nota_interna', 'nota_externa', 'nota_factura'` a `$fillable` ya (la Task 7
-crea las columnas; tenerlo aquí evita tocar el modelo dos veces, y un `$fillable`
-con una columna que todavía no existe no rompe nada porque nadie la asigna).
+**No toques `$fillable` para las notas:** sus columnas las crea la Task 7 y ahí se
+añaden. Un `$fillable` que nombra columnas inexistentes es un hallazgo legítimo.
 
 ```php
     /**
@@ -1192,6 +1190,8 @@ git commit -m "La cortesia no cobra y al quitarla no pierde el margen, que es lo
 - Create: `app/Services/PagoNoPermitidoException.php`
 - Create: `app/Http/Controllers/Api/Facturacion/PrefacturaPagoController.php`
 - Create: `app/Http/Requests/Facturacion/StorePagoRequest.php`
+- Modify: `app/Http/Controllers/Api/Facturacion/Concerns/RechazaPrefacturaCerrada.php` (recibe `rechazoRapido()`)
+- Modify: `app/Http/Controllers/Api/Facturacion/PrefacturaRenglonController.php` (deja de declararlo)
 - Modify: `routes/api.php`
 - Test: `tests/Feature/Facturacion/PagosPrefacturaTest.php`
 
@@ -1730,18 +1730,25 @@ class PrefacturaPagoController extends Controller
             'prefactura' => app(PrefacturaController::class)->fichaDe($id),
         ]);
     }
+}
+```
 
+**`rechazoRapido()` NO se copia: se mueve al trait.** Antes de escribir este
+controlador, saca `rechazoRapido()` de `PrefacturaRenglonController` y ponlo en
+`app/Http/Controllers/Api/Facturacion/Concerns/RechazaPrefacturaCerrada.php`, junto a
+`rechazarSiCerrada()` y `rechazarSiDescartada()`, que es de donde se compone:
+
+```php
+    /** El camino rápido completo: una cerrada y un borrador descartado se rechazan igual. */
     private function rechazoRapido(FactPrefactura $prefactura): ?JsonResponse
     {
         return $this->rechazarSiCerrada($prefactura) ?? $this->rechazarSiDescartada($prefactura);
     }
-}
 ```
 
-**Nota:** `rechazoRapido()` es idéntico al de `PrefacturaRenglonController`. Si al
-escribirlo ves que ya son dos copias literales, muévelo al trait
-`RechazaPrefacturaCerrada` y quítalo de los dos controladores: el bloque 2 ya
-extrajo ese trait por este mismo motivo.
+Los dos controladores lo usan desde el trait y ninguno lo declara. El bloque 2 ya
+extrajo ese trait por este mismo motivo, y dejar la segunda copia sería duplicación
+literal de un bloque de lógica, que la revisión trata como defecto.
 
 - [ ] **Step 7: Las rutas**
 
@@ -1821,7 +1828,7 @@ Restaura con `git checkout --` después de cada una.
 - [ ] **Step 10: Commit**
 
 ```bash
-git add app/Services/PagosPrefactura.php app/Services/PagoNoPermitidoException.php app/Http/Controllers/Api/Facturacion/PrefacturaPagoController.php app/Http/Controllers/Api/Facturacion/PrefacturaController.php app/Http/Requests/Facturacion/StorePagoRequest.php routes/api.php tests/Feature/Facturacion/PagosPrefacturaTest.php tests/Feature/Facturacion/EndpointsPrefacturaTest.php
+git add app/Services/PagosPrefactura.php app/Services/PagoNoPermitidoException.php app/Http/Controllers/Api/Facturacion/PrefacturaPagoController.php app/Http/Controllers/Api/Facturacion/PrefacturaController.php app/Http/Controllers/Api/Facturacion/PrefacturaRenglonController.php app/Http/Controllers/Api/Facturacion/Concerns/RechazaPrefacturaCerrada.php app/Http/Requests/Facturacion/StorePagoRequest.php routes/api.php tests/Feature/Facturacion/PagosPrefacturaTest.php tests/Feature/Facturacion/EndpointsPrefacturaTest.php
 git commit -m "Los pagos, con la regla de cada forma: el efectivo excede, AvCard no va con combustible"
 ```
 
@@ -2228,6 +2235,7 @@ git commit -m "El pago Amex agrega su comision, y quitarlo quita la suya y no la
 - Create: `database/migrations/2026_09_29_093300_add_notas_to_fact_prefacturas_table.php`
 - Create: `app/Http/Requests/Facturacion/UpdateNotasRequest.php`
 - Create: `app/Services/PrefacturaSinCobroException.php`
+- Modify: `app/Models/FactPrefactura.php` (las tres notas en `$fillable`)
 - Modify: `app/Services/CierrePrefactura.php`
 - Modify: `app/Http/Controllers/Api/Facturacion/PrefacturaController.php`
 - Modify: `routes/api.php`
@@ -2560,7 +2568,14 @@ En `PrefacturaController`:
     }
 ```
 
-Añade las tres notas a `presentar()`, junto a `tipo_destino`:
+Añade las tres notas a `$fillable` de `App\Models\FactPrefactura`, después de
+`'tipo_destino'`:
+
+```php
+        'nota_interna', 'nota_externa', 'nota_factura',
+```
+
+Y añade las tres a `presentar()`, junto a `tipo_destino`:
 
 ```php
             'nota_interna' => $p->nota_interna,
