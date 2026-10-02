@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Facturacion;
 
 use App\Models\FactPrefactura;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -19,7 +20,19 @@ class StorePrefacturaRequest extends FormRequest
             'destino' => ['nullable', 'string', 'max:120'],
             'operacion_llegada_id' => ['nullable', 'integer', 'exists:operaciones_diarias,id'],
             'operacion_salida_id' => ['nullable', 'integer', 'exists:operaciones_diarias,id'],
-            'tipo_destino' => ['required', Rule::in([FactPrefactura::DESTINO_NACIONAL, FactPrefactura::DESTINO_INTERNACIONAL])],
+            // Un borrador SIEMPRE se abre nacional. El destino internacional lo pone
+            // `PrefacturaRenglonController::internacional()` y solo si agregó el paquete:
+            // aceptarlo aquí crearía, por API, una prefactura que dice Internacional sin
+            // los servicios del paquete y sin el botón del editor para agregarlos.
+            'tipo_destino' => [
+                'required',
+                Rule::in([FactPrefactura::DESTINO_NACIONAL, FactPrefactura::DESTINO_INTERNACIONAL]),
+                function (string $atributo, mixed $valor, Closure $falla): void {
+                    if ($valor === FactPrefactura::DESTINO_INTERNACIONAL) {
+                        $falla('Un borrador se abre como nacional; el paquete internacional se agrega después desde el editor.');
+                    }
+                },
+            ],
         ];
     }
 

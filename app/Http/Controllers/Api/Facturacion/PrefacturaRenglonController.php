@@ -9,6 +9,7 @@ use App\Models\Bitacora;
 use App\Models\FactPrefactura;
 use App\Models\FactServicio;
 use App\Services\CargosEstancia;
+use App\Services\ServicioDeEstanciaNoDisponibleException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -136,26 +137,33 @@ class PrefacturaRenglonController extends Controller
 
         // La transacción de afuera deja la bitácora en la misma que el servicio:
         // `CargosEstancia` abre la suya, que aquí queda anidada.
-        $resultado = DB::transaction(function () use ($request, $prefactura, $cargos, $datos) {
-            // Candado y guarda de descartada ANTES del servicio. La de cerrada sigue
-            // siendo del servicio (su excepción se traduce sola a 409).
-            if ($respuesta = $this->rechazarSiDescartada($this->bloquear($prefactura->id))) {
-                return $respuesta;
-            }
+        try {
+            $resultado = DB::transaction(function () use ($request, $prefactura, $cargos, $datos) {
+                // Candado y guarda de descartada ANTES del servicio. La de cerrada sigue
+                // siendo del servicio (su excepción se traduce sola a 409).
+                if ($respuesta = $this->rechazarSiDescartada($this->bloquear($prefactura->id))) {
+                    return $respuesta;
+                }
 
-            $resultado = $cargos->recalcular($prefactura, $datos['pernoctas'], $datos['transitos_2h'], $datos['transitos_12h']);
+                $resultado = $cargos->recalcular($prefactura, $datos['pernoctas'], $datos['transitos_2h'], $datos['transitos_12h']);
 
-            Bitacora::log(
-                modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
-                accion: Bitacora::ACCION_ACTUALIZAR,
-                descripcion: "Se recalculó la estancia de la prefactura {$prefactura->id}: {$resultado['renglones']} renglones.",
-                usuarioId: $request->user()->id,
-                registroId: $prefactura->id,
-                datosNuevos: $datos,
-            );
+                Bitacora::log(
+                    modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
+                    accion: Bitacora::ACCION_ACTUALIZAR,
+                    descripcion: "Se recalculó la estancia de la prefactura {$prefactura->id}: {$resultado['renglones']} renglones.",
+                    usuarioId: $request->user()->id,
+                    registroId: $prefactura->id,
+                    datosNuevos: $datos,
+                );
 
-            return $resultado;
-        });
+                return $resultado;
+            });
+        } catch (ServicioDeEstanciaNoDisponibleException $e) {
+            // Nada quedó escrito (la transacción se revirtió). El mensaje ya dice qué
+            // hacer; sin esta captura, con APP_DEBUG=false Laravel lo reemplaza por
+            // un «Server Error» y la persona nunca lo lee.
+            return response()->json(['message' => $e->getMessage(), 'codigo' => 'servicio_estancia_no_disponible'], 422);
+        }
 
         if ($resultado instanceof JsonResponse) {
             return $resultado;
@@ -176,7 +184,7 @@ class PrefacturaRenglonController extends Controller
             return $respuesta;
         }
 
-        $agregados = DB::transaction(function () use ($request, $prefactura, $cargos) {
+        $resultado = DB::transaction(function () use ($request, $prefactura, $cargos) {
             if ($respuesta = $this->rechazarSiDescartada($this->bloquear($prefactura->id))) {
                 return $respuesta;
             }
@@ -184,26 +192,45 @@ class PrefacturaRenglonController extends Controller
             // El servicio toma el candado y rechaza una cerrada ANTES de que se escriba
             // nada: por eso el cambio de destino va después, ya con la fila bloqueada y
             // comprobada como borrador.
-            $agregados = $cargos->agregarPaqueteInternacional($prefactura);
-            $prefactura->update(['tipo_destino' => FactPrefactura::DESTINO_INTERNACIONAL]);
+            $resultado = $cargos->agregarPaqueteInternacional($prefactura);
+
+            // Solo se marca internacional si la prefactura TIENE algo del paquete (lo que
+            // se agregó ahora o lo que ya estaba). Marcarla sin ninguno la deja en un
+            // callejón: la insignia dice Internacional, la tabla no tiene el paquete y el
+            // editor ya no ofrece el botón, que solo sale con destino nacional.
+            $marcada = $resultado['en_paquete'] > 0;
+
+            if ($marcada) {
+                $prefactura->update(['tipo_destino' => FactPrefactura::DESTINO_INTERNACIONAL]);
+            }
 
             Bitacora::log(
                 modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
                 accion: Bitacora::ACCION_ACTUALIZAR,
-                descripcion: "Se marcó internacional la prefactura {$prefactura->id} y se agregaron {$agregados} servicios del paquete.",
+                descripcion: $marcada
+                    ? "Se marcó internacional la prefactura {$prefactura->id} y se agregaron {$resultado['renglones']} servicios del paquete."
+                    : "Se intentó marcar internacional la prefactura {$prefactura->id}: no se agregó ningún servicio del paquete y sigue nacional.",
                 usuarioId: $request->user()->id,
                 registroId: $prefactura->id,
-                datosNuevos: ['tipo_destino' => FactPrefactura::DESTINO_INTERNACIONAL, 'servicios_agregados' => $agregados],
+                datosNuevos: [
+                    'tipo_destino' => $marcada ? FactPrefactura::DESTINO_INTERNACIONAL : $prefactura->tipo_destino,
+                    'servicios_agregados' => $resultado['renglones'],
+                    'servicios_faltantes' => $resultado['faltantes'],
+                ],
             );
 
-            return $agregados;
+            return $resultado;
         });
 
-        if ($agregados instanceof JsonResponse) {
-            return $agregados;
+        if ($resultado instanceof JsonResponse) {
+            return $resultado;
         }
 
-        return response()->json(['message' => 'Paquete internacional agregado.', 'renglones' => $agregados]);
+        return response()->json([
+            'message' => $resultado['motivo'] ?? 'Paquete internacional agregado.',
+            'renglones' => $resultado['renglones'],
+            'motivo' => $resultado['motivo'],
+        ]);
     }
 
     /**

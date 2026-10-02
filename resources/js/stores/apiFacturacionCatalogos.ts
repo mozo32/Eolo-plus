@@ -137,7 +137,7 @@ export type CategoriaServicio = {
     status: StatusCatalogo;
 };
 
-/** Cómo se ajusta el precio antes de aplicar el margen; la fórmula vive en `FactServicio::aplicarAjuste()`. */
+/** Cómo se ajusta el precio antes de aplicar el margen; la fórmula vive en `App\Support\ImporteServicio::calcular()` (app/Support/ImporteServicio.php). */
 export type AjustePrecio = 'ninguno' | 'mas_5' | 'sin_iva' | 'comision_131';
 
 export type Servicio = {
@@ -455,7 +455,8 @@ export const apiPrefacturas = {
     agregarRenglon: (id: number, datos: Record<string, unknown>) => pedir<{ renglon_id: number }>(`${BASE}/prefacturas/${id}/renglones`, { method: 'POST', body: datos }),
     quitarRenglon: (id: number, renglon: number) => pedir<{ message: string }>(`${BASE}/prefacturas/${id}/renglones/${renglon}`, { method: 'DELETE' }),
     estancia: (id: number, datos: Record<string, unknown>) => pedir<{ renglones: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/estancia`, { method: 'PATCH', body: datos }),
-    internacional: (id: number) => pedir<{ renglones: number }>(`${BASE}/prefacturas/${id}/internacional`, { method: 'PATCH' }),
+    /** `motivo` llega cuando el paquete no se agregó completo; con `renglones` 0 el destino sigue nacional. */
+    internacional: (id: number) => pedir<{ renglones: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/internacional`, { method: 'PATCH' }),
     /** Baja lógica de un borrador. 409 (ErrorApi.codigo ya_cerrada o ya_descartada) si ya no es un borrador activo. */
     descartar: (id: number) => pedir<{ message: string }>(`${BASE}/prefacturas/${id}/descartar`, { method: 'PATCH' }),
 };

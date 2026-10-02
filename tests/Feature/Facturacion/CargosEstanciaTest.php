@@ -9,6 +9,7 @@ use App\Models\FactPrefacturaRenglon;
 use App\Models\FactServicio;
 use App\Services\CargosEstancia;
 use App\Services\RenglonDePrefacturaCerradaException;
+use App\Services\ServicioDeEstanciaNoDisponibleException;
 use Illuminate\Support\Facades\DB;
 
 /*
@@ -98,7 +99,11 @@ test('el paquete internacional agrega las cuatro con el precio del catalogo', fu
 
     $agregados = app(CargosEstancia::class)->agregarPaqueteInternacional($p);
 
-    expect($agregados)->toBe(4)
+    expect($agregados['renglones'])->toBe(4)
+        ->and($agregados['activos'])->toBe(4)
+        ->and($agregados['en_paquete'])->toBe(4)
+        ->and($agregados['faltantes'])->toBe([])
+        ->and($agregados['motivo'])->toBeNull()
         ->and($p->fresh()->subtotal())->toBe('6058.50');
 });
 
@@ -401,8 +406,102 @@ test('el paquete internacional con parte del paquete ya puesto agrega solo lo qu
 
     $p = $p->fresh();
 
-    expect($agregados)->toBe(2)
+    expect($agregados['renglones'])->toBe(2)
+        ->and($agregados['motivo'])->toBeNull()
         ->and($p->renglones()->count())->toBe(3)
         ->and($p->renglones()->where('servicio_id', $servicios[1]->id)->sole()->cantidad)->toBe(3)
         ->and($p->renglones()->pluck('servicio_id')->sort()->values()->all())->toBe($servicios->pluck('id')->sort()->values()->all());
+});
+
+/*
+ * El paquete internacional no puede cobrar de menos en silencio. Un servicio de baja
+ * no se cobra (correcto), pero el resultado tiene que decir cual falto y por que.
+ */
+
+function paqueteInternacionalDelCatalogo(): array
+{
+    return collect([['DSMES - salida', 4060.50], ['DSM - salida', 348.0], ['Mex-eAPI - salida', 900.0], ['Servicios Internacionales - salida', 750.0]])
+        ->map(fn ($f) => FactServicio::create(['nombre' => $f[0], 'precio_unitario' => $f[1], 'en_paquete_internacional' => true]))
+        ->all();
+}
+
+test('un paquete internacional incompleto dice cual servicio faltó y que se cobra de menos', function () {
+    $p = conEstancia();
+    $servicios = paqueteInternacionalDelCatalogo();
+    $servicios[0]->update(['status' => FactServicio::STATUS_INACTIVO]);
+
+    $resultado = app(CargosEstancia::class)->agregarPaqueteInternacional($p);
+
+    expect($resultado['renglones'])->toBe(3)
+        ->and($resultado['activos'])->toBe(3)
+        ->and($resultado['en_paquete'])->toBe(3)
+        ->and($resultado['faltantes'])->toBe(['DSMES - salida'])
+        ->and($resultado['motivo'])->toContain('DSMES - salida')->toContain('incompleto')
+        ->and($p->fresh()->subtotal())->toBe('1998.00');
+});
+
+test('un paquete internacional sin ningun servicio activo no agrega nada y lo dice', function () {
+    $p = conEstancia();
+    foreach (paqueteInternacionalDelCatalogo() as $servicio) {
+        $servicio->update(['status' => FactServicio::STATUS_INACTIVO]);
+    }
+
+    $resultado = app(CargosEstancia::class)->agregarPaqueteInternacional($p);
+
+    expect($resultado['renglones'])->toBe(0)
+        ->and($resultado['activos'])->toBe(0)
+        ->and($resultado['en_paquete'])->toBe(0)
+        ->and($resultado['faltantes'])->toHaveCount(4)
+        ->and($resultado['motivo'])->toContain('ningún servicio')->toContain('DSMES - salida')
+        ->and($p->fresh()->renglones()->count())->toBe(0);
+});
+
+test('un catalogo sin servicios marcados como paquete no agrega nada y manda a reimportar', function () {
+    $p = conEstancia();
+    FactServicio::create(['nombre' => 'Otro servicio', 'precio_unitario' => 10.0]);
+
+    $resultado = app(CargosEstancia::class)->agregarPaqueteInternacional($p);
+
+    expect($resultado['renglones'])->toBe(0)
+        ->and($resultado['activos'])->toBe(0)
+        ->and($resultado['en_paquete'])->toBe(0)
+        ->and($resultado['faltantes'])->toBe([])
+        ->and($resultado['motivo'])->toContain('Reimporta');
+});
+
+test('un servicio del paquete dado de baja que ya estaba en los renglones no cuenta como faltante', function () {
+    $p = conEstancia();
+    $servicios = paqueteInternacionalDelCatalogo();
+    $p->renglones()->create([
+        'servicio_id' => $servicios[0]->id, 'nombre_servicio' => 'DSMES - salida', 'precio_unitario' => 4060.50,
+        'cantidad' => 1, 'es_de_tercero' => false, 'margen' => 0, 'ajuste_precio' => 'ninguno', 'orden' => 1,
+    ]);
+    $servicios[0]->update(['status' => FactServicio::STATUS_INACTIVO]);
+
+    $resultado = app(CargosEstancia::class)->agregarPaqueteInternacional($p);
+
+    expect($resultado['renglones'])->toBe(3)
+        ->and($resultado['en_paquete'])->toBe(4)
+        ->and($resultado['faltantes'])->toBe([])
+        ->and($resultado['motivo'])->toBeNull();
+});
+
+test('repetir el paquete cuando ya esta completo no agrega ni avisa', function () {
+    $p = conEstancia();
+    paqueteInternacionalDelCatalogo();
+    app(CargosEstancia::class)->agregarPaqueteInternacional($p);
+
+    $resultado = app(CargosEstancia::class)->agregarPaqueteInternacional($p->fresh());
+
+    expect($resultado['renglones'])->toBe(0)
+        ->and($resultado['en_paquete'])->toBe(4)
+        ->and($resultado['motivo'])->toBeNull();
+});
+
+test('si falta el servicio de estancia la excepcion es la propia, que el endpoint traduce', function () {
+    $p = conEstancia();
+    FactServicio::porConcepto(FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->update(['status' => FactServicio::STATUS_INACTIVO]);
+
+    expect(fn () => app(CargosEstancia::class)->recalcular($p, pernoctas: 1, transitos2h: 0, transitos12h: 0))
+        ->toThrow(ServicioDeEstanciaNoDisponibleException::class, 'Corre el importador de catálogos o reactívalo');
 });

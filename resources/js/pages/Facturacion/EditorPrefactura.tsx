@@ -145,7 +145,7 @@ export default function EditorPrefactura({ id }: Props) {
 
     const [modal, setModal] = useState<'renglon' | 'estancia' | null>(null);
     const [accionando, setAccionando] = useState<string | null>(null);
-    const [avisoEstancia, setAvisoEstancia] = useState<string | null>(null);
+    const [avisoCargos, setAvisoCargos] = useState<string | null>(null);
 
     const peticionRef = useRef(0);
     const prefacturaRef = useRef<Prefactura | null>(null);
@@ -370,7 +370,7 @@ export default function EditorPrefactura({ id }: Props) {
         setModal(null);
         // Se recarga siempre: aunque no se genere ningún renglón, el servidor pudo quitar los cargos previos.
         await cargar();
-        setAvisoEstancia(resultado.motivo);
+        setAvisoCargos(resultado.motivo);
 
         if (resultado.renglones === 0) {
             // El caso principal es una aeronave en Guarda, que no paga estancia: sin explicación, el operador no entiende qué pasó.
@@ -419,9 +419,23 @@ export default function EditorPrefactura({ id }: Props) {
             });
             if (!confirmacion.isConfirmed) return;
 
-            const { renglones: agregados } = await apiPrefacturas.internacional(prefactura.id);
-            toast.fire({ icon: 'success', titleText: `Paquete internacional agregado: ${agregados} ${agregados === 1 ? 'servicio' : 'servicios'}.` });
+            const { renglones: agregados, motivo } = await apiPrefacturas.internacional(prefactura.id);
             await cargar();
+
+            if (motivo !== null) {
+                // El servidor avisa cuando el paquete no se agregó completo (un servicio dado de baja, o ninguno marcado): un toast de
+                // «agregado» sobre un paquete que cobra de menos sería peor que no avisar. Se queda como aviso en la tabla.
+                setAvisoCargos(motivo);
+                await Swal.fire({
+                    icon: 'warning',
+                    titleText: agregados === 0 ? 'No se agregó el paquete internacional' : 'El paquete internacional quedó incompleto',
+                    text: motivo,
+                    confirmButtonColor: '#4f46e5',
+                });
+                return;
+            }
+
+            toast.fire({ icon: 'success', titleText: `Paquete internacional agregado: ${agregados} ${agregados === 1 ? 'servicio' : 'servicios'}.` });
         });
 
     const descartar = () =>
@@ -465,7 +479,7 @@ export default function EditorPrefactura({ id }: Props) {
 
             const { prefactura: cerradaAhora, message } = await apiPrefacturas.cerrar(prefactura.id);
             aplicar(cerradaAhora);
-            setAvisoEstancia(null);
+            setAvisoCargos(null);
             toast.fire({ icon: 'success', titleText: message });
         });
 
@@ -670,10 +684,10 @@ export default function EditorPrefactura({ id }: Props) {
                             )}
                         </div>
 
-                        {avisoEstancia && (
+                        {avisoCargos && (
                             <div role="status" className="flex items-start justify-between gap-3 border-b border-sky-100 bg-sky-50 px-6 py-3 text-[12px] font-bold text-sky-800">
-                                <span>{avisoEstancia}</span>
-                                <button type="button" onClick={() => setAvisoEstancia(null)} className="shrink-0 text-sky-500 hover:text-sky-700" aria-label="Cerrar aviso">
+                                <span>{avisoCargos}</span>
+                                <button type="button" onClick={() => setAvisoCargos(null)} className="shrink-0 text-sky-500 hover:text-sky-700" aria-label="Cerrar aviso">
                                     <X size={14} />
                                 </button>
                             </div>

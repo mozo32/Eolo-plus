@@ -866,3 +866,140 @@ test('una prefactura con la operacion de llegada nula no esconde ninguna llegada
 
     expect($ids)->toBe([$libre->id]);
 });
+
+/*
+|--------------------------------------------------------------------------
+| Revision final: el paquete internacional y la estancia no fallan en silencio
+|--------------------------------------------------------------------------
+*/
+
+function paqueteInternacionalCompleto(): void
+{
+    foreach (['DSMES - salida' => 4060.50, 'DSM - salida' => 348.0, 'Mex-eAPI - salida' => 900.0, 'Servicios Internacionales - salida' => 750.0] as $nombre => $precio) {
+        FactServicio::create(['nombre' => $nombre, 'precio_unitario' => $precio, 'en_paquete_internacional' => true]);
+    }
+}
+
+test('el paquete internacional completo marca el destino y no trae motivo', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    paqueteInternacionalCompleto();
+    $p = prefacturaBorrador();
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/internacional")
+        ->assertOk()
+        ->assertJsonPath('renglones', 4)
+        ->assertJsonPath('motivo', null)
+        ->assertJsonPath('message', 'Paquete internacional agregado.');
+
+    expect($p->fresh()->tipo_destino)->toBe(FactPrefactura::DESTINO_INTERNACIONAL)
+        ->and($p->fresh()->subtotal())->toBe('6058.50');
+});
+
+test('el paquete internacional incompleto marca el destino, agrega lo que hay y dice que servicio falto', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    paqueteInternacionalCompleto();
+    FactServicio::where('nombre', 'DSMES - salida')->update(['status' => FactServicio::STATUS_INACTIVO]);
+    $p = prefacturaBorrador();
+
+    $respuesta = $this->patchJson("/api/facturacion/prefacturas/{$p->id}/internacional")
+        ->assertOk()
+        ->assertJsonPath('renglones', 3);
+
+    expect($respuesta->json('motivo'))->toContain('DSMES - salida')
+        ->and($respuesta->json('message'))->toBe($respuesta->json('motivo'))
+        ->and($p->fresh()->tipo_destino)->toBe(FactPrefactura::DESTINO_INTERNACIONAL)
+        ->and($p->renglones()->count())->toBe(3);
+});
+
+test('un paquete internacional con cero servicios marcados responde 200 con el motivo y NO marca el destino', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    FactServicio::create(['nombre' => 'Comisariato', 'precio_unitario' => 500.0]);
+    $p = prefacturaBorrador();
+
+    $respuesta = $this->patchJson("/api/facturacion/prefacturas/{$p->id}/internacional")
+        ->assertOk()
+        ->assertJsonPath('renglones', 0);
+
+    // Sigue nacional: el editor solo ofrece «Marcar internacional» con destino nacional,
+    // asi que marcarla vacia la dejaria sin forma de corregirse.
+    expect($respuesta->json('motivo'))->toBeString()->not->toBe('')
+        ->and($p->fresh()->tipo_destino)->toBe(FactPrefactura::DESTINO_NACIONAL)
+        ->and($p->renglones()->count())->toBe(0);
+});
+
+test('un paquete internacional con todos de baja tampoco marca el destino', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    FactServicio::create(['nombre' => 'DSMES - salida', 'precio_unitario' => 4060.50, 'en_paquete_internacional' => true, 'status' => FactServicio::STATUS_INACTIVO]);
+    $p = prefacturaBorrador();
+
+    $respuesta = $this->patchJson("/api/facturacion/prefacturas/{$p->id}/internacional")->assertOk()->assertJsonPath('renglones', 0);
+
+    expect($respuesta->json('motivo'))->toContain('DSMES - salida')
+        ->and($p->fresh()->tipo_destino)->toBe(FactPrefactura::DESTINO_NACIONAL);
+});
+
+test('si el paquete ya estaba en los renglones, se marca internacional aunque no se agregue nada', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = FactServicio::create(['nombre' => 'Migracion', 'precio_unitario' => 300.0, 'en_paquete_internacional' => true]);
+    $p = prefacturaBorrador();
+    $p->renglones()->create([
+        'servicio_id' => $servicio->id, 'nombre_servicio' => 'Migracion', 'precio_unitario' => 300.0,
+        'cantidad' => 1, 'es_de_tercero' => false, 'margen' => 0, 'ajuste_precio' => 'ninguno', 'orden' => 1,
+    ]);
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/internacional")
+        ->assertOk()
+        ->assertJsonPath('renglones', 0)
+        ->assertJsonPath('motivo', null);
+
+    expect($p->fresh()->tipo_destino)->toBe(FactPrefactura::DESTINO_INTERNACIONAL);
+});
+
+test('el intento de marcar internacional sin paquete queda en la bitacora como intento, no como marca', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/internacional")->assertOk();
+
+    $registro = Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)->where('accion', Bitacora::ACCION_ACTUALIZAR)->sole();
+
+    expect($registro->descripcion)->toContain('Se intentó marcar internacional')
+        ->and($registro->descripcion)->not->toContain('Se marcó');
+});
+
+test('una prefactura no se puede abrir internacional por API: el destino lo pone la accion del paquete', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson('/api/facturacion/prefacturas', cuerpoPrefactura(['tipo_destino' => 'internacional']))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['tipo_destino']);
+
+    expect(FactPrefactura::count())->toBe(0);
+});
+
+test('si falta el servicio de estancia responde 422 con el mensaje en espanol y un codigo, no un 500', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = conEstancia();
+    FactServicio::porConcepto(FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->update(['status' => FactServicio::STATUS_INACTIVO]);
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/estancia", ['pernoctas' => 1, 'transitos_2h' => 0, 'transitos_12h' => 0])
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'servicio_estancia_no_disponible')
+        ->assertJsonPath('message', "No existe un servicio activo con concepto '".FactServicio::CONCEPTO_ESTANCIA_PERNOCTA."'. Corre el importador de catálogos o reactívalo.");
+
+    expect($p->renglones()->count())->toBe(0)
+        ->and(bitacoraDePrefacturas(Bitacora::ACCION_ACTUALIZAR))->toBe(0);
+});
+
+test('el 422 de estancia revierte lo ya borrado: los renglones previos siguen', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = conEstancia();
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/estancia", ['pernoctas' => 1, 'transitos_2h' => 0, 'transitos_12h' => 0])->assertOk();
+    FactServicio::porConcepto(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H)->update(['status' => FactServicio::STATUS_INACTIVO]);
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/estancia", ['pernoctas' => 4, 'transitos_2h' => 1, 'transitos_12h' => 0])
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'servicio_estancia_no_disponible');
+
+    expect($p->renglones()->sole()->cantidad)->toBe(1);
+});

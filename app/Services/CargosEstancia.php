@@ -7,7 +7,6 @@ use App\Models\FactPrefactura;
 use App\Models\FactServicio;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
-use RuntimeException;
 
 /**
  * Los cargos que no se capturan uno por uno: la estancia y el paquete
@@ -49,6 +48,7 @@ class CargosEstancia
      *                                                lo explique en lugar de quedarse callada.
      *
      * @throws RenglonDePrefacturaCerradaException si la prefactura ya está cerrada.
+     * @throws ServicioDeEstanciaNoDisponibleException si falta (o está de baja) el servicio de un concepto con cantidad; se revierte todo.
      */
     public function recalcular(FactPrefactura $prefactura, int $pernoctas, int $transitos2h, int $transitos12h): array
     {
@@ -115,7 +115,7 @@ class CargosEstancia
 
                 if ($servicio === null) {
                     // Lanza dentro de la transacción: el borrado de arriba se revierte.
-                    throw new RuntimeException("No existe un servicio activo con concepto '{$concepto}'. Corre el importador de catálogos o reactívalo.");
+                    throw new ServicioDeEstanciaNoDisponibleException("No existe un servicio activo con concepto '{$concepto}'. Corre el importador de catálogos o reactívalo.");
                 }
 
                 if ($tarifa === null) {
@@ -154,11 +154,22 @@ class CargosEstancia
 
     /**
      * Agrega los servicios del paquete internacional que falten, con el precio del
-     * catálogo. Devuelve cuántos agregó.
+     * catálogo. Solo se agregan los ACTIVOS: uno dado de baja no se cobra, y eso es
+     * correcto, pero NO puede pasar en silencio. Un paquete que agrega 3 de 4 cobra
+     * de menos y el toast diría «agregado», así que el resultado dice qué faltó.
+     *
+     * `renglones` es cuántos agregó. `activos` es cuántos servicios activos tiene el
+     * paquete en el catálogo y `faltantes` los nombres de los dados de baja que no se
+     * agregaron. `en_paquete` es cuántos servicios del paquete tiene la prefactura al
+     * terminar (los agregados y los que ya estaban): si es 0, el destino NO debe
+     * marcarse internacional. `motivo` lo dice con palabras, para que la pantalla lo
+     * explique en lugar de quedarse callada.
+     *
+     * @return array{renglones: int, en_paquete: int, activos: int, faltantes: list<string>, motivo: ?string}
      *
      * @throws RenglonDePrefacturaCerradaException si la prefactura ya está cerrada.
      */
-    public function agregarPaqueteInternacional(FactPrefactura $prefactura): int
+    public function agregarPaqueteInternacional(FactPrefactura $prefactura): array
     {
         return DB::transaction(function () use ($prefactura) {
             $actual = $this->bloquearBorrador($prefactura);
@@ -166,12 +177,15 @@ class CargosEstancia
             // `array_filter`: un `NOT IN` con un NULL en la lista no devuelve nada.
             $yaPuestos = array_values(array_filter($actual->renglones()->pluck('servicio_id')->all()));
 
-            $servicios = FactServicio::query()
+            // El paquete COMPLETO, activo o no: hace falta saber qué quedó fuera y por qué.
+            $paquete = FactServicio::query()
                 ->where('en_paquete_internacional', true)
-                ->where('status', FactServicio::STATUS_ACTIVO)
-                ->whereNotIn('id', $yaPuestos)
                 ->orderBy('id')
                 ->get();
+
+            $servicios = $paquete
+                ->where('status', FactServicio::STATUS_ACTIVO)
+                ->whereNotIn('id', $yaPuestos);
 
             $orden = $this->maximoOrden($actual);
             $creados = 0;
@@ -192,8 +206,47 @@ class CargosEstancia
                 $creados++;
             }
 
-            return $creados;
+            // Un servicio dado de baja que ya está en los renglones no «falta»: ya se cobra.
+            $dadosDeBaja = $paquete
+                ->where('status', '!=', FactServicio::STATUS_ACTIVO)
+                ->whereNotIn('id', $yaPuestos)
+                ->pluck('nombre')
+                ->all();
+
+            $enPaquete = $paquete->whereIn('id', $yaPuestos)->count() + $creados;
+
+            return [
+                'renglones' => $creados,
+                'en_paquete' => $enPaquete,
+                'activos' => $paquete->where('status', FactServicio::STATUS_ACTIVO)->count(),
+                'faltantes' => $dadosDeBaja,
+                'motivo' => $this->motivoDelPaquete($paquete->count(), $creados, $dadosDeBaja),
+            ];
         });
+    }
+
+    /**
+     * @param  list<string>  $dadosDeBaja  nombres de los servicios del paquete que no se agregaron por estar de baja
+     */
+    private function motivoDelPaquete(int $marcados, int $creados, array $dadosDeBaja): ?string
+    {
+        if ($dadosDeBaja !== []) {
+            $nombres = implode(', ', $dadosDeBaja);
+            $activos = $marcados - count($dadosDeBaja);
+            $cuantos = count($dadosDeBaja) === 1 ? '1 servicio del paquete está dado de baja' : count($dadosDeBaja).' servicios del paquete están dados de baja';
+
+            if ($activos === 0 && $creados === 0) {
+                return "No se agregó ningún servicio del paquete internacional: {$cuantos} en el catálogo ({$nombres}) y no hay ninguno activo. Reactívalos en el catálogo de servicios y vuelve a intentarlo.";
+            }
+
+            return "El paquete internacional quedó incompleto y se cobra de menos: {$cuantos} en el catálogo y no se agregó ({$nombres}). Si corresponde cobrarlo, reactívalo en el catálogo y agrégalo con AGREGAR SERVICIO.";
+        }
+
+        if ($marcados === 0) {
+            return 'El catálogo no tiene ningún servicio marcado como paquete internacional, así que no se agregó nada. Reimporta el catálogo de servicios o márcalos en la pantalla de servicios.';
+        }
+
+        return null;
     }
 
     /**

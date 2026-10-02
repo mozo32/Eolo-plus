@@ -152,7 +152,18 @@ export default function ModalNuevaPrefactura({ onCerrar, onCreada }: Props) {
 
             if (tipoDestino === 'internacional') {
                 try {
-                    await apiPrefacturas.internacional(prefactura.id);
+                    const { renglones, motivo } = await apiPrefacturas.internacional(prefactura.id);
+
+                    // Un 200 no basta: con `renglones` 0 el servidor no agregó nada y dejó el borrador nacional, y con un motivo el paquete
+                    // quedó incompleto (cobra de menos). En los dos casos hay que decirlo ahora, porque el editor no vuelve a avisar.
+                    if (renglones === 0 || motivo !== null) {
+                        await Swal.fire({
+                            icon: 'warning',
+                            titleText: renglones === 0 ? 'El borrador se creó como nacional' : 'El paquete internacional quedó incompleto',
+                            text: motivo ?? 'No se agregó ningún servicio del paquete internacional. Puedes marcarlo internacional desde el editor.',
+                            confirmButtonColor: '#4f46e5',
+                        });
+                    }
                 } catch (error) {
                     await Swal.fire({
                         icon: 'warning',
