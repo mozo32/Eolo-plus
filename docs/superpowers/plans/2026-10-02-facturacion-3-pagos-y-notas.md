@@ -82,7 +82,7 @@ TypeScript, Tailwind 4, SweetAlert2, aritmética de cadenas con `bc`.
 |---|---|
 | `app/Models/FactFormaPago.php` | Constantes de concepto, `scopePorConcepto`, `concepto` en `$fillable` |
 | `app/Services/ImportadorMatriculas.php` | `importarFormasPago()` asigna los tres conceptos |
-| `app/Models/FactPrefactura.php` | Relación `pagos()`, `pagado()`, `porCobrar()`, `sobrepago()`, `sobrepagoEsCambio()`, notas en `$fillable` |
+| `app/Models/FactPrefactura.php` | Relación `pagos()`, `pagado()`, `porCobrar()`, `sobrepago()`, `efectivoPagado()`, `cambio()`, `cobradoDeMas()` |
 | `app/Models/FactPrefacturaRenglon.php` | `es_cortesia` en `$fillable` y `$casts`; `importe()` devuelve `'0.00'` |
 | `app/Services/CierrePrefactura.php` | `cerrar()` acepta `bool $confirmarSinCobro` |
 | `app/Http/Controllers/Api/Facturacion/PrefacturaController.php` | `cerrar()` acepta el flag, `presentar()` agrega el cobro, `notas()` |
@@ -563,17 +563,20 @@ git commit -m "Las tres formas de pago con regla propia se reconocen por concept
   - `FactPrefactura::pagado(): string`
   - `FactPrefactura::porCobrar(): string` — nunca negativo.
   - `FactPrefactura::sobrepago(): string` — nunca negativo.
-  - `FactPrefactura::sobrepagoEsCambio(): bool`
+  - `FactPrefactura::efectivoPagado(): string`
+  - `FactPrefactura::cambio(): string` — `min(sobrepago, efectivoPagado)`
+  - `FactPrefactura::cobradoDeMas(): string` — `sobrepago − cambio`
   - `FactPrefacturaPago` con `$fillable = ['prefactura_id', 'forma_pago_id', 'monto', 'renglon_comision_id', 'user_id', 'status']`
   Las usan las Tasks 5, 6, 7, 8 y 9.
 
-**Contexto medido que explica `sobrepagoEsCambio()`:** de los 27 folios del histórico
+**Contexto medido que explica el reparto del sobrepago:** de los 27 folios del histórico
 con pagos por encima del total, **16 tienen efectivo y 11 no** (7 Visa, 4 Amex, 1
 Transferencia, 1 Mastercard, 1 AvCard) — y Visa, Mastercard y Transferencia **sí
 tienen tope** en `mpago.php`. El tope se calcula contra el `Total` guardado, así que
 cobrar y después quitar un servicio deja la prefactura sobrepagada sin que el tope
 se entere. Con efectivo detrás, el sobrepago es **cambio** que se devuelve; sin
-efectivo, es **cobrado de más** y lo que hay que hacer es corregir el pago.
+efectivo —o con menos efectivo que el sobrepago— el resto es **cobrado de más** y lo
+que hay que hacer es corregir el pago. El cambio nunca pasa del efectivo cobrado.
 
 - [ ] **Step 1: Escribe la prueba que falla**
 
@@ -590,7 +593,8 @@ test('sin pagos, lo pagado es cero y falta todo el total', function () {
         ->and($p->total())->toBe('116.00')
         ->and($p->porCobrar())->toBe('116.00')
         ->and($p->sobrepago())->toBe('0.00')
-        ->and($p->sobrepagoEsCambio())->toBeFalse();
+        ->and($p->cambio())->toBe('0.00')
+        ->and($p->cobradoDeMas())->toBe('0.00');
 });
 
 test('lo pagado es la suma de los pagos, sin pasar por float', function () {
@@ -623,7 +627,8 @@ test('porCobrar nunca es negativo y el sobrepago aparece en su lugar', function 
 
     expect($p->porCobrar())->toBe('0.00')
         ->and($p->sobrepago())->toBe('84.00')
-        ->and($p->sobrepagoEsCambio())->toBeTrue();
+        ->and($p->cambio())->toBe('84.00')
+        ->and($p->cobradoDeMas())->toBe('0.00');
 });
 
 test('un sobrepago SIN efectivo no es cambio: es cobrado de mas', function () {
@@ -636,7 +641,8 @@ test('un sobrepago SIN efectivo no es cambio: es cobrado de mas', function () {
 
     expect($p->fresh()->total())->toBe('580.00')
         ->and($p->fresh()->sobrepago())->toBe('116.00')
-        ->and($p->fresh()->sobrepagoEsCambio())->toBeFalse();
+        ->and($p->fresh()->cambio())->toBe('0.00')
+        ->and($p->fresh()->cobradoDeMas())->toBe('116.00');
 });
 
 test('los derivados leen la base y no la relacion cacheada', function () {
@@ -808,7 +814,7 @@ añaden. Un `$fillable` que nombra columnas inexistentes es un hallazgo legítim
     /**
      * Lo cobrado por encima del total. Nunca negativo.
      *
-     * Lo que SIGNIFICA depende de `sobrepagoEsCambio()`: con efectivo es cambio que
+     * Se parte en `cambio()` y `cobradoDeMas()`: con efectivo es cambio que
      * se devuelve; sin efectivo es que el documento se editó después de cobrarse, y
      * entonces se corrige el pago, no se entrega dinero.
      */
@@ -823,7 +829,7 @@ añaden. Un `$fillable` que nombra columnas inexistentes es un hallazgo legítim
      * Si hay un pago en efectivo detrás del sobrepago. Se consulta por el CONCEPTO de
      * la forma de pago y no por su nombre, que se edita en pantalla.
      */
-    public function sobrepagoEsCambio(): bool
+    public function cambio(): string
     {
         return bccomp($this->sobrepago(), '0.00', 2) > 0
             && $this->pagos()
@@ -1297,7 +1303,8 @@ test('el efectivo SI puede exceder, y el exceso es cambio', function () {
     $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos", ['forma_pago_id' => $formas[FactFormaPago::CONCEPTO_EFECTIVO]->id, 'monto' => '200.00'])
         ->assertCreated()
         ->assertJsonPath('prefactura.sobrepago', '84.00')
-        ->assertJsonPath('prefactura.sobrepago_es_cambio', true);
+        ->assertJsonPath('prefactura.cambio', '84.00')
+        ->assertJsonPath('prefactura.cobrado_de_mas', '0.00');
 });
 
 test('AvCard se rechaza cuando la prefactura tiene combustible', function () {
@@ -1320,7 +1327,8 @@ test('AvCard se acepta sin combustible y sin tope', function () {
     $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos", ['forma_pago_id' => $formas[FactFormaPago::CONCEPTO_AVCARD]->id, 'monto' => '500.00'])
         ->assertCreated()
         ->assertJsonPath('prefactura.sobrepago', '384.00')
-        ->assertJsonPath('prefactura.sobrepago_es_cambio', false);
+        ->assertJsonPath('prefactura.cambio', '0.00')
+        ->assertJsonPath('prefactura.cobrado_de_mas', '384.00');
 });
 
 test('el combustible se detecta por concepto, no por el nombre del servicio', function () {
@@ -1762,17 +1770,18 @@ Dentro del grupo `subdep:factPrefacturas`:
 Agrégalas también a la tabla de rutas protegidas de `EndpointsPrefacturaTest`.
 
 **La ficha todavía no trae `pagado`, `por_cobrar`, `sobrepago` ni
-`sobrepago_es_cambio`:** eso lo añade la Task 7. Las pruebas de esta task que los
+`cambio` ni `cobrado_de_mas`:** eso lo añade la Task 7. Las pruebas de esta task que los
 afirman van a fallar hasta entonces. Para no dejar la task en rojo, **añade el
 bloque de cobro a `presentar()` en esta task** con estas cuatro claves, y la Task 7
 solo agrega las notas:
 
 ```php
     /**
-     * Lo cobrado. `sobrepago_es_cambio` distingue el cambio que se devuelve (hay
-     * efectivo detrás) del cobrado de más (se editó el documento tras cobrarlo).
+     * Lo cobrado. El sobrepago se parte: `cambio` es lo que se devuelve y no puede
+     * pasar del efectivo que entró; `cobrado_de_mas` es el resto, que se corrige
+     * cambiando el pago. Los dos pueden ser distintos de cero a la vez.
      *
-     * @return array{pagado: ?string, por_cobrar: ?string, sobrepago: ?string, sobrepago_es_cambio: bool, pagos: array}
+     * @return array{pagado: ?string, por_cobrar: ?string, sobrepago: ?string, cambio: ?string, cobrado_de_mas: ?string, pagos: array}
      */
     private function cobro(FactPrefactura $p): array
     {
@@ -1781,7 +1790,8 @@ solo agrega las notas:
         try {
             $porCobrar = $p->porCobrar();
             $sobrepago = $p->sobrepago();
-            $esCambio = $p->sobrepagoEsCambio();
+            $cambio = $p->cambio();
+            $cobradoDeMas = $p->cobradoDeMas();
         } catch (UnexpectedValueException) {
             // Ya lo reportó `totales()`, que corre en la misma ficha.
             $porCobrar = $sobrepago = null;
@@ -1792,7 +1802,8 @@ solo agrega las notas:
             'pagado' => $p->pagado(),
             'por_cobrar' => $porCobrar,
             'sobrepago' => $sobrepago,
-            'sobrepago_es_cambio' => $esCambio,
+            'cambio' => $cambio,
+            'cobrado_de_mas' => $cobradoDeMas,
             'pagos' => $p->pagos->map(fn ($pago) => [
                 'id' => $pago->id,
                 'forma_pago_id' => $pago->forma_pago_id,
@@ -2751,7 +2762,10 @@ Añade a `interface Prefactura`:
     por_cobrar: string | null;
     sobrepago: string | null;
     /** true: hay efectivo detrás y el sobrepago es cambio que se devuelve. false: se cobró de más. */
-    sobrepago_es_cambio: boolean;
+    /** Lo que se devuelve. Nunca pasa del efectivo cobrado. */
+    cambio: string | null;
+    /** El resto del sobrepago: no se devuelve, se corrige el pago. */
+    cobrado_de_mas: string | null;
 ```
 
 Añade a `RenglonPrefactura`:
@@ -2795,12 +2809,13 @@ quitar uno. El de Amex abre `ModalPagoAmex`. Solo se puede operar en borrador.
 
 Reglas de presentación que el componente tiene que cumplir:
 
-- Cuando `sobrepago` es `> 0` y `sobrepago_es_cambio` es `true`: rótulo **«Cambio»**,
-  en tono informativo.
-- Cuando `sobrepago` es `> 0` y `sobrepago_es_cambio` es `false`: rótulo **«Cobrado
-  de más»**, en tono de advertencia, con el texto «Se cobró más que el total. Revisa
-  el pago: el documento pudo editarse después de cobrarse.» **Nunca lo llames
-  cambio**: sería decirle al operador que entregue efectivo que nadie le dio.
+- Cuando `cambio` es `> 0`: rótulo **«Cambio»**, en tono informativo.
+- Cuando `cobrado_de_mas` es `> 0`: rótulo **«Cobrado de más»**, en tono de advertencia, con el texto «Se cobró más que el total. Revisa
+  el pago: el documento pudo editarse después de cobrarse.»
+- **Los dos pueden salir a la vez**, y entonces se muestran los dos: con Visa 200 y
+  efectivo 10 sobre un total de 116, el cambio es 10 y el cobrado de más es 84.
+  **Nunca llames cambio al cobrado de más**: sería decirle al operador que entregue
+  efectivo que nadie le dio.
 - Amex no aparece en el selector de formas: tiene su propio botón, porque agrega un
   renglón de comisión.
 - Un pago con `es_comision_amex` muestra, junto al botón de quitarlo, que al
@@ -3269,7 +3284,7 @@ comisión, que la Task 6 añade como `CONCEPTO_COMISION_AMEX`.
 **Consistencia de tipos.** `monto` viaja siempre como **cadena** (`string`) entre el
 cliente, el Form Request, el servicio y `bc`; nunca como `float`. `pagado()`,
 `porCobrar()`, `sobrepago()` y `ComisionAmex::calcular()` devuelven `string` de dos
-decimales. `sobrepagoEsCambio()` devuelve `bool`. `es_cortesia` es `boolean` en PHP
+decimales, incluidos `cambio()` y `cobradoDeMas()`. `es_cortesia` es `boolean` en PHP
 y en TypeScript.
 
 **Un orden que importa:** la Task 5 añade el bloque `cobro()` a `presentar()` porque

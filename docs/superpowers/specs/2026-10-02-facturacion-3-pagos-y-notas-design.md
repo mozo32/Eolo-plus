@@ -98,15 +98,25 @@ cortesía, el total baja por debajo de lo ya pagado y el tope nunca se enteró. 
 Eolo-plus pasa lo mismo: los pagos van en el borrador, y el borrador se sigue
 editando.
 
-**Consecuencia:** el número derivado es `sobrepago = max(0, pagado − total)`, pero
-lo que *significa* depende de cómo nació:
+**Consecuencia:** el sobrepago es `max(0, pagado − total)`, y **se parte en dos
+números**, porque las dos mitades piden acciones distintas:
 
-- Con un pago en **efectivo**, es **cambio**: dinero que se devuelve.
-- **Sin efectivo**, es **cobrado de más**: el documento se editó después de
-  cobrarse, y lo que hay que hacer es corregir el pago, no devolver nada.
+```
+sobrepago       = max(0, pagado − total)
+cambio          = min(sobrepago, efectivo cobrado)   ← se devuelve
+cobrado de más  = sobrepago − cambio                 ← se corrige el pago
+```
 
-La pantalla lo nombra distinto en cada caso. Llamar «cambio» a un sobrecargo de
-tarjeta sería decirle al operador que entregue efectivo que nadie le dio.
+**El cambio no puede pasar del efectivo que entró.** Una primera versión de esta
+especificación decía que el sobrepago entero era cambio «si había efectivo detrás», y
+eso es falso en el caso mixto: con Visa 200 y efectivo 10 sobre un total de 116, el
+sobrepago es 94 pero solo 10 entraron en efectivo. Decirle al operador que devuelva 94
+sería decirle que entregue dinero que nadie le dio — exactamente lo que esta sección
+quería evitar.
+
+Los dos números pueden ser distintos de cero a la vez, y la pantalla muestra los que lo
+sean: el cambio como dinero que se devuelve, el cobrado de más como un pago que hay que
+corregir.
 
 ### 3. La regla de AvCard es real y se cumple sin excepción
 
@@ -309,15 +319,15 @@ mensaje en español): `ya_cerrada` (409), `ya_descartada` (409),
 `comision_supera_subtotal` (422), `sin_cobro` (422, solo al cerrar sin confirmar).
 
 La ficha de la prefactura (`show`) gana `pagos`, `pagado`, `por_cobrar` y
-`sobrepago`, todos como cadenas, como los totales del bloque 2, más un booleano
-`sobrepago_es_cambio` que dice si hay un pago en efectivo detrás.
+`sobrepago`, `cambio` y `cobrado_de_mas`, todos como cadenas, como los totales del
+bloque 2.
 
 ### Pantalla
 
 **No hay pantalla nueva.** `EditorPrefactura.tsx` gana tres cosas:
 
-- Un panel de **cobro**: las formas de pago, lo pagado, lo que falta, y el cambio
-  o el aviso de cobrado de más según corresponda;
+- Un panel de **cobro**: las formas de pago, lo pagado, lo que falta, y el cambio y/o
+  el aviso de cobrado de más, que pueden salir los dos a la vez;
   botón de agregar y de quitar. El de Amex abre su propio diálogo, que explica que
   el monto es **lo que se carga a la tarjeta** y muestra la comisión que va a
   agregar antes de confirmarla.
