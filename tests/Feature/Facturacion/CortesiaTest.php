@@ -2,6 +2,8 @@
 
 use App\Models\Bitacora;
 use App\Models\FactPrefactura;
+use App\Models\FactServicio;
+use App\Services\CargosEstancia;
 
 test('un renglon de cortesia no cobra y el subtotal lo refleja', function () {
     $p = prefacturaBorrador();
@@ -181,4 +183,109 @@ test('el renglon de otra prefactura no se puede marcar desde esta', function () 
         ->assertNotFound();
 
     expect($renglon->fresh()->es_cortesia)->toBeFalse();
+});
+
+test('es_cortesia no booleano se rechaza: el texto "false" no marca la cortesia', function (mixed $valor) {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    $renglon = renglonDe($p, 100.0, 1);
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/renglones/{$renglon->id}/cortesia", ['es_cortesia' => $valor])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['es_cortesia']);
+
+    expect($renglon->fresh()->es_cortesia)->toBeFalse()
+        ->and(Bitacora::count())->toBe(0);
+})->with(['false', 'si', 'cortesia', 2]);
+
+test('la bitacora guarda el estado de antes y el de despues, sin invertirlos', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    $renglon = renglonDe($p, 100.0, 3);
+    $base = "/api/facturacion/prefacturas/{$p->id}/renglones/{$renglon->id}/cortesia";
+
+    $this->patchJson($base, ['es_cortesia' => true])->assertOk();
+    $this->patchJson($base, ['es_cortesia' => false])->assertOk();
+
+    [$marca, $quita] = Bitacora::where('accion', Bitacora::ACCION_ACTUALIZAR)->orderBy('id')->get()->all();
+
+    expect($marca->datos_anteriores)->toBe(['renglon_id' => $renglon->id, 'es_cortesia' => false])
+        ->and($marca->datos_nuevos)->toBe(['renglon_id' => $renglon->id, 'es_cortesia' => true, 'importe' => '300.00'])
+        ->and($quita->datos_anteriores)->toBe(['renglon_id' => $renglon->id, 'es_cortesia' => true])
+        ->and($quita->datos_nuevos)->toBe(['renglon_id' => $renglon->id, 'es_cortesia' => false, 'importe' => '300.00']);
+});
+
+test('recalcular la estancia conserva la cortesia de un renglon aunque cambie la cantidad, y lo dice', function () {
+    $p = conEstancia();
+    $cargos = app(CargosEstancia::class);
+
+    $cargos->recalcular($p, pernoctas: 1, transitos2h: 0, transitos12h: 0);
+    $p->fresh()->renglones()->sole()->update(['es_cortesia' => true]);
+    expect($p->fresh()->subtotal())->toBe('0.00');
+
+    // Otra cantidad: no es cambiar de opinion sobre la cortesia.
+    $resultado = $cargos->recalcular($p->fresh(), pernoctas: 5, transitos2h: 0, transitos12h: 0);
+
+    $renglon = $p->fresh()->renglones()->sole();
+
+    expect($renglon->cantidad)->toBe(5)
+        ->and($renglon->es_cortesia)->toBeTrue()
+        ->and($renglon->importe())->toBe('0.00')
+        ->and($p->fresh()->subtotal())->toBe('0.00')
+        // La cifra que se deja de cobrar crecio (5 x 4676.00): el aviso la dice.
+        ->and($resultado['motivo'])->toBe('Se conservó la cortesía de 1 renglón de estancia: pernocta (no se cobran 23380.00).');
+});
+
+test('un renglon de estancia sin cortesia sigue sin ella, y solo se avisa de los que la conservan', function () {
+    $p = conEstancia();
+    $cargos = app(CargosEstancia::class);
+
+    $cargos->recalcular($p, pernoctas: 1, transitos2h: 1, transitos12h: 1);
+    $p->fresh()->renglones()->where('concepto', FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->sole()->update(['es_cortesia' => true]);
+
+    $resultado = $cargos->recalcular($p->fresh(), pernoctas: 2, transitos2h: 3, transitos12h: 1);
+
+    $porConcepto = $p->fresh()->renglones->keyBy('concepto');
+
+    expect($porConcepto[FactServicio::CONCEPTO_ESTANCIA_PERNOCTA]->es_cortesia)->toBeTrue()
+        ->and($porConcepto[FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H]->es_cortesia)->toBeFalse()
+        ->and($porConcepto[FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H]->es_cortesia)->toBeFalse()
+        ->and($resultado['motivo'])->toContain('1 renglón')->toContain('pernocta')
+        ->and($resultado['motivo'])->not->toContain('tránsito');
+});
+
+test('si se conserva la cortesia de varios renglones, el aviso los cuenta y los nombra', function () {
+    $p = conEstancia();
+    $cargos = app(CargosEstancia::class);
+
+    $cargos->recalcular($p, pernoctas: 1, transitos2h: 1, transitos12h: 0);
+    $p->fresh()->renglones->each(fn ($r) => $r->update(['es_cortesia' => true]));
+
+    $resultado = $cargos->recalcular($p->fresh(), pernoctas: 1, transitos2h: 2, transitos12h: 0);
+
+    expect($resultado['motivo'])->toContain('2 renglones')
+        ->toContain('pernocta (no se cobran 4676.00)')
+        ->toContain('tránsito de 2 horas (no se cobran 2289.00)');
+});
+
+test('sin cortesias previas el recalculo no dice nada de cortesia', function () {
+    $p = conEstancia();
+
+    $resultado = app(CargosEstancia::class)->recalcular($p, pernoctas: 2, transitos2h: 0, transitos12h: 0);
+
+    expect($resultado['motivo'])->toBeNull()
+        ->and($p->fresh()->renglones()->sole()->es_cortesia)->toBeFalse();
+});
+
+test('por el endpoint, recalcular la estancia conserva la cortesia y el mensaje lo dice', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = conEstancia();
+    app(CargosEstancia::class)->recalcular($p, pernoctas: 1, transitos2h: 0, transitos12h: 0);
+    $p->fresh()->renglones()->sole()->update(['es_cortesia' => true]);
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/estancia", ['pernoctas' => 3, 'transitos_2h' => 0, 'transitos_12h' => 0])
+        ->assertOk()
+        ->assertJsonPath('motivo', 'Se conservó la cortesía de 1 renglón de estancia: pernocta (no se cobran 14028.00).');
+
+    expect($p->fresh()->renglones()->sole()->es_cortesia)->toBeTrue();
 });

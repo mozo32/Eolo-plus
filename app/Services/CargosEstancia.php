@@ -43,9 +43,12 @@ class CargosEstancia
      * a mano no se toca). Una aeronave en Guarda, o sin ficha, no recibe ninguno nuevo
      * y además pierde los que ya tuviera, como en el sistema viejo.
      *
+     * Los renglones que ya eran cortesía lo siguen siendo (por concepto): se conserva
+     * y el `motivo` lo dice, con el importe que no se cobra.
+     *
      * @return array{renglones: int, motivo: ?string} `motivo` dice por qué no se
-     *                                                generó ningún renglón (o por qué faltó alguno), para que la pantalla
-     *                                                lo explique en lugar de quedarse callada.
+     *                                                generó ningún renglón (o por qué faltó alguno) y qué cortesías se
+     *                                                conservaron, para que la pantalla lo explique en lugar de quedarse callada.
      *
      * @throws RenglonDePrefacturaCerradaException si la prefactura ya está cerrada.
      * @throws ServicioDeEstanciaNoDisponibleException si falta (o está de baja) el servicio de un concepto con cantidad; se revierte todo.
@@ -99,10 +102,17 @@ class CargosEstancia
                 ->whereIn('concepto', FactServicio::CONCEPTOS_ESTANCIA)
                 ->pluck('orden', 'concepto');
 
+            // La cortesía se lee ANTES del borrado, igual que el orden: quien corrige una
+            // cantidad de pernoctas no está cambiando de opinión sobre la cortesía.
+            $cortesias = $actual->renglones()
+                ->whereIn('concepto', FactServicio::CONCEPTOS_ESTANCIA)
+                ->pluck('es_cortesia', 'concepto');
+
             $this->quitarEstancia($actual);
 
             $creados = 0;
             $sinTarifa = [];
+            $conservadas = [];
 
             foreach ($conceptos as [$concepto, $etiqueta, $cantidad, $tarifa]) {
                 if ($cantidad === 0) {
@@ -125,7 +135,7 @@ class CargosEstancia
                 }
 
                 // `$tarifa` llega como cadena decimal y se congela tal cual: nada de float.
-                $actual->renglones()->create([
+                $renglon = $actual->renglones()->create([
                     'servicio_id' => $servicio->id,
                     'nombre_servicio' => $servicio->nombre,
                     'precio_unitario' => $tarifa,
@@ -135,7 +145,12 @@ class CargosEstancia
                     'ajuste_precio' => FactServicio::AJUSTE_NINGUNO,
                     'concepto' => $concepto,
                     'orden' => $ordenes[$concepto] ?? ($this->maximoOrden($actual) + 1),
+                    'es_cortesia' => (bool) ($cortesias[$concepto] ?? false),
                 ]);
+
+                if ($renglon->es_cortesia) {
+                    $conservadas[] = "{$etiqueta} (no se cobran {$renglon->importeSinCortesia()})";
+                }
 
                 $creados++;
             }
@@ -146,6 +161,15 @@ class CargosEstancia
                 $motivo = 'No hay tarifa de '.implode(', ', $sinTarifa).' ni en la matrícula ni en su categoría, así que no se cobró.';
             } elseif ($creados === 0) {
                 $motivo = 'Todas las cantidades de estancia están en cero, así que no hay nada que cobrar.';
+            }
+
+            // Conservar la cortesía no puede pasar en silencio: al subir una cantidad crece
+            // lo que se deja de cobrar, y el operador debe verlo.
+            if ($conservadas !== []) {
+                $cuantos = count($conservadas);
+                $aviso = ($cuantos === 1 ? 'Se conservó la cortesía de 1 renglón de estancia: ' : "Se conservó la cortesía de {$cuantos} renglones de estancia: ")
+                    .implode(', ', $conservadas).'.';
+                $motivo = $motivo === null ? $aviso : $motivo.' '.$aviso;
             }
 
             return ['renglones' => $creados, 'motivo' => $motivo];
