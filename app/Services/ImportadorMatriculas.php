@@ -60,6 +60,7 @@ class ImportadorMatriculas
         2 => FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H,
         3 => FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H,
         4 => FactServicio::CONCEPTO_ESTANCIA_PERNOCTA,
+        100 => FactServicio::CONCEPTO_COMISION_AMEX,
     ];
 
     /**

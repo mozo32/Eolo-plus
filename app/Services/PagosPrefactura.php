@@ -7,6 +7,8 @@ use App\Models\FactFormaPago;
 use App\Models\FactPrefactura;
 use App\Models\FactPrefacturaPago;
 use App\Models\FactServicio;
+use App\Support\ComisionAmex;
+use App\Support\ImporteServicio;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use UnexpectedValueException;
@@ -70,6 +72,144 @@ class PagosPrefactura
                 usuarioId: $userId,
                 registroId: $actual->id,
                 datosNuevos: ['pago_id' => $pago->id, 'forma_pago' => $forma->nombre, 'monto' => $monto],
+            );
+
+            return $pago;
+        });
+    }
+
+    /**
+     * El pago Amex: registra lo que se carga a la tarjeta y agrega la comisión como
+     * renglón.
+     *
+     * El monto que entra es el BRUTO —lo que el cliente ve en su estado de cuenta— y
+     * la comisión se calcula para que el total de la prefactura caiga en esa cifra.
+     * `ComisionAmex` explica por qué. El renglón guarda el importe ya calculado, con
+     * margen 0 y sin ajuste, y el pago apunta a ÉL (`renglon_comision_id`): quitar el
+     * pago quita esa comisión y no las de otros pagos Amex (`quitar()`).
+     *
+     * Este método NO pasa por `registrar()`: Amex tiene su propia regla, y la acción
+     * del endpoint genérico la rechaza (`amex_por_su_endpoint`). Por eso el tope de «lo
+     * que falta por cobrar», que el sistema viejo aplicaba a Amex porque caía en la
+     * rama `else` de `mpago.php`, se vuelve a escribir AQUÍ. Son DOS comprobaciones, y
+     * no son la misma:
+     *
+     * 1. `comision_supera_subtotal` — el monto no puede superar el SUBTOTAL de la
+     *    prefactura, como `mpamex.php:106`. Se compara contra el subtotal de AHORA, que
+     *    ya incluye las comisiones de pagos Amex anteriores: el viejo comparaba contra
+     *    `tb_prefcatura.subtotal`, que `prefactura.php` recalcula (sumando también las
+     *    comisiones) en cada carga. Es una cota gruesa, no una regla de negocio.
+     * 2. `amex_supera_lo_que_falta` — el pago no puede dejar la prefactura sobrepagada.
+     *
+     * ORDEN DE LA SEGUNDA: se comprueba DESPUÉS de sumar la comisión, contra lo que
+     * faltaría ya con ella, y no contra lo que falta ahora. La comisión forma parte de
+     * lo que el cliente debe tras este pago (el monto que se teclea la CUBRE, y por eso
+     * es mayor que la deuda previa); comprobar antes rechazaría justo el pago que salda
+     * la cuenta: para liquidar una deuda D con Amex hay que cargar ~1.06 D, y contra D
+     * no pasaría nunca. Lo que se pregunta es si, al terminar, `pagado <= total`. Se
+     * calcula sin escribir, con las mismas fórmulas del modelo (`calcularIva()`), así
+     * que un rechazo no deja nada que revertir. El redondeo de la comisión a centavos
+     * puede dejar el total un centavo por debajo del monto; ese centavo SÍ se rechaza
+     * (no se compensa): el operador carga un centavo menos.
+     *
+     * @throws InvalidArgumentException si `$montoBruto` no es un decimal positivo de hasta dos decimales.
+     * @throws RenglonDePrefacturaCerradaException si la prefactura ya está cerrada.
+     * @throws PrefacturaDescartadaException si el borrador está descartado.
+     * @throws PagoNoPermitidoException si el monto supera el subtotal o lo que faltaría por cobrar, o si Amex o los totales no están disponibles.
+     * @throws ServicioDeComisionNoDisponibleException si falta el servicio de catálogo.
+     */
+    public function registrarAmex(FactPrefactura $prefactura, string $montoBruto, int $userId): FactPrefacturaPago
+    {
+        $montoBruto = $this->normalizarMonto($montoBruto);
+
+        return DB::transaction(function () use ($prefactura, $montoBruto, $userId) {
+            $actual = $this->bloquearBorrador($prefactura);
+
+            // Igual que `registrar()`: solo una forma activa, leída aquí con la prefactura
+            // ya bloqueada.
+            $forma = FactFormaPago::query()->activos()->porConcepto(FactFormaPago::CONCEPTO_AMEX)->orderBy('id')->first();
+
+            if ($forma === null) {
+                throw new PagoNoPermitidoException('No hay una forma de pago Amex activa. Reactívala en el catálogo de formas de pago.', 'forma_de_pago_no_disponible');
+            }
+
+            try {
+                $subtotal = $actual->subtotal();
+                $tasa = $actual->ivaTasa();
+            } catch (UnexpectedValueException $e) {
+                throw $this->totalesNoCalculables($e);
+            }
+
+            // Comprobación 1: contra el subtotal de AHORA (con las comisiones previas).
+            if (bccomp($montoBruto, $subtotal, 2) > 0) {
+                throw new PagoNoPermitidoException(
+                    "El monto Amex ({$montoBruto}) no puede superar el subtotal de la prefactura, que es {$subtotal}.",
+                    'comision_supera_subtotal',
+                );
+            }
+
+            $servicio = FactServicio::porConcepto(FactServicio::CONCEPTO_COMISION_AMEX)->activos()->first();
+
+            if ($servicio === null) {
+                // Lanza dentro de la transacción: nada queda escrito.
+                throw new ServicioDeComisionNoDisponibleException(
+                    "No existe un servicio activo con concepto '".FactServicio::CONCEPTO_COMISION_AMEX."'. Corre el importador de catálogos o reactívalo."
+                );
+            }
+
+            try {
+                // La fórmula vive en `ComisionAmex`: aquí solo se llama.
+                $comision = ComisionAmex::calcular($montoBruto, $tasa);
+
+                // Comprobación 2: lo que faltaría DESPUÉS de agregar la comisión. Mismas
+                // fórmulas que el modelo, sin escribir todavía.
+                $subtotalConComision = bcadd($subtotal, $comision, 2);
+                $totalConComision = bcadd($subtotalConComision, FactPrefactura::calcularIva($subtotalConComision, $tasa), 2);
+                $faltaConComision = bcsub($totalConComision, $actual->pagado(), 2);
+            } catch (UnexpectedValueException $e) {
+                throw $this->totalesNoCalculables($e);
+            }
+
+            if (bccomp($faltaConComision, '0.00', 2) < 0) {
+                $faltaConComision = '0.00';
+            }
+
+            if (bccomp($montoBruto, $faltaConComision, 2) > 0) {
+                throw new PagoNoPermitidoException(
+                    "El monto Amex ({$montoBruto}) supera lo que falta por cobrar: con su comisión de {$comision} faltarían {$faltaConComision}.",
+                    'amex_supera_lo_que_falta',
+                );
+            }
+
+            // El renglón CONGELA el importe de la comisión en `precio_unitario`, con
+            // margen 0 y sin ajuste: la comisión YA es la cifra final, y pasarla por el
+            // margen del catálogo la movería.
+            $renglon = $actual->renglones()->create([
+                'servicio_id' => $servicio->id,
+                'nombre_servicio' => $servicio->nombre,
+                'precio_unitario' => $comision,
+                'cantidad' => 1,
+                'es_de_tercero' => false,
+                'margen' => 0,
+                'ajuste_precio' => ImporteServicio::AJUSTE_NINGUNO,
+                'concepto' => FactServicio::CONCEPTO_COMISION_AMEX,
+                'orden' => (int) $actual->renglones()->reorder()->max('orden') + 1,
+            ]);
+
+            $pago = $actual->pagos()->create([
+                'forma_pago_id' => $forma->id,
+                'monto' => $montoBruto,
+                'renglon_comision_id' => $renglon->id,
+                'user_id' => $userId,
+            ]);
+
+            Bitacora::log(
+                modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
+                accion: Bitacora::ACCION_CREAR,
+                descripcion: "Se registró un pago de {$montoBruto} con {$forma->nombre} en la prefactura {$actual->id} y se agregó su comisión de {$comision}.",
+                usuarioId: $userId,
+                registroId: $actual->id,
+                datosNuevos: ['pago_id' => $pago->id, 'forma_pago' => $forma->nombre, 'monto' => $montoBruto, 'comision' => $comision, 'renglon_comision_id' => $renglon->id],
             );
 
             return $pago;
@@ -184,12 +324,7 @@ class PagosPrefactura
         } catch (UnexpectedValueException $e) {
             // La tasa de IVA o un renglón no se reconocen: no hay total contra el que topar.
             // Se reporta: bloquea TODOS los cobros con tarjeta y el 422 culpa al pago.
-            report($e);
-
-            throw new PagoNoPermitidoException(
-                'No se puede calcular lo que falta por cobrar: un renglón o la tasa de IVA tienen un valor que no se reconoce.',
-                'totales_no_calculables',
-            );
+            throw $this->totalesNoCalculables($e);
         }
 
         if (bccomp($monto, $falta, 2) > 0) {
@@ -198,6 +333,21 @@ class PagosPrefactura
                 'supera_lo_que_falta',
             );
         }
+    }
+
+    /**
+     * La tasa de IVA, un renglón o la comisión tienen un valor que no se reconoce: no hay
+     * total contra el que topar. Se reporta —bloquea TODOS los cobros con tarjeta y el 422
+     * culparía al pago— y se devuelve la excepción para lanzarla.
+     */
+    private function totalesNoCalculables(UnexpectedValueException $e): PagoNoPermitidoException
+    {
+        report($e);
+
+        return new PagoNoPermitidoException(
+            'No se puede calcular lo que falta por cobrar: un renglón o la tasa de IVA tienen un valor que no se reconoce.',
+            'totales_no_calculables',
+        );
     }
 
     /**

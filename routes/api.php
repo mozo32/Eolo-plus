@@ -431,6 +431,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(functio
         Route::patch('/prefacturas/{id}/internacional', [PrefacturaRenglonController::class, 'internacional'])->whereNumber('id');
         Route::patch('/prefacturas/{id}/descartar', [PrefacturaController::class, 'descartar'])->whereNumber('id');
         Route::post('/prefacturas/{id}/pagos', [PrefacturaPagoController::class, 'store'])->whereNumber('id');
+        Route::post('/prefacturas/{id}/pagos/amex', [PrefacturaPagoController::class, 'amex'])->whereNumber('id');
         Route::delete('/prefacturas/{id}/pagos/{pago}', [PrefacturaPagoController::class, 'destroy'])->whereNumber('id')->whereNumber('pago');
     });
 

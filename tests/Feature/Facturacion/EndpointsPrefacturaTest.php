@@ -165,6 +165,7 @@ test('cada ruta de escritura de prefacturas lleva su subdepartamento', function 
         'PATCH api/facturacion/prefacturas/{id}/internacional' => 'subdep:factPrefacturas',
         'PATCH api/facturacion/prefacturas/{id}/descartar' => 'subdep:factPrefacturas',
         'POST api/facturacion/prefacturas/{id}/pagos' => 'subdep:factPrefacturas',
+        'POST api/facturacion/prefacturas/{id}/pagos/amex' => 'subdep:factPrefacturas',
         'DELETE api/facturacion/prefacturas/{id}/pagos/{pago}' => 'subdep:factPrefacturas',
     ];
 

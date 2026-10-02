@@ -34,6 +34,9 @@ class FactServicio extends Model
 
     public const CONCEPTO_ESTANCIA_TRANSITO_12H = 'estancia_transito_12h';
 
+    /** El renglón que agrega el pago Amex: en el origen es `id_servicio = 100`, «Comisión AMEX». */
+    public const CONCEPTO_COMISION_AMEX = 'comision_amex';
+
     /** @var list<string> */
     public const CONCEPTOS_ESTANCIA = [
         self::CONCEPTO_ESTANCIA_PERNOCTA,
