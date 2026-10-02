@@ -128,6 +128,76 @@ class FactPrefactura extends Model
     }
 
     /**
+     * Solo los pagos activos: la baja es lógica, igual que en el resto del módulo.
+     *
+     * Las restricciones de un `hasMany` no se copian como atributos al crear: un
+     * pago creado por aquí toma su `status` del default de la columna ('A').
+     */
+    public function pagos()
+    {
+        return $this->hasMany(FactPrefacturaPago::class, 'prefactura_id')
+            ->where('status', FactPrefacturaPago::STATUS_ACTIVO)
+            ->orderBy('id');
+    }
+
+    /**
+     * Suma de los pagos activos. Los cuatro derivados del cobro consultan la base
+     * (`pagos()->...`) y no la relación cacheada (`$this->pagos`), por la misma razón
+     * que `subtotalDerivado()` con los renglones: un número de cobro que no ve el pago
+     * recién registrado en esta misma instancia miente en silencio.
+     *
+     * No depende de la tasa de IVA, así que puede devolver su número aunque
+     * `porCobrar()` y `sobrepago()` lancen por una tasa ilegible en `total()`.
+     */
+    public function pagado(): string
+    {
+        $suma = '0.00';
+
+        foreach ($this->pagos()->get() as $pago) {
+            $suma = bcadd($suma, (string) $pago->monto, 2);
+        }
+
+        return $suma;
+    }
+
+    /**
+     * Lo que falta por cobrar. Nunca negativo: el exceso es `sobrepago()`. Lanza
+     * `UnexpectedValueException` si `total()` lo hace (tasa de IVA ilegible).
+     */
+    public function porCobrar(): string
+    {
+        $falta = bcsub($this->total(), $this->pagado(), 2);
+
+        return bccomp($falta, '0.00', 2) > 0 ? $falta : '0.00';
+    }
+
+    /**
+     * Lo cobrado por encima del total. Nunca negativo. Lanza igual que `porCobrar()`.
+     *
+     * Lo que SIGNIFICA depende de `sobrepagoEsCambio()`: con efectivo es cambio que
+     * se devuelve; sin efectivo es que el documento se editó después de cobrarse, y
+     * entonces se corrige el pago, no se entrega dinero.
+     */
+    public function sobrepago(): string
+    {
+        $exceso = bcsub($this->pagado(), $this->total(), 2);
+
+        return bccomp($exceso, '0.00', 2) > 0 ? $exceso : '0.00';
+    }
+
+    /**
+     * Si hay un pago en efectivo detrás del sobrepago. Se consulta por el CONCEPTO de
+     * la forma de pago y no por su nombre, que se edita en pantalla.
+     */
+    public function sobrepagoEsCambio(): bool
+    {
+        return bccomp($this->sobrepago(), '0.00', 2) > 0
+            && $this->pagos()
+                ->whereHas('formaPago', fn ($q) => $q->porConcepto(FactFormaPago::CONCEPTO_EFECTIVO))
+                ->exists();
+    }
+
+    /**
      * Compara el sello de una prefactura cerrada contra lo que hoy derivan sus
      * renglones, y devuelve en qué difieren: `['total' => ['sellado' => '232.00',
      * 'derivado' => '105099.00']]`. Vacío si coinciden o si es borrador (un borrador

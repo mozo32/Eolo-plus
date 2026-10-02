@@ -294,3 +294,16 @@ function formasDePago(): array
 
     return $formas;
 }
+
+/**
+ * Registra un pago a mano, sin pasar por el servicio de la Task 5: sirve para
+ * probar los derivados y la rama de una prefactura cerrada.
+ */
+function pagoDe(App\Models\FactPrefactura $p, App\Models\FactFormaPago $forma, string $monto): App\Models\FactPrefacturaPago
+{
+    return $p->pagos()->create([
+        'forma_pago_id' => $forma->id,
+        'monto' => $monto,
+        'user_id' => $p->user_id,
+    ]);
+}
