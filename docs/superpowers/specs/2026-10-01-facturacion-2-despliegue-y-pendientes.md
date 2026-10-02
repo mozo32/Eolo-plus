@@ -26,8 +26,11 @@ Tres decisiones de diseño que explican el resto de la guía:
   `iva_tasa_sellada`). El `importe` de un renglón nunca se guarda. Guardarlo es la
   redundancia que dejó al sistema viejo con encabezados cuyo total no corresponde a
   sus renglones.
-- **El folio sale de un contador con `lockForUpdate()`**, no de `MAX(folio) + 1`. Esto
-  último es lo que hace el sistema viejo y lo que produjo sus 207 folios duplicados.
+- **El folio sale de un contador con `lockForUpdate()`**, no de `MAX(folio) + 1`. El
+  sistema viejo sí usa `MAX + 1` (`a_pref.php`, líneas 24 a 38: lee el último folio de
+  `tb_hprefactura` y suma uno), un mecanismo que permite duplicados. **Que ese mecanismo
+  sea lo que produjo sus 207 folios duplicados no está demostrado**: ver «Los 207 folios
+  duplicados: qué son» más abajo.
 - **Una prefactura cerrada no se edita**: el invariante vive en el modelo, en el
   servicio y en los endpoints, no solo en la pantalla.
 
@@ -71,14 +74,17 @@ php artisan migrate
 # +- ¿QUÉ BASE ES ESTA? Los pasos 1 a 3 dependen de la respuesta ----------------+
 # | (a) El 1b NO estaba aplicado (se despliegan juntos): pasos 1 a 3 tal como    |
 # |     están; la primera --aplicar ya asigna conceptos y marcas.                |
-# | (b) El 1b YA ESTABA en uso y alguien editó precios o nombres de servicios a  |
-# |     mano: NO correr los pasos 1 a 3. Usar la OPCIÓN B de la guía del 1b      |
-# |     (sección «Precio del combustible»), que asigna solo concepto y marcas    |
-# |     con un UPDATE dirigido y no toca ningún precio.                          |
-# | (c) El 1b ya estaba en uso y nadie editó servicios: los pasos 1 a 3 sirven,  |
-# |     pero LEER antes la lista que imprime la simulación.                      |
+# | (b) El 1b YA ESTABA en uso, sea cual sea el motivo: NO correr los pasos 1 a  |
+# |     3. Usar la OPCIÓN B de la guía del 1b (sección «Precio del combustible»),|
+# |     que asigna solo concepto y marcas con un UPDATE dirigido y no toca nada  |
+# |     más. El criterio es «el 1b ya estaba en uso», NO «alguien editó          |
+# |     servicios»: --forzar pisa SEIS tablas (aeronaves, categorías de          |
+# |     aeronave, tipos de motor, precio de combustible, clientes y servicios),  |
+# |     y quien editó tarifas de matrícula pero no servicios perdería justo las  |
+# |     tarifas de estancia que este bloque cobra.                               |
 # +------------------------------------------------------------------------------+
 
+# SOLO PARA EL CASO (a). En el caso (b) saltar a la opción B.
 # 1. Simulación del importador: lee fact-fbo, escribe y revierte.
 #    LEER ENTERA la salida, sobre todo la lista de tablas que --forzar pisa.
 php artisan facturacion:importar-matriculas | tee storage/logs/facturacion-importacion-$(date +%F).log
@@ -104,6 +110,11 @@ entradas del 1b). La entrada va en el primer nivel del módulo Facturación, jun
 «Aeronaves facturables» y «Clientes», no dentro de «Catálogos».
 
 ### Paso obligatorio: volver a correr el importador
+
+**Si el 1b ya estaba en uso, el «importador» de este paso es la OPCIÓN B de la guía
+del 1b (UPDATE dirigido), no `--forzar`**: ver el cuadro de decisión de arriba y
+«Qué pisa `--forzar`» más abajo. `--forzar` revierte a los valores del sistema viejo
+cualquier tarifa, RFC o precio editado a mano en seis tablas y **eso cambia cobros**.
 
 **Es el paso más fácil de omitir y el que más rompe.** La migración `092000` agrega
 `concepto` y `en_paquete_internacional` y los deja en **NULL y 0 en las filas que ya
@@ -138,14 +149,22 @@ completa de tablas y columnas, y a la advertencia de que cualquier tarifa, RFC o
 precio editado a mano desde las pantallas se revierte al valor del sistema viejo y
 **eso cambia cobros**. No se repite aquí para que no haya dos listas que diverjan.
 
-Lo único que este bloque agrega a esa lista: `--forzar` reescribe la marca
-`en_paquete_internacional` de **todos** los servicios desde el origen (solo los ids
-viejos 9, 10, 14 y 93 quedan en 1) y asigna `concepto` solo a las filas que lo tienen
-en NULL; nunca cambia uno ya asignado.
+`--forzar` pisa **seis** tablas: aeronaves (estatus, categoría, motor, derecho de
+vuelos y tarifas propias), categorías de aeronave (tarifas de pernocta y tránsito),
+tipos de motor (tarifa de aterrizaje), precio vigente del combustible, clientes (RFC,
+correo y teléfono) y servicios (categoría, precio, margen, ajuste y, en algunos, nombre).
 
-La alternativa para una base con precios editados a mano es la **opción B** de la guía
-del 1b: los `UPDATE` dirigidos (con `SET NAMES utf8mb4;` obligatorio, su comprobación
-B.0 previa y su verificación posterior). Se corren **en lugar de** los pasos 1 a 3.
+Lo único que este bloque agrega a esa lista: para los servicios que **casan con el
+origen** (por nombre, o por concepto los cuatro que lo llevan), `--forzar` reescribe la
+marca `en_paquete_internacional` desde el origen (solo los ids viejos 9, 10, 14 y 93
+quedan en 1) y asigna `concepto` solo a las filas que lo tienen en NULL; nunca cambia
+uno ya asignado.
+
+**Elegir entre las dos vías:** si el 1b ya estaba en uso, se usa la **opción B** de la
+guía del 1b: los `UPDATE` dirigidos (con `SET NAMES utf8mb4;` obligatorio, su
+comprobación B.0 previa y su verificación posterior), **en lugar de** los pasos 1 a 3.
+La opción A (`--forzar`) queda para cuando el 1b y el 2 se despliegan juntos, o para
+una base de pruebas.
 
 ### Verificación (haya sido el importador o la opción B)
 
@@ -177,16 +196,56 @@ SELECT s.precio_unitario AS precio_del_servicio, p.precio_eolo AS precio_eolo_vi
 
 Las dos columnas deben ser iguales. Si no lo son, **volver a registrar el precio desde
 la pantalla de Combustible** (la sincronía ya encuentra el servicio y deja rastro en la
-bitácora con el valor anterior), no corregir el servicio a mano.
+bitácora con el valor anterior), no corregir el servicio a mano. **Teclear el precio de
+Eolo explícitamente, igual al vigente**: si se deja que la pantalla lo calcule con la
+fórmula a partir del precio ASA, puede salir un diezmilésimo distinto (la guía del 1b
+documenta 26.0640 contra 26.0639), y entonces el servicio tampoco coincidirá. Repetir
+la consulta de arriba después.
 
-### Si una migración hay que revertirla
+### ATENCIÓN: revertir este bloque DESTRUYE prefacturas
 
-`php artisan migrate:rollback` sobre la migración `092300` **borra** la fila del
-contador (`down()` la elimina). Si ya se cerraron prefacturas, volver a migrar la
-resiembra en **10000** y el siguiente cierre intentaría un folio que ya existe: el
-índice único de `folio` lo rechazaría (es la última red), pero el cierre fallaría
-hasta que alguien ajuste el contador a mano. No revertir esa migración con prefacturas
-cerradas.
+**No ejecutar `php artisan migrate:rollback` en una base con prefacturas.**
+`migrate:rollback` no revierte «una migración»: **revierte el último lote**, que es
+este despliegue entero (las cuatro migraciones; en una base nueva, donde todo corrió en
+un solo lote, incluso las anteriores: se comprobó en una base de prueba, donde
+`migrate:rollback --pretend` lista el borrado de todas). Los `down()` de este bloque son:
+
+| Migración | Lo que hace su `down()` |
+|---|---|
+| `092300` | **borra la fila del contador** `prefactura_folio_siguiente` |
+| `092200` | `DROP TABLE fact_prefactura_renglones`: **todos los renglones** |
+| `092100` | `DROP TABLE fact_prefacturas`: **todas las prefacturas, cerradas incluidas, con sus folios y sellos** |
+| `092000` | quita `concepto` y `en_paquete_internacional` de `fact_servicios` |
+
+Quien ejecute el rollback con prefacturas ya cerradas **pierde todos los documentos
+emitidos y sus folios**, sin copia en ningún otro lado: el sistema viejo no las tiene
+(sus folios son menores de 10000). Además, aunque solo se revirtiera `092300`, volver
+a migrar resembraría el contador en **10000** y el siguiente cierre intentaría un folio
+que ya existe; el índice único lo rechazaría y el cierre fallaría hasta ajustar el
+contador a mano.
+
+Reglas:
+
+- **Antes de migrar**, sacar copia de `fact_prefacturas`, `fact_prefactura_renglones`,
+  `fact_servicios` y `fact_configuracion` (por ejemplo con `mysqldump`).
+- **Después del primer cierre, ninguna migración de este bloque se revierte.** Si hay
+  que dar marcha atrás del despliegue, se vuelve al código anterior y las tablas y
+  columnas se dejan donde están. Se espera que el código del 1b las ignore (las
+  columnas nuevas son nulas o tienen valor por omisión), pero **eso no se probó**.
+- Si de verdad hace falta revertir una sola migración, y **solo en una base sin
+  prefacturas cerradas**: `--step=N` cuenta desde la migración más reciente de toda la
+  base, no desde la que dice `--path`, y `--path` solo filtra qué archivos acepta
+  (una que no coincide sale como «Migration not found» y no se hace nada). Por eso:
+
+  ```bash
+  php artisan migrate:status        # ver cuáles son las más recientes
+  php artisan migrate:rollback --pretend --step=1 --path=database/migrations/2026_09_29_092300_seed_folio_prefactura_en_fact_configuracion.php
+  ```
+
+  **Leer la salida de `--pretend`**: debe listar exactamente las sentencias de esa
+  migración y ningún «Migration not found». Solo entonces repetir el comando sin
+  `--pretend`. Una migración intermedia (`092200`, `092100`) no se puede revertir sin
+  revertir antes las posteriores, porque el rollback va en orden inverso.
 
 ## El folio arranca en 10000
 
@@ -223,8 +282,16 @@ márgenes × 4 ajustes), cero diferencias** entre `ImporteServicio::calcular()` 
 **Hay que volver a correrlo si alguien toca `ImporteServicio` o `importeVistaPrevia`.**
 La prueba permanente (`tests/Unit/ImporteServicioTest.php`) clava los valores del lado
 de PHP pero **no** prueba la equivalencia entre los dos lados, y lo dice en un
-comentario. El barrido no es parte de la suite ni del repositorio: se hizo con un
-script temporal que transpilaba `formato.ts`.
+comentario.
+
+**Los scripts del barrido NO están en el repositorio** (vivieron en un directorio
+temporal de la sesión) y los ocho precios originales no se conservaron. Para rehacerlo:
+transpilar `formato.ts` a CommonJS con esbuild; generar las 512 combinaciones (8 precios
+que incluyan los extremos, como 0.0001 y el máximo permitido × 4 cantidades × 4 márgenes
+× 4 ajustes); calcular cada una con `ImporteServicio::calcular()` en PHP y con
+`importeVistaPrevia(...).toFixed(2)` en Node; y exigir cero diferencias. Si nadie va a
+hacer eso, la instrucción de «volverlo a correr» no se puede cumplir tal como está, y
+la única red es la prueba que clava el lado de PHP.
 
 ## Lo que sqlite no puede demostrar
 
@@ -232,10 +299,15 @@ La suite corre sobre sqlite en memoria. Sqlite **ignora `lockForUpdate()`**, com
 texto en binario y no aplica concurrencia real. Lo que sigue depende de esas tres cosas
 y hay que probarlo contra MySQL real, **antes** de que dos operadores usen el módulo a la vez.
 
-### 1. El índice único del folio aguanta dos cierres simultáneos — YA SE MIDIÓ
+### 1. El contador del folio serializa dos cierres simultáneos — YA SE MIDIÓ (el índice único, no)
 
 Es la única parte de esta lista verificada con concurrencia real, y **no** fue contra la
-base de producción sino contra MariaDB local:
+base de producción sino contra MariaDB local. **Qué se demostró exactamente:** que el
+contador con `lockForUpdate()` serializa los cierres. Con 60 de 60 folios distintos y
+cero errores, **el índice único de `folio` nunca llegó a dispararse**: no se demostró que
+aguante un duplicado, solo que el mecanismo de arriba no produce ninguno. La medición
+viene de la revisión de la Task 4, hecha antes del HEAD final, **y no se repitió sobre
+el código actual**.
 
 - Dos procesos PHP contra MariaDB, con arranque sincronizado y 60 prefacturas,
   llamando al `CierrePrefactura::cerrar()` real: **60 cierres, 60 folios distintos y
@@ -248,8 +320,14 @@ base de producción sino contra MariaDB local:
   Eso valida que la medición sí detecta el problema.
 
 Lo que esta medición **no** cubre: el montaje no forma parte de la suite ni del
-repositorio, se corrió contra MariaDB y no contra la versión de MySQL de producción, y
-midió el servicio, no el endpoint HTTP. Repetirla en producción es sensato y barato.
+repositorio, se corrió contra MariaDB y no contra la versión de MySQL de producción,
+midió el servicio y no el endpoint HTTP, y es de una revisión anterior al HEAD final.
+Repetirla sobre el código desplegado, en la base real, es sensato y barato.
+
+Para comprobar que el índice único existe y rechaza (en una **copia** de la base, no
+en producción), con dos prefacturas cerradas de prueba:
+`UPDATE fact_prefacturas SET folio = <folio de la otra> WHERE id = <esta>;` debe fallar
+con el error 1062 (entrada duplicada).
 
 ### 2. El cierre atómico devuelve 409 bajo dos conexiones reales
 
@@ -338,12 +416,50 @@ Cómo leerlo:
   −0.01 y 198 en +0.01): no hay sesgo hacia un lado, que es lo que dejaría un
   truncamiento sistemático. El desglose de «exactas al centavo» existe precisamente
   porque la tolerancia de 2 centavos de «idénticas» habría escondido un truncamiento.
-- **El total difiere de subtotal + IVA hasta por 49 centavos en 441 prefacturas.** Es
-  consecuencia de que el IVA guardado es float y el total se calculó con el IVA sin redondear.
-- **Las clasificaciones dependen de cómo se lea el float** (ver «Las tres lecturas del FLOAT»);
-  por eso un número como 3,077 exactas puede cambiar entre lecturas aunque las clases no cambien.
+- **El total difiere de subtotal + IVA hasta por 49 centavos en 441 prefacturas, y eso
+  NO es ruido de float.** Leyendo el IVA a precisión completa, ninguna de esas 441 queda
+  a menos de 1.1 centavos del total guardado (medición del revisor del comando). Lo que
+  muestra el dato es otra cosa: ver «El total que no sale de subtotal + IVA» más abajo.
+  Alguien que lea «es ruido de float» y descarte estas diferencias estaría descartando
+  hasta 49 centavos por prefactura con una causa que no es esa.
+- **Las clasificaciones dependen de cómo se lea el float** (ver «Las tres lecturas del
+  FLOAT»), pero solo mueven el desglose de «exactas al centavo» y los renglones de uno o
+  dos centavos; **no explican las diferencias del total**.
 - **Los números pueden moverse** si el volcado se refresca. No es una regresión: el
   comando mide el origen tal como está.
+
+### El total que no sale de subtotal + IVA
+
+**Patrón medido** (en el volcado, con la lectura SQL del float y una tolerancia de 1.1
+centavos, que no es la del comando: las cifras no son comparables una a una con las 441):
+de las 3,494 prefacturas comparadas, 3,350 tienen un total igual a 1.16 × la suma de sus
+renglones (`precio_u × cantidad`); de las 605 cuyo total difiere de subtotal + IVA
+(leído a precisión completa) en 1.1 centavos o más, **579 coinciden con 1.16 × la suma
+de los renglones** y 26 no se explican con eso; y 739 tienen el subtotal guardado a
+1.1 centavos o más de la suma de sus renglones.
+
+Dicho de otra manera: **el encabezado guarda un subtotal redondeado mientras el total
+(y el IVA) salen de la suma exacta.** Dos casos concretos:
+
+- **Folio 5**: subtotal guardado 289,480.00; renglones suman 289,480.50; total guardado
+  335,797.38, que es exactamente 1.16 × 289,480.50.
+- **Folio 2629**: subtotal guardado 110,659.00; renglones suman 110,658.54; total guardado
+  128,363.91, que es 1.16 × 110,658.54 redondeado a centavos.
+
+**Mecanismo: hipótesis NO verificada.** El sistema viejo calcula subtotal, IVA y total a
+la vez desde `SUM(importe)` de los renglones en `Servicios_p.php` (líneas 52 a 64), lo que daría un
+subtotal exacto; y existe otro camino, `actualizar_tot.php`, que escribe
+subtotal, IVA y total tal como los manda el navegador por POST. Que ese camino (o
+cualquier otro) sea el origen del subtotal redondeado **no se comprobó**: ni se
+rastreó qué pantalla llama a cuál ni se cruzó contra las filas afectadas. Tampoco el IVA
+sigue un patrón verificado: el del folio 5 (46,316.90) no es 16% ni de 289,480.00 ni
+de 289,480.50. Hasta que alguien lo investigue, lo único afirmable es el patrón.
+
+Para el bloque nuevo la consecuencia práctica es que el sistema nuevo, que deriva
+subtotal, IVA y total de la misma suma, **no reproduce esos totales**: sale 1.16 ×
+suma de renglones, con el subtotal también exacto. Cuál de los dos documentos es el
+«correcto» para esas prefacturas es una pregunta de negocio (y de la importación del
+histórico, ver bloque 3).
 
 ### Advertencia de alcance
 
@@ -360,36 +476,62 @@ Lo que sí garantiza es que la fórmula del IVA (`FactPrefactura::calcularIva()`
 solo lugar y que el comando la llama en lugar de copiarla; una prueba con la
 mutación comprobada (cambiar `0.005` por `0` la hace fallar) lo fija.
 
-## Tres cosas del dato de origen que son preguntas para el negocio
+## Cuatro cosas del dato de origen que son preguntas para el negocio
 
 No son defectos del código del bloque 2: son hallazgos del sistema viejo que la red
 destapó. Van aquí porque alguien tiene que decidirlas, y **el comando las muestra, no las
 esconde** (excluirlas habría ocultado cientos de miles de pesos).
 
-1. **19 prefacturas con dinero y sin un solo renglón, 307,972.60 pesos en total.**
-   Son 19 encabezados con subtotal mayor que cero y ningún renglón en `tb_venta`, que
-   corresponden a 13 folios distintos (el folio 3599 aparece cuatro veces). El folio
-   **2698** solo son **73,898.80**. Otros: 3599 (115,063.40 entre sus cuatro filas),
-   3299 y 3541 (24,790.00 cada uno) y el folio 6 (20,913.00). El comando
-   las clasifica como estructurales «sin renglones»; **cuenta 12**, no 19, porque
-   excluye los folios duplicados y las cuatro filas del 3599 caen ahí (las 12 restantes
-   suman 192,309.20). ¿Son prefacturas capturadas y luego vaciadas? ¿Cobros reales sin
-   detalle? No se sabe, y solo el negocio puede decirlo.
+1. **19 encabezados con dinero y sin un solo renglón, 307,972.60 pesos en total.**
+   Son **19 filas de `tb_hprefactura` en 14 folios distintos** con subtotal mayor que
+   cero y ningún renglón en `tb_venta`. El folio **2698** solo son **73,898.80**. Otros:
+   3299 y 3541 (24,790.00 cada uno) y el folio 6 (20,913.00). El comando las clasifica
+   como estructurales «sin renglones», pero **cuenta 12 filas en 12 folios, por
+   192,309.20, no 19**, porque excluye los folios duplicados y dos de estos 14 lo son: el
+   **3599** (4 filas, 115,063.40) y el **3800** (3 filas, 600.00). Comprobación:
+   192,309.20 + 115,063.40 + 600.00 = 307,972.60. O sea que **los 115,663.40 de esos dos
+   folios están en el dato y el comando no los ve**. ¿Son prefacturas capturadas y luego
+   vaciadas? ¿Cobros reales sin detalle? No se sabe, y solo el negocio puede decirlo.
 2. **46 prefacturas con subtotal guardado en cero** y renglones que suman más de un peso.
    El encabezado dice que no hay nada que cobrar y el detalle dice que sí.
 3. **188 renglones cuyo importe guardado no corresponde a su precio por cantidad**, 156
    de ellos por más de 2 centavos, el peor por 13,644.00 (folio 866). Los 32 restantes son
    ruido del float, ver abajo.
+4. **86 renglones en 42 folios cuyo folio no tiene encabezado en `tb_hprefactura`, por
+   933,929.15 pesos** (suma de `importe`; con `precio_u × cantidad` salen 933,929.16).
+   Cuentan dentro de los 10,310 «renglones revisados», pero **ninguna comparación los ve**:
+   las de subtotal, IVA y total parten del encabezado, y la de renglones solo compara
+   cada uno consigo mismo. Es casi un millón de pesos que la red no mira y de los que
+   nadie sabe qué son (¿prefacturas borradas, renglones huérfanos de un fallo, folios de
+   otra serie?).
 
 Las 113 estructurales restantes (subtotal y renglones que no cuadran, con ambos
 presentes) son la discrepancia de aritmética propiamente dicha; el comando las lista
 con `--detalle=N` (por omisión enumera 20 por lista), y su destino es la segunda de
 las dos decisiones del bloque 3.
 
+## Los 207 folios duplicados: qué son
+
+El sistema viejo calcula el folio con `MAX + 1` (`a_pref.php`, líneas 24 a 38), un
+mecanismo que **sí permite** que dos sesiones tomen el mismo número. Pero que eso
+produjera los 207 duplicados **no está demostrado**, y el dato apunta en otra dirección
+(medido contra `fact-fbo-prod`): son 207 folios con 497 filas (154 con dos filas, hasta
+8); **206 de los 207 tienen una sola matrícula y los 207 caen en un solo día**. El
+folio 3922 tiene 8 filas, todas de una matrícula y un día. El único con dos matrículas
+es el folio 1 (2 filas, el mismo día).
+
+Eso se parece más a **re-guardados del mismo documento** que a dos operadores peleando
+por el número. Puede haber algo de carrera, pero no se demostró. **Importa porque la
+decisión del bloque 3 —cuál fila conserva cada folio— depende de entender qué son**: si
+son re-guardados, probablemente la última versión es la vigente y las demás son
+historia; si fueran documentos distintos con el mismo número, no se puede descartar
+ninguno. Esto último es una hipótesis, no una recomendación.
+
 ## Las tres lecturas del FLOAT
 
-Explican por qué aparecen diferencias de centavos que **no son defectos**, y el comando
-las documenta en su cabecera:
+Explican las diferencias de centavos **en los renglones y en el desglose de «exactas»**,
+y el comando las documenta en su cabecera. **No explican las diferencias del total** (ver
+«El total que no sale de subtotal + IVA»):
 
 1. **`precio_u` e `iva` son `FLOAT` (precisión simple) en el origen.** Un precio como
    8114.15 no existe en float32: se guarda como 8114.150390625. Toda comparación de
@@ -404,10 +546,11 @@ las documenta en su cabecera:
    como se ve).
 3. **MySQL entrega un `FLOAT` por texto con unos 6 dígitos significativos.** El IVA real
    46316.8984375 llega como «46316.9». Para IVA de cinco cifras eso mete hasta 5 centavos
-   de error de **lectura**, y alimenta buena parte de los 43 de redondeo del IVA y los 441
-   del total. Leyendo el IVA dentro de SQL con `iva + 0e0` (lectura binaria completa)
-   salen las mismas clases (3,451 / 43 / 0) y 3,099 exactas en vez de 3,077: las clases no
-   cambian, el desglose de exactas sí.
+   de error de **lectura** en ese IVA. Leyendo el IVA dentro de SQL con `iva + 0e0` (lectura
+   binaria completa) salen las mismas clases (3,451 / 43 / 0) y 3,099 exactas en vez de
+   3,077: las clases no cambian, solo el desglose de exactas. **Por lo tanto este efecto
+   no explica ni los 43 de redondeo del IVA ni los 441 del total**; moverlos a otra clase
+   exigiría un cambio que la lectura completa no produjo.
 
 ## Lo que queda para el bloque 3
 
@@ -421,10 +564,12 @@ las documenta en su cabecera:
   calcular. Y arrastra **dos decisiones** que hay que tomar antes:
   - qué hacer con los **207 folios duplicados** (497 filas): hoy el comando los excluye
     porque no se pueden comparar; una importación tiene que decidir cuál conserva cada
-    folio;
-  - qué hacer con las **estructurales** (171 en el subtotal, ver arriba): importarlas
-    tal cual trae al sistema nuevo documentos cuyo total no corresponde a su detalle, y
-    el sello de una cerrada impide corregirlas después.
+    folio, y para eso hay que entender primero qué son (ver «Los 207 folios duplicados:
+    qué son»: el dato sugiere re-guardados, no una carrera de numeración);
+  - qué hacer con las **estructurales** (171 en el subtotal, ver arriba), con los 86
+    renglones sin encabezado y con los totales que no salen de subtotal + IVA:
+    importarlos tal cual trae al sistema nuevo documentos cuyo total no corresponde a
+    su detalle, y el sello de una cerrada impide corregirlos después.
 
 **El usuario pidió aviso explícito cuando eso sea posible**: cuando pagos y notas ya
 tengan tabla y la importación del histórico deje de ser parcial, hay que decirlo en voz
