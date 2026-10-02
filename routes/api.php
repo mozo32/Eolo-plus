@@ -41,6 +41,7 @@ use App\Http\Controllers\Api\Facturacion\ClienteController;
 use App\Http\Controllers\Api\Facturacion\FormaPagoController;
 use App\Http\Controllers\Api\Facturacion\PrecioCombustibleController;
 use App\Http\Controllers\Api\Facturacion\PrefacturaController;
+use App\Http\Controllers\Api\Facturacion\PrefacturaPagoController;
 use App\Http\Controllers\Api\Facturacion\PrefacturaRenglonController;
 use App\Http\Controllers\Api\Facturacion\ProveedorController;
 use App\Http\Controllers\Api\Facturacion\ServicioController;
@@ -429,6 +430,8 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(functio
         Route::patch('/prefacturas/{id}/estancia', [PrefacturaRenglonController::class, 'estancia'])->whereNumber('id');
         Route::patch('/prefacturas/{id}/internacional', [PrefacturaRenglonController::class, 'internacional'])->whereNumber('id');
         Route::patch('/prefacturas/{id}/descartar', [PrefacturaController::class, 'descartar'])->whereNumber('id');
+        Route::post('/prefacturas/{id}/pagos', [PrefacturaPagoController::class, 'store'])->whereNumber('id');
+        Route::delete('/prefacturas/{id}/pagos/{pago}', [PrefacturaPagoController::class, 'destroy'])->whereNumber('id')->whereNumber('pago');
     });
 
     Route::middleware('subdep:factFormasPago')->group(function () {

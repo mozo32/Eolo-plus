@@ -325,10 +325,4 @@ class PrefacturaRenglonController extends Controller
 
         return $mensajes;
     }
-
-    /** El chequeo rápido de las dos guardas que comparten todas las escrituras de renglones. */
-    private function rechazoRapido(FactPrefactura $prefactura): ?JsonResponse
-    {
-        return $this->rechazarSiCerrada($prefactura) ?? $this->rechazarSiDescartada($prefactura);
-    }
 }

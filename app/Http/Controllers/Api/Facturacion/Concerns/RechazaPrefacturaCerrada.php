@@ -43,4 +43,14 @@ trait RechazaPrefacturaCerrada
             'codigo' => 'ya_descartada',
         ], 409);
     }
+
+    /**
+     * El camino rápido completo: una cerrada y un borrador descartado se rechazan
+     * igual, con el mismo orden (primero la cerrada). Lo comparten todas las
+     * escrituras sobre una prefactura: renglones y pagos.
+     */
+    private function rechazoRapido(FactPrefactura $prefactura): ?JsonResponse
+    {
+        return $this->rechazarSiCerrada($prefactura) ?? $this->rechazarSiDescartada($prefactura);
+    }
 }

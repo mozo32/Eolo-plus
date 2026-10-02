@@ -363,6 +363,9 @@ class PrefacturaController extends Controller
         ] + $this->totales($p) + $this->verificacionDelSello($p);
 
         if ($conRenglones) {
+            // El cobro solo va en la ficha: el listado no lo muestra y cada fila costaría una docena de consultas.
+            $datos += $this->cobro($p);
+
             $datos['renglones'] = $p->renglones->map(fn (FactPrefacturaRenglon $r) => [
                 'id' => $r->id,
                 'servicio_id' => $r->servicio_id,
@@ -430,6 +433,44 @@ class PrefacturaController extends Controller
                 'sello_error' => 'No se pudo verificar el sello contra los renglones: un renglón o la tasa de IVA tienen un valor que no se reconoce.',
             ];
         }
+    }
+
+    /**
+     * Lo cobrado. El sobrepago se parte: `cambio` es lo que se devuelve y no puede
+     * pasar del efectivo que entró; `cobrado_de_mas` es el resto, que se corrige
+     * cambiando el pago. Los dos pueden ser distintos de cero a la vez.
+     *
+     * @return array{pagado: string, por_cobrar: ?string, sobrepago: ?string, cambio: ?string, cobrado_de_mas: ?string, pagos: array}
+     */
+    private function cobro(FactPrefactura $p): array
+    {
+        // Si los totales no se pudieron calcular, tampoco lo que depende de ellos: lo
+        // pagado sí, porque no depende de la tasa de IVA.
+        try {
+            $porCobrar = $p->porCobrar();
+            $sobrepago = $p->sobrepago();
+            $cambio = $p->cambio();
+            $cobradoDeMas = $p->cobradoDeMas();
+        } catch (UnexpectedValueException) {
+            // Ya lo reportó `totales()`, que corre en la misma ficha.
+            $porCobrar = $sobrepago = $cambio = $cobradoDeMas = null;
+        }
+
+        return [
+            'pagado' => $p->pagado(),
+            'por_cobrar' => $porCobrar,
+            'sobrepago' => $sobrepago,
+            'cambio' => $cambio,
+            'cobrado_de_mas' => $cobradoDeMas,
+            'pagos' => $p->pagos()->with('formaPago')->get()->map(fn ($pago) => [
+                'id' => $pago->id,
+                'forma_pago_id' => $pago->forma_pago_id,
+                'forma_pago' => $pago->formaPago?->nombre,
+                'concepto' => $pago->formaPago?->concepto,
+                'monto' => (string) $pago->monto,
+                'es_comision_amex' => $pago->renglon_comision_id !== null,
+            ])->all(),
+        ];
     }
 
     /** @return array{importe: ?string, importe_error: ?string} */
