@@ -174,9 +174,8 @@ class FactPrefactura extends Model
     /**
      * Lo cobrado por encima del total. Nunca negativo. Lanza igual que `porCobrar()`.
      *
-     * Lo que SIGNIFICA depende de `sobrepagoEsCambio()`: con efectivo es cambio que
-     * se devuelve; sin efectivo es que el documento se editó después de cobrarse, y
-     * entonces se corrige el pago, no se entrega dinero.
+     * Lo que SIGNIFICA se reparte entre `cambio()` (lo que se devuelve, hasta el
+     * efectivo que entró) y `cobradoDeMas()` (el resto, que se corrige en el pago).
      */
     public function sobrepago(): string
     {
@@ -186,15 +185,62 @@ class FactPrefactura extends Model
     }
 
     /**
-     * Si hay un pago en efectivo detrás del sobrepago. Se consulta por el CONCEPTO de
-     * la forma de pago y no por su nombre, que se edita en pantalla.
+     * Suma de los pagos activos cuya forma de pago tiene concepto efectivo. Se busca
+     * por el CONCEPTO y no por el nombre, que se edita en pantalla. Lee la base y no
+     * la relación cacheada, igual que `pagado()`.
+     *
+     * No depende de la tasa de IVA: no lanza aunque `total()` sí lo haga.
      */
-    public function sobrepagoEsCambio(): bool
+    public function efectivoPagado(): string
     {
-        return bccomp($this->sobrepago(), '0.00', 2) > 0
-            && $this->pagos()
-                ->whereHas('formaPago', fn ($q) => $q->porConcepto(FactFormaPago::CONCEPTO_EFECTIVO))
-                ->exists();
+        $suma = '0.00';
+
+        $enEfectivo = $this->pagos()
+            ->whereHas('formaPago', fn ($q) => $q->porConcepto(FactFormaPago::CONCEPTO_EFECTIVO))
+            ->get();
+
+        foreach ($enEfectivo as $pago) {
+            $suma = bcadd($suma, (string) $pago->monto, 2);
+        }
+
+        return $suma;
+    }
+
+    /**
+     * Lo que se DEVUELVE al cliente: el menor entre el sobrepago y el efectivo que
+     * entró. No puede pasar del efectivo recibido: no se da en cambio dinero que no
+     * se cobró en efectivo. Es lo que hace el sistema viejo (`mpago.php`: monto menos
+     * total, acotado por el efectivo). Se compara con `bccomp` y no con `min()` de PHP,
+     * que compararía cadenas.
+     *
+     * Lanza `UnexpectedValueException` si `total()` lo hace (tasa de IVA ilegible),
+     * porque depende de `sobrepago()`.
+     */
+    public function cambio(): string
+    {
+        $sobrepago = $this->sobrepago();
+        $efectivo = $this->efectivoPagado();
+
+        return bccomp($sobrepago, $efectivo, 2) <= 0 ? $sobrepago : $efectivo;
+    }
+
+    /**
+     * El resto del sobrepago: lo cobrado de más que NO se devuelve sino que se
+     * corrige en el pago. Nace cuando se cobra y luego el documento se edita (se
+     * quita un servicio) o cuando se paga con tarjeta por encima del total.
+     *
+     * `cambio()` y `cobradoDeMas()` pueden ser distintos de cero A LA VEZ: sobre un
+     * total de 116.00, Visa 200.00 más efectivo 10.00 dan sobrepago 94.00, cambio
+     * 10.00 (el efectivo que entró) y cobrado de más 84.00 (el resto, de la tarjeta).
+     * Los tres suman: `cambio() + cobradoDeMas() = sobrepago()`.
+     *
+     * Lanza `UnexpectedValueException` si `total()` lo hace, porque depende de
+     * `sobrepago()`. De los cinco derivados del cobro, solo `pagado()` y
+     * `efectivoPagado()` están a salvo de la tasa.
+     */
+    public function cobradoDeMas(): string
+    {
+        return bcsub($this->sobrepago(), $this->cambio(), 2);
     }
 
     /**
