@@ -931,10 +931,31 @@ test('si el origen no trae las formas 3, 4 y 5 el importador lo reporta en espan
         ->and(FactFormaPago::whereNotNull('concepto')->count())->toBe(0);
 });
 
-test('una simulacion no deja el concepto asignado', function () {
+test('una simulacion no deja el concepto asignado a una fila que ya existia', function () {
+    // Una fila que existe antes y despues: un conteo que parte de cero no veria
+    // si la asignacion quedara fuera de la transaccion.
+    $efectivo = FactFormaPago::create(['nombre' => 'Efectivo']);
     sembrarFormasDePagoLegacy();
 
     app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
 
-    expect(FactFormaPago::count())->toBe(0);
+    expect($efectivo->fresh()->concepto)->toBeNull()
+        ->and(FactFormaPago::count())->toBe(1);
+});
+
+test('la busqueda del concepto normaliza el nombre igual que la creacion: espacio duro y espacios dobles', function () {
+    DB::connection('remota')->table('tb_tip_fpago')->insert([
+        ['id_tipo_formas' => 3, 'tipo_forma' => "Amex\u{00A0}"],
+        ['id_tipo_formas' => 4, 'tipo_forma' => 'Efectivo'],
+        ['id_tipo_formas' => 5, 'tipo_forma' => 'AvCard  by WFS'],
+    ]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactFormaPago::porConcepto(FactFormaPago::CONCEPTO_AMEX)->sole()->nombre)->toBe('Amex')
+        ->and(FactFormaPago::porConcepto(FactFormaPago::CONCEPTO_AVCARD)->sole()->nombre)->toBe('AvCard by WFS')
+        ->and(FactFormaPago::count())->toBe(3)
+        ->and(implode(' ', $resultado->hallazgos))->not->toContain('No se encontró')
+        // Solo los dos de espacios raros, uno por fila: no se emiten dos veces.
+        ->and(collect($resultado->hallazgos)->filter(fn ($h) => str_contains($h, 'espacios raros'))->count())->toBe(2);
 });

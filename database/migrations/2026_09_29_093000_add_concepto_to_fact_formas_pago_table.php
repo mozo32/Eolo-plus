@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\FactFormaPago;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -21,10 +20,13 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
+    // Literales y no `FactFormaPago::CONCEPTO_*`: una migración ya aplicada no puede
+    // depender del modelo, que cambia; si se renombrara una constante, dejaría de
+    // cargar en una instalación nueva.
     private const POR_NOMBRE = [
-        'Efectivo' => FactFormaPago::CONCEPTO_EFECTIVO,
-        'Amex' => FactFormaPago::CONCEPTO_AMEX,
-        'AvCard by WFS' => FactFormaPago::CONCEPTO_AVCARD,
+        'Efectivo' => 'efectivo',
+        'Amex' => 'amex',
+        'AvCard by WFS' => 'avcard',
     ];
 
     public function up(): void

@@ -945,8 +945,19 @@ class ImportadorMatriculas
                 continue;
             }
 
+            // Normaliza igual que `nombreCatalogo()` al crear la fila ('Amex<NBSP>' se
+            // guardó como 'Amex'): con un simple `trim()` la búsqueda no encontraría lo
+            // que el paso anterior acaba de crear y dejaría el concepto en NULL. El
+            // hallazgo de los espacios raros ya lo emitió `nombreCatalogo()`.
+            $nombreNormalizado = self::normalizarNombre((string) $nombre);
+
+            if ($nombreNormalizado === '') {
+                // Sin nombre no se importó (ya hay hallazgo de eso): no hay fila que buscar.
+                continue;
+            }
+
             $forma = FactFormaPago::porConcepto($concepto)->first()
-                ?? FactFormaPago::whereNull('concepto')->where('nombre', trim((string) $nombre))->first();
+                ?? FactFormaPago::whereNull('concepto')->where('nombre', $nombreNormalizado)->first();
 
             if ($forma === null) {
                 $this->resultado->hallazgo("No se encontró en Eolo-plus la forma de pago '{$nombre}' para asignarle el concepto '{$concepto}'.");
@@ -1017,8 +1028,7 @@ class ImportadorMatriculas
     private function nombreCatalogo(mixed $crudo, string $tabla, int|string $id, string $etiqueta): ?string
     {
         $original = (string) $crudo;
-        $colapsado = preg_replace('/[\s\p{Z}]+/u', ' ', $original);
-        $nombre = trim($colapsado ?? $original);
+        $nombre = self::normalizarNombre($original);
 
         if ($nombre === '') {
             $this->resultado->hallazgo("{$etiqueta} sin nombre en {$tabla} (id {$id}): no se importa.");
@@ -1032,6 +1042,18 @@ class ImportadorMatriculas
         }
 
         return $nombre;
+    }
+
+    /**
+     * Solo la normalización, sin hallazgos: la comparten `nombreCatalogo()`, que la
+     * aplica al crear la fila y reporta, y la búsqueda del concepto, que tiene que
+     * normalizar igual que la creación o no encuentra la fila que acaba de crearse.
+     */
+    private static function normalizarNombre(string $crudo): string
+    {
+        $colapsado = preg_replace('/[\s\p{Z}]+/u', ' ', $crudo);
+
+        return trim($colapsado ?? $crudo);
     }
 
     private function hallazgoRepetido(string $etiqueta, string $tabla, int|string $id, string $nombre, string $primero): void
