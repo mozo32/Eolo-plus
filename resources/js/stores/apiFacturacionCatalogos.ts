@@ -38,19 +38,35 @@ export const MENSAJE_ERROR_DEL_SERVIDOR =
     'El servidor tuvo un problema y no pudo completar la operación. Recarga la prefactura para ver cómo quedó y vuelve a intentarlo; si se repite, avisa a sistemas.';
 
 /**
- * El texto de un error para mostrarlo: un 5xx (y un 404) nunca enseña lo que dijo el servidor; un 422 junta sus errores por campo;
- * lo demás ya trae su mensaje en español escrito por el servidor y se muestra tal cual.
+ * El texto de un error para mostrarlo: un 5xx, un 401/403/404/419/429 y un fallo de red nunca enseñan lo que dijo el framework
+ * (inglés); un 422 junta sus errores por campo; lo demás ya trae su mensaje en español escrito por el servidor y se muestra tal cual.
  */
 export function mensajeDeError(e: unknown): string {
     if (e instanceof ErrorApi) {
         if (e.status >= 500) return MENSAJE_ERROR_DEL_SERVIDOR;
-        // El 404 de un registro que ya no está (un pago que otra sesión quitó) trae el texto de Laravel, en inglés.
-        if (e.status === 404) return 'Ese registro ya no existe: otra persona pudo quitarlo. Se recargó la prefactura para mostrar cómo quedó.';
+
+        // Estos traen el texto del framework, en inglés («Unauthenticated.», «CSRF token mismatch.», «Too Many Attempts.»).
+        // El mensaje no promete nada que el llamador pueda no hacer (como recargar).
+        switch (e.status) {
+            case 401:
+                return 'Tu sesión terminó. Vuelve a iniciar sesión y repite la operación.';
+            case 403:
+                return 'No tienes permiso para hacer esto.';
+            case 404:
+                return 'Ese registro ya no existe: otra persona pudo quitarlo o cambiarlo.';
+            case 419:
+                return 'La página caducó. Recárgala (F5) e inténtalo de nuevo; si tenías algo sin guardar, cópialo antes.';
+            case 429:
+                return 'Se hicieron demasiadas peticiones seguidas. Espera un momento e inténtalo de nuevo.';
+        }
 
         const delCampo = Object.values(e.errors).flat();
 
         return delCampo.length > 0 ? delCampo.join(' ') : e.message;
     }
+
+    // `fetch` rechaza con un TypeError cuando no hay red («Failed to fetch», «Load failed», «NetworkError…»). Solo ese: un TypeError de código no se disfraza.
+    if (e instanceof TypeError && /fetch|network|load failed/i.test(e.message)) return 'No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.';
 
     return e instanceof Error ? e.message : 'Error inesperado';
 }
@@ -518,10 +534,14 @@ export const apiPrefacturas = {
     editar: (id: number, datos: Record<string, unknown>) => pedir<{ prefactura: Prefactura }>(`${BASE}/prefacturas/${id}`, { method: 'PUT', body: datos }),
     /**
      * Sin `confirmarSinCobro`, el servidor rechaza (422, ErrorApi.codigo `sin_cobro`, con `cuerpo.faltante`) si los pagos no cubren el total.
-     * Solo se manda `true` cuando quien opera confirmó ESE aviso.
+     * Solo se manda `true` cuando quien opera confirmó ESE aviso, y con `faltanteConfirmado` —la cifra que vio—: el servidor la compara con
+     * el faltante real dentro del cierre y, si ya es otro, responde `sin_cobro` con el nuevo en lugar de cerrar.
      */
-    cerrar: (id: number, confirmarSinCobro = false) =>
-        pedir<{ prefactura: Prefactura; message: string }>(`${BASE}/prefacturas/${id}/cerrar`, { method: 'PATCH', body: { confirmar_sin_cobro: confirmarSinCobro } }),
+    cerrar: (id: number, confirmarSinCobro = false, faltanteConfirmado?: string) =>
+        pedir<{ prefactura: Prefactura; message: string }>(`${BASE}/prefacturas/${id}/cerrar`, {
+            method: 'PATCH',
+            body: faltanteConfirmado === undefined ? { confirmar_sin_cobro: confirmarSinCobro } : { confirmar_sin_cobro: confirmarSinCobro, faltante_confirmado: faltanteConfirmado },
+        }),
     agregarPago: (id: number, datos: { forma_pago_id: number; monto: string }) =>
         pedir<{ message: string; pago_id: number; prefactura: Prefactura }>(`${BASE}/prefacturas/${id}/pagos`, { method: 'POST', body: datos }),
     /** `monto` es lo que se carga a la tarjeta; el servidor agrega la comisión como renglón y devuelve la suya (`comision`). */

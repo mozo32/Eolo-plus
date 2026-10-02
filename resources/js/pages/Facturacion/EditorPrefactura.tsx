@@ -131,8 +131,9 @@ interface Props {
  * totales, cobro y notas (estos dos últimos son componentes propios).
  *
  *  - Los totales y el importe de cada renglón son SIEMPRE los del servidor; esta
- *    pantalla no suma nada. La única cuenta local es la vista previa del
- *    renglón dentro de `ModalRenglon`.
+ *    pantalla no suma nada. Las únicas cuentas locales son dos vistas previas,
+ *    rotuladas como tales y con su autoridad en PHP: el importe del renglón
+ *    (`ModalRenglon`) y la comisión Amex (`ModalPagoAmex`).
  *  - Una prefactura cerrada es un documento emitido: ni siquiera se ofrece
  *    editarla (el endpoint también lo hace cumplir).
  *  - Los códigos de error de negocio (incompleta, ya_cerrada, ya_descartada,
@@ -156,6 +157,11 @@ export default function EditorPrefactura({ id }: Props) {
 
     const peticionRef = useRef(0);
     const prefacturaRef = useRef<Prefactura | null>(null);
+    // Las notas con cambios sin guardar. Su estado vive en `PanelNotas`; el editor solo necesita saberlo al cerrar.
+    const notasPendientesRef = useRef<string[]>([]);
+    const alCambiarNotasPendientes = useCallback((notas: string[]) => {
+        notasPendientesRef.current = notas;
+    }, []);
 
     /** Pone la ficha del servidor. El encabezado a medio capturar no se pisa con una recarga que no lo toca. */
     const aplicar = useCallback((nueva: Prefactura) => {
@@ -177,7 +183,7 @@ export default function EditorPrefactura({ id }: Props) {
             setRecargaFallida(false);
         } catch (e) {
             if (numero !== peticionRef.current) return;
-            setErrorCarga(e instanceof Error ? e.message : 'No se pudo cargar la prefactura.');
+            setErrorCarga(mensajeDeError(e));
             // `errorCarga` solo se pinta cuando no hay ficha. Con una ficha ya cargada, la pantalla seguiría mostrando lo de antes como si fuera lo vigente.
             if (prefacturaRef.current !== null) {
                 setRecargaFallida(true);
@@ -494,9 +500,19 @@ export default function EditorPrefactura({ id }: Props) {
 
     const cerrar = () =>
         ejecutar('cerrar', 'No se pudo cerrar la prefactura', async () => {
-            // El servidor cierra lo que tiene guardado: un encabezado a medio capturar quedaría fuera del documento sellado.
-            if (encabezadoModificado) {
-                await Swal.fire({ icon: 'warning', titleText: 'Hay cambios sin guardar', text: 'Guarda los cambios del encabezado antes de cerrar la prefactura.', confirmButtonColor: '#4f46e5' });
+            // El servidor cierra lo que tiene guardado: un encabezado o una nota a medio capturar quedarían fuera del documento sellado,
+            // y una cerrada ya no se edita. Un solo aviso que dice QUÉ falta guardar.
+            const sinGuardar = [...(encabezadoModificado ? ['el encabezado'] : []), ...notasPendientesRef.current];
+
+            if (sinGuardar.length > 0) {
+                const externa = notasPendientesRef.current.includes('la nota externa');
+
+                await Swal.fire({
+                    icon: 'warning',
+                    titleText: 'Hay cambios sin guardar',
+                    text: `Guarda ${sinGuardar.join(', ')} antes de cerrar la prefactura: una cerrada ya no se puede editar.${externa ? ' La nota externa es la que se imprime en el documento, y saldría sin lo que escribiste.' : ''}`,
+                    confirmButtonColor: '#4f46e5',
+                });
                 return;
             }
 
@@ -527,20 +543,12 @@ export default function EditorPrefactura({ id }: Props) {
                 if (!confirmacion.isConfirmed) return;
 
                 try {
-                    const { prefactura: cerradaAhora, message } = await apiPrefacturas.cerrar(prefactura.id, faltante !== null);
+                    // Se manda la cifra que el operador VIO: el servidor la compara con el faltante real dentro del cierre y, si ya es otro,
+                    // responde `sin_cobro` con el nuevo en lugar de cerrar (abajo, otra vuelta del bucle con otra confirmación).
+                    const { prefactura: cerradaAhora, message } = await apiPrefacturas.cerrar(prefactura.id, faltante !== null, faltante ?? undefined);
                     aplicar(cerradaAhora);
                     setAvisoCargos(null);
                     toast.fire({ icon: 'success', titleText: message });
-
-                    // El servidor acepta la confirmación sin comparar la cifra: si cambió entre el aviso y el cierre, se dice después.
-                    if (faltante !== null && cerradaAhora.por_cobrar !== null && cerradaAhora.por_cobrar !== faltante) {
-                        await Swal.fire({
-                            icon: 'warning',
-                            titleText: 'Se cerró con otro faltante',
-                            text: `El aviso decía que faltaban ${formatearMonto(faltante)}, pero la prefactura quedó cerrada con ${formatearMonto(cerradaAhora.por_cobrar)} por cobrar. Revisa los pagos.`,
-                            confirmButtonColor: '#4f46e5',
-                        });
-                    }
 
                     return;
                 } catch (e) {
@@ -905,7 +913,7 @@ export default function EditorPrefactura({ id }: Props) {
 
                     <PanelCobro prefactura={prefactura} onCambio={cargar} onError={manejarError} />
 
-                    <PanelNotas prefactura={prefactura} onCambio={cargar} onError={manejarError} />
+                    <PanelNotas prefactura={prefactura} onCambio={cargar} onError={manejarError} onPendientes={alCambiarNotasPendientes} />
                 </div>
             </div>
 

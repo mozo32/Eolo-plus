@@ -1,6 +1,6 @@
 import { ErrorApi, apiPrefacturas, type Prefactura } from '@/stores/apiFacturacionCatalogos';
 import { Save } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BOTON_PRIMARIO, campoConError, errorStyle, labelStyle, sectionTitle, toast } from './estilos';
 
 type Campo = 'nota_interna' | 'nota_externa' | 'nota_factura';
@@ -27,7 +27,14 @@ interface Props {
     onCambio: () => Promise<void>;
     /** Lo que el panel no sabe resolver (la prefactura se cerró, se descartó, un 5xx). */
     onError: (e: unknown, titulo: string) => Promise<void>;
+    /**
+     * Qué notas tienen cambios sin guardar («la nota externa»…); vacío si ninguna. Lo necesita el editor para no cerrar la prefactura
+     * con una nota a medias: el estado de las notas vive aquí, y una cerrada ya no admite notas. Debe ser estable (`useCallback`).
+     */
+    onPendientes: (notas: string[]) => void;
 }
+
+const enMinuscula = (texto: string): string => texto.charAt(0).toLowerCase() + texto.slice(1);
 
 /**
  * Las tres notas de la prefactura. Solo la externa se imprime en el documento.
@@ -37,7 +44,7 @@ interface Props {
  * guardar la externa no toca las otras dos, ni pisa lo que otra persona haya guardado en ellas.
  * Una cerrada (o un borrador descartado) solo se lee.
  */
-export default function PanelNotas({ prefactura, onCambio, onError }: Props) {
+export default function PanelNotas({ prefactura, onCambio, onError, onPendientes }: Props) {
     const soloLectura = prefactura.estado === 'cerrada' || prefactura.status === 'N';
 
     const guardadas = notasDe(prefactura);
@@ -53,6 +60,18 @@ export default function PanelNotas({ prefactura, onCambio, onError }: Props) {
     }
 
     const modificado = !sonIguales(valores, guardadas);
+
+    // Se avisa al editor de lo pendiente. La clave es texto para que el efecto solo corra cuando cambia el CONJUNTO, no en cada tecla.
+    const claveDePendientes = CAMPOS.filter(({ campo }) => valores[campo] !== guardadas[campo])
+        .map(({ nombre }) => enMinuscula(nombre))
+        .join('|');
+
+    useEffect(() => {
+        onPendientes(claveDePendientes === '' ? [] : claveDePendientes.split('|'));
+    }, [claveDePendientes, onPendientes]);
+
+    // Al desmontarse (se fue de la pantalla) no queda nada pendiente que el editor tenga que recordar.
+    useEffect(() => () => onPendientes([]), [onPendientes]);
 
     const cambiar = (campo: Campo, texto: string) => {
         setValores(actual => ({ ...actual, [campo]: texto }));
