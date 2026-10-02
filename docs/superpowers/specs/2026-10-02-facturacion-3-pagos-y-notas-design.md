@@ -217,6 +217,20 @@ los hechos medidos.
    descuento va al 5** (10 usos, y arrastra los negativos).
 4. **Las notas son tres columnas en `fact_prefacturas`**, no una tabla: el viejo ya
    es uno-a-uno.
+
+   **Corrección (2026-10-02):** una versión anterior de esta especificación decía que
+   «solo la externa se imprime» y que `invoice.php:272` es «el único sitio del sistema
+   viejo que lee `tb_notas`». **Las dos cosas son falsas.**
+   `Prefectura/invoice_cerradas.php:267-300` lee `nota_ext` **y `nota_fac`**, e imprime un
+   bloque «Notas Facturación» con la de factura; y varias otras variantes del PDF
+   (`invoice2`, `invoice_p`, …) también leen `nota_ext`. Lo cierto es lo acotado: **en
+   `invoice.php`, que es la variante viva, solo sale la externa.**
+
+   **Decisión abierta para el bloque 4 (impresión):** si `nota_factura` debe imprimirse, y
+   en qué documento. `invoice_cerradas.php` solo lo referencian las copias `Prefectura12` y
+   `Prefectura14`, no la `Prefectura` viva, así que puede ser código muerto o puede ser la
+   reimpresión que el departamento sí usa. **Hay que preguntárselo a ellos**, no deducirlo.
+   Este bloque guarda las tres notas, así que la decisión no cuesta migración.
 5. **El cambio se deriva.**
 6. **La comisión Amex ABSORBE el redondeo, para que el total del documento caiga
    exacto en lo que se carga a la tarjeta.** Decidido por el usuario el 2026-10-02,

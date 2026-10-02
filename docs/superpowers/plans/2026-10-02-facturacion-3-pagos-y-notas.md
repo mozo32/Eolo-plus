@@ -2547,9 +2547,14 @@ namespace App\Http\Requests\Facturacion;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * Las tres notas, todas opcionales. `sometimes` y no `nullable` a secas: una clave
- * ausente deja la nota como estaba, y una clave con `null` la vacía. Sin
- * `sometimes`, guardar solo la externa borraría las otras dos.
+ * Las tres notas, todas opcionales: una clave ausente deja la nota como estaba, y una
+ * clave con `null` la vacía.
+ *
+ * CORRECCIÓN (2026-10-02): el porqué que este plan daba —«sin `sometimes`, guardar solo
+ * la externa borraría las otras dos»— es FALSO. Medido: quitándolo, las once pruebas de
+ * notas siguen en verde, porque `validated()` ya omite las claves ausentes. Lo que de
+ * verdad protege el comportamiento es leer con `validated()` y NO con `input()`; hay una
+ * prueba que caza esa mutación. `sometimes` se queda porque documenta la intención.
  */
 class UpdateNotasRequest extends FormRequest
 {
