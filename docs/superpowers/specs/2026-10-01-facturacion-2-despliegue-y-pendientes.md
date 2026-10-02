@@ -579,11 +579,10 @@ alta en lugar de esperar a que alguien pregunte.
 
 Del propio bloque 2:
 
-- **`CierrePrefactura::cerrar()` no rechaza prefacturas descartadas.** La guarda del
-  folio vive solo en HTTP (`rechazarSiDescartada()` en el controlador, bajo candado), a
-  diferencia del invariante de «cerrada», que vive en el modelo y el servicio. Cualquier
-  llamador futuro (el bloque 3, un importador) que invoque `cerrar()` directamente podría
-  cerrar un borrador descartado y consumir un folio para un documento que nadie ve.
+- **La conexión `remota` entra con credenciales de escritura.** Que el comando de
+  comparación solo lea es una garantía de **código**, fijada por tres pruebas; el `.env`
+  usa `root` contra la base legada. La defensa estructural sería un usuario de MySQL de
+  solo lectura para esa conexión. Importa más en el bloque 3, que sí escribirá.
 - **No hay restricción única sobre `fact_prefacturas.operacion_llegada_id`**, ni
   comprobación en el Form Request: dos operadores pueden crear dos borradores sobre la
   **misma llegada** a la vez. El filtro «llegadas sin facturar» solo protege a quien
