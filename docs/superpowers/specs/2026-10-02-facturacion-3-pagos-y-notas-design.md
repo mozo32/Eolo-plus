@@ -43,6 +43,20 @@ nada, igual que el 2.
 | `tb_notas` | 215 | Tres columnas en `fact_prefacturas` |
 | `tb_tip_fpago` | 7 | Ya está: `fact_formas_pago`, lo trajo el 1b |
 | `tb_venta` con `id_servicio = 100` | 733 | Renglones de comisión Amex |
+
+**Las tres poblaciones Amex, para que nadie las vuelva a derivar.** Medidas en
+`fact-fbo-prod`, cada una es un subconjunto de la anterior y las tres cifras son
+correctas con su filtro:
+
+| Filtro | Folios |
+|---|---|
+| un solo pago Amex y `subtotal > 0` | **771** |
+| … y exactamente **una** línea de comisión (`id_servicio = 100`) | **765** |
+| … y partida mayor que 0, donde partida es `SUM(tb_venta.importe)` **sin** el servicio 100 | **718** |
+
+Las comparaciones de la fórmula usan **718**, porque son las que tienen una partida con la
+que cuadrar. La afirmación de que «769 superan el subtotal» usa **771**, y no depende de la
+partida.
 | `tb_venta` con `remision = 'cortesia'` | 130 | Renglones con `es_cortesia` |
 
 Las siete formas de pago del catálogo del 1b, con su reparto en el histórico:
