@@ -304,8 +304,13 @@ class PagosPrefactura
         return null;
     }
 
-    /** El total que tendría la prefactura con esta comisión añadida: el del modelo, sin escribir. */
-    private static function totalConComision(string $subtotal, string $comision, string $tasa): string
+    /**
+     * El total que tendría la prefactura con esta comisión añadida: el del modelo, sin escribir.
+     * Pública y estática por la misma razón que `comisionQueCuadra()`: el comando de comparación
+     * (`facturacion:comparar-pagos`) la usa para decir cuánto quedaría por cobrar con la fórmula,
+     * en lugar de escribir otra copia de «subtotal + comisión + IVA».
+     */
+    public static function totalConComision(string $subtotal, string $comision, string $tasa): string
     {
         $conComision = bcadd($subtotal, $comision, 2);
 
