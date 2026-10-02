@@ -1873,10 +1873,13 @@ el pago por el monto tecleado.
 `amex_supera_lo_que_falta`. Ese es el que el sistema viejo aplicaba de verdad: en
 `mpago.php`, Amex caía en la rama `else`, la de Visa y Mastercard.
 
-**NO hay tope por el subtotal.** Medido contra el histórico: de los 771 folios Amex con un
-solo pago, **769 tienen un monto que supera el subtotal guardado** y 764 lo tienen igual al
-`Total`, con `Total / subtotal = 1.16` exacto. Un tope por el subtotal habría rechazado 769
-de 771 pagos reales y haría imposible pagar una prefactura completa con una sola pasada.
+**NO hay tope por el subtotal.** Medido contra el histórico: de los **719 folios** Amex con
+un solo pago, **717 tienen un monto que supera el subtotal guardado** y **713** lo tienen
+igual al `Total`, con `Total / subtotal = 1.16` exacto. Un tope por el subtotal habría
+rechazado 717 de 719 pagos reales y haría imposible pagar una prefactura completa con una
+sola pasada. (Una versión anterior decía «769 de 771»: eran **filas**, porque la consulta
+unía a `tb_hprefactura`, que tiene 207 folios duplicados, sin deduplicar. La proporción es
+la misma y la decisión no cambia.)
 
 **La comisión ABSORBE el redondeo** (decisión del usuario, 2026-10-02). El renglón se
 guarda con dos decimales —es dinero que el cliente ve impreso— pero ese redondeo más el
@@ -1907,7 +1910,9 @@ deliberada que el viejo no tenía: él absorbía cualquier desvío porque calcul
 diferencia, así que un monto mal tecleado se lo tragaba entero.
 
 La Task 9 reporta los 21 ajustes con su desvío máximo, y **cuenta aparte los 7 folios sin
-candidato** (47, 200, 587, 1732, 2061, 2062 y 2235), que sí difieren del viejo.
+candidato** (47, 200, 587, 1732, 2061, 2062 y 2235). De esos siete, **solo el 47 y el 200
+difieren de verdad del viejo**; en los otros cinco la comisión guardada es igual a la de la
+fórmula, y no hay candidato porque el pago no es la prefactura completa.
 
 **Hace falta un servicio de catálogo para la comisión.** En el origen es
 `id_servicio = 100`, «Comisión AMEX». Se reconoce por concepto, como los de
@@ -1989,7 +1994,7 @@ test('la comision usa la tasa de IVA vigente, no un literal', function () {
 
 test('el monto Amex no puede superar lo que falta por cobrar, contando su comision', function () {
     // El operador teclea el total final que se carga a la tarjeta. Medido en el historico:
-    // en 764 de 771 folios Amex el monto coincide con el Total guardado, y 769 de 771 SUPERAN
+    // en 713 de 719 folios Amex el monto coincide con el Total guardado, y 717 de 719 SUPERAN
     // el subtotal, asi que un tope por el subtotal rechazaria casi todos los pagos reales.
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $p = paraAmex();
@@ -2914,7 +2919,7 @@ export function comisionVistaPrevia(monto: string, tasaIva: string): number | nu
 El diálogo dice, en texto: que el monto es **lo que se carga a la tarjeta**, que la
 comisión se agrega como renglón, y cuál es **lo que falta por cobrar**, que es el tope.
 (Una versión anterior de este plan decía «el subtotal actual (el tope)»; el tope por el
-subtotal se eliminó en `fef173b` porque habría rechazado 769 de 771 pagos Amex reales.) Al
+subtotal se eliminó en `fef173b` porque habría rechazado 717 de 719 pagos Amex reales.) Al
 confirmar llama `apiPrefacturas.agregarPagoAmex` y muestra la comisión **que
 devolvió el servidor**, no la vista previa.
 

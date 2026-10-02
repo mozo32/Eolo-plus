@@ -44,19 +44,24 @@ nada, igual que el 2.
 | `tb_tip_fpago` | 7 | Ya está: `fact_formas_pago`, lo trajo el 1b |
 | `tb_venta` con `id_servicio = 100` | 733 | Renglones de comisión Amex |
 
-**Las tres poblaciones Amex, para que nadie las vuelva a derivar.** Medidas en
-`fact-fbo-prod`, cada una es un subconjunto de la anterior y las tres cifras son
-correctas con su filtro:
+**Las poblaciones Amex, medidas bien (corregido el 2026-10-02).** Una versión anterior
+de esta sección daba **771** y **765** como folios. **Eran FILAS, no folios.** La consulta
+unía `tb_formas_pago` a `tb_hprefactura`, que tiene **207 folios duplicados** —un hecho que
+este mismo documento registra— sin deduplicar, así que cada encabezado repetido multiplicaba
+la fila. El `JOIN` metía 52 filas de más.
+
+Contado por folio, tomando **el último encabezado de cada uno** (el del intento que sí
+imprimió):
 
 | Filtro | Folios |
 |---|---|
-| un solo pago Amex y `subtotal > 0` | **771** |
-| … y exactamente **una** línea de comisión (`id_servicio = 100`) | **765** |
-| … y partida mayor que 0, donde partida es `SUM(tb_venta.importe)` **sin** el servicio 100 | **718** |
+| un solo pago Amex, `subtotal > 0`, último encabezado | **719** |
+| el único pago del folio es Amex, con una sola comisión y partida > 0, **sin exigir encabezado** | **718** |
 
-Las comparaciones de la fórmula usan **718**, porque son las que tienen una partida con la
-que cuadrar. La afirmación de que «769 superan el subtotal» usa **771**, y no depende de la
-partida.
+Las comparaciones de la fórmula usan **718**. Esa población no exige encabezado a propósito:
+los folios 2061 y 2062 no lo tienen. La partida es `SUM(tb_venta.importe)` **sin** el
+servicio 100, que son decimales exactos; `precio_u` y `tb_prefcatura.subtotal` son `float`
+y derivar la partida de ellos introduce ruido.
 | `tb_venta` con `remision = 'cortesia'` | 130 | Renglones con `es_cortesia` |
 
 Las siete formas de pago del catálogo del 1b, con su reparto en el histórico:
@@ -281,7 +286,12 @@ los hechos medidos.
 
    **El comando de comparación tiene que reportar el ajuste nombrado y contado** —los 21 y
    su desvío máximo— y **contar aparte los 7 folios sin candidato** (47, 200, 587, 1732,
-   2061, 2062 y 2235), que se quedan con la fórmula y por tanto sí difieren del viejo.
+   2061, 2062 y 2235), que se quedan con la fórmula.
+
+   **Corrección (2026-10-02):** de esos siete, **solo dos difieren de verdad del sistema
+   viejo: el 47 y el 200.** En los otros cinco la comisión guardada **es igual** a la de la
+   fórmula: no hay candidato porque el pago no es la prefactura completa, no porque la cifra
+   difiera. Decir que «los 7 difieren» era inexacto.
 7. **Borrar un pago Amex borra la comisión que ese pago creó**, no todas las de la
    prefactura, que es lo que hace `eliminar_f.php`.
 
@@ -365,16 +375,18 @@ verdad: en `mpago.php`, Amex caía en la rama `else`, la de Visa y Mastercard.
 
 **NO se rechaza por superar el subtotal.** Una versión anterior de esta especificación lo
 pedía, copiando la guarda `monto < ftotal` de `mpamex.php:106`, y **está medido que es
-incompatible con el dato real**: de los 771 folios Amex del histórico con un solo pago,
-**769 tienen un monto que supera el subtotal guardado**, así que esa guarda los habría
-rechazado casi todos. El tope de «lo que falta», en cambio, acepta 769 de los 771 — 764 de
-ellos justo en el borde.
+incompatible con el dato real**: de los **719 folios** Amex del histórico con un solo pago,
+**717 tienen un monto que supera el subtotal guardado**, así que esa guarda los habría
+rechazado casi todos. El tope de «lo que falta», en cambio, los acepta — 713 de ellos justo
+en el borde. (Una versión anterior decía «769 de 771»; eran filas, no folios, por el `JOIN`
+a los encabezados duplicados. La proporción es la misma, 99.7%, así que la decisión no
+cambia: solo las cifras absolutas estaban infladas.)
 
 La razón es que **el operador teclea el total final que se carga a la tarjeta**, no el
-subtotal: en 764 de 771 folios el monto coincide con el `Total` guardado, y
+subtotal: en **713 de 719** folios el monto coincide con el `Total` guardado, y
 `Total / subtotal = 1.16` exacto, lo que confirma que el subtotal guardado ya incluye la
 comisión. Con la guarda del subtotal, pagar una prefactura completa con una sola pasada de
-Amex sería imposible; es justo lo que esos 764 folios hicieron.
+Amex sería imposible; es justo lo que esos 713 folios hicieron.
 
 El combustible se detecta por **concepto**, no por id: `FactServicio::CONCEPTO_COMBUSTIBLE`
 existe desde el bloque 2 justo para no depender del `id_servicio = 7` del viejo.
@@ -435,7 +447,9 @@ y lo fijan pruebas que cuentan las escrituras. Compara:
   centavo, separando las 765 que siguen la fórmula de las 5 de la segunda rama y
   las 11 irreconciliables, en lugar de meterlas en un solo número.
 - **El sobrepago derivado** contra el `Cambio` guardado, que se sabe mal **en las
-  dos direcciones**: de los 27 folios sobrepagados, 15 tienen `Cambio` distinto de
+  dos direcciones** (**30 / 14 / 2** sin tolerancia; ver la corrección al final de esta
+  sección): de los 27 folios sobrepagados **con un centavo de tolerancia**, 15 tienen
+  `Cambio` distinto de
   cero y **12 lo tienen en cero**; y de los 18 folios con `Cambio` distinto de cero,
   **3 no están sobrepagados**. El comando reporta las dos listas por separado, para
   que el bloque 6 sepa qué está importando.
