@@ -30,8 +30,8 @@ Todo lo que sigue está verificado contra el volcado de producción del
 | Tabla | Filas | Qué es |
 |---|---|---|
 | `tb_prefcatura` | 9 | Las prefacturas **abiertas** en este momento, una por matrícula |
-| `tb_hprefactura` | 4,053 | El histórico cerrado |
-| `tb_venta` | 10,148 | Los renglones, colgados del **folio**, no del id del encabezado |
+| `tb_hprefactura` | 4,054 | El histórico cerrado |
+| `tb_venta` | 10,310 | Los renglones, colgados del **folio**, no del id del encabezado |
 | `tb_formas_pago` | 3,534 | Pagos (bloque 3) |
 | `tb_llegadas` | 3,867 | Llegada, salida y duración de la estancia |
 | `tb_notas` | 215 | Notas (bloque 3) |
