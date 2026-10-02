@@ -447,6 +447,27 @@ test('un folio sin candidato en la ventana se cuenta aparte, y el pago completo 
         ->and($lista)->toMatch('/\|\s*2061\s*\|.*\|\s*sin encabezado\s*\|\s*sin encabezado\s*\|/');
 });
 
+test('el funnel Amex cuenta folios, no filas: un encabezado repetido no multiplica la poblacion', function () {
+    // Un folio con TRES encabezados: un join contra tb_hprefactura lo contaria tres veces.
+    origenPrefactura(5, 862.07, 1000.00);
+    origenPrefactura(5, 862.07, 1000.00);
+    origenPrefactura(5, 862.07, 1000.00);
+    origenRenglon(5, 50, 813.27, 813.27);
+    origenRenglon(5, 100, 48.80, 48.80);
+    origenPago(5, 3, 1000.00);
+
+    // Un folio sin encabezado: cuenta para los 718 de la formula, no para los 719 con encabezado.
+    origenRenglon(2061, 24, 1495.00, 1495.00);
+    origenRenglon(2061, 100, 131.70, 131.70);
+    origenPago(2061, 3, 2698.972);
+
+    $this->artisan('facturacion:comparar-pagos')
+        ->expectsOutputToContain('Folios cuyo único pago es un Amex: 2')
+        ->expectsOutputToContain('de ellos, con encabezado de subtotal mayor que cero (el último de cada folio): 1')
+        ->expectsOutputToContain('y partida mayor que cero (los que se comparan): 2')
+        ->assertExitCode(0);
+});
+
 test('la poblacion del ajuste exige que el unico pago del folio sea Amex', function () {
     // Amex mas Visa: el monto Amex no es todo lo que se pago, asi que no se compara el total.
     origenPrefactura(1, 1048.80, 1216.61);
@@ -520,8 +541,31 @@ test('el sobrepago no tiene tolerancia: un centavo de mas cuenta, y se dice apar
     expect($salida)->toContain('Sobrepagadas: 2')
         ->and($salida)->toContain('de ellas, por un solo centavo: 1')
         ->and($salida)->toContain('Sobrepagadas con Cambio en cero: 2')
-        // Sin contar el de un centavo (el criterio con el que el diseño midio 27, 12 y 3).
-        ->and($salida)->toContain('sobrepagadas 1, con Cambio en cero 1, con Cambio guardado sin sobrepago 0');
+        // No hay una segunda cuenta «sin contar el centavo»: el comando no es mas laxo que el sistema.
+        ->and($salida)->not->toContain('Sin contar');
+});
+
+test('un sobrepago de un centavo se nombra con su causa: el que crea el redondeo y el que ya estaba en el origen', function () {
+    // 3261: dos pagos Amex de cuatro decimales. La suma del origen cuadra con el Total (66765.55),
+    // pero cada pago se redondea hacia arriba y lo importado suma un centavo de mas.
+    origenPrefactura(3261, 66765.55, 66765.55);
+    origenPago(3261, 3, 59316.136);
+    origenPago(3261, 3, 7449.4156);
+
+    // 394: un efectivo de un centavo de mas que YA estaba en el origen, con su cambio guardado.
+    origenPrefactura(394, 7606.42, 7606.42, 0.01);
+    origenPago(394, 4, 7606.43);
+
+    $salida = salidaDeCompararPagos();
+
+    expect($salida)->toContain('Sobrepagadas: 2')
+        ->and($salida)->toContain('de ellas, por un solo centavo: 2')
+        ->and($salida)->toContain('de esas, creadas por el redondeo al importar (no existen en el origen): 1')
+        ->and($salida)->toContain('de esas, que ya existen en el origen: 1');
+
+    $lista = seccionDeCompararPagos($salida, 'Sobrepagadas por un solo centavo');
+    expect($lista)->toMatch('/\|\s*3261\s*\|\s*66765\.55\s*\|\s*66765\.56\s*\|\s*66765\.55\s*\|.*lo crea el redondeo al importar/')
+        ->and($lista)->toMatch('/\|\s*394\s*\|\s*7606\.42\s*\|\s*7606\.43\s*\|\s*7606\.43\s*\|\s*0\.01\s*\|.*ya está en el origen/');
 });
 
 test('los folios con encabezado y sin ningun pago se cuentan', function () {
@@ -550,6 +594,32 @@ test('las cortesias se identifican por importe 0 con precio mayor que 0', functi
         ->expectsOutputToContain('Importe en cero sin marca de cortesía: 1')
         ->expectsOutputToContain('Marcadas como cortesía sin importe en cero: 0')
         ->assertExitCode(0);
+});
+
+test('los descuentos marcados Cortesia, la errata y la condicion que no captura las marcadas se dicen aparte', function () {
+    origenPrefactura(1, 0.00, 0.00);
+    origenRenglon(1, 50, 300.00, 0.00, 'cortesia');            // cortesia de verdad
+    origenRenglon(1, 2, -1615.00, -1615.00, 'cortesia');       // marcada, pero es un DESCUENTO
+    origenRenglon(1, 24, 700.00, 700.00, 'cortesia');          // marcada, cobra: ni cortesia ni descuento
+    origenRenglon(1, 2, 1615.00, 0.00, 'cortecia');            // importe 0 con una errata en la marca
+    origenRenglon(1, 6, 867.87, 0.00, 'N/A');                  // importe 0 sin marca y sin errata
+
+    $salida = salidaDeCompararPagos();
+
+    expect($salida)->toContain('Cortesías marcadas: 3')
+        ->and($salida)->toContain('Cortesías marcadas con importe en cero: 1')
+        ->and($salida)->toContain('Marcadas como cortesía sin importe en cero: 2')
+        ->and($salida)->toContain('de ellas, con precio e importe negativos (descuentos, del bloque 5): 1')
+        ->and($salida)->toContain('de ellas, con importe distinto de cero y sin ser negativas: 1')
+        ->and($salida)->toContain('Importe en cero sin marca de cortesía: 2')
+        ->and($salida)->toContain('de ellas, con una remisión que parece una errata de «cortesia»: 1')
+        ->and($salida)->toContain('NO captura las 3 marcadas: deja fuera 2 y agrega 2 sin marca.');
+
+    expect(seccionDeCompararPagos($salida, 'Marcadas como cortesía con un importe que no es cero'))
+        ->toMatch('/\|\s*-1615\.00\s*\|\s*-1615\.00\s*\|.*descuento \(renglón negativo, bloque 5\)/')
+        ->toMatch('/\|\s*700\.00\s*\|\s*700\.00\s*\|.*con importe/');
+    expect(seccionDeCompararPagos($salida, 'Importe en cero con precio mayor que cero, sin la marca'))
+        ->toMatch('/cortecia\s*\|\s*errata de «cortesia»/');
 });
 
 test('una marca de cortesia en un renglon con importe se lista aparte, y la que no cuadra tambien', function () {

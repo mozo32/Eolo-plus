@@ -109,6 +109,10 @@ cambia uno ya puesto.
 
 ### Opción B (caso b): asignarlos a mano, sin tocar ningún precio
 
+**Sin este paso, o sin el importador en el caso (a), el pago Amex responde 422, y AvCard no se
+rechaza con combustible, en silencio.** Es una instrucción de despliegue: no se probó contra
+ninguna base, porque no hay una con el catálogo del 1b a mano.
+
 Es la vía cuando el 1b o el 2 ya estaban en uso. `--forzar` pisa **seis** tablas
 (aeronaves, categorías de aeronave, tipos de motor, precio de combustible, clientes y
 servicios): ver «Qué pisa `--forzar`» en la guía del 1b y la del 2. Cualquier tarifa, RFC o
@@ -211,25 +215,27 @@ ajustarse. La tabla las separa:
 | Pagos | **3,534** (3,516 folios) | 3,534 | Coincide |
 | Comisiones Amex (`tb_venta`, servicio 100) | **733**, una por folio | 733 | Coincide |
 | Folios con encabezado repetido | **207** (497 filas) | 207 | Coincide |
-| Poblaciones Amex | **729** → **718** → **718** (folios) | 771 → 765 → 718 | **771 y 765 no son folios** (ver abajo) |
+| Poblaciones Amex, en folios | **719** (único pago Amex, subtotal > 0, último encabezado) → **716** (con una sola comisión); y **718** para la fórmula (sin exigir encabezado) | 771 → 765 → 718 | **771 y 765 eran filas, no folios** (ver abajo) |
 | Comisión Amex: exactas / segunda rama / ninguna | **696 / 5 / 24** de 725 comparables | 765 / 5 / 11 de 781 | **765 y 781 son filas de un join** (ver abajo) |
 | Ajustes de `comisionQueCuadra()` | **21** de 718, de 1 a 3 centavos | 21, de 1 a 3 | Coincide |
 | …que coinciden con la comisión del viejo | **21 de 21** | 21 de 21 | Coincide |
 | La fórmula sola cuadra el total | **690** | 690 | Coincide |
 | Sin candidato en la ventana de ±5 centavos | **7**: 47, 200, 587, 1732, 2061, 2062, 2235 | 7, los mismos | Coincide el conjunto; **no todos difieren del viejo** (ver abajo) |
 | El 200 | pago completo, comisión del viejo a 28.18 de la fórmula, **32.69** por cobrar | ~28 pesos, 32.69 | Coincide |
-| Sobrepagadas / con Cambio en cero / Cambio sin sobrepago | **30 / 14 / 2** | 27 / 12 / 3 | **Con tolerancia de un centavo sí salen 27 / 12 / 3** (ver abajo) |
+| Sobrepagadas / con Cambio en cero / Cambio sin sobrepago | **30 / 14 / 2**, sin tolerancia | 27 / 12 / 3 | **El diseño midió con un centavo de tolerancia que no declaró; el comando no la usa**, por eso son tres más (ver abajo) |
 | Folios con encabezado y sin ningún pago | **289** | 289 | Coincide |
 | Cortesías marcadas | **130** | 130 | Coincide |
 | Importe 0 con `precio_u > 0` | **142** | 142 | Coincide |
-| Importe 0 con `precio_u > 0` **sin** marca de cortesía | **19** | 12 (= 142 − 130) | **Las 130 no son un subconjunto de las 142** (ver abajo) |
+| Importe 0 con `precio_u > 0` **sin** marca de cortesía | **19** | 12 (= 142 − 130) | **Las 130 no son un subconjunto de las 142**: 123 en las dos, 7 marcadas sin importe 0, 19 con importe 0 sin marca (ver abajo) |
 
 ### Lo que cada cifra que no salió significa
 
-**771, 765 y 781 no son conteos de folios.** El `INNER JOIN` contra `tb_hprefactura` multiplica
-cada pago por cada encabezado repetido: **781 es exactamente el número de filas** de
-`tb_formas_pago` (Amex) × `tb_hprefactura` (subtotal > 0) × `tb_venta` (servicio 100), que
-son 729 pagos distintos. Y **765 / 5 / 11 sale, aproximadamente (766 / 5 / 10), solo contando
+**771, 765 y 781 eran filas, no folios.** La consulta unía `tb_formas_pago` a `tb_hprefactura`,
+que tiene 207 folios duplicados, sin deduplicar, y el `JOIN` multiplica cada pago por cada
+encabezado repetido. Se reprodujo exacto: los folios cuyo único pago es un Amex, con encabezado
+de subtotal > 0, son **771 filas y 719 folios**; con una sola línea de comisión, **765 filas y 716
+folios**; y **781 es el número de filas** de pagos Amex × encabezados × comisión, sobre 729 pagos
+distintos. Y **765 / 5 / 11 sale, aproximadamente (766 / 5 / 10), solo contando
 filas y aceptando hasta 3 centavos de diferencia**; al centavo, sobre las mismas 781 filas, son
 750 / 5 / 26. Contado por folios, que es lo que importa, y **al centavo**: de las 733
 comisiones, 725 son comparables con un pago Amex (8 no: 5 folios sin pago Amex —23, 50, 108,
@@ -239,11 +245,12 @@ siguen ninguna**. De esas 24, **21 son los ajustes de 1 a 3 centavos que
 `comisionQueCuadra()` reproduce al centavo**, y quedan **3 que ningún ajuste alcanza: 22
 (la comisión guardada es 600 y la fórmula da 1,082.29; el folio tiene dos pagos con el mismo
 monto, uno Amex y uno Mastercard), 200 (ver abajo) y 3484 (guardada 1,667.78, fórmula 94.40:
-el pago Amex es 1,934.62 de un total de 34,178.33)**. El 718 sí es de folios, y coincide
-con la especificación: los folios cuyo **único pago** es un Amex, con una sola línea de
-comisión y partida mayor que cero (**no requiere encabezado**: el 2061 y el 2062 no lo
-tienen y están entre los 718). La especificación decía además «subtotal > 0», pero con el
-funnel por folios ese filtro no quita ninguno.
+el pago Amex es 1,934.62 de un total de 34,178.33)**. **El 718 de la comparación de la fórmula sí
+era de folios y coincide:** los folios cuyo **único pago** es un Amex, con una sola línea de
+comisión y partida mayor que cero, **sin exigir encabezado**: 716 tienen encabezado y el 2061 y
+el 2062 no lo tienen (por eso no son los 716 de arriba más nada: la población se definió sin
+encabezado a propósito). El comando imprime el funnel por folios: 729 con único pago Amex, 719 de
+ellos con encabezado de subtotal > 0, 718 con una sola comisión y partida > 0.
 
 **El monto con el que se calcula la comisión es el importable** (el del pago ya redondeado a
 centavos, el que el sistema nuevo tendrá en `fact_prefactura_pagos.monto`): con él salen las
@@ -266,32 +273,41 @@ segunda rama, 1,080.22 contra 878.51) y el **200**. El comando los separa por ca
   Con los renglones que sí tienen, el pago **excede** lo que ellos suman (por cobrar −812.00
   y −1,137.96): no son pagos parciales sino pagos mayores que el detalle que sobrevivió.
 
-**El sobrepago, con tolerancia cero, da 30 / 14 / 2, no 27 / 12 / 3.** El comando no tiene
-tolerancia porque el sistema nuevo no la tiene (`pagado − total > 0` es sobrepago), y por eso
-imprime aparte «de ellas, por un solo centavo: 3». **Sin contar esos tres sí salen 27, 12 y 3**
-(el criterio con el que el diseño midió), y el comando lo dice en su propia línea. De los tres,
-**dos (los folios 3261 y 3555) son un efecto de la importación misma**: tienen dos pagos Amex de
-cuatro decimales (59,316.136 y 7,449.4156; 47,477.4776 y 4,600.7572) y cada uno se redondea
-hacia arriba, de modo que la suma de lo importado queda un centavo por encima del Total.
-Importar pagos de uno en uno a `decimal(12,2)` **crea** dos sobrepagos que el origen no tenía. El
-tercero es el folio 394: un pago en efectivo de 7,606.43 sobre un Total de 7,606.42 y un `Cambio`
-guardado de 0.01, que es un cambio real.
+**El sobrepago, sin tolerancia, da 30 / 14 / 2, no 27 / 12 / 3.** El diseño midió con **un
+centavo de tolerancia que nunca declaró** (sus consultas llevaban `+ 0.011`). El comando **no la
+usa**: el sobrepago del sistema nuevo es exacto (`pagado − total > 0`) y el comando no debe ser
+más laxo que el sistema que verifica. Por eso sus cifras son tres más, y no hay una segunda cuenta
+«sin contar el centavo». Los tres folios que lo son **por un solo centavo** salen nombrados, cada
+uno con su causa, y la distinción importa para el bloque 6:
 
-**Las 130 cortesías marcadas no son un subconjunto de las 142 filas con importe 0.**
-`remision = 'cortesia'` se evalúa en SQL, con la collation del origen, que no distingue
-mayúsculas ni acentos: así salen las 130. De ellas:
+- **3261 y 3555 los crea la propia importación; no existen en el origen.** Cada uno tiene dos pagos
+  Amex de cuatro decimales (59,316.136 y 7,449.4156; 47,477.4776 y 4,600.7572), cada pago se redondea
+  hacia arriba, y la suma de lo importado queda un centavo por encima del Total, mientras que la
+  suma del origen, a centavos, cuadra con él (66,765.55 y 52,078.23). Importar pagos de uno en uno a
+  `decimal(12,2)` **fabrica** estos dos sobrepagos.
+- **El 394 es un cambio real de 0.01:** un pago en efectivo de 7,606.43 sobre un Total de 7,606.42,
+  con un `Cambio` guardado de 0.01. Ya estaba en el origen.
+
+**Las 130 cortesías marcadas no son un subconjunto de las 142 filas con importe 0, y el bloque 6
+necesita tres cosas para no perder ni inventar cortesías.** `remision = 'cortesia'` se evalúa en
+SQL, con la collation del origen, que no distingue mayúsculas ni acentos: así salen las 130. De
+ellas:
 
 - **123** tienen importe 0 y `precio_u > 0` (las que el bloque 6 traducirá a `es_cortesia`);
-- **7 no tienen importe 0**: el folio **1031** (importe 700.00, cobra) y **6 renglones escritos
-  «Cortesía» con precio y importe NEGATIVOS** (folios 3090, 3393, 3507, 3508, 3640 y 3646). Esos
-  seis no son cortesías en el sentido del bloque 3: son **descuentos** (renglones negativos), que
-  el bloque 5 trae. Con la regla `importe 0 y precio_u > 0`, ninguno de los siete se traduce a
-  `es_cortesia`, y el bloque 6 tiene que decidir qué hace con ellos;
-- **19** filas con importe 0 y `precio_u > 0` **no llevan marca** (la especificación decía 12).
-  Una es el folio 53, escrita «cortecia» (una cortesía con una errata). Otras viven en los folios
-  866, 869, 932, 1177, 1178, 1824, 2558 y 3100, donde hay renglones a precio completo con importe
-  0 sin que nada diga por qué (el 866 ya apareció en el bloque 2 con 13,644.00 de diferencia).
-  **No se sabe si son cortesías olvidadas de marcar o errores**; el comando las lista una por una.
+- **7 no tienen importe 0**, y son dos cosas distintas: **seis renglones escritos «Cortesía» con
+  precio e importe NEGATIVOS** (folios 3090, 3393, 3507, 3508, 3640 y 3646), que **no son cortesías
+  sino descuentos** (renglones negativos), y el bloque 5 los trae; y el folio **1031**, que está
+  marcado pero cobra (importe 700.00). Con la regla «importe 0 con `precio_u > 0`», ninguno de los
+  siete se traduce a `es_cortesia`. **La condición no captura las 130: deja fuera 7 y agrega 19.**
+- **19** filas con importe 0 y `precio_u > 0` **no llevan marca** (el diseño decía 12). **Una es el
+  folio 53, escrita «cortecia»**: una errata de «cortesía» en el origen, que ninguna comparación
+  exacta captura. Otras viven en los folios 866, 869, 932, 1177, 1178, 1824, 2558 y 3100, donde hay
+  renglones a precio completo con importe 0 sin que nada diga por qué (el 866 ya apareció en el
+  bloque 2 con 13,644.00 de diferencia). **No se sabe si son cortesías olvidadas de marcar o
+  errores**; el comando las lista una por una, y marca la errata.
+
+Las tres cosas, en una línea: hay seis filas negativas que pertenecen al bloque 5, hay una errata
+en el origen, y la condición del bloque 6 y la marca del origen son conjuntos distintos.
 
 ### Lo que el comando mide además
 
@@ -435,6 +451,6 @@ Del bloque 2, **sigue abierta, sin cambios** (los archivos del bloque no la toca
 ## Nota de entorno
 
 `php artisan test --parallel` produce falsos fallos en la máquina de desarrollo actual (ver la guía del
-1b). **La suite se corre en serie.** Al cierre de este bloque son **976 pruebas** en
-verde, medidas con `php artisan test` en serie: 947 al empezar la última task del bloque y 29 de
+1b). **La suite se corre en serie.** Al cierre de este bloque son **979 pruebas** en
+verde, medidas con `php artisan test` en serie: 947 al empezar la última task del bloque y 32 de
 `CompararPagosTest` (751 al cerrar el bloque 2).

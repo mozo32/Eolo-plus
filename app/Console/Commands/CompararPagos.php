@@ -63,24 +63,31 @@ use Illuminate\Support\Facades\DB;
  *    intento que sí imprimió) para el `Total` y el `Cambio`, y lo dice en la salida. Sin
  *    esto, un folio repetido contaría sus pagos tantas veces como encabezados tenga.
  *
- * TRES COSAS QUE LA MEDICIÓN DEL DISEÑO NO DECÍA Y ESTE COMANDO SÍ DICE:
+ * COSAS QUE LA MEDICIÓN DEL DISEÑO NO DECÍA Y ESTE COMANDO SÍ DICE:
  *
- * - Los conteos de las tres poblaciones Amex (771, 765, 718) y las 781 filas comparables que
- *   trajo el diseño son CONTEOS DE FILAS de un join contra `tb_hprefactura`, que multiplica
- *   por cada encabezado repetido; no son folios. En folios, las comisiones son 733 (una por
- *   folio) y el funnel de la sección del ajuste termina en 718, que sí es un conteo de
- *   folios: aquellos cuyo ÚNICO pago es un Amex, con una sola línea de comisión y partida
- *   mayor que cero. No hace falta encabezado: los folios 2061 y 2062 no lo tienen y están
- *   entre los 718.
+ * - Los conteos de las poblaciones Amex del diseño (771 y 765) eran FILAS, no folios: venían de
+ *   un join contra `tb_hprefactura`, que multiplica cada pago por cada encabezado repetido
+ *   (los 781 «comparables» son exactamente las filas de ese join, sobre 729 pagos distintos).
+ *   Contados por folio, con el último encabezado, los folios cuyo único pago es un Amex son
+ *   729, y 719 de ellos tienen encabezado con subtotal mayor que cero. Para la comparación de
+ *   la fórmula la población es de 718: el único pago del folio es un Amex, con una sola línea
+ *   de comisión y partida mayor que cero, SIN exigir encabezado (los folios 2061 y 2062 no lo
+ *   tienen y están entre los 718). Las comisiones son 733, una por folio.
  * - El monto con el que se calcula la comisión es el IMPORTABLE (el del pago redondeado a
  *   centavos), porque es el que el sistema nuevo tendrá en `fact_prefactura_pagos.monto`.
  * - `remision = 'cortesia'` se evalúa EN SQL, con la collation del origen, que no distingue
  *   mayúsculas ni acentos: así salen las 130 del diseño. Seis de ellas están escritas
- *   «Cortesía», y el comando lo dice (el bloque 6 debe comparar igual, no en PHP).
+ *   «Cortesía» y NO son cortesías sino renglones de precio e importe negativos (descuentos,
+ *   del bloque 5). La condición del bloque 6, «importe 0 con precio_u > 0», no captura las 130:
+ *   deja fuera esos seis y un renglón marcado con importe, y captura 19 que no llevan marca,
+ *   una de ellas con una errata en el origen («cortecia»). El comando separa las tres cosas.
  *
- * El sobrepago no tiene tolerancia: `pagado − Total` mayor que cero es sobrepago, como lo
- * calcula el sistema nuevo. Por eso sale una línea aparte con lo que pasaría de contar solo
- * el que pasa de un centavo: es el criterio con el que el diseño midió 27, 12 y 3.
+ * El sobrepago NO tiene tolerancia: `pagado − Total` mayor que cero es sobrepago, como lo
+ * calcula el sistema nuevo, y el comando no debe ser más laxo que el sistema que verifica. Los
+ * que lo son por un solo centavo salen aparte, nombrados, con su causa: si el centavo ya está en
+ * el origen o lo crea el redondeo de cada pago al importarlo (dos pagos Amex de cuatro decimales
+ * que se redondean hacia arriba suman un centavo más que su Total). El diseño midió con un centavo
+ * de tolerancia que no declaró; por eso sus cifras son tres menos que las de este comando.
  *
  * Las tolerancias no se ajustan para que la corrida cuadre con un número esperado: si el
  * resultado cambia, es un hallazgo.
@@ -136,7 +143,7 @@ class CompararPagos extends Command
 
         $formas = $remota->table('tb_tip_fpago')->select('id_tipo_formas', 'tipo_forma')->orderBy('id_tipo_formas')->get();
         $encabezados = $remota->table('tb_hprefactura')
-            ->select('id_prefactura', 'fol_prefactura', 'Total', 'Cambio')
+            ->select('id_prefactura', 'fol_prefactura', 'subtotal', 'Total', 'Cambio')
             ->orderBy('id_prefactura')
             ->get();
         $pagos = $remota->table('tb_formas_pago')
@@ -471,7 +478,7 @@ class CompararPagos extends Command
     private function analizarAjustes(array $renglonesPorFolio, array $pagosPorFolio, array $ultimo, mixed $amexId): array
     {
         $resultado = [
-            'solo_amex' => 0, 'una_comision' => 0, 'comparadas' => 0,
+            'solo_amex' => 0, 'con_encabezado' => 0, 'una_comision' => 0, 'comparadas' => 0,
             'formula_sola' => 0, 'formula_sola_distinta' => [],
             'ajustadas' => [], 'ajustadas_distintas' => [], 'reproducidas' => [],
             'sin_candidato' => [], 'desvio_maximo' => '0.00', 'desvio_minimo' => null,
@@ -486,6 +493,10 @@ class CompararPagos extends Command
                 continue;
             }
             $resultado['solo_amex']++;
+
+            if (isset($ultimo[$folio]) && bccomp($this->centavos($ultimo[$folio]->subtotal), '0.00', 2) > 0) {
+                $resultado['con_encabezado']++;
+            }
 
             $renglones = $renglonesPorFolio[$folio] ?? [];
             $comisiones = array_values(array_filter($renglones, fn ($r) => (int) $r->id_servicio === self::SERVICIO_COMISION));
@@ -570,6 +581,7 @@ class CompararPagos extends Command
         $this->newLine();
         $this->line('Ajuste de la comisión: PagosPrefactura::comisionQueCuadra() sobre los folios de un solo pago Amex');
         $this->line("Folios cuyo único pago es un Amex: {$a['solo_amex']}");
+        $this->line("  de ellos, con encabezado de subtotal mayor que cero (el último de cada folio): {$a['con_encabezado']}");
         $this->line("  con exactamente una línea de comisión: {$a['una_comision']}");
         $this->line("  y partida mayor que cero (los que se comparan): {$a['comparadas']}");
         $this->line("La fórmula sola cuadra el total, sin ajuste: {$a['formula_sola']}");
@@ -628,18 +640,17 @@ class CompararPagos extends Command
     {
         $sinPagos = 0;
         $sobrepagadas = 0;
-        $porUnCentavo = 0;
         $cambioDistintoDeCero = 0;
         $sobreSinCambio = [];
         $cambioSinSobrepago = [];
-        $sobrepagadasMasDeUnCentavo = 0;
-        $sobreSinCambioMasDeUnCentavo = 0;
-        $cambioSinSobrepagoMasDeUnCentavo = 0;
+        $porUnCentavo = [];
 
         foreach ($ultimo as $folio => $h) {
             $pagado = '0.00';
+            $origen = '0.000000';
             foreach ($pagosPorFolio[$folio] ?? [] as $p) {
                 $pagado = bcadd($pagado, $p->importado, 2);
+                $origen = bcadd($origen, $p->origen, 6);
             }
             if (! isset($pagosPorFolio[$folio])) {
                 $sinPagos++;
@@ -650,7 +661,6 @@ class CompararPagos extends Command
             $sobrepago = bcsub($pagado, $total, 2);
             $estaSobrepagada = bccomp($sobrepago, '0.00', 2) > 0;
             $conCambio = bccomp($cambio, '0.00', 2) !== 0;
-            $masDeUnCentavo = bccomp($sobrepago, '0.01', 2) > 0;
 
             if ($conCambio) {
                 $cambioDistintoDeCero++;
@@ -658,36 +668,53 @@ class CompararPagos extends Command
 
             if ($estaSobrepagada) {
                 $sobrepagadas++;
-                if (! $masDeUnCentavo) {
-                    $porUnCentavo++;
-                } else {
-                    $sobrepagadasMasDeUnCentavo++;
+
+                // Un sobrepago de un solo centavo puede venir del origen o del redondeo de cada
+                // pago al importarlo: se distingue mirando si la suma del ORIGEN, a centavos, ya
+                // pasaba del Total.
+                if ($sobrepago === '0.01') {
+                    $delOrigen = $this->redondear($origen);
+                    $yaEnElOrigen = bccomp($delOrigen, $total, 2) > 0;
+                    $porUnCentavo[] = [
+                        'folio' => $folio, 'total' => $total, 'pagado' => $pagado, 'origen' => $delOrigen, 'cambio' => $cambio,
+                        'en_origen' => $yaEnElOrigen,
+                        'causa' => $yaEnElOrigen
+                            ? 'ya está en el origen (la suma del origen pasa del Total)'
+                            : 'lo crea el redondeo al importar (la suma del origen cuadra con el Total)',
+                    ];
                 }
 
                 if (! $conCambio) {
                     $sobreSinCambio[] = ['folio' => $folio, 'total' => $total, 'pagado' => $pagado, 'sobrepago' => $sobrepago, 'cambio' => $cambio];
-                    $sobreSinCambioMasDeUnCentavo += $masDeUnCentavo ? 1 : 0;
                 }
             } elseif ($conCambio) {
                 $cambioSinSobrepago[] = ['folio' => $folio, 'total' => $total, 'pagado' => $pagado, 'sobrepago' => $sobrepago, 'cambio' => $cambio];
             }
-
-            if ($conCambio && ! $masDeUnCentavo) {
-                $cambioSinSobrepagoMasDeUnCentavo++;
-            }
         }
 
+        $creadas = count(array_filter($porUnCentavo, fn ($c) => ! $c['en_origen']));
+
         $this->newLine();
-        $this->line('Sobrepago derivado (pagado menos el Total guardado, cada pago a centavos) contra el Cambio guardado');
+        $this->line('Sobrepago derivado (pagado menos el Total guardado, cada pago a centavos, sin tolerancia) contra el Cambio guardado');
         $this->line('Folios con encabezado: '.count($ultimo));
         $this->line("Folios con encabezado y sin ningún pago: {$sinPagos}");
         $this->line("Sobrepagadas: {$sobrepagadas}");
-        $this->line("  de ellas, por un solo centavo: {$porUnCentavo}");
+        $this->line('  de ellas, por un solo centavo: '.count($porUnCentavo));
+        $this->line("    de esas, creadas por el redondeo al importar (no existen en el origen): {$creadas}");
+        $this->line('    de esas, que ya existen en el origen: '.(count($porUnCentavo) - $creadas));
         $this->line("Cambio guardado distinto de cero: {$cambioDistintoDeCero}");
         $this->line('Sobrepagadas con Cambio en cero: '.count($sobreSinCambio));
         $this->line('Sobrepagadas con Cambio guardado: '.($sobrepagadas - count($sobreSinCambio)));
         $this->line('Cambio guardado sin sobrepago: '.count($cambioSinSobrepago));
-        $this->line("Sin contar el sobrepago de un solo centavo (el criterio del diseño): sobrepagadas {$sobrepagadasMasDeUnCentavo}, con Cambio en cero {$sobreSinCambioMasDeUnCentavo}, con Cambio guardado sin sobrepago {$cambioSinSobrepagoMasDeUnCentavo}");
+
+        if ($porUnCentavo !== []) {
+            $this->newLine();
+            $this->warn('Sobrepagadas por un solo centavo, y de dónde viene ese centavo:');
+            $this->table(
+                ['Folio', 'Total guardado', 'Pagado importado', 'Suma del origen', 'Cambio guardado', 'Causa'],
+                array_map(fn ($c) => [(string) $c['folio'], $c['total'], $c['pagado'], $c['origen'], $c['cambio'], $c['causa']], $porUnCentavo),
+            );
+        }
 
         if ($sobreSinCambio !== []) {
             $this->newLine();
@@ -710,6 +737,13 @@ class CompararPagos extends Command
 
     // ---- 5. Las cortesías ---------------------------------------------------------------
 
+    /**
+     * La condición con la que el bloque 6 traducirá a `es_cortesia` («importe 0 con precio_u > 0»)
+     * contra la marca del origen. No son el mismo conjunto, y el bloque 6 necesita las tres
+     * diferencias para no perder ni inventar cortesías: las marcadas que la condición no captura
+     * (entre ellas los descuentos, que son renglones negativos del bloque 5), las que la condición
+     * captura sin marca, y entre estas las que tienen una errata en la remisión.
+     */
     private function compararCortesias($renglones): void
     {
         $marcadas = 0;
@@ -717,14 +751,19 @@ class CompararPagos extends Command
         $importeEnCero = 0;
         $marcadasConImporteEnCero = 0;
         $marcadasSinImporteEnCero = [];
+        $descuentos = 0;
         $sinMarca = [];
+        $erratas = 0;
 
         foreach ($renglones as $r) {
             $marcada = (int) $r->marcada_cortesia === 1;
-            $esCortesia = bccomp($this->centavos($r->importe), '0.00', 2) === 0
-                && bccomp($this->seisDecimales($r->precio_u), '0', 6) > 0;
+            $importe = $this->centavos($r->importe);
+            $precio = $this->seisDecimales($r->precio_u);
+            $esCortesia = bccomp($importe, '0.00', 2) === 0 && bccomp($precio, '0', 6) > 0;
+            $esDescuento = bccomp($importe, '0.00', 2) < 0 && bccomp($precio, '0', 6) < 0;
+            $remision = (string) $r->remision;
 
-            $fila = [(string) $r->fol_prefactura, (string) $r->id_venta, (string) $r->id_servicio, $this->recortar($this->seisDecimales($r->precio_u)), $this->centavos($r->importe), (string) $r->cantidad, (string) $r->remision];
+            $fila = [(string) $r->fol_prefactura, (string) $r->id_venta, (string) $r->id_servicio, $this->recortar($precio), $importe, (string) $r->cantidad, $remision];
 
             if ($marcada) {
                 $marcadas++;
@@ -740,9 +779,13 @@ class CompararPagos extends Command
             if ($marcada && $esCortesia) {
                 $marcadasConImporteEnCero++;
             } elseif ($marcada) {
-                $marcadasSinImporteEnCero[] = $fila;
+                $marcadasSinImporteEnCero[] = array_merge($fila, [$esDescuento ? 'descuento (renglón negativo, bloque 5)' : 'con importe']);
+                $descuentos += $esDescuento ? 1 : 0;
             } elseif ($esCortesia) {
-                $sinMarca[] = $fila;
+                // Una remisión que no es 'cortesia' pero se le parece: una errata de ella.
+                $errata = $remision !== '' && levenshtein(strtolower(trim($remision)), 'cortesia') <= 2;
+                $erratas += $errata ? 1 : 0;
+                $sinMarca[] = array_merge($fila, [$errata ? 'errata de «cortesia»' : '']);
             }
         }
 
@@ -753,9 +796,13 @@ class CompararPagos extends Command
         $this->line("Importe en cero con precio mayor que cero: {$importeEnCero}");
         $this->line("Cortesías marcadas con importe en cero: {$marcadasConImporteEnCero}");
         $this->line('Marcadas como cortesía sin importe en cero: '.count($marcadasSinImporteEnCero));
+        $this->line("  de ellas, con precio e importe negativos (descuentos, del bloque 5): {$descuentos}");
+        $this->line('  de ellas, con importe distinto de cero y sin ser negativas: '.(count($marcadasSinImporteEnCero) - $descuentos));
         $this->line('Importe en cero sin marca de cortesía: '.count($sinMarca));
+        $this->line("  de ellas, con una remisión que parece una errata de «cortesia»: {$erratas}");
+        $this->line("La condición «importe 0 con precio mayor que 0» NO captura las {$marcadas} marcadas: deja fuera ".count($marcadasSinImporteEnCero).' y agrega '.count($sinMarca).' sin marca.');
 
-        $columnas = ['Folio', 'Renglón', 'Servicio', 'Precio', 'Importe', 'Cantidad', 'Remisión'];
+        $columnas = ['Folio', 'Renglón', 'Servicio', 'Precio', 'Importe', 'Cantidad', 'Remisión', 'Qué es'];
 
         if ($marcadasSinImporteEnCero !== []) {
             $this->newLine();
