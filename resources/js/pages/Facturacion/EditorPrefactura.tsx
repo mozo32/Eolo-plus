@@ -1,22 +1,28 @@
 import AppLayout from '@/layouts/app-layout';
 import { facturacionPrefacturas } from '@/routes';
-import { ErrorApi, apiPrefacturas, type DiscrepanciaSello, type Prefactura } from '@/stores/apiFacturacionCatalogos';
+import { ErrorApi, apiPrefacturas, mensajeDeError, type DiscrepanciaSello, type Prefactura } from '@/stores/apiFacturacionCatalogos';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { ArrowLeft, Ban, Globe, Lock, Plus, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, X } from 'lucide-react';
+import { ArrowLeft, Ban, Gift, Globe, Lock, Plus, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import CabeceraPantalla from './components/CabeceraPantalla';
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO, TD, TH, campoConError, errorStyle, labelStyle, sectionTitle, toast } from './components/estilos';
-import { aCampoFechaHora, deCampoFechaHora, esConceptoDeEstancia, fechaHoraSinZona, formatearMonto, formatearTasa } from './components/formato';
+import { aCampoFechaHora, deCampoFechaHora, esConceptoDeEstancia, esMontoPositivo, fechaHoraSinZona, formatearMonto, formatearTasa } from './components/formato';
 import ModalEstancia, { type CantidadesEstancia } from './components/ModalEstancia';
 import ModalRenglon, { type DatosRenglon } from './components/ModalRenglon';
+import PanelCobro from './components/PanelCobro';
+import PanelNotas from './components/PanelNotas';
 import SelectorCliente from './components/SelectorCliente';
 
 const TEXTO_MAX = 120;
 
-/** Los cuatro códigos de negocio que dicen que el estado que se ve ya no es el del servidor (o que el cierre se abortó). */
-const CODIGOS_DE_ESTADO = ['incompleta', 'ya_cerrada', 'ya_descartada', 'sello_inconsistente'];
+/**
+ * Los códigos de negocio que dicen que el estado que se ve ya no es el del servidor (o que el cierre se abortó): obligan a
+ * recargar la ficha y se muestran con el mensaje del servidor. `sin_cobro` y `totales_no_calculables` son los del cobro;
+ * el primero lo atiende el cierre (vuelve a pedir confirmación) y, si llega a otro sitio, se resuelve como los demás.
+ */
+const CODIGOS_DE_ESTADO = ['incompleta', 'ya_cerrada', 'ya_descartada', 'sello_inconsistente', 'sin_cobro', 'totales_no_calculables'];
 
 interface FormularioEncabezado {
     clienteId: number | null;
@@ -121,8 +127,8 @@ interface Props {
 }
 
 /**
- * Editor de una prefactura: un documento, no un catálogo. Encabezado, renglones
- * y totales.
+ * Editor de una prefactura: un documento, no un catálogo. Encabezado, renglones,
+ * totales, cobro y notas (estos dos últimos son componentes propios).
  *
  *  - Los totales y el importe de cada renglón son SIEMPRE los del servidor; esta
  *    pantalla no suma nada. La única cuenta local es la vista previa del
@@ -130,7 +136,8 @@ interface Props {
  *  - Una prefactura cerrada es un documento emitido: ni siquiera se ofrece
  *    editarla (el endpoint también lo hace cumplir).
  *  - Los códigos de error de negocio (incompleta, ya_cerrada, ya_descartada,
- *    sello_inconsistente) piden cada uno una reacción distinta: ver `manejarError`.
+ *    sello_inconsistente, sin_cobro, totales_no_calculables) piden cada uno una
+ *    reacción distinta: ver `manejarError`.
  */
 export default function EditorPrefactura({ id }: Props) {
     const [prefactura, setPrefactura] = useState<Prefactura | null>(null);
@@ -195,6 +202,10 @@ export default function EditorPrefactura({ id }: Props) {
      *  - ya_cerrada (409): alguien la cerró o ya estaba: lo que se ve está viejo, se recarga.
      *  - ya_descartada (409): el borrador ya no existe para trabajar: se recarga y se vuelve a la lista.
      *  - sello_inconsistente (409): el cierre se abortó; nada se guardó y reintentar es seguro.
+     *  - sin_cobro, totales_no_calculables (422): se muestra el mensaje del servidor y se recarga. (El cierre atiende `sin_cobro`
+     *    antes de llegar aquí: vuelve a pedir la confirmación con el faltante que trae.)
+     *  - 5xx: un mensaje genérico en español, nunca el «Server Error» crudo; se recarga, porque no se sabe cómo quedó.
+     *  - 404: el registro ya no está (otra sesión lo quitó); se dice y se recarga.
      */
     const manejarError = useCallback(
         async (e: unknown, titulo: string) => {
@@ -226,8 +237,15 @@ export default function EditorPrefactura({ id }: Props) {
                 return;
             }
 
-            const detalle = e instanceof ErrorApi && Object.keys(e.errors).length > 0 ? Object.values(e.errors).flat().join(' ') : e instanceof Error ? e.message : 'Error inesperado';
-            await Swal.fire({ icon: 'error', titleText: titulo, text: detalle, confirmButtonColor: '#4f46e5' });
+            if (e instanceof ErrorApi && e.codigo !== null && CODIGOS_DE_ESTADO.includes(e.codigo)) {
+                await Swal.fire({ icon: 'warning', titleText: titulo, text: e.message, confirmButtonColor: '#4f46e5' });
+                await cargar();
+                return;
+            }
+
+            await Swal.fire({ icon: 'error', titleText: titulo, text: mensajeDeError(e), confirmButtonColor: '#4f46e5' });
+
+            if (e instanceof ErrorApi && (e.status >= 500 || e.status === 404)) await cargar();
         },
         [cargar],
     );
@@ -464,6 +482,16 @@ export default function EditorPrefactura({ id }: Props) {
             router.visit(facturacionPrefacturas().url);
         });
 
+    /** Sin totales no hay nada que sellar: el servidor tampoco cierra. El botón se deshabilita y se dice por qué. */
+    const sinTotales = prefactura.totales_error !== null || prefactura.cobro_error !== null || prefactura.por_cobrar === null;
+
+    const cortesia = (renglonId: number, nombre: string, marcar: boolean) =>
+        ejecutar(`cortesia-${renglonId}`, 'No se pudo cambiar la cortesía', async () => {
+            await apiPrefacturas.cortesia(prefactura.id, renglonId, marcar);
+            await cargar();
+            toast.fire({ icon: 'success', titleText: marcar ? `«${nombre}» queda como cortesía: ya no se cobra.` : `«${nombre}» vuelve a cobrarse.` });
+        });
+
     const cerrar = () =>
         ejecutar('cerrar', 'No se pudo cerrar la prefactura', async () => {
             // El servidor cierra lo que tiene guardado: un encabezado a medio capturar quedaría fuera del documento sellado.
@@ -472,22 +500,60 @@ export default function EditorPrefactura({ id }: Props) {
                 return;
             }
 
-            const confirmacion = await Swal.fire({
-                titleText: 'Cerrar la prefactura',
-                text: `Se le asignará un folio: el folio se consume y no se puede reutilizar. Una vez cerrada, la prefactura ya no se podrá editar. Total: ${formatearMonto(prefactura.total)}.`,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'Sí, cerrar',
-                cancelButtonText: 'Cancelar',
-                confirmButtonColor: '#059669',
-                reverseButtons: true,
-            });
-            if (!confirmacion.isConfirmed) return;
+            if (sinTotales) return;
 
-            const { prefactura: cerradaAhora, message } = await apiPrefacturas.cerrar(prefactura.id);
-            aplicar(cerradaAhora);
-            setAvisoCargos(null);
-            toast.fire({ icon: 'success', titleText: message });
+            // El total se lee de la ficha vigente: tras un `sin_cobro` la ficha se recargó y el de la closure ya es viejo.
+            const base = () => `Se le asignará un folio: el folio se consume y no se puede reutilizar. Una vez cerrada, la prefactura ya no se podrá editar. Total: ${formatearMonto((prefacturaRef.current ?? prefactura).total)}.`;
+
+            // Lo que falta por cobrar, según lo último que se leyó. null: no hay nada que confirmar. Solo se manda `confirmar_sin_cobro` si
+            // quien opera confirmó ESTE aviso, y el servidor rechaza (`sin_cobro`) un cierre sin confirmar si el cobro cambió desde entonces.
+            let faltante: string | null = esMontoPositivo(prefactura.por_cobrar) ? prefactura.por_cobrar : null;
+            let aviso = '';
+
+            for (;;) {
+                const confirmacion = await Swal.fire({
+                    titleText: faltante === null ? 'Cerrar la prefactura' : 'Cerrar sin el cobro completo',
+                    text:
+                        faltante === null
+                            ? base()
+                            : `${aviso} Faltan ${formatearMonto(faltante)} por cobrar: si la cierras así, el documento sale con el cobro incompleto y ya no se podrá corregir. ${base()}`.trim(),
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: faltante === null ? 'Sí, cerrar' : 'Sí, cerrar sin cobro completo',
+                    cancelButtonText: 'Cancelar',
+                    confirmButtonColor: faltante === null ? '#059669' : '#d97706',
+                    reverseButtons: true,
+                });
+                if (!confirmacion.isConfirmed) return;
+
+                try {
+                    const { prefactura: cerradaAhora, message } = await apiPrefacturas.cerrar(prefactura.id, faltante !== null);
+                    aplicar(cerradaAhora);
+                    setAvisoCargos(null);
+                    toast.fire({ icon: 'success', titleText: message });
+
+                    // El servidor acepta la confirmación sin comparar la cifra: si cambió entre el aviso y el cierre, se dice después.
+                    if (faltante !== null && cerradaAhora.por_cobrar !== null && cerradaAhora.por_cobrar !== faltante) {
+                        await Swal.fire({
+                            icon: 'warning',
+                            titleText: 'Se cerró con otro faltante',
+                            text: `El aviso decía que faltaban ${formatearMonto(faltante)}, pero la prefactura quedó cerrada con ${formatearMonto(cerradaAhora.por_cobrar)} por cobrar. Revisa los pagos.`,
+                            confirmButtonColor: '#4f46e5',
+                        });
+                    }
+
+                    return;
+                } catch (e) {
+                    const nuevo = e instanceof ErrorApi && e.codigo === 'sin_cobro' && typeof e.cuerpo.faltante === 'string' ? e.cuerpo.faltante : null;
+                    if (!(e instanceof ErrorApi) || nuevo === null) throw e;
+
+                    // Alguien cobró o editó entre la lectura y el envío: lo que la pantalla creía ya no vale. No se reintenta solo:
+                    // se pone al día la ficha y se vuelve a pedir la confirmación, con el faltante que dijo el servidor.
+                    await cargar();
+                    aviso = `${e.message} ${faltante === null ? 'La pantalla mostraba el cobro completo.' : `La pantalla mostraba que faltaban ${formatearMonto(faltante)}.`}`;
+                    faltante = nuevo;
+                }
+            }
         });
 
     return (
@@ -731,6 +797,11 @@ export default function EditorPrefactura({ id }: Props) {
                                                             ESTANCIA
                                                         </span>
                                                     )}
+                                                    {renglon.es_cortesia && (
+                                                        <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black text-emerald-700" title="Cortesía: el renglón se ve en el documento pero no se cobra.">
+                                                            CORTESÍA
+                                                        </span>
+                                                    )}
                                                 </p>
                                                 {(renglon.remision || Number(renglon.margen) > 0) && (
                                                     <p className="text-[10px] font-bold text-slate-400">
@@ -753,7 +824,19 @@ export default function EditorPrefactura({ id }: Props) {
                                             </td>
                                             {!soloLectura && (
                                                 <td className="px-6 py-4">
-                                                    <div className="flex items-center justify-end">
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void cortesia(renglon.id, renglon.nombre_servicio, !renglon.es_cortesia)}
+                                                            disabled={ocupado}
+                                                            aria-pressed={renglon.es_cortesia}
+                                                            title={renglon.es_cortesia ? 'Quitar la cortesía: vuelve a cobrarse' : 'Marcar como cortesía: se ve en el documento pero no se cobra'}
+                                                            aria-label={`${renglon.es_cortesia ? 'Quitar la cortesía de' : 'Marcar como cortesía'} ${renglon.nombre_servicio}`}
+                                                            className={`flex items-center gap-1 rounded border px-2 py-1 text-[9px] font-black uppercase transition-colors disabled:opacity-50 ${renglon.es_cortesia ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border-slate-200 bg-white text-slate-400 hover:text-emerald-700'}`}
+                                                        >
+                                                            <Gift size={12} />
+                                                            Cortesía
+                                                        </button>
                                                         <button
                                                             type="button"
                                                             onClick={() => void quitarRenglon(renglon.id, renglon.nombre_servicio)}
@@ -793,19 +876,36 @@ export default function EditorPrefactura({ id }: Props) {
                             </div>
 
                             {!soloLectura && (
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <button type="button" onClick={() => void descartar()} disabled={ocupado} className="flex items-center justify-center gap-2 rounded border border-red-200 bg-white px-4 py-3 text-[10px] font-black text-red-600 transition-all hover:bg-red-50 disabled:opacity-50">
-                                        <Ban size={14} />
-                                        {accionando === 'descartar' ? 'DESCARTANDO…' : 'DESCARTAR BORRADOR'}
-                                    </button>
-                                    <button type="button" onClick={() => void cerrar()} disabled={ocupado} className={`${BOTON_PRIMARIO} !bg-emerald-600 hover:!bg-emerald-700 !px-6 !py-3`}>
-                                        <Lock size={14} />
-                                        {accionando === 'cerrar' ? 'CERRANDO…' : 'CERRAR PREFACTURA'}
-                                    </button>
+                                <div className="flex flex-col items-end gap-2">
+                                    {sinTotales && (
+                                        <p role="status" className="max-w-md text-right text-[11px] font-bold text-amber-700">
+                                            Cerrar está deshabilitado hasta corregirlo. {prefactura.totales_error ?? prefactura.cobro_error ?? 'los totales no se pudieron calcular.'}
+                                        </p>
+                                    )}
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                        <button type="button" onClick={() => void descartar()} disabled={ocupado} className="flex items-center justify-center gap-2 rounded border border-red-200 bg-white px-4 py-3 text-[10px] font-black text-red-600 transition-all hover:bg-red-50 disabled:opacity-50">
+                                            <Ban size={14} />
+                                            {accionando === 'descartar' ? 'DESCARTANDO…' : 'DESCARTAR BORRADOR'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => void cerrar()}
+                                            disabled={ocupado || sinTotales}
+                                            title={sinTotales ? 'No se puede cerrar mientras los totales no se puedan calcular.' : undefined}
+                                            className={`${BOTON_PRIMARIO} !bg-emerald-600 hover:!bg-emerald-700 !px-6 !py-3`}
+                                        >
+                                            <Lock size={14} />
+                                            {accionando === 'cerrar' ? 'CERRANDO…' : 'CERRAR PREFACTURA'}
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
                     </section>
+
+                    <PanelCobro prefactura={prefactura} onCambio={cargar} onError={manejarError} />
+
+                    <PanelNotas prefactura={prefactura} onCambio={cargar} onError={manejarError} />
                 </div>
             </div>
 

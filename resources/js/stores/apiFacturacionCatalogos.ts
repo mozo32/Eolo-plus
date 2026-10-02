@@ -16,17 +16,43 @@ function getXsrfToken(): string {
 
 const BASE = '/api/facturacion';
 
-/** Error de la API con el código HTTP, el de negocio (ya_desactivada…) y los errores por campo del 422. */
+/**
+ * Error de la API con el código HTTP, el de negocio (ya_desactivada…) y los errores por campo del 422.
+ * `cuerpo` es la respuesta entera: algunos códigos de negocio traen datos propios (`sin_cobro` trae `faltante`).
+ */
 export class ErrorApi extends Error {
     constructor(
         message: string,
         public readonly status: number,
         public readonly codigo: string | null = null,
         public readonly errors: Record<string, string[]> = {},
+        public readonly cuerpo: Record<string, unknown> = {},
     ) {
         super(message);
         this.name = 'ErrorApi';
     }
+}
+
+/** Lo que se le dice a quien opera cuando el servidor falla (5xx): el cuerpo de un 500 es inglés técnico o un «Server Error» crudo. */
+export const MENSAJE_ERROR_DEL_SERVIDOR =
+    'El servidor tuvo un problema y no pudo completar la operación. Recarga la prefactura para ver cómo quedó y vuelve a intentarlo; si se repite, avisa a sistemas.';
+
+/**
+ * El texto de un error para mostrarlo: un 5xx (y un 404) nunca enseña lo que dijo el servidor; un 422 junta sus errores por campo;
+ * lo demás ya trae su mensaje en español escrito por el servidor y se muestra tal cual.
+ */
+export function mensajeDeError(e: unknown): string {
+    if (e instanceof ErrorApi) {
+        if (e.status >= 500) return MENSAJE_ERROR_DEL_SERVIDOR;
+        // El 404 de un registro que ya no está (un pago que otra sesión quitó) trae el texto de Laravel, en inglés.
+        if (e.status === 404) return 'Ese registro ya no existe: otra persona pudo quitarlo. Se recargó la prefactura para mostrar cómo quedó.';
+
+        const delCampo = Object.values(e.errors).flat();
+
+        return delCampo.length > 0 ? delCampo.join(' ') : e.message;
+    }
+
+    return e instanceof Error ? e.message : 'Error inesperado';
 }
 
 async function leer<T>(res: Response): Promise<T> {
@@ -38,7 +64,13 @@ async function leer<T>(res: Response): Promise<T> {
                 ? (data as { message: string }).message
                 : `Error en el servidor (${res.status})`;
 
-        throw new ErrorApi(mensaje, res.status, (data as { codigo?: string })?.codigo ?? null, (data as { errors?: Record<string, string[]> })?.errors ?? {});
+        throw new ErrorApi(
+            mensaje,
+            res.status,
+            (data as { codigo?: string })?.codigo ?? null,
+            (data as { errors?: Record<string, string[]> })?.errors ?? {},
+            data && typeof data === 'object' ? (data as Record<string, unknown>) : {},
+        );
     }
 
     return data as T;
@@ -157,7 +189,10 @@ export type Servicio = {
     status: StatusCatalogo;
 };
 
-export type FormaPago = { id: number; nombre: string; status: StatusCatalogo };
+/** `concepto` es null salvo en las tres que tienen regla propia de cobro: efectivo, Amex y AvCard. */
+export type ConceptoFormaPago = 'efectivo' | 'amex' | 'avcard';
+
+export type FormaPago = { id: number; nombre: string; concepto: ConceptoFormaPago | null; status: StatusCatalogo };
 
 export type Proveedor = { id: number; nombre: string; status: StatusCatalogo };
 
@@ -369,6 +404,17 @@ async function pedir<T>(url: string, { method, body }: OpcionesPedir = {}): Prom
     return leer<T>(await fetch(url, method ? escritura(method, body) : LECTURA));
 }
 
+/** Un pago de la prefactura. `concepto` es null salvo en Efectivo, Amex y AvCard. */
+export interface PagoPrefactura {
+    id: number;
+    forma_pago_id: number;
+    forma_pago: string | null;
+    concepto: ConceptoFormaPago | null;
+    monto: string;
+    /** true si este pago creó un renglón de comisión: quitarlo también lo quita. */
+    es_comision_amex: boolean;
+}
+
 /** Un renglón de prefactura: congela el precio, el margen y el ajuste que tenía el servicio al agregarse. */
 export interface RenglonPrefactura {
     id: number;
@@ -384,6 +430,8 @@ export interface RenglonPrefactura {
     /** null si el servidor no pudo calcularlo (`importe_error` dice por qué). */
     importe: string | null;
     importe_error: string | null;
+    /** Un renglón de cortesía se ve en el documento pero su importe es 0.00. */
+    es_cortesia: boolean;
 }
 
 /** Lo que el sello guardó contra lo que derivan hoy los renglones, por campo. */
@@ -421,6 +469,23 @@ export interface Prefactura {
     sello_discrepancias: Record<string, DiscrepanciaSello> | never[];
     sello_error: string | null;
     cerrada_at: string | null;
+    nota_interna: string | null;
+    nota_externa: string | null;
+    nota_factura: string | null;
+    /**
+     * El cobro. Solo viene en la ficha, no en el listado.
+     * Si los totales no se pudieron calcular (`cobro_error` dice por qué), `por_cobrar`, `sobrepago`, `cambio` y
+     * `cobrado_de_mas` vienen en null; `pagado` no depende de la tasa de IVA y sí trae su número.
+     */
+    pagos: PagoPrefactura[];
+    pagado: string;
+    por_cobrar: string | null;
+    sobrepago: string | null;
+    /** Lo que se devuelve. Nunca pasa del efectivo cobrado. */
+    cambio: string | null;
+    /** El resto del sobrepago: no se devuelve, se corrige el pago. */
+    cobrado_de_mas: string | null;
+    cobro_error: string | null;
     /** Solo en la ficha, no en el listado. */
     renglones?: RenglonPrefactura[];
 }
@@ -451,7 +516,24 @@ export const apiPrefacturas = {
     ficha: (id: number) => pedir<{ prefactura: Prefactura }>(`${BASE}/prefacturas/${id}`),
     crear: (datos: Record<string, unknown>) => pedir<{ prefactura: Prefactura }>(`${BASE}/prefacturas`, { method: 'POST', body: datos }),
     editar: (id: number, datos: Record<string, unknown>) => pedir<{ prefactura: Prefactura }>(`${BASE}/prefacturas/${id}`, { method: 'PUT', body: datos }),
-    cerrar: (id: number) => pedir<{ prefactura: Prefactura; message: string }>(`${BASE}/prefacturas/${id}/cerrar`, { method: 'PATCH' }),
+    /**
+     * Sin `confirmarSinCobro`, el servidor rechaza (422, ErrorApi.codigo `sin_cobro`, con `cuerpo.faltante`) si los pagos no cubren el total.
+     * Solo se manda `true` cuando quien opera confirmó ESE aviso.
+     */
+    cerrar: (id: number, confirmarSinCobro = false) =>
+        pedir<{ prefactura: Prefactura; message: string }>(`${BASE}/prefacturas/${id}/cerrar`, { method: 'PATCH', body: { confirmar_sin_cobro: confirmarSinCobro } }),
+    agregarPago: (id: number, datos: { forma_pago_id: number; monto: string }) =>
+        pedir<{ message: string; pago_id: number; prefactura: Prefactura }>(`${BASE}/prefacturas/${id}/pagos`, { method: 'POST', body: datos }),
+    /** `monto` es lo que se carga a la tarjeta; el servidor agrega la comisión como renglón y devuelve la suya (`comision`). */
+    agregarPagoAmex: (id: number, monto: string) =>
+        pedir<{ message: string; pago_id: number; comision: string; prefactura: Prefactura }>(`${BASE}/prefacturas/${id}/pagos/amex`, { method: 'POST', body: { monto } }),
+    /** Si el pago creó una comisión Amex, se quita con él. */
+    quitarPago: (id: number, pago: number) => pedir<{ message: string; prefactura: Prefactura }>(`${BASE}/prefacturas/${id}/pagos/${pago}`, { method: 'DELETE' }),
+    /** Una clave ausente deja la nota como estaba; `null` la vacía. */
+    guardarNotas: (id: number, datos: { nota_interna?: string | null; nota_externa?: string | null; nota_factura?: string | null }) =>
+        pedir<{ message: string; prefactura: Prefactura }>(`${BASE}/prefacturas/${id}/notas`, { method: 'PATCH', body: datos }),
+    cortesia: (id: number, renglon: number, esCortesia: boolean) =>
+        pedir<{ message: string; prefactura: Prefactura }>(`${BASE}/prefacturas/${id}/renglones/${renglon}/cortesia`, { method: 'PATCH', body: { es_cortesia: esCortesia } }),
     agregarRenglon: (id: number, datos: Record<string, unknown>) => pedir<{ renglon_id: number }>(`${BASE}/prefacturas/${id}/renglones`, { method: 'POST', body: datos }),
     quitarRenglon: (id: number, renglon: number) => pedir<{ message: string }>(`${BASE}/prefacturas/${id}/renglones/${renglon}`, { method: 'DELETE' }),
     estancia: (id: number, datos: Record<string, unknown>) => pedir<{ renglones: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/estancia`, { method: 'PATCH', body: datos }),

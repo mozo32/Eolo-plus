@@ -186,6 +186,43 @@ export function importeVistaPrevia(precio: number, margen: number, ajuste: Ajust
 }
 
 /**
+ * VISTA PREVIA de la comisión Amex, para que quien cobra vea el cargo antes de
+ * confirmarlo. No es la cifra oficial: la calcula el servidor.
+ *
+ * AUTORIDAD: `App\Support\ComisionAmex::calcular()` (app/Support/ComisionAmex.php). Esta función es
+ * una copia de esa fórmula: quien cambie una tiene que cambiar la otra.
+ *
+ *   base     = monto / ((1 + iva) × 1.06)
+ *   comisión = base × 0.06
+ *
+ * Y aun así puede diferir por centavos de lo que queda: al registrar, el servidor AJUSTA la comisión
+ * (`PagosPrefactura::comisionQueCuadra()`, hasta 5 centavos) para que el total de la prefactura caiga exacto
+ * en lo que se carga a la tarjeta. Ese ajuste depende de los totales y NO se copia aquí; por eso esto es una
+ * estimación y la pantalla lo dice. La cifra que cuenta es la que devuelve el servidor.
+ *
+ * null si el monto o la tasa no son números utilizables (vacío no es cero: no se estima nada).
+ */
+export function comisionVistaPrevia(monto: string, tasaIva: string | null): number | null {
+    const m = parsearMonto(monto);
+    const t = tasaIva === null || tasaIva.trim() === '' ? NaN : Number(tasaIva);
+
+    if (m === null || !Number.isFinite(t)) return null;
+
+    const divisor = (1 + t) * 1.06;
+
+    return divisor <= 0 ? null : redondear2((m * 0.06) / divisor);
+}
+
+/** true si el importe del servidor (texto decimal) es mayor que cero. Solo compara: no suma ni resta nada. null y vacío no son positivos. */
+export function esMontoPositivo(valor: Monto): boolean {
+    if (valor === null || valor === undefined || valor === '') return false;
+
+    const numero = Number(valor);
+
+    return !Number.isNaN(numero) && numero > 0;
+}
+
+/**
  * Fecha y hora que el servidor guarda SIN zona ("2026-09-30 14:30:00"): se muestran tal cual, sin pasar por `Date`,
  * que las interpretaría en la zona del navegador y correría la hora. "30/09/2026 14:30", o "—" si no hay.
  */
