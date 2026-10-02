@@ -115,21 +115,129 @@ test('la prefactura completa se paga de una sola pasada con Amex: el monto es el
     expect($p->fresh()->total())->toBe('2253.86');
 });
 
-test('el borde del pago completo: con subtotal 100,000.00 el mayor Amex es 122,960.00', function () {
+test('el borde del pago completo: con subtotal 100,000.00 el total exacto es 122,960.00 y la comision absorbe unos centavos mas', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $p = paraAmex();
 
-    // 1.2296 x 100,000.00: la comision es 6,000.00 y el total 122,960.00 empata con el monto.
-    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '122960.01'])
-        ->assertStatus(422)->assertJsonPath('codigo', 'amex_supera_lo_que_falta');
-
-    expect($p->fresh()->pagos()->count())->toBe(0);
-
+    // 1.2296 x 100,000.00: la comision de la formula es 6,000.00 y el total 122,960.00.
     $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '122960.00'])
         ->assertCreated()
         ->assertJsonPath('comision', '6000.00')
         ->assertJsonPath('prefactura.por_cobrar', '0.00');
 });
+
+test('la comision se ajusta dentro de su ventana y mas alla de ella el tope decide', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = paraAmex();
+
+    // Hasta 6 centavos de total por encima de la formula se absorben (la comision sube 5).
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '122960.06'])
+        ->assertCreated()
+        ->assertJsonPath('comision', '6000.05')
+        ->assertJsonPath('prefactura.por_cobrar', '0.00');
+
+    $this->deleteJson("/api/facturacion/prefacturas/{$p->id}/pagos/{$p->fresh()->pagos()->sole()->id}")->assertOk();
+
+    // Fuera de la ventana ningun candidato cuadra: se queda la formula (6,000.00, total 122,960.00)
+    // y el tope rechaza lo que supera ese total.
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '122960.08'])
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'amex_supera_lo_que_falta');
+
+    expect($p->fresh()->pagos()->count())->toBe(0)
+        ->and(comisionesDe($p)->count())->toBe(0);
+});
+
+test('un total que ningun centavo de comision alcanza deja la comision de la formula y el tope decide', function () {
+    // Con subtotal 100,000.00 el total salta de 122,960.03 a 122,960.05 al subir la comision: el
+    // 122,960.04 no existe. El 122,960.04 tecleado no se puede cuadrar; la formula da 6,000.00
+    // (total 122,960.00, por debajo) y el tope lo rechaza. Es el caso que la ventana no resuelve.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = paraAmex();
+
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '122960.04'])
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'amex_supera_lo_que_falta');
+
+    // Sus vecinos, que SI existen, se aceptan exactos.
+    foreach (['122960.03', '122960.05'] as $monto) {
+        $q = paraAmex();
+        $this->postJson("/api/facturacion/prefacturas/{$q->id}/pagos/amex", ['monto' => $monto])
+            ->assertCreated()
+            ->assertJsonPath('prefactura.por_cobrar', '0.00');
+    }
+});
+
+test('un pago parcial no mueve la comision: ningun candidato de la ventana cuadra', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = paraAmex();
+
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '122900.00'])
+        ->assertCreated()
+        ->assertJsonPath('comision', ComisionAmex::calcular('122900.00', '0.1600'));
+
+    expect($p->fresh()->porCobrar())->not->toBe('0.00');
+});
+
+/*
+| Pagos Amex REALES del historico (tb_formas_pago / tb_venta de fact-fbo-prod). El subtotal de
+| partida es la suma de los importes SIN la comision (id_servicio <> 100), que son decimales
+| exactos: restarla del `subtotal` guardado, un float, mete ruido de varios centavos. Cada fila:
+| folio, subtotal de partida, monto del pago, comision que la formula sola calcularia, y la
+| comision que registro el sistema viejo.
+*/
+dataset('pagos amex reales que ya cuadraban', [
+    'folio 26' => ['46427.00', '57086.64', '2785.62'],
+    'folio 69' => ['16728.13', '20568.91', '1003.69'],
+    'folio 75' => ['1833.00', '2253.86', '109.98'],
+    'folio 94' => ['44974.85', '55301.07', '2698.49'],
+]);
+
+dataset('pagos amex reales que se desviaban', [
+    // [partida, monto, comision de la formula, comision que cuadra (= la del sistema viejo), desvio de la formula]
+    'folio 126 (+0.01)' => ['35759.95', '43970.43', '2145.60', '2145.59'],
+    'folio 294 (-0.01)' => ['25418.57', '31254.68', '1525.11', '1525.12'],
+    'folio 681 (-0.02)' => ['23862.06', '29340.80', '1431.72', '1431.73'],
+    'folio 2522 (+0.04)' => ['106181.46', '130560.69', '6370.89', '6370.86'],
+]);
+
+test('un pago real que ya cuadraba NO mueve la comision: queda la de la formula, que es la del sistema viejo', function (string $partida, string $monto, string $comision) {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = paraAmex((float) $partida);
+
+    expect(ComisionAmex::calcular($monto, '0.1600'))->toBe($comision);
+
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => $monto])
+        ->assertCreated()
+        ->assertJsonPath('comision', $comision)
+        ->assertJsonPath('prefactura.total', $monto)
+        ->assertJsonPath('prefactura.por_cobrar', '0.00')
+        ->assertJsonPath('prefactura.sobrepago', '0.00');
+
+    $alta = Bitacora::where('accion', Bitacora::ACCION_CREAR)->sole();
+    expect($alta->datos_nuevos)->toMatchArray(['comision' => $comision, 'comision_formula' => $comision]);
+})->with('pagos amex reales que ya cuadraban');
+
+test('un pago real que se desviaba cae EXACTO: la comision absorbe el redondeo y coincide con la del sistema viejo', function (string $partida, string $monto, string $formula, string $cuadra) {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = paraAmex((float) $partida);
+
+    // La formula sola NO cuadraba: el total quedaba lejos del monto en 1 a 4 centavos.
+    expect(ComisionAmex::calcular($monto, '0.1600'))->toBe($formula)->not->toBe($cuadra);
+
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => $monto])
+        ->assertCreated()
+        ->assertJsonPath('comision', $cuadra)
+        ->assertJsonPath('prefactura.total', $monto)
+        ->assertJsonPath('prefactura.pagado', $monto)
+        ->assertJsonPath('prefactura.por_cobrar', '0.00')
+        ->assertJsonPath('prefactura.sobrepago', '0.00');
+
+    // La bitacora guarda las dos cifras, para que la Task 9 cuente el ajuste.
+    $alta = Bitacora::where('accion', Bitacora::ACCION_CREAR)->sole();
+    expect($alta->datos_nuevos)->toMatchArray(['comision' => $cuadra, 'comision_formula' => $formula])
+        ->and($alta->descripcion)->toContain("la fórmula daba {$formula}");
+})->with('pagos amex reales que se desviaban');
 
 test('el monto Amex tampoco puede superar lo que falta por cobrar, con su propio codigo', function () {
     // El sistema viejo topaba a Amex por `Total - caja` (caia en la rama `else` de
@@ -168,20 +276,35 @@ test('el tope de lo que falta se comprueba DESPUES de agregar la comision', func
         ->and($p->fresh()->porCobrar())->toBe('9.44');
 });
 
-test('el borde exacto del tope: lo que falta con la comision se acepta y un centavo mas se rechaza', function () {
+test('el borde del tope con pagos previos: lo que falta con la comision, mas lo que absorbe la ventana', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $p = paraAmex();
     pagoDe($p, formasDePago()['Visa'], '115000.00');
 
-    // Con 1,060.00 la comision es 51.72 y el total 116,060.00: pagado y total empatan.
-    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '1060.01'])
+    // Con 1,060.00 la comision es 51.72 y el total 116,060.00: pagado y total empatan. Hasta
+    // 1,060.06 la comision absorbe (sube 6 centavos) y empatan igual; 1,060.07 ya no se alcanza.
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '1060.07'])
         ->assertStatus(422)->assertJsonPath('codigo', 'amex_supera_lo_que_falta');
 
-    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '1060.00'])->assertCreated();
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '1060.06'])->assertCreated();
 
-    expect($p->fresh()->total())->toBe('116060.00')
-        ->and($p->fresh()->pagado())->toBe('116060.00')
+    expect($p->fresh()->pagado())->toBe('116060.06')
+        ->and($p->fresh()->total())->toBe('116060.06')
         ->and($p->fresh()->sobrepago())->toBe('0.00');
+});
+
+test('el ajuste apunta a lo que SALDA la cuenta: pagado mas monto, no solo el monto', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = paraAmex(9132.71);
+    pagoDe($p, formasDePago()['Visa'], '1160.00');
+
+    // La formula da 487.96 para 10,000.00; con eso el total seria 11,159.98, dos centavos menos
+    // que 1,160.00 + 10,000.00. La comision sube a 487.98 y el total cae EXACTO en 11,160.00.
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '10000.00'])
+        ->assertCreated()
+        ->assertJsonPath('comision', '487.98')
+        ->assertJsonPath('prefactura.total', '11160.00')
+        ->assertJsonPath('prefactura.por_cobrar', '0.00');
 });
 
 test('una prefactura ya sobrepagada no admite otro pago Amex', function () {
@@ -437,39 +560,60 @@ test('con un subtotal de monto / 1.2296 el total tras la comision cae en el mont
         ->and($p->fresh()->porCobrar())->toBe('0.00');
 });
 
-test('por el servicio, el desvio del total es de un centavo como maximo, y el centavo de menos se rechaza', function () {
+test('por el servicio, la comision absorbe el redondeo: todo lo alcanzable cae exacto y solo lo inalcanzable se rechaza', function () {
     $p = paraAmex(1.0);
     $renglon = $p->renglones()->sole();
     $servicio = app(PagosPrefactura::class);
     $tasa = $p->ivaTasa();
-    $desvios = [];
+    $aceptados = 0;
     $rechazados = 0;
+    $ajustados = 0;
 
-    for ($centavos = 100_000; $centavos <= 2_000_000; $centavos += 7_919) {
+    for ($centavos = 100_000; $centavos <= 2_000_000; $centavos += 5_003) {
         $monto = bcdiv((string) $centavos, '100', 2);
         $partida = bcadd(bcdiv($monto, '1.2296', 6), '0.005', 2);
         $renglon->update(['precio_unitario' => $partida]);
+        $formula = ComisionAmex::calcular($monto, $tasa);
 
-        // Lo que DEBE pasar: el total con comision menos el monto. Negativo = el redondeo dejo
-        // el total por debajo de lo tecleado, y el tope lo rechaza.
-        $conComision = bcadd($partida, ComisionAmex::calcular($monto, $tasa), 2);
-        $desvio = bcsub(bcadd($conComision, FactPrefactura::calcularIva($conComision, $tasa), 2), $monto, 2);
+        // Fuerza bruta INDEPENDIENTE del servicio: ¿alguna comision a +-5 centavos da el monto?
+        $alcanzable = false;
+
+        for ($k = -PagosPrefactura::VENTANA_AJUSTE_COMISION; $k <= PagosPrefactura::VENTANA_AJUSTE_COMISION; $k++) {
+            $c = bcadd($formula, bcdiv((string) $k, '100', 2), 2);
+            $conComision = bcadd($partida, $c, 2);
+            $alcanzable = $alcanzable || bcadd($conComision, FactPrefactura::calcularIva($conComision, $tasa), 2) === $monto;
+        }
 
         try {
             $pago = $servicio->registrarAmex($p, $monto, $p->user_id);
-            $aceptado = true;
+            $desvio = bcsub($p->fresh()->total(), $monto, 2);
+
+            // Aceptado: o cayo exacto, o la formula ya dejaba el total por encima (por cobrar 0.01).
+            expect($desvio === '0.00' || ($desvio === '0.01' && ! $alcanzable))->toBeTrue("monto {$monto}: desvio {$desvio}");
+            $ajustados += $pago->renglonComision->importe() !== $formula ? 1 : 0;
+            $aceptados++;
             $servicio->quitar($p, $pago->id, $p->user_id);
         } catch (App\Services\PagoNoPermitidoException $e) {
-            expect($e->codigo)->toBe('amex_supera_lo_que_falta');
-            $aceptado = false;
+            // Rechazado: solo por el tope, y solo si NINGUN candidato cuadraba.
+            expect($e->codigo)->toBe('amex_supera_lo_que_falta')
+                ->and($alcanzable)->toBeFalse("monto {$monto} era alcanzable y se rechazo");
             $rechazados++;
         }
-
-        $desvios[$desvio] = true;
-        expect($aceptado)->toBe(bccomp($desvio, '0.00', 2) >= 0, "monto {$monto}, desvio {$desvio}");
     }
 
-    // Solo hay tres desvios posibles y el negativo es el unico que se rechaza.
-    expect(array_keys($desvios))->each->toBeIn(['-0.01', '0.00', '0.01'])
+    expect($aceptados)->toBeGreaterThan(0)
+        ->and($ajustados)->toBeGreaterThan(0)
         ->and($rechazados)->toBeGreaterThan(0);
+});
+
+test('la comision ajustada nunca queda negativa ni sale de su ventana', function () {
+    // Total buscado 0.00 con subtotal 0.00: solo la comision 0.00 lo da. Desde 0.01 se alcanza bajando uno.
+    expect(PagosPrefactura::comisionQueCuadra('0.01', '0.00', '0.1600', '0.00'))->toBe('0.00');
+    // Un total negativo exigiria una comision negativa: no se busca.
+    expect(PagosPrefactura::comisionQueCuadra('0.00', '0.00', '0.1600', '-0.02'))->toBeNull();
+    // Fuera de la ventana (6 centavos de comision) no se llega, aunque el total exista.
+    expect(PagosPrefactura::comisionQueCuadra('10.00', '100.00', '0.1600', bcadd('116.00', bcmul('1.16', '0.30', 2), 2)))->toBeNull();
+    // Dentro, si.
+    expect(PagosPrefactura::comisionQueCuadra('10.00', '100.00', '0.1600', '127.60'))->toBe('10.00');
+    expect(PagosPrefactura::comisionQueCuadra('10.00', '100.00', '0.1600', '127.61'))->not->toBeNull();
 });

@@ -30,6 +30,16 @@ class PagosPrefactura
     public const MONTO_MAXIMO = '9999999999.99';
 
     /**
+     * Cuántos centavos, hacia cada lado, puede alejarse la comisión de lo que da
+     * `ComisionAmex::calcular()` cuando `comisionQueCuadra()` la ajusta. Sobra para el
+     * redondeo (que mueve el total a lo sumo un centavo, es decir ~1 de comisión; los
+     * cuatro centavos de total que se vieron en el histórico son ~4 de comisión) y no es
+     * tanto como para que un monto equivocado la mueva de verdad: 5 centavos de comisión
+     * son ~6 de total.
+     */
+    public const VENTANA_AJUSTE_COMISION = 5;
+
+    /**
      * `$monto` es una cadena decimal positiva y se queda como cadena: nunca float. Acepta
      * lo mismo que `StorePagoRequest` (`+5.00`, `.50`, `5.`) y lo guarda con dos decimales.
      *
@@ -104,9 +114,24 @@ class PagosPrefactura
      * la cuenta: para liquidar una deuda D con Amex hay que cargar ~1.06 D, y contra D
      * no pasaría nunca. Lo que se pregunta es si, al terminar, `pagado <= total`. Se
      * calcula sin escribir, con las mismas fórmulas del modelo (`calcularIva()`), así
-     * que un rechazo no deja nada que revertir. El redondeo de la comisión a centavos
-     * puede dejar el total un centavo por debajo del monto; ese centavo SÍ se rechaza
-     * (no se compensa): el operador carga un centavo menos.
+     * que un rechazo no deja nada que revertir.
+     *
+     * LA COMISIÓN ABSORBE EL REDONDEO. `ComisionAmex::calcular()` redondea a centavos y el
+     * IVA del total también, así que el total puede caer 1 a 4 centavos por encima o por
+     * debajo de lo cargado a la tarjeta (en el histórico: exacto en 476 de 771, por debajo
+     * en 161 y por encima en 134). Por debajo el tope rechazaría un pago legítimo. Decisión
+     * del usuario: la comisión se ajusta unos centavos hasta que el total caiga EXACTO en
+     * `pagado + monto` (con nada pagado antes, en el monto tecleado), buscando en una
+     * ventana acotada (`comisionQueCuadra()`). Si ningún candidato de la ventana cuadra —
+     * un pago parcial, o un total que ningún centavo de comisión alcanza— se queda el
+     * valor de `calcular()` y el tope decide.
+     *
+     * ES LA ÚNICA EXCEPCIÓN CONSCIENTE a «ningún cobro cambia» de este bloque: el renglón
+     * de comisión puede diferir en unos centavos del que calculó el sistema viejo (y del que
+     * da la fórmula sola). Se acepta porque la alternativa es peor de las dos maneras: o se
+     * rechaza una quinta parte de los pagos Amex reales por un centavo, o el documento sale
+     * con un total distinto del cargo a la tarjeta. La bitácora guarda las dos cifras
+     * (`comision_formula` y `comision`) para que el comando de comparación pueda contarlo.
      *
      * @throws InvalidArgumentException si `$montoBruto` no es un decimal positivo de hasta dos decimales.
      * @throws RenglonDePrefacturaCerradaException si la prefactura ya está cerrada.
@@ -146,14 +171,19 @@ class PagosPrefactura
             }
 
             try {
-                // La fórmula vive en `ComisionAmex`: aquí solo se llama.
-                $comision = ComisionAmex::calcular($montoBruto, $tasa);
+                $pagado = $actual->pagado();
 
-                // El tope: lo que faltaría DESPUÉS de agregar la comisión. Mismas
-                // fórmulas que el modelo, sin escribir todavía.
-                $subtotalConComision = bcadd($subtotal, $comision, 2);
-                $totalConComision = bcadd($subtotalConComision, FactPrefactura::calcularIva($subtotalConComision, $tasa), 2);
-                $faltaConComision = bcsub($totalConComision, $actual->pagado(), 2);
+                // La fórmula vive en `ComisionAmex`: aquí solo se llama, y es el punto de
+                // partida y el valor de reserva del ajuste.
+                $comisionFormula = ComisionAmex::calcular($montoBruto, $tasa);
+
+                // El ajuste: la comisión que deja el total EXACTO en `pagado + monto`, o la de
+                // la fórmula si ninguna de la ventana lo logra.
+                $comision = self::comisionQueCuadra($comisionFormula, $subtotal, $tasa, bcadd($pagado, $montoBruto, 2)) ?? $comisionFormula;
+
+                // El tope: lo que faltaría DESPUÉS de agregar la comisión (ya ajustada).
+                // Mismas fórmulas que el modelo, sin escribir todavía.
+                $faltaConComision = bcsub(self::totalConComision($subtotal, $comision, $tasa), $pagado, 2);
             } catch (UnexpectedValueException $e) {
                 throw $this->totalesNoCalculables($e);
             }
@@ -194,14 +224,62 @@ class PagosPrefactura
             Bitacora::log(
                 modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
                 accion: Bitacora::ACCION_CREAR,
-                descripcion: "Se registró un pago de {$montoBruto} con {$forma->nombre} en la prefactura {$actual->id} y se agregó su comisión de {$comision}.",
+                descripcion: "Se registró un pago de {$montoBruto} con {$forma->nombre} en la prefactura {$actual->id} y se agregó su comisión de {$comision}"
+                    .($comision === $comisionFormula ? '.' : " (la fórmula daba {$comisionFormula}; se ajustó para que el total cuadre con el cargo)."),
                 usuarioId: $userId,
                 registroId: $actual->id,
-                datosNuevos: ['pago_id' => $pago->id, 'forma_pago' => $forma->nombre, 'monto' => $montoBruto, 'comision' => $comision, 'renglon_comision_id' => $renglon->id],
+                datosNuevos: ['pago_id' => $pago->id, 'forma_pago' => $forma->nombre, 'monto' => $montoBruto, 'comision' => $comision, 'comision_formula' => $comisionFormula, 'renglon_comision_id' => $renglon->id],
             );
 
             return $pago;
         });
+    }
+
+    /**
+     * La comisión, a lo sumo `VENTANA_AJUSTE_COMISION` centavos lejos de `$comisionInicial`,
+     * con la que el total de la prefactura cae EXACTO en `$totalBuscado`; `null` si ninguna lo
+     * logra. Pública y estática para que el comando de comparación (Task 9) reutilice la
+     * búsqueda en lugar de escribir otra.
+     *
+     * Por qué una búsqueda y no despejar: ajustar la comisión en `d` mueve el total en ~1.16 d,
+     * porque la comisión entra en el subtotal y el IVA se calcula sobre él (y se redondea). Sumar
+     * la diferencia tal cual se pasa de largo; resolver la ecuación obliga a invertir ese
+     * redondeo. Probar los candidatos de uno en uno con las MISMAS fórmulas que el modelo
+     * (`totalConComision()`) no puede equivocarse, y son 11 cuentas. Se prueba primero el
+     * valor de la fórmula y luego se abre de a un centavo hacia cada lado, así que gana el
+     * candidato más cercano. Como el total sube 1 o 2 centavos por cada centavo de comisión,
+     * ninguno repite el mismo total: hay a lo sumo un candidato que cuadra. A veces ninguno:
+     * el total salta de un centavo a otro sin pasar por el buscado.
+     *
+     * La comisión nunca es negativa.
+     *
+     * @param  string  $subtotal  el subtotal SIN esta comisión
+     */
+    public static function comisionQueCuadra(string $comisionInicial, string $subtotal, string $tasa, string $totalBuscado): ?string
+    {
+        for ($paso = 0; $paso <= self::VENTANA_AJUSTE_COMISION; $paso++) {
+            foreach ($paso === 0 ? [0] : [$paso, -$paso] as $signo) {
+                $candidata = bcadd($comisionInicial, bcdiv((string) $signo, '100', 2), 2);
+
+                if (bccomp($candidata, '0.00', 2) < 0) {
+                    continue;
+                }
+
+                if (bccomp(self::totalConComision($subtotal, $candidata, $tasa), $totalBuscado, 2) === 0) {
+                    return $candidata;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** El total que tendría la prefactura con esta comisión añadida: el del modelo, sin escribir. */
+    private static function totalConComision(string $subtotal, string $comision, string $tasa): string
+    {
+        $conComision = bcadd($subtotal, $comision, 2);
+
+        return bcadd($conComision, FactPrefactura::calcularIva($conComision, $tasa), 2);
     }
 
     /**
