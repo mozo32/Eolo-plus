@@ -617,3 +617,45 @@ test('la comision ajustada nunca queda negativa ni sale de su ventana', function
     expect(PagosPrefactura::comisionQueCuadra('10.00', '100.00', '0.1600', '127.60'))->toBe('10.00');
     expect(PagosPrefactura::comisionQueCuadra('10.00', '100.00', '0.1600', '127.61'))->not->toBeNull();
 });
+
+test('la cota superior de la ventana: 122,960.07 necesita una comision de 6000.06, fuera de +-5, y se rechaza', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = paraAmex();
+
+    // Valores FIJOS, no derivados de la constante: asi una ventana de +-6 o mas hace fallar la prueba.
+    // Con subtotal 100,000.00, la comision 6000.06 deja el total EXACTO en 122,960.07...
+    $conComision = bcadd('100000.00', '6000.06', 2);
+    expect(bcadd($conComision, FactPrefactura::calcularIva($conComision, '0.1600'), 2))->toBe('122960.07')
+        ->and(ComisionAmex::calcular('122960.07', '0.1600'))->toBe('6000.00')
+        // ...pero esta a 6 centavos de la formula: sin candidato.
+        ->and(PagosPrefactura::comisionQueCuadra('6000.00', '100000.00', '0.1600', '122960.07'))->toBeNull()
+        // Y 6000.05 (a 5) si se alcanza.
+        ->and(PagosPrefactura::comisionQueCuadra('6000.00', '100000.00', '0.1600', '122960.06'))->toBe('6000.05');
+
+    $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => '122960.07'])
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'amex_supera_lo_que_falta');
+
+    expect($p->fresh()->pagos()->count())->toBe(0)
+        ->and(comisionesDe($p)->count())->toBe(0);
+});
+
+test('una prefactura saldada no admite un pago Amex, ni de centavos', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = paraAmex(1000.0);
+    pagoDe($p, formasDePago()['Visa'], '1160.00');   // total 1160.00, pagado 1160.00: no falta nada
+
+    expect($p->fresh()->porCobrar())->toBe('0.00');
+
+    // Sin la guarda, la comision subia lo justo para que el pago se pagara a si mismo.
+    foreach (['0.01', '0.02', '0.03', '0.05', '0.06', '100.00'] as $monto) {
+        $this->postJson("/api/facturacion/prefacturas/{$p->id}/pagos/amex", ['monto' => $monto])
+            ->assertStatus(422)
+            ->assertJsonPath('codigo', 'amex_supera_lo_que_falta')
+            ->assertJsonPath('message', fn ($m) => str_contains($m, 'no falta nada'));
+    }
+
+    expect($p->fresh()->pagos()->count())->toBe(1)
+        ->and($p->fresh()->renglones()->count())->toBe(1)
+        ->and(comisionesDe($p)->count())->toBe(0);
+});

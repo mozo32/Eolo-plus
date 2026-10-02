@@ -31,11 +31,13 @@ class PagosPrefactura
 
     /**
      * Cuántos centavos, hacia cada lado, puede alejarse la comisión de lo que da
-     * `ComisionAmex::calcular()` cuando `comisionQueCuadra()` la ajusta. Sobra para el
-     * redondeo (que mueve el total a lo sumo un centavo, es decir ~1 de comisión; los
-     * cuatro centavos de total que se vieron en el histórico son ~4 de comisión) y no es
-     * tanto como para que un monto equivocado la mueva de verdad: 5 centavos de comisión
-     * son ~6 de total.
+     * `ComisionAmex::calcular()` cuando `comisionQueCuadra()` la ajusta. Es una GUARDA
+     * INTENCIONADA, no un límite técnico (la búsqueda podría abrirse cuanto se quisiera):
+     * sobra para el redondeo (que mueve el total a lo sumo un centavo, ~1 de comisión; el
+     * mayor ajuste del histórico fue de 3) y no es tanto como para que un monto equivocado
+     * la mueva de verdad: 5 centavos de comisión son ~6 de total. Pasado eso no hay
+     * candidato, se queda la fórmula y el tope rechaza. El sistema viejo no tenía esta
+     * guarda (ver `registrarAmex()`).
      */
     public const VENTANA_AJUSTE_COMISION = 5;
 
@@ -116,22 +118,41 @@ class PagosPrefactura
      * calcula sin escribir, con las mismas fórmulas del modelo (`calcularIva()`), así
      * que un rechazo no deja nada que revertir.
      *
-     * LA COMISIÓN ABSORBE EL REDONDEO. `ComisionAmex::calcular()` redondea a centavos y el
-     * IVA del total también, así que el total puede caer 1 a 4 centavos por encima o por
-     * debajo de lo cargado a la tarjeta (en el histórico: exacto en 476 de 771, por debajo
-     * en 161 y por encima en 134). Por debajo el tope rechazaría un pago legítimo. Decisión
-     * del usuario: la comisión se ajusta unos centavos hasta que el total caiga EXACTO en
-     * `pagado + monto` (con nada pagado antes, en el monto tecleado), buscando en una
-     * ventana acotada (`comisionQueCuadra()`). Si ningún candidato de la ventana cuadra —
-     * un pago parcial, o un total que ningún centavo de comisión alcanza— se queda el
+     * NO ENTRA UN PAGO AMEX EN UNA PREFACTURA SALDADA. Si no falta nada por cobrar, se
+     * rechaza (con el código del tope, `amex_supera_lo_que_falta`). Sin esta guarda el ajuste
+     * de abajo dejaría pasar montos de centavos (0.01, 0.02, 0.03...): la comisión sube lo
+     * justo para que el pago se pague a sí mismo, y quedaría un renglón de comisión de
+     * centavos en un documento ya saldado. Un cobro que solo existe para financiar su propia
+     * comisión no tiene sentido ahí.
+     *
+     * LA COMISIÓN ABSORBE EL REDONDEO. `ComisionAmex::calcular()` redondea a centavos y el IVA
+     * del total también, y ningún centavo de comisión alcanza todos los totales: el total sube
+     * 1 o 2 centavos por cada centavo de comisión, así que algunos no existen. Con un monto
+     * nominal (`round(partida × 1.2296, 2)`) el 13.6% de los totales es inalcanzable y unas 7
+     * de cada 100 prefacturas pagadas completas con Amex se rechazarían por un centavo (el tope
+     * ve el total por debajo del monto). Eso, y no el histórico, es lo que justifica el
+     * ajuste: en el histórico (718 folios con un solo pago Amex) la fórmula sola cuadra en 690,
+     * hay 21 que necesitan un ajuste de 1 a 3 centavos y 7 no tienen candidato.
+     *
+     * Decisión del usuario: la comisión se ajusta unos centavos hasta que el total caiga EXACTO
+     * en `pagado + monto` (con nada pagado antes, en el monto tecleado), buscando en una ventana
+     * acotada (`comisionQueCuadra()`). Si ningún candidato de la ventana cuadra —un pago
+     * parcial, un total que ningún centavo alcanza o un monto lejos del nominal— se queda el
      * valor de `calcular()` y el tope decide.
      *
-     * ES LA ÚNICA EXCEPCIÓN CONSCIENTE a «ningún cobro cambia» de este bloque: el renglón
-     * de comisión puede diferir en unos centavos del que calculó el sistema viejo (y del que
-     * da la fórmula sola). Se acepta porque la alternativa es peor de las dos maneras: o se
-     * rechaza una quinta parte de los pagos Amex reales por un centavo, o el documento sale
-     * con un total distinto del cargo a la tarjeta. La bitácora guarda las dos cifras
-     * (`comision_formula` y `comision`) para que el comando de comparación pueda contarlo.
+     * EL VIEJO CALCULABA POR DIFERENCIA, y por eso siempre cerraba: `monto / 1.16 - partida`
+     * reproduce su comisión en 712 de los 718 folios (la fórmula, en 695), de modo que absorbía
+     * cualquier desvío, de cualquier tamaño: un monto mal tecleado se lo tragaba entero y
+     * la comisión se movía lo que hiciera falta (en el folio 200, ~28 pesos). Aquí NO: la
+     * ventana de ±5 centavos es una guarda INTENCIONADA que el viejo no tenía. Pasados unos
+     * 6 centavos de total no hay candidato, se queda la fórmula y el tope rechaza, que es lo
+     * que protege de un monto mal tecleado.
+     *
+     * NO CAMBIA NINGÚN COBRO respecto al viejo en lo medido: las 21 comisiones ajustadas del
+     * histórico coinciden al centavo con las que guardó el sistema viejo. El ajuste acerca el
+     * renglón a lo que el viejo ya hacía; no se aparta de ello. La bitácora guarda las dos
+     * cifras (`comision_formula` y `comision`) para que el comando de comparación pueda
+     * contarlo.
      *
      * @throws InvalidArgumentException si `$montoBruto` no es un decimal positivo de hasta dos decimales.
      * @throws RenglonDePrefacturaCerradaException si la prefactura ya está cerrada.
@@ -157,8 +178,17 @@ class PagosPrefactura
             try {
                 $subtotal = $actual->subtotal();
                 $tasa = $actual->ivaTasa();
+                $faltaAhora = $actual->porCobrar();
             } catch (UnexpectedValueException $e) {
                 throw $this->totalesNoCalculables($e);
+            }
+
+            // Saldada (o sobrepagada): no entra ningún Amex. Ver el docblock.
+            if (bccomp($faltaAhora, '0.00', 2) <= 0) {
+                throw new PagoNoPermitidoException(
+                    "El monto Amex ({$montoBruto}) supera lo que falta por cobrar: no falta nada, y un pago Amex en una prefactura saldada solo pagaría su propia comisión.",
+                    'amex_supera_lo_que_falta',
+                );
             }
 
             $servicio = FactServicio::porConcepto(FactServicio::CONCEPTO_COMISION_AMEX)->activos()->first();
