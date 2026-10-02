@@ -11,6 +11,7 @@ use App\Models\FactPrefactura;
 use App\Models\FactPrefacturaRenglon;
 use App\Models\OperacionDiaria;
 use App\Services\CierrePrefactura;
+use App\Services\PrefacturaDescartadaException;
 use App\Services\PrefacturaIncompletaException;
 use App\Services\PrefacturaYaCerradaException;
 use App\Services\RenglonDePrefacturaCerradaException;
@@ -235,6 +236,8 @@ class PrefacturaController extends Controller
             });
         } catch (PrefacturaYaCerradaException|RenglonDePrefacturaCerradaException $e) {
             return response()->json(['message' => $e->getMessage(), 'codigo' => 'ya_cerrada'], 409);
+        } catch (PrefacturaDescartadaException $e) {
+            return response()->json(['message' => $e->getMessage(), 'codigo' => 'ya_descartada'], 409);
         } catch (PrefacturaIncompletaException $e) {
             return response()->json(['message' => $e->getMessage(), 'codigo' => 'incompleta'], 422);
         } catch (SelloInconsistenteException) {

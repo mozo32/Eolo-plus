@@ -42,6 +42,13 @@ class CierrePrefactura
                 throw new PrefacturaYaCerradaException('Esta prefactura ya está cerrada.');
             }
 
+            // Un folio es lo único que no se puede des-consumir. El endpoint ya rechaza un
+            // borrador descartado, pero el invariante vive aquí también: cerrar desde
+            // código no debe gastar un folio en un documento que nadie ve.
+            if ($prefactura->status === FactPrefactura::STATUS_INACTIVO) {
+                throw new PrefacturaDescartadaException('Este borrador está descartado: no se puede cerrar.');
+            }
+
             if ($prefactura->cliente_id === null) {
                 throw new PrefacturaIncompletaException('Falta el cliente: sin cliente no se puede facturar.');
             }

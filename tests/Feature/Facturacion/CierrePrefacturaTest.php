@@ -5,6 +5,7 @@ use App\Models\Bitacora;
 use App\Models\FactConfiguracion;
 use App\Models\FactPrefactura;
 use App\Services\CierrePrefactura;
+use App\Services\PrefacturaDescartadaException;
 use App\Services\PrefacturaIncompletaException;
 use App\Services\PrefacturaYaCerradaException;
 use App\Services\SelloInconsistenteException;
@@ -213,4 +214,28 @@ test('si el sello no coincide con los renglones tras escribirlo, el cierre se re
         ->and($p->folio)->toBeNull()
         ->and(FactConfiguracion::valor('prefactura_folio_siguiente'))->toBe('10000')
         ->and(Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)->count())->toBe(0);
+});
+
+test('un borrador descartado no se cierra y no consume folio', function () {
+    [$p, $usuario] = prefacturaCompleta();
+    $p->update(['status' => FactPrefactura::STATUS_INACTIVO]);
+
+    expect(fn () => app(CierrePrefactura::class)->cerrar($p->fresh(), $usuario->id))
+        ->toThrow(PrefacturaDescartadaException::class);
+
+    $p = $p->fresh();
+    expect($p->estado)->toBe(FactPrefactura::ESTADO_BORRADOR)
+        ->and($p->folio)->toBeNull()
+        ->and($p->subtotal_sellado)->toBeNull()
+        ->and(FactConfiguracion::valor('prefactura_folio_siguiente'))->toBe('10000');
+});
+
+test('una instancia vieja de un borrador descartado por otra sesion tampoco gasta folio', function () {
+    [$p, $usuario] = prefacturaCompleta();
+    $vieja = FactPrefactura::find($p->id);
+    FactPrefactura::whereKey($p->id)->update(['status' => FactPrefactura::STATUS_INACTIVO]);
+
+    expect(fn () => app(CierrePrefactura::class)->cerrar($vieja, $usuario->id))
+        ->toThrow(PrefacturaDescartadaException::class)
+        ->and(FactConfiguracion::valor('prefactura_folio_siguiente'))->toBe('10000');
 });
