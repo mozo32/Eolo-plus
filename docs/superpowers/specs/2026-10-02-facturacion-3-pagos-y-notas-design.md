@@ -447,15 +447,24 @@ y lo fijan pruebas que cuentan las escrituras. Compara:
 - **Los 3,534 pagos**: que cada uno se pueda representar y que la suma por folio
   coincida con la del origen.
 - **Las 733 comisiones Amex**: la comisión calculada contra la guardada, al
-  centavo, separando las 765 que siguen la fórmula de las 5 de la segunda rama y
-  las 11 irreconciliables, en lugar de meterlas en un solo número.
+  centavo, separando las **696** que siguen la fórmula de las **5** de la segunda
+  rama y las **24** que no siguen ninguna, de 725 comparables, en lugar de meterlas
+  en un solo número.
 - **El sobrepago derivado** contra el `Cambio` guardado, que se sabe mal **en las
-  dos direcciones** (**30 / 14 / 2** sin tolerancia; ver la corrección al final de esta
-  sección): de los 27 folios sobrepagados **con un centavo de tolerancia**, 15 tienen
-  `Cambio` distinto de
-  cero y **12 lo tienen en cero**; y de los 18 folios con `Cambio` distinto de cero,
-  **3 no están sobrepagados**. El comando reporta las dos listas por separado, para
-  que el bloque 6 sepa qué está importando.
+  dos direcciones**: **30** folios sobrepagados, de los cuales **16** tienen `Cambio`
+  distinto de cero y **14 lo tienen en cero**; y de los 18 folios con `Cambio`
+  distinto de cero, **2 no están sobrepagados**. El comando reporta las dos listas
+  por separado, para que el bloque 6 sepa qué está importando.
+
+  **Corrección a lo que el diseño midió.** Las primeras cifras de esta sección
+  (765 / 5 / 11 en las comisiones; 27 / 15 / 12 / 3 en el `Cambio`) eran incorrectas
+  por dos causas, y las de arriba son las buenas. Las **765** y las 781 comparables
+  eran **filas** de un `JOIN` contra `tb_hprefactura` sin deduplicar, que tiene 207
+  folios repetidos: contado por folio y al centavo son 696 / 5 / 24 de 725. Y las
+  27 / 15 / 12 / 3 se midieron con **un centavo de tolerancia que no se declaró**; el
+  comando no la usa, y sin ella son 30 / 16 / 14 / 2. La guía de despliegue
+  (`2026-10-02-facturacion-3-despliegue-y-pendientes.md`) tiene el detalle folio por
+  folio.
 
 Las etiquetas de la salida son **distintas por concepto**. El bloque 2 aprendió por
 qué: una desviación de un centavo en el IVA pasó 19 pruebas porque el IVA y el

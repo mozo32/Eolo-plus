@@ -214,17 +214,37 @@ test('sin ningun pago, la bitacora dice pagado 0.00 y el faltante es el total', 
 
 test('confirmar cuando ya esta cubierta no deja rastro de falta de cobro', function () {
     // Mandar el flag de mas no inventa un faltante: la bitacora solo habla de cobro cuando faltaba.
-    foreach (['116.00', '200.00'] as $pagado) {
-        [$p, $usuario] = prefacturaCompleta(100.0, 1);
-        pagoDe($p, formasDePago()['Visa'], $pagado);
+    [$p, $usuario] = prefacturaCompleta(100.0, 1);
+    pagoDe($p, formasDePago()['Visa'], '116.00');
 
-        app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true);
-    }
+    app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true);
 
-    foreach (Bitacora::where('accion', Bitacora::ACCION_FINALIZAR)->get() as $entrada) {
-        expect($entrada->datos_nuevos)->not->toHaveKeys(['pagado', 'faltante', 'confirmado_sin_cobro'])
-            ->and($entrada->descripcion)->not->toContain('sin cobro');
-    }
+    $entrada = Bitacora::where('accion', Bitacora::ACCION_FINALIZAR)->sole();
+
+    expect($entrada->datos_nuevos)->not->toHaveKeys(['pagado', 'faltante', 'confirmado_sin_cobro', 'sobrepago'])
+        ->and($entrada->descripcion)->not->toContain('sin cobro')
+        ->and($entrada->descripcion)->not->toContain('por encima');
+});
+
+test('cerrar cobrado de mas no pide confirmacion pero deja en la bitacora lo pagado y el sobrepago', function () {
+    // La decision de no bloquearlo es deliberada y no cambia: cierra sin confirmar. Lo que se
+    // exige es el rastro, porque una vez cerrada los pagos quedan congelados.
+    $this->actingAs($usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    [$p] = prefacturaCompleta(100.0, 1);
+    pagoDe($p, formasDePago()['Visa'], '200.00');
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar")->assertOk();
+
+    $entrada = Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)
+        ->where('accion', Bitacora::ACCION_FINALIZAR)->sole();
+
+    expect($p->fresh()->estado)->toBe(FactPrefactura::ESTADO_CERRADA)
+        ->and($entrada->descripcion)->toContain('por encima del total')
+        ->and($entrada->descripcion)->toContain('pagado 200.00')
+        ->and($entrada->descripcion)->toContain('sobrepago 84.00')
+        ->and($entrada->descripcion)->not->toContain('sin cobro')
+        ->and($entrada->datos_nuevos)->toMatchArray(['total' => '116.00', 'pagado' => '200.00', 'sobrepago' => '84.00'])
+        ->and($entrada->datos_nuevos)->not->toHaveKeys(['faltante', 'confirmado_sin_cobro']);
 });
 
 test('una tasa de IVA ilegible responde 422 totales_no_calculables, con y sin confirmar', function (array $cuerpo) {

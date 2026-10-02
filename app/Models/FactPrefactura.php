@@ -142,7 +142,7 @@ class FactPrefactura extends Model
     }
 
     /**
-     * Suma de los pagos activos. Los cuatro derivados del cobro consultan la base
+     * Suma de los pagos activos. Los seis derivados del cobro consultan la base
      * (`pagos()->...`) y no la relación cacheada (`$this->pagos`), por la misma razón
      * que `subtotalDerivado()` con los renglones: un número de cobro que no ve el pago
      * recién registrado en esta misma instancia miente en silencio.
@@ -211,8 +211,9 @@ class FactPrefactura extends Model
      * Lo que se DEVUELVE al cliente: el menor entre el sobrepago y el efectivo que
      * entró. No puede pasar del efectivo recibido: no se da en cambio dinero que no
      * se cobró en efectivo. Es lo que hace el sistema viejo (`mpago.php`: monto menos
-     * total, acotado por el efectivo). Se compara con `bccomp` y no con `min()` de PHP,
-     * que compararía cadenas.
+     * total, acotado por el efectivo). Se compara con `bccomp` y no con `min()` de PHP por
+     * la misma regla del resto del camino del dinero: todo se compara como decimal
+     * de escala fija, sin depender de cómo PHP ordene dos cadenas numéricas.
      *
      * Lanza `UnexpectedValueException` si `total()` lo hace (tasa de IVA ilegible),
      * porque depende de `sobrepago()`.
@@ -236,7 +237,7 @@ class FactPrefactura extends Model
      * Los tres suman: `cambio() + cobradoDeMas() = sobrepago()`.
      *
      * Lanza `UnexpectedValueException` si `total()` lo hace, porque depende de
-     * `sobrepago()`. De los cinco derivados del cobro, solo `pagado()` y
+     * `sobrepago()`. De los seis derivados del cobro, solo `pagado()` y
      * `efectivoPagado()` están a salvo de la tasa.
      */
     public function cobradoDeMas(): string

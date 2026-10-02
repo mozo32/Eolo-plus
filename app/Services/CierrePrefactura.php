@@ -97,9 +97,17 @@ class CierrePrefactura
             // FALTA de cobro la pide: una prefactura sobrepagada cierra sin confirmar.
             //
             // Lo que se cierra SIN cobro completo queda dicho en la bitácora (abajo): sin
-            // ese rastro, a posteriori sería tan silencioso como en el sistema viejo.
+            // ese rastro, a posteriori sería tan silencioso como en el sistema viejo. Y lo
+            // que se cierra COBRADO DE MÁS también: no se bloquea ni se confirma (decisión
+            // escrita), pero tampoco se calla, porque una vez cerrada los pagos quedan
+            // congelados y la devolución no existe en el sistema.
             $pagado = $prefactura->pagado();
             $faltante = null;
+            $sobrepago = null;
+
+            if (bccomp($pagado, $total, 2) > 0) {
+                $sobrepago = bcsub($pagado, $total, 2);
+            }
 
             if (bccomp($pagado, $total, 2) < 0) {
                 $faltante = bcsub($total, $pagado, 2);
@@ -152,7 +160,8 @@ class CierrePrefactura
                 modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
                 accion: Bitacora::ACCION_FINALIZAR,
                 descripcion: "Se cerró la prefactura con folio {$folio} por un total de {$total}."
-                    .($faltante === null ? '' : " Se confirmó cerrar sin cobro completo: pagado {$pagado}, faltan {$faltante}."),
+                    .($faltante === null ? '' : " Se confirmó cerrar sin cobro completo: pagado {$pagado}, faltan {$faltante}.")
+                    .($sobrepago === null ? '' : " Se cerró con el cliente cobrado por encima del total: pagado {$pagado}, sobrepago {$sobrepago}."),
                 usuarioId: $userId,
                 registroId: $prefactura->id,
                 datosNuevos: [
@@ -165,6 +174,9 @@ class CierrePrefactura
                     'pagado' => $pagado,
                     'faltante' => $faltante,
                     'confirmado_sin_cobro' => true,
+                ]) + ($sobrepago === null ? [] : [
+                    'pagado' => $pagado,
+                    'sobrepago' => $sobrepago,
                 ]),
             );
 

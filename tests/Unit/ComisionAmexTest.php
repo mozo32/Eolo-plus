@@ -65,7 +65,7 @@ test('la constante de redondeo es 0.005 y no 0.006', function () {
 
 test('la tasa se respeta con sus cuatro decimales', function () {
     // Tasa 0.0855 da divisor 1.0855 × 1.06 = 1.150630, cociente 1000 / 1.150630 = 869.08...
-    // Su 6% es 52.1448..., redondea a 52.15. Si se baja escala del bcadd('1', $tasaIva, 4)
+    // Su 6% es 52.1453..., redondea a 52.15. Si se baja escala del bcadd('1', $tasaIva, 4)
     // a 2, la tasa se trunca a 0.08, divisor es 1.1448, cociente da 52.41 incorrecto.
     // Esta prueba mata esa mutación de escala a 2.
     expect(ComisionAmex::calcular('1000.00', '0.0855'))->toBe('52.15');

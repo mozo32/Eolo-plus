@@ -17,12 +17,13 @@ use UnexpectedValueException;
  *     subtotal = base + comisión = base × 1.06
  *     total    = subtotal × (1 + iva) = monto
  *
- * Aquí la tasa se LEE en lugar de fijarse. Con 16% da el mismo número que las 765
- * comisiones del histórico que siguen esta fórmula; el día que la tasa cambie,
- * sigue siendo correcta, lo que el literal `1.2296` no haría.
+ * Aquí la tasa se LEE en lugar de fijarse. Con 16% da el mismo número que las 696
+ * comisiones del histórico que siguen esta fórmula (de 725 comparables, contadas por
+ * folio y al centavo; 695 sobre los 718 folios de la población del ajuste); el día que
+ * la tasa cambie, sigue siendo correcta, lo que el literal `1.2296` no haría.
  *
  * `mpamex.php` tiene una SEGUNDA fórmula (`monto * 0.06`) para cuando ya había
- * pagos registrados. Se descarta a propósito: aparece 5 veces contra 765, y aplica
+ * pagos registrados. Se descarta a propósito: aparece 5 veces contra 696, y aplica
  * el 6% a un monto bruto como si fuera neto, lo que hace que la misma cantidad
  * cargada a la tarjeta produzca dos comisiones distintas según el orden en que se
  * capturó. El comando `facturacion:comparar-pagos` nombra esos 5 folios.
@@ -56,8 +57,12 @@ final class ComisionAmex
     }
 
     /**
-     * Valida que sea un decimal. Un signo menos SÍ se acepta: lo rechaza el
-     * `bccomp` del divisor con su propio mensaje. Se asume que el valor ya ha
+     * Valida que sea un decimal. Un signo menos SÍ se acepta, en los dos valores.
+     * En la TASA de IVA acaba rechazado: una tasa de -1 o menos deja el divisor en
+     * cero o negativo, y `calcular()` lanza su propio mensaje. En el MONTO no lo
+     * rechaza nadie: el divisor sigue siendo positivo y `calcular('-5', '0.1600')`
+     * devuelve '-0.23'. Quien llame con importes negativos (renglones de descuento)
+     * debe validarlos fuera. Se asume que el valor ya ha
      * sido recortado en `calcular()`: esto previene que una entrada con espacios
      * lance `ValueError` en `bcmul` en lugar de `UnexpectedValueException`.
      */
