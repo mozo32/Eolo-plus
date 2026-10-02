@@ -156,3 +156,41 @@ test('sin el subdepartamento no se pueden cambiar las notas', function () {
 
     expect($p->fresh()->nota_externa)->toBeNull();
 });
+
+test('un PATCH vacio no escribe ni deja entrada en la bitacora, y responde con la ficha', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    $p->update(['nota_externa' => 'igual']);
+    $actualizada = $p->fresh()->updated_at;
+    $bitacoraAntes = Bitacora::count();
+
+    $this->travel(5)->minutes();
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/notas", [])
+        ->assertOk()
+        ->assertJsonPath('prefactura.nota_externa', 'igual');
+
+    expect(Bitacora::count())->toBe($bitacoraAntes)
+        ->and($p->fresh()->updated_at->equalTo($actualizada))->toBeTrue();
+});
+
+test('repetir lo ya guardado tampoco deja entrada en la bitacora', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    $p->update(['nota_externa' => 'igual', 'nota_interna' => null]);
+    $bitacoraAntes = Bitacora::count();
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/notas", ['nota_externa' => 'igual', 'nota_interna' => null])->assertOk();
+
+    expect(Bitacora::count())->toBe($bitacoraAntes);
+});
+
+test('un cambio real si deja su entrada', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    $p->update(['nota_externa' => 'antes']);
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/notas", ['nota_externa' => 'despues'])->assertOk();
+
+    expect(Bitacora::where('accion', Bitacora::ACCION_ACTUALIZAR)->count())->toBe(1);
+});

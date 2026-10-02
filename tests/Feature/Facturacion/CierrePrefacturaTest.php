@@ -82,8 +82,11 @@ test('no se puede cerrar sin renglones', function () {
 
 test('el cierre deja rastro en bitacora con el folio y el total', function () {
     [$p, $usuario] = prefacturaCompleta(precio: 1000.0, cantidad: 1);
+    // Cubierta por completo: la entrada NO lleva nada del cobro (cerrar sin cobro completo
+    // deja su propio rastro y lo fija `CierreSinCobroTest`).
+    pagoDe($p, formasDePago()['Visa'], '1160.00');
 
-    app(CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true);
+    app(CierrePrefactura::class)->cerrar($p, $usuario->id);
 
     $entrada = Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)
         ->where('accion', Bitacora::ACCION_FINALIZAR)->sole();

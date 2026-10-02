@@ -29,6 +29,7 @@ class CierrePrefactura
      * del total. Por defecto NO: quien cierra sin cobro completo tiene que decirlo.
      *
      * @throws PrefacturaSinCobroException si los pagos no cubren el total y no se confirmó.
+     * @throws TotalesNoCalculablesException si la tasa de IVA o un renglón no se reconocen.
      */
     public function cerrar(FactPrefactura $prefactura, int $userId, bool $confirmarSinCobro = false): FactPrefactura
     {
@@ -68,22 +69,35 @@ class CierrePrefactura
             // los métodos del modelo, NO una copia de la fórmula (el redondeo del IVA
             // vive en `FactPrefactura::iva()`), y van antes del cambio de estado porque
             // los totales deciden por `estaCerrada()`.
-            $subtotal = $prefactura->subtotal();
-            $tasa = $prefactura->ivaTasa();
-            $iva = $prefactura->iva();
-            $total = $prefactura->total();
+            //
+            // SOLO estas lecturas se envuelven: `siguienteFolio()` lanza también
+            // `UnexpectedValueException` (contador corrupto) y no debe confundirse con esto.
+            try {
+                $subtotal = $prefactura->subtotal();
+                $tasa = $prefactura->ivaTasa();
+                $iva = $prefactura->iva();
+                $total = $prefactura->total();
+            } catch (UnexpectedValueException $e) {
+                throw new TotalesNoCalculablesException($e->getMessage(), previous: $e);
+            }
 
             // El aviso del cobro va DESPUÉS de los totales (necesita el total) y ANTES
             // del folio (si lanza, no se gasta). El sistema viejo deja imprimir sin
             // cobrar —289 de sus 3,764 cerradas no tienen pago— así que esto NO bloquea:
             // pide una confirmación explícita, que es lo que el viejo no hacía. Solo la
             // FALTA de cobro la pide: una prefactura sobrepagada cierra sin confirmar.
-            if (! $confirmarSinCobro) {
-                $pagado = $prefactura->pagado();
+            //
+            // Lo que se cierra SIN cobro completo queda dicho en la bitácora (abajo): sin
+            // ese rastro, a posteriori sería tan silencioso como en el sistema viejo.
+            $pagado = $prefactura->pagado();
+            $faltante = null;
 
-                if (bccomp($pagado, $total, 2) < 0) {
+            if (bccomp($pagado, $total, 2) < 0) {
+                if (! $confirmarSinCobro) {
                     throw new PrefacturaSinCobroException(bcsub($total, $pagado, 2));
                 }
+
+                $faltante = bcsub($total, $pagado, 2);
             }
 
             $folio = $this->siguienteFolio();
@@ -126,7 +140,8 @@ class CierrePrefactura
             Bitacora::log(
                 modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
                 accion: Bitacora::ACCION_FINALIZAR,
-                descripcion: "Se cerró la prefactura con folio {$folio} por un total de {$total}.",
+                descripcion: "Se cerró la prefactura con folio {$folio} por un total de {$total}."
+                    .($faltante === null ? '' : " Se confirmó cerrar sin cobro completo: pagado {$pagado}, faltan {$faltante}."),
                 usuarioId: $userId,
                 registroId: $prefactura->id,
                 datosNuevos: [
@@ -135,7 +150,11 @@ class CierrePrefactura
                     'iva_tasa' => $tasa,
                     'iva' => $iva,
                     'total' => $total,
-                ],
+                ] + ($faltante === null ? [] : [
+                    'pagado' => $pagado,
+                    'faltante' => $faltante,
+                    'confirmado_sin_cobro' => true,
+                ]),
             );
 
             return $cerrada;

@@ -18,6 +18,7 @@ use App\Services\PrefacturaSinCobroException;
 use App\Services\PrefacturaYaCerradaException;
 use App\Services\RenglonDePrefacturaCerradaException;
 use App\Services\SelloInconsistenteException;
+use App\Services\TotalesNoCalculablesException;
 use DateTimeInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -223,7 +224,9 @@ class PrefacturaController extends Controller
     {
         // En dos sentencias: con `(bool) $datos['x'] ?? false` en una sola, la
         // precedencia del cast se come al `??` y la clave ausente revienta.
-        $datos = $request->validate(['confirmar_sin_cobro' => ['sometimes', 'boolean']]);
+        $datos = $request->validate(['confirmar_sin_cobro' => ['sometimes', 'boolean']], [
+            'confirmar_sin_cobro.boolean' => 'La confirmación de cerrar sin cobro debe ser verdadera o falsa.',
+        ]);
         $confirmar = (bool) ($datos['confirmar_sin_cobro'] ?? false);
 
         try {
@@ -254,6 +257,16 @@ class PrefacturaController extends Controller
                 'message' => $e->getMessage(),
                 'codigo' => 'sin_cobro',
                 'faltante' => $e->faltante,
+            ], 422);
+        } catch (TotalesNoCalculablesException $e) {
+            // Ni confirmando se puede cerrar: no hay total que sellar. Se reporta (la
+            // transacción se revirtió y nada más lo registra) y se dice qué corregir.
+            // El código es el mismo que usa `PagosPrefactura` para esta causa.
+            report($e->getPrevious() ?? $e);
+
+            return response()->json([
+                'message' => 'No se puede cerrar: un renglón o la tasa de IVA tienen un valor que no se reconoce. Corrígelo (el ajuste de precio del renglón o la tasa de IVA en la configuración) y vuelve a cerrar.',
+                'codigo' => 'totales_no_calculables',
             ], 422);
         } catch (SelloInconsistenteException) {
             // El cierre se abortó porque el sello no coincidía con la derivación, casi
@@ -296,9 +309,21 @@ class PrefacturaController extends Controller
                 return $respuesta;
             }
 
+            // Se lee con `validated()`, NO con `input()`: `validated()` omite las claves que
+            // no vinieron, y por eso guardar solo la externa no toca las otras dos.
+            $cambios = collect($request->validated())
+                ->filter(fn ($valor, $campo) => $actual->{$campo} !== $valor)
+                ->all();
+
+            // Sin cambio no hay escritura ni bitácora (como `cortesia()`): un PATCH vacío,
+            // o que repite lo guardado, no deja una entrada con «antes» igual a «después».
+            if ($cambios === []) {
+                return $actual;
+            }
+
             $campos = ['nota_interna', 'nota_externa', 'nota_factura'];
             $antes = $actual->only($campos);
-            $actual->update($request->validated());
+            $actual->update($cambios);
 
             Bitacora::log(
                 modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,

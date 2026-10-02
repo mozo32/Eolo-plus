@@ -11,9 +11,11 @@ use Illuminate\Support\Facades\Schema;
  * fila por folio con los tres campos, que tres pantallas distintas del sistema
  * viejo guardan por separado. Los largos son los del origen.
  *
- * Solo la EXTERNA se imprime: `invoice.php:272` es el único que lee `tb_notas` y
- * solo lee `nota_ext`. La interna es para el departamento y la de factura viaja al
- * dato fiscal.
+ * En `invoice.php`, que es la variante viva del PDF, solo sale la EXTERNA
+ * (`invoice.php:272` lee `nota_ext`). La interna es para el departamento. Otras
+ * variantes también leen `nota_ext`, y `Prefectura/invoice_cerradas.php:267-300` lee
+ * además `nota_fac` y la imprime en un bloque «Notas Facturación»: si `nota_factura`
+ * debe imprimirse en el documento nuevo es una decisión abierta del bloque 4.
  */
 return new class extends Migration
 {
