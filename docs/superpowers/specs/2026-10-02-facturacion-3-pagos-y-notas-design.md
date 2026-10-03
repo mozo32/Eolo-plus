@@ -84,7 +84,8 @@ tabla no limita cuántos, pero conviene saber que el caso de dos es raro.
 ### 1. El sistema viejo NO exige cobrar antes de imprimir
 
 **289 de 3,764 folios cerrados no tienen ningún pago** (7.7%). De los 3,475 que sí
-tienen: 3,417 cubren el total exacto, 31 quedan por debajo y 27 por encima
+tienen: 3,417 cubren el total exacto, 31 quedan por debajo y **30** por encima
+(medido sin tolerancia; ver la corrección de 2.b)
 (efectivo con cambio).
 
 **Consecuencia:** cerrar no puede exigir cobro, o esas 289 serían inimportables en
@@ -92,8 +93,16 @@ el bloque 6. Pero sí tiene que **avisar** — hoy nadie se entera.
 
 ### 2. El `Cambio` guardado está mal
 
-Está mal en las dos direcciones. De los **27** folios con pagos por encima del
-total, solo **15** tienen `Cambio` distinto de cero: los otros 12 lo tienen en cero.
+Está mal en las dos direcciones. De los **30** folios con pagos por encima del total,
+solo **16** tienen `Cambio` distinto de cero: los otros **14** lo tienen en cero.
+
+**Corrección (2026-10-02).** Una versión anterior daba 27 / 15 / 12 y «3 no están
+sobrepagados». Esas cifras se midieron con **un centavo de tolerancia que nunca se
+declaró** (`+ 0.011` en la consulta). El `sobrepago` del sistema nuevo es exacto, así que el
+comando de verificación no la usa, y sin ella son **30 / 16 / 14**, con **2** folios (308 y
+1837) que tienen `Cambio` sin estar sobrepagados. De los tres folios que entran solo por un
+centavo, **dos (3261 y 3555) los crea el propio redondeo al importar** y no existen en el
+origen; el **394** es un cambio real.
 Y de los **18** folios con `Cambio` distinto de cero, **3 no están sobrepagados**.
 
 La causa de la primera dirección está en `mpago.php`: casi toda rama que inserta un
@@ -147,15 +156,22 @@ decorativa; se queda tal cual.
 
 ### 4. La comisión Amex tiene una sola fórmula en la práctica, y es exacta
 
-`mpamex.php` tiene dos ramas según si ya había pagos registrados. Contra las 781
-comisiones comparables del histórico:
+`mpamex.php` tiene dos ramas según si ya había pagos registrados. Contra las **725**
+comisiones comparables del histórico, **por folio y al centavo**:
 
 | Fórmula | Coincidencias |
 |---|---|
-| `monto × 0.06 / 1.2296` (rama sin pagos previos) | **765** |
+| `monto × 0.06 / 1.2296` (rama sin pagos previos) | **696** |
 | `monto × 0.06` (rama con pagos previos) | 5 |
 | `subtotal × 0.06` | 0 |
-| Ninguna de las tres | 11 |
+| Ninguna de las dos anteriores | 24 |
+
+**Corrección (2026-10-02).** Una versión anterior daba «765 / 5 / 0 / 11 de 781». Las 781
+eran **filas**, no folios: la consulta unía los pagos a `tb_hprefactura`, que tiene **207
+folios duplicados**, sin deduplicar. Contado por folio son **725 comparables** (733
+comisiones menos 8: cinco folios sin pago Amex y tres con varios). De las **24** que no
+siguen ninguna rama, **21 las reproduce `PagosPrefactura::comisionQueCuadra()`** y coinciden
+al centavo con la comisión guardada; las otras 3 son los folios 22, 200 y 3484.
 
 Y la que gana **no es un parche**. `1.2296 = 1.16 × 1.06`. Si el operador teclea lo
 que se le va a cargar a la tarjeta:
@@ -341,7 +357,7 @@ de `2026_09_29_099000_add_unique_matricula_to_aeronaves.php`, que
  *
  * El viejo escribe `monto * 0.06 / 1.2296`, y 1.2296 es 1.16 × 1.06 precalculado.
  * Aquí la tasa de IVA se lee en lugar de fijarse: con 16% da el mismo número que
- * las 765 comisiones del histórico, y sobrevive a un cambio de tasa.
+ * las 696 comisiones del histórico que siguen la fórmula, y sobrevive a un cambio de tasa.
  */
 public static function calcular(string $montoBruto, string $tasaIva): string
 ```
@@ -506,7 +522,8 @@ Heredadas del bloque 2 y vigentes:
   no lo ha probado; las 289 cerradas sin pago sugieren que en algún sitio se cobra
   después. Si en las pruebas resulta que hace falta, añadirlo es agregar, no
   deshacer.
-- **Los 5 folios de la segunda rama de la comisión Amex y los 11 irreconciliables.**
+- **Los 5 folios de la segunda rama de la comisión Amex (2, 3, 29, 32, 47) y los 3 que
+  ninguna fórmula ni ajuste alcanza (22, 200, 3484).**
   El comando los nombra uno por uno; qué hacer con ellos es decisión del bloque 6,
   cuando se importen.
 - **El descuento** (bloque 5) y con él la pregunta que el bloque 2 dejó escrita: el
