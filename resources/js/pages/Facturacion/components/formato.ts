@@ -250,6 +250,12 @@ export function deCampoFechaHora(texto: string): string | null {
  */
 export const esConceptoDeEstancia = (concepto: string | null | undefined): boolean => typeof concepto === 'string' && concepto.startsWith('estancia_');
 
+/**
+ * La comisión de un pago Amex la agrega el sistema (`PagosPrefactura::registrarAmex()`) como renglón con este concepto. Es la contrapartida
+ * de un cargo ya hecho a una tarjeta: tocarla deja el documento por debajo (o por encima) de lo que se cobró.
+ */
+export const esConceptoComisionAmex = (concepto: string | null | undefined): boolean => concepto === 'comision_amex';
+
 /** "0.1600" es "16 %". */
 export function formatearTasa(tasa: string | null | undefined): string {
     if (tasa === null || tasa === undefined || tasa === '' || Number.isNaN(Number(tasa))) return '—';

@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import CabeceraPantalla from './components/CabeceraPantalla';
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO, TD, TH, campoConError, errorStyle, labelStyle, sectionTitle, toast } from './components/estilos';
-import { aCampoFechaHora, deCampoFechaHora, esConceptoDeEstancia, esMontoPositivo, fechaHoraSinZona, formatearMonto, formatearTasa } from './components/formato';
+import { aCampoFechaHora, deCampoFechaHora, esConceptoComisionAmex, esConceptoDeEstancia, esMontoPositivo, fechaHoraSinZona, formatearMonto, formatearTasa } from './components/formato';
 import ModalEstancia, { type CantidadesEstancia } from './components/ModalEstancia';
 import ModalRenglon, { type DatosRenglon } from './components/ModalRenglon';
 import PanelCobro from './components/PanelCobro';
@@ -409,20 +409,44 @@ export default function EditorPrefactura({ id }: Props) {
         }
     };
 
-    const quitarRenglon = (renglonId: number, nombre: string) =>
+    /**
+     * La comisión Amex es la contrapartida de un cargo ya hecho a la tarjeta. No se bloquea (no cobrársela al cliente es una intención
+     * plausible), pero quien opera tiene que saber que el documento quedará por debajo de lo que se cargó.
+     */
+    const confirmarSobreComisionAmex = async (nombre: string, accion: 'cortesia' | 'quitar'): Promise<boolean> => {
+        const confirmacion = await Swal.fire({
+            // El nombre sale del catálogo: titleText (texto plano), nunca title, que SweetAlert2 interpreta como HTML.
+            titleText: accion === 'cortesia' ? `Marcar "${nombre}" como cortesía` : `Quitar "${nombre}"`,
+            text: `Este renglón es la comisión de un pago con Amex. ${accion === 'cortesia' ? 'Si no se cobra' : 'Si se quita'}, el documento quedará por debajo de lo que se cargó a la tarjeta.${accion === 'quitar' ? ' El pago dejará de tener comisión.' : ''} ¿Continuar?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: accion === 'cortesia' ? 'Sí, marcar como cortesía' : 'Sí, quitar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#4f46e5',
+            reverseButtons: true,
+        });
+
+        return confirmacion.isConfirmed;
+    };
+
+    const quitarRenglon = (renglonId: number, nombre: string, concepto: string | null) =>
         ejecutar(`quitar-${renglonId}`, 'No se pudo quitar el servicio', async () => {
-            const confirmacion = await Swal.fire({
-                // El nombre sale del catálogo y lo capturó un usuario: titleText (texto plano), nunca title, que SweetAlert2 interpreta como HTML.
-                titleText: `Quitar "${nombre}"`,
-                text: 'El renglón sale de la prefactura y los totales se recalculan.',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'Sí, quitar',
-                cancelButtonText: 'Cancelar',
-                confirmButtonColor: '#dc2626',
-                reverseButtons: true,
-            });
-            if (!confirmacion.isConfirmed) return;
+            const confirmado = esConceptoComisionAmex(concepto)
+                ? await confirmarSobreComisionAmex(nombre, 'quitar')
+                : (
+                      await Swal.fire({
+                          // El nombre sale del catálogo y lo capturó un usuario: titleText (texto plano), nunca title, que SweetAlert2 interpreta como HTML.
+                          titleText: `Quitar "${nombre}"`,
+                          text: 'El renglón sale de la prefactura y los totales se recalculan.',
+                          icon: 'warning',
+                          showCancelButton: true,
+                          confirmButtonText: 'Sí, quitar',
+                          cancelButtonText: 'Cancelar',
+                          confirmButtonColor: '#dc2626',
+                          reverseButtons: true,
+                      })
+                  ).isConfirmed;
+            if (!confirmado) return;
 
             await apiPrefacturas.quitarRenglon(prefactura.id, renglonId);
             toast.fire({ icon: 'success', titleText: 'Servicio quitado.' });
@@ -491,8 +515,11 @@ export default function EditorPrefactura({ id }: Props) {
     /** Sin totales no hay nada que sellar: el servidor tampoco cierra. El botón se deshabilita y se dice por qué. */
     const sinTotales = prefactura.totales_error !== null || prefactura.cobro_error !== null || prefactura.por_cobrar === null;
 
-    const cortesia = (renglonId: number, nombre: string, marcar: boolean) =>
+    const cortesia = (renglonId: number, nombre: string, marcar: boolean, concepto: string | null) =>
         ejecutar(`cortesia-${renglonId}`, 'No se pudo cambiar la cortesía', async () => {
+            // Solo al MARCAR: quitar la cortesía vuelve a cobrar la comisión, que es lo que cuadra con la tarjeta.
+            if (marcar && esConceptoComisionAmex(concepto) && !(await confirmarSobreComisionAmex(nombre, 'cortesia'))) return;
+
             await apiPrefacturas.cortesia(prefactura.id, renglonId, marcar);
             await cargar();
             toast.fire({ icon: 'success', titleText: marcar ? `«${nombre}» queda como cortesía: ya no se cobra.` : `«${nombre}» vuelve a cobrarse.` });
@@ -805,6 +832,11 @@ export default function EditorPrefactura({ id }: Props) {
                                                             ESTANCIA
                                                         </span>
                                                     )}
+                                                    {esConceptoComisionAmex(renglon.concepto) && (
+                                                        <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-[9px] font-black text-violet-700" title="Comisión de un pago con Amex: es la contrapartida de un cargo ya hecho a la tarjeta. Cortesía o quitarla deja el documento por debajo de lo que se cargó.">
+                                                            COMISIÓN AMEX
+                                                        </span>
+                                                    )}
                                                     {renglon.es_cortesia && (
                                                         <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black text-emerald-700" title="Cortesía: el renglón se ve en el documento pero no se cobra.">
                                                             CORTESÍA
@@ -835,7 +867,7 @@ export default function EditorPrefactura({ id }: Props) {
                                                     <div className="flex items-center justify-end gap-1">
                                                         <button
                                                             type="button"
-                                                            onClick={() => void cortesia(renglon.id, renglon.nombre_servicio, !renglon.es_cortesia)}
+                                                            onClick={() => void cortesia(renglon.id, renglon.nombre_servicio, !renglon.es_cortesia, renglon.concepto)}
                                                             disabled={ocupado}
                                                             aria-pressed={renglon.es_cortesia}
                                                             title={renglon.es_cortesia ? 'Quitar la cortesía: vuelve a cobrarse' : 'Marcar como cortesía: se ve en el documento pero no se cobra'}
@@ -847,7 +879,7 @@ export default function EditorPrefactura({ id }: Props) {
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            onClick={() => void quitarRenglon(renglon.id, renglon.nombre_servicio)}
+                                                            onClick={() => void quitarRenglon(renglon.id, renglon.nombre_servicio, renglon.concepto)}
                                                             disabled={ocupado}
                                                             title="Quitar"
                                                             aria-label={`Quitar ${renglon.nombre_servicio}`}

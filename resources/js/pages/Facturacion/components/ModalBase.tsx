@@ -14,6 +14,11 @@ interface Props {
     subtitulo: string;
     /** Con cambios sin guardar, Escape y el clic fuera piden confirmación. */
     tieneCambios: boolean;
+    /**
+     * Mientras una petición viaja el diálogo no se puede cerrar (ni con la X, ni con Escape, ni con el clic fuera):
+     * cerrarlo ahí deja la operación hecha y al operador sin ver su resultado.
+     */
+    bloqueado?: boolean;
     onCerrar: () => void;
     /** Clase de ancho máximo de Tailwind. */
     ancho?: string;
@@ -21,14 +26,18 @@ interface Props {
 }
 
 /** Carcasa de los modales de Facturación; mismo aspecto que el de Préstamo de chalecos. */
-export default function ModalBase({ idTitulo, titulo, subtitulo, tieneCambios, onCerrar, ancho = 'max-w-2xl', children }: Props) {
+export default function ModalBase({ idTitulo, titulo, subtitulo, tieneCambios, bloqueado = false, onCerrar, ancho = 'max-w-2xl', children }: Props) {
     const tieneCambiosRef = useRef(tieneCambios);
+    const bloqueadoRef = useRef(bloqueado);
 
     useEffect(() => {
         tieneCambiosRef.current = tieneCambios;
-    }, [tieneCambios]);
+        bloqueadoRef.current = bloqueado;
+    }, [tieneCambios, bloqueado]);
 
     const intentarCerrar = useCallback(async () => {
+        if (bloqueadoRef.current) return;
+
         if (!tieneCambiosRef.current) {
             onCerrar();
             return;
@@ -80,7 +89,7 @@ export default function ModalBase({ idTitulo, titulo, subtitulo, tieneCambios, o
                         <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">{subtitulo}</p>
                     </div>
 
-                    <button type="button" onClick={() => void intentarCerrar()} className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors" aria-label="Cerrar">
+                    <button type="button" onClick={() => void intentarCerrar()} disabled={bloqueado} className="p-2 rounded-full hover:bg-slate-200 text-slate-400 transition-colors disabled:cursor-not-allowed disabled:opacity-40" aria-label="Cerrar">
                         <X size={20} />
                     </button>
                 </div>

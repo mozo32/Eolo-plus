@@ -47,16 +47,20 @@ const enMinuscula = (texto: string): string => texto.charAt(0).toLowerCase() + t
 export default function PanelNotas({ prefactura, onCambio, onError, onPendientes }: Props) {
     const soloLectura = prefactura.estado === 'cerrada' || prefactura.status === 'N';
 
-    const guardadas = notasDe(prefactura);
-    const [previas, setPrevias] = useState<Notas>(guardadas);
-    const [valores, setValores] = useState<Notas>(guardadas);
+    // Lo que llegó en la ficha, y lo que el panel SABE guardado. Normalmente es lo mismo; difieren cuando se guarda bien y la recarga
+    // de la ficha falla: el servidor ya tiene las notas, la ficha en pantalla es vieja, y el panel no debe creer que hay pendientes.
+    const delServidor = notasDe(prefactura);
+    const [previas, setPrevias] = useState<Notas>(delServidor);
+    const [guardadas, setGuardadas] = useState<Notas>(delServidor);
+    const [valores, setValores] = useState<Notas>(delServidor);
     const [errores, setErrores] = useState<Partial<Record<Campo, string>>>({});
     const [guardando, setGuardando] = useState(false);
 
     // Lo guardado cambió (una recarga): lo que no se tocó se pone al día, lo que se está tecleando se conserva.
-    if (!sonIguales(previas, guardadas)) {
-        setPrevias(guardadas);
-        setValores(actual => (sonIguales(actual, previas) ? guardadas : actual));
+    if (!sonIguales(previas, delServidor)) {
+        setPrevias(delServidor);
+        setGuardadas(delServidor);
+        setValores(actual => (sonIguales(actual, guardadas) ? delServidor : actual));
     }
 
     const modificado = !sonIguales(valores, guardadas);
@@ -101,7 +105,10 @@ export default function PanelNotas({ prefactura, onCambio, onError, onPendientes
             const { prefactura: guardada } = await apiPrefacturas.guardarNotas(prefactura.id, cambios);
             // Solo las notas que se mandaron: lo que se esté tecleando en las otras no se pisa. Y con lo que el servidor guardó (recorta espacios).
             const nuevas = notasDe(guardada);
-            setValores(actual => ({ ...actual, ...Object.fromEntries(Object.keys(cambios).map(campo => [campo, nuevas[campo as Campo]])) }));
+            const enviadas = Object.fromEntries(Object.keys(cambios).map(campo => [campo, nuevas[campo as Campo]]));
+            setValores(actual => ({ ...actual, ...enviadas }));
+            // Ya están guardadas aunque la recarga de abajo falle: sin esto el panel seguiría diciendo «Cambios sin guardar» y el editor no dejaría cerrar.
+            setGuardadas(actual => ({ ...actual, ...enviadas }));
             toast.fire({ icon: 'success', titleText: 'Notas guardadas.' });
             await onCambio();
         } catch (error) {

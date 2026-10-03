@@ -131,7 +131,7 @@ export default function ModalPagoAmex({ prefactura, onCerrar, onCambio, onError 
     }
 
     return (
-        <ModalBase idTitulo="titulo-modal-amex" titulo="Pago con Amex" subtitulo="El monto es lo que se carga a la tarjeta" tieneCambios={tieneCambios} onCerrar={onCerrar} ancho="max-w-lg">
+        <ModalBase idTitulo="titulo-modal-amex" titulo="Pago con Amex" subtitulo="El monto es lo que se carga a la tarjeta" tieneCambios={tieneCambios} bloqueado={enviando} onCerrar={onCerrar} ancho="max-w-lg">
             <form onSubmit={registrar} noValidate className="space-y-5">
                 <div className="space-y-3 border bg-slate-50 p-5">
                     <p className="text-[11px] font-semibold text-slate-500">
@@ -162,7 +162,7 @@ export default function ModalPagoAmex({ prefactura, onCerrar, onCambio, onError 
                 )}
 
                 <div className="flex justify-end gap-2">
-                    <button type="button" onClick={onCerrar} className={BOTON_SECUNDARIO}>
+                    <button type="button" onClick={onCerrar} disabled={enviando} className={BOTON_SECUNDARIO}>
                         CANCELAR
                     </button>
                     <button type="submit" disabled={enviando} className={BOTON_PRIMARIO}>
