@@ -13,8 +13,9 @@ function documentoDe(FactPrefactura $p, bool $esCotizacion, string $elaboradoPor
         'esCotizacion' => $esCotizacion,
         'subtotal' => $esCotizacion ? $p->subtotal() : (string) $p->subtotal_sellado,
         'iva' => $esCotizacion ? $p->iva() : (string) $p->iva_sellado,
-        'ivaTasa' => $esCotizacion ? $p->ivaTasa() : (string) $p->iva_tasa_sellada,
+        'ivaEtiqueta' => $p->ivaTasaEtiqueta(),
         'total' => $esCotizacion ? $p->total() : (string) $p->total_sellado,
+        'cambio' => $p->cambio(),
         'elaboradoPor' => $elaboradoPor,
     ])->render();
 }
@@ -30,6 +31,7 @@ test('el documento emitido trae el folio, el total SELLADO y cada renglon', func
     expect($html)->toContain('PREFACTURA DE SERVICIOS')
         ->and($html)->toContain('10000')          // el folio que cerrarConSello pone
         ->and($html)->toContain('2,610.00')       // el total sellado, formateado
+        ->and($html)->toContain('IVA (16%)')
         ->and($html)->not->toContain('COTIZACIÓN');
 
     foreach ($cerrada->renglones as $renglon) {
@@ -61,14 +63,16 @@ test('la vista imprime las cifras que recibe y no las pide al modelo', function 
         'esCotizacion' => false,
         'subtotal' => '1111.11',
         'iva' => '2222.22',
-        'ivaTasa' => '0.3333',
+        'ivaEtiqueta' => '33.33%',
         'total' => '3333.33',
+        'cambio' => '4444.44',
         'elaboradoPor' => 'Ana Pérez',
     ])->render();
 
     expect($html)->toContain('1,111.11')
         ->and($html)->toContain('2,222.22')
-        ->and($html)->toContain('0.3333')
+        ->and($html)->toContain('IVA (33.33%)')
+        ->and($html)->toContain('4,444.44')
         ->and($html)->toContain('3,333.33')
         ->and($html)->not->toContain('1,158.84');
 });
@@ -174,3 +178,14 @@ test('la relacion cerradaPor da el usuario que cerro', function () {
 
     expect($p->fresh()->cerradaPor->name)->toBe($usuario->name);
 });
+
+test('la etiqueta de la tasa es un porcentaje sin ceros de sobra', function (string $tasa, string $etiqueta) {
+    [$p] = prefacturaCompleta(100.0, 1);
+
+    expect(cerrarConSello($p, '100.00', '1.00', '101.00', $tasa)->ivaTasaEtiqueta())->toBe($etiqueta);
+})->with([
+    'dieciseis' => ['0.1600', '16%'],
+    'ocho' => ['0.0800', '8%'],
+    'dieciseis y medio' => ['0.1650', '16.5%'],
+    'cero' => ['0.0000', '0%'],
+]);

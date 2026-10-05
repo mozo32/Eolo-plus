@@ -152,7 +152,20 @@
     </style>
 </head>
 <body>
-    {{-- Esta vista FORMATEA, no calcula: las cifras de totales llegan en el array. --}}
+    {{--
+        Esta vista FORMATEA, no calcula ni llama a métodos de dinero: todo lo que imprime
+        son atributos, relaciones y las ocho claves del array que quien la llama arma
+        (y por eso la excepción de un cálculo no puede nacer aquí, después de su try/catch):
+
+            prefactura   FactPrefactura con renglones, pagos.formaPago, cliente y aeronave
+            esCotizacion bool: COTIZACIÓN sin folio, o documento emitido
+            subtotal     cadena de 2 decimales (sellado o derivado, según el caso)
+            iva          cadena de 2 decimales
+            ivaEtiqueta  la tasa como porcentaje, p. ej. '16%'
+            total        cadena de 2 decimales
+            cambio       cadena de 2 decimales; la línea CAMBIO sale si es mayor que cero
+            elaboradoPor nombre de quien cerró, o de quien imprime
+    --}}
 
     <table>
         <tr>
@@ -259,7 +272,7 @@
             <td class="derecha">{{ number_format($subtotal, 2) }}</td>
         </tr>
         <tr>
-            <td>IVA ({{ $ivaTasa }})</td>
+            <td>IVA ({{ $ivaEtiqueta }})</td>
             <td class="derecha">{{ number_format($iva, 2) }}</td>
         </tr>
         <tr class="total">
@@ -267,11 +280,6 @@
             <td class="derecha">{{ number_format($total, 2) }}</td>
         </tr>
     </table>
-
-    @php
-        // El cambio no viaja en el array: es lo único que la vista pide al modelo.
-        $cambio = $prefactura->cambio();
-    @endphp
 
     <div class="seccion">
         <div class="seccion-titulo">FORMA DE PAGO</div>

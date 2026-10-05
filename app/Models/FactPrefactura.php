@@ -112,6 +112,21 @@ class FactPrefactura extends Model
     }
 
     /**
+     * La tasa como la lleva el papel: `'16%'` para `0.1600`, `'8%'` para `0.0800`,
+     * `'16.5%'` para `0.1650`. Existe porque el documento impreso lleva un porcentaje y
+     * la columna guarda una razón. Sigue a `ivaTasa()`, así que usa la tasa sellada si ya
+     * se cerró y no pasa por `float`. Lanza igual que `ivaTasa()`.
+     */
+    public function ivaTasaEtiqueta(): string
+    {
+        // Con escala 2 `bcmul` siempre devuelve un punto, así que recortar ceros no se
+        // come cifras enteras ('100.00' queda '100').
+        $porcentaje = bcmul($this->ivaTasa(), '100', 2);
+
+        return rtrim(rtrim($porcentaje, '0'), '.').'%';
+    }
+
+    /**
      * Suma de los importes derivados (o el sello, si ya está cerrada). Se suma con
      * bcadd para no pasar por float: cada importe ya viene como cadena de dos
      * decimales.
