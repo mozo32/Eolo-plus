@@ -216,3 +216,141 @@ test('sin el subdepartamento no se agrupa', function () {
     $this->patchJson("/api/facturacion/prefacturas/{$p->id}/renglones/{$renglon->id}/grupo", ['grupo' => 'Rampa'])
         ->assertForbidden();
 });
+
+test('el documento imprime UNA fila por grupo, con la etiqueta y la suma', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    [$p] = prefacturaCompleta(1000.0, 1);
+    $a = renglonDe($p, 100.0, 2);   // 200.00
+    $b = renglonDe($p, 50.0, 1);    // 50.00
+    $a->update(['grupo' => 'Servicios de rampa']);
+    $b->update(['grupo' => 'Servicios de rampa']);
+    $cerrada = cerrarConSello($p->fresh(), '1250.00', '200.00', '1450.00');
+
+    $filas = null;
+    View::composer('pdf.prefactura', function ($vista) use (&$filas) {
+        $filas = $vista->getData()['filas'];
+    });
+
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertOk();
+
+    $grupo = collect($filas)->firstWhere('concepto', 'Servicios de rampa');
+
+    expect($grupo)->not->toBeNull()
+        ->and($grupo['importe'])->toBe('250.00')
+        ->and($grupo['precio'])->toBeNull()
+        ->and($grupo['cantidad'])->toBeNull()
+        ->and($grupo['remision'])->toBeNull()
+        // Los dos renglones agrupados NO salen por su nombre.
+        ->and(collect($filas)->pluck('concepto'))->not->toContain($a->nombre_servicio)
+        ->and(collect($filas)->pluck('concepto'))->not->toContain($b->nombre_servicio)
+        // Y el renglon sin agrupar si.
+        ->and(collect($filas)->pluck('concepto'))->toContain($p->renglones()->whereNull('grupo')->first()->nombre_servicio)
+        // Dos renglones agrupados y uno suelto: tres renglones, DOS filas.
+        ->and($filas)->toHaveCount(2);
+});
+
+test('el grupo ocupa el lugar del orden MENOR de sus renglones', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    $primero = renglonDe($p, 10.0, 1);
+    $segundo = renglonDe($p, 20.0, 1);
+    $tercero = renglonDe($p, 30.0, 1);
+    $primero->update(['orden' => 1, 'nombre_servicio' => 'PRIMERO SUELTO']);
+    $segundo->update(['orden' => 2, 'grupo' => 'EL GRUPO']);
+    $tercero->update(['orden' => 3, 'nombre_servicio' => 'TERCERO SUELTO']);
+
+    $filas = null;
+    View::composer('pdf.prefactura', function ($vista) use (&$filas) {
+        $filas = $vista->getData()['filas'];
+    });
+
+    $this->get("/api/facturacion/prefacturas/{$p->id}/cotizacion")->assertOk();
+
+    expect(collect($filas)->pluck('concepto')->all())->toBe(['PRIMERO SUELTO', 'EL GRUPO', 'TERCERO SUELTO']);
+});
+
+test('el grupo con renglones antes y despues de uno suelto sale en el lugar del PRIMERO, y suma los dos', function () {
+    // Con un solo renglon por grupo, «el lugar del primero» y «el lugar del ultimo» son el
+    // mismo, y la prueba de arriba no los distingue. Aqui el grupo rodea a un renglon suelto.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    $alInicio = renglonDe($p, 10.0, 1);
+    $suelto = renglonDe($p, 20.0, 1);
+    $alFinal = renglonDe($p, 30.0, 1);
+    $ultimoSuelto = renglonDe($p, 40.0, 1);
+    $alInicio->update(['orden' => 1, 'grupo' => 'EL GRUPO']);
+    $suelto->update(['orden' => 2, 'nombre_servicio' => 'SUELTO UNO']);
+    $alFinal->update(['orden' => 3, 'grupo' => 'EL GRUPO']);
+    $ultimoSuelto->update(['orden' => 4, 'nombre_servicio' => 'SUELTO DOS']);
+
+    $filas = null;
+    View::composer('pdf.prefactura', function ($vista) use (&$filas) {
+        $filas = $vista->getData()['filas'];
+    });
+
+    $this->get("/api/facturacion/prefacturas/{$p->id}/cotizacion")->assertOk();
+
+    expect(collect($filas)->pluck('concepto')->all())->toBe(['EL GRUPO', 'SUELTO UNO', 'SUELTO DOS'])
+        // El renglon que va DESPUES del suelto tambien cuenta para la suma.
+        ->and($filas[0]['importe'])->toBe('40.00');
+});
+
+test('una cortesia dentro de un grupo contribuye cero a la suma', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    $cobrado = renglonDe($p, 100.0, 1);
+    $gratis = renglonDe($p, 300.0, 1);
+    $cobrado->update(['grupo' => 'Rampa']);
+    $gratis->update(['grupo' => 'Rampa', 'es_cortesia' => true]);
+
+    $filas = null;
+    View::composer('pdf.prefactura', function ($vista) use (&$filas) {
+        $filas = $vista->getData()['filas'];
+    });
+
+    $this->get("/api/facturacion/prefacturas/{$p->id}/cotizacion")->assertOk();
+
+    $grupo = collect($filas)->firstWhere('concepto', 'Rampa');
+
+    expect($grupo['importe'])->toBe('100.00')
+        // La marca describe un renglon, no una suma.
+        ->and($grupo['cortesia'])->toBeFalse();
+});
+
+test('dos grupos distintos salen como dos filas', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    renglonDe($p, 100.0, 1)->update(['grupo' => 'Rampa']);
+    renglonDe($p, 200.0, 1)->update(['grupo' => 'Maniobras']);
+
+    $filas = null;
+    View::composer('pdf.prefactura', function ($vista) use (&$filas) {
+        $filas = $vista->getData()['filas'];
+    });
+
+    $this->get("/api/facturacion/prefacturas/{$p->id}/cotizacion")->assertOk();
+
+    expect(collect($filas)->pluck('concepto')->sort()->values()->all())->toBe(['Maniobras', 'Rampa'])
+        ->and(collect($filas)->firstWhere('concepto', 'Rampa')['importe'])->toBe('100.00')
+        ->and(collect($filas)->firstWhere('concepto', 'Maniobras')['importe'])->toBe('200.00');
+});
+
+test('la suma de las filas sigue cuadrando con el subtotal', function () {
+    // La prueba que amarra el invariante al documento: agrupar no puede desviar el papel.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    renglonDe($p, 100.0, 2)->update(['grupo' => 'Rampa']);
+    renglonDe($p, 50.0, 1)->update(['grupo' => 'Rampa']);
+    renglonDe($p, 33.33, 3);
+
+    $filas = null;
+    View::composer('pdf.prefactura', function ($vista) use (&$filas) {
+        $filas = $vista->getData()['filas'];
+    });
+
+    $this->get("/api/facturacion/prefacturas/{$p->id}/cotizacion")->assertOk();
+
+    $suma = collect($filas)->reduce(fn ($acc, $f) => bcadd($acc, $f['importe'], 2), '0.00');
+
+    expect($suma)->toBe($p->fresh()->subtotal());
+});

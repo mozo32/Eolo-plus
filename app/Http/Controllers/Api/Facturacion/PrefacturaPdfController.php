@@ -6,7 +6,6 @@ use App\Http\Controllers\Api\Facturacion\Concerns\RechazaPrefacturaCerrada;
 use App\Http\Controllers\Controller;
 use App\Models\Bitacora;
 use App\Models\FactPrefactura;
-use App\Models\FactPrefacturaRenglon;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -170,6 +169,19 @@ class PrefacturaPdfController extends Controller
     /**
      * Las filas del documento, ya resueltas, en el orden en que se imprimen.
      *
+     * Un renglón sin grupo es una fila. Los renglones que comparten etiqueta de `grupo` se
+     * colapsan en UNA fila con la etiqueta como concepto, sin precio, cantidad ni remisión
+     * (no hay un valor que valga para el conjunto) y con la suma de sus importes, hecha con
+     * `bcadd` porque `array_sum` pasaría por `float`. Es solo presentación: el subtotal
+     * sigue sumando el `importe()` de cada renglón, y esta suma no entra en ninguna cifra.
+     *
+     * Un renglón en cortesía aporta `0.00` a su grupo, y la fila del grupo no lleva la marca
+     * «Cortesía»: esa marca describe un renglón, no una suma.
+     *
+     * El grupo ocupa el lugar de su renglón de `orden` MENOR. Los renglones ya llegan
+     * ordenados por `orden` y luego `id`, así que basta emitir el grupo la PRIMERA vez que
+     * aparece; ordenar aparte, o emitirlo en su última aparición, lo movería de sitio.
+     *
      * Las dos cosas que la hacen segura, y que no se pueden cambiar sin romper un
      * invariante del bloque 4:
      *
@@ -185,17 +197,40 @@ class PrefacturaPdfController extends Controller
      */
     private function filasDe(FactPrefactura $prefactura): array
     {
-        return $prefactura->renglones
-            ->map(fn (FactPrefacturaRenglon $renglon) => [
-                'concepto' => $renglon->nombre_servicio,
-                'cortesia' => (bool) $renglon->es_cortesia,
-                'remision' => $renglon->remision,
-                'precio' => (string) $renglon->precio_unitario,
-                'cantidad' => $renglon->cantidad,
-                'importe' => $renglon->importe(),
-            ])
-            ->values()
-            ->all();
+        $filas = [];
+        $lugarDelGrupo = [];
+
+        foreach ($prefactura->renglones as $renglon) {
+            if ($renglon->grupo === null) {
+                $filas[] = [
+                    'concepto' => $renglon->nombre_servicio,
+                    'cortesia' => (bool) $renglon->es_cortesia,
+                    'remision' => $renglon->remision,
+                    'precio' => (string) $renglon->precio_unitario,
+                    'cantidad' => $renglon->cantidad,
+                    'importe' => $renglon->importe(),
+                ];
+
+                continue;
+            }
+
+            if (! isset($lugarDelGrupo[$renglon->grupo])) {
+                $lugarDelGrupo[$renglon->grupo] = count($filas);
+                $filas[] = [
+                    'concepto' => $renglon->grupo,
+                    'cortesia' => false,
+                    'remision' => null,
+                    'precio' => null,
+                    'cantidad' => null,
+                    'importe' => '0.00',
+                ];
+            }
+
+            $lugar = $lugarDelGrupo[$renglon->grupo];
+            $filas[$lugar]['importe'] = bcadd($filas[$lugar]['importe'], $renglon->importe(), 2);
+        }
+
+        return $filas;
     }
 
     /** Arma el PDF. La plantilla solo formatea: las cifras llegan ya calculadas. */
