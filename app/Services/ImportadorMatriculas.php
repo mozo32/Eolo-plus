@@ -51,7 +51,9 @@ class ImportadorMatriculas
 
     /**
      * Ids del origen que llevan concepto. Son estables: el sistema viejo los usa
-     * hardcodeados (`$id_servicio=7`, `$Permocta=4`, `$trans2h=2`, `$trans12h=3`).
+     * hardcodeados (`$id_servicio=7`, `$Permocta=4`, `$trans2h=2`, `$trans12h=3`), y
+     * `insert_ajusteestancia.php` compara los dos de ajuste de estancia por su id literal
+     * (`if ($ajuste==110)`, `elseif($ajuste==109)`).
      *
      * @var array<int,string>
      */
@@ -61,6 +63,8 @@ class ImportadorMatriculas
         3 => FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H,
         4 => FactServicio::CONCEPTO_ESTANCIA_PERNOCTA,
         100 => FactServicio::CONCEPTO_COMISION_AMEX,
+        109 => FactServicio::CONCEPTO_ESTANCIA_AJUSTE_2H_12H,
+        110 => FactServicio::CONCEPTO_ESTANCIA_AJUSTE_12H_PERNOCTA,
     ];
 
     /**

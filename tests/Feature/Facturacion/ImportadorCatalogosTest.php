@@ -959,3 +959,32 @@ test('la busqueda del concepto normaliza el nombre igual que la creacion: espaci
         // Solo los dos de espacios raros, uno por fila: no se emiten dos veces.
         ->and(collect($resultado->hallazgos)->filter(fn ($h) => str_contains($h, 'espacios raros'))->count())->toBe(2);
 });
+
+test('el importador asigna el concepto a los dos servicios de ajuste de estancia, y reimportar no los duplica', function () {
+    // Sin esto el ajuste de estancia no funciona en una instalacion real: la migracion que
+    // asigna estos conceptos corre una sola vez y, si se migra antes de importar, no ve nada.
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 109, 'servicio' => 'Ajuste de Estancia_de 2 hrs a 12 hrs', 'precio_u' => '0.0000', 'id_categorias' => 1],
+        ['id_servicio' => 110, 'servicio' => 'Ajuste de Estancia_de 12 hrs a pernocta', 'precio_u' => '0.0000', 'id_categorias' => 1],
+    ]);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactServicio::porConcepto(FactServicio::CONCEPTO_ESTANCIA_AJUSTE_2H_12H)->sole()->nombre)->toBe('Ajuste de Estancia_de 2 hrs a 12 hrs')
+        ->and(FactServicio::porConcepto(FactServicio::CONCEPTO_ESTANCIA_AJUSTE_12H_PERNOCTA)->sole()->nombre)->toBe('Ajuste de Estancia_de 12 hrs a pernocta')
+        ->and(FactServicio::count())->toBe(2);
+});
+
+test('si la migracion de los conceptos de ajuste ya los asigno, reimportar los reconoce y no inserta copias', function () {
+    FactServicio::create(['nombre' => 'Ajuste de Estancia_de 2 hrs a 12 hrs', 'precio_unitario' => 0, 'concepto' => FactServicio::CONCEPTO_ESTANCIA_AJUSTE_2H_12H]);
+    FactServicio::create(['nombre' => 'Ajuste de Estancia_de 12 hrs a pernocta', 'precio_unitario' => 0, 'concepto' => FactServicio::CONCEPTO_ESTANCIA_AJUSTE_12H_PERNOCTA]);
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 109, 'servicio' => 'Ajuste de Estancia_de 2 hrs a 12 hrs', 'precio_u' => '0.0000', 'id_categorias' => 1],
+        ['id_servicio' => 110, 'servicio' => 'Ajuste de Estancia_de 12 hrs a pernocta', 'precio_u' => '0.0000', 'id_categorias' => 1],
+    ]);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactServicio::count())->toBe(2);
+});
