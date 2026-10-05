@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\FactConfiguracion;
 use App\Models\FactPrefactura;
 use App\Models\FactServicio;
 
@@ -99,7 +100,9 @@ test('un renglon de cortesia sale con su precio y el importe en cero, marcado', 
     // El documento tiene que mostrar QUE se dejo de cobrar, no esconderlo.
     expect($html)->toContain('300.0000')     // el precio unitario sigue visible
         ->and($html)->toContain('Cortesía')
-        ->and($html)->toContain('0.00');
+        ->and($html)->toContain('0.00')
+        // 300 x 2: el importe que la cortesía suprime no puede salir en ningun sitio.
+        ->and($html)->not->toContain('600.00');
 });
 
 test('el renglon de comision Amex se identifica en el documento', function () {
@@ -169,7 +172,19 @@ test('el pie trae el aviso de las 72 horas y el de privacidad, literales', funct
 
     expect($html)->toContain('72 horas naturales')
         ->and($html)->toContain('MXN $250.00 + IVA')
-        ->and($html)->toContain('eolo.com.mx/#/privacidad');
+        ->and($html)->toContain('eolo.com.mx/#/privacidad')
+        ->and($html)->toContain('solicitar su factura fiscal')
+        ->and($html)->toContain('Contacto: facturacion@eolo.com.mx');
+
+    // El texto ENTERO, sin que los saltos de linea del fuente cuenten.
+    $plano = preg_replace('/\s+/', ' ', strip_tags(str_replace('<br>', ' ', $html)));
+
+    expect($plano)->toContain(
+        'Estimado cliente, usted cuenta con un máximo de 72 horas naturales posteriores a la fecha '
+        .'de emisión de esta prefactura para solicitar su factura fiscal. Tarifa de refacturación: '
+        .'MXN $250.00 + IVA. Contacto: facturacion@eolo.com.mx '
+        .'Revisa Nuestro Aviso de Privacidad https://www.eolo.com.mx/#/privacidad'
+    );
 });
 
 test('la relacion cerradaPor da el usuario que cerro', function () {
@@ -189,3 +204,10 @@ test('la etiqueta de la tasa es un porcentaje sin ceros de sobra', function (str
     'dieciseis y medio' => ['0.1650', '16.5%'],
     'cero' => ['0.0000', '0%'],
 ]);
+
+test('la etiqueta de la tasa de un borrador sigue la tasa vigente de fact_configuracion', function () {
+    // Sin sello la etiqueta sale de la configuracion, no de una columna sellada.
+    FactConfiguracion::updateOrCreate(['clave' => 'iva_tasa'], ['valor' => '0.08', 'descripcion' => 'Tasa de IVA']);
+
+    expect(prefacturaBorrador()->ivaTasaEtiqueta())->toBe('8%');
+});
