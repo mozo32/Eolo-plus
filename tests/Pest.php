@@ -273,8 +273,8 @@ function cerrarConSello(App\Models\FactPrefactura $p, string $subtotal, string $
 }
 
 /**
- * Las siete formas de pago del catálogo, con el concepto de las tres que el
- * código reconoce. Devuelve [concepto o nombre => modelo] para poder tomar una
+ * Las ocho formas de pago del catálogo, con el concepto de las cuatro que lo
+ * tienen. Devuelve [concepto o nombre => modelo] para poder tomar una
  * por su concepto sin otra consulta.
  *
  * @return array<string, App\Models\FactFormaPago>
@@ -289,6 +289,7 @@ function formasDePago(): array
         'AvCard by WFS' => App\Models\FactFormaPago::CONCEPTO_AVCARD,
         'Transferencia' => null,
         'Tarjeta Remota' => null,
+        'Saldo a favor' => App\Models\FactFormaPago::CONCEPTO_SALDO_A_FAVOR,
     ];
 
     $formas = [];
