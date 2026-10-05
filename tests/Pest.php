@@ -249,8 +249,14 @@ function conEstancia(string $estatus = App\Models\FactAeronave::ESTATUS_TRANSITO
 /**
  * Cierra a mano una prefactura con el sello indicado (sin pasar por el servicio de
  * cierre de la Task 4): sirve para probar la rama sellada.
+ *
+ * Pone TAMBIÉN `cerrada_at` y `cerrada_por`, como lo hace el cierre de verdad. Si no los
+ * pusiera, todo papel de prueba saldría con `Fecha: —` y `Elaborado por: Sin registrar`, y
+ * ninguna prueba distinguiría el nombre de quien cerró del de quien imprime, ni la fecha de
+ * cierre de la de hoy: es el hueco que este ayudante ya produjo una vez. `$cierra` es quien
+ * cierra; por omisión, quien creó la prefactura.
  */
-function cerrarConSello(App\Models\FactPrefactura $p, string $subtotal, string $iva, string $total, string $tasa = '0.1600'): App\Models\FactPrefactura
+function cerrarConSello(App\Models\FactPrefactura $p, string $subtotal, string $iva, string $total, string $tasa = '0.1600', ?App\Models\User $cierra = null): App\Models\FactPrefactura
 {
     $p->update([
         'estado' => App\Models\FactPrefactura::ESTADO_CERRADA,
@@ -259,6 +265,8 @@ function cerrarConSello(App\Models\FactPrefactura $p, string $subtotal, string $
         'iva_sellado' => $iva,
         'total_sellado' => $total,
         'iva_tasa_sellada' => $tasa,
+        'cerrada_at' => now(),
+        'cerrada_por' => $cierra?->id ?? $p->user_id,
     ]);
 
     return $p->fresh();

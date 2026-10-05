@@ -560,6 +560,13 @@ export default function EditorPrefactura({ id }: Props) {
         }
     };
 
+    /** Reimprimir es volver a pedir el documento: se abre en una pestaña y, si el navegador la bloquea, se avisa como en COTIZAR y en «Cerrar e imprimir». */
+    const imprimir = () => {
+        if (window.open(urlDocumentoPrefactura(prefactura.id), '_blank') === null) {
+            toast.fire({ icon: 'warning', titleText: 'No se pudo abrir el documento: el navegador bloqueó la ventana. Permite las ventanas emergentes de este sitio.', timer: 8000 });
+        }
+    };
+
     /**
      * El cierre: sus diálogos (cambios sin guardar, confirmación, faltante) y la llamada al servidor. Lo usan «Cerrar prefactura» y
      * «Cerrar e imprimir». Dos ganchos para esta última:
@@ -1025,7 +1032,7 @@ export default function EditorPrefactura({ id }: Props) {
                                     )}
                                     <button
                                         type="button"
-                                        onClick={() => window.open(urlDocumentoPrefactura(prefactura.id), '_blank')}
+                                        onClick={imprimir}
                                         disabled={motivoSinImprimir !== null}
                                         title={motivoSinImprimir ?? 'Abre el documento en una pestaña nueva.'}
                                         className={BOTON_PRIMARIO}

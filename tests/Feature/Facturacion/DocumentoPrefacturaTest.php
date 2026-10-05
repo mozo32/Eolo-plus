@@ -1,9 +1,12 @@
 <?php
 
+use App\Models\FactAeronave;
+use App\Models\FactCategoriaAeronave;
 use App\Models\FactConfiguracion;
 use App\Models\FactPrefactura;
 use App\Models\FactPrefacturaRenglon;
 use App\Models\FactServicio;
+use App\Models\TipoAeronave;
 
 /** Los importes de los renglones, como quien llama los arma: por id, sobre la coleccion cargada. */
 function importesDe(FactPrefactura $p): array
@@ -16,7 +19,7 @@ function importesDe(FactPrefactura $p): array
 /** El HTML que la plantilla genera para una prefactura. */
 function documentoDe(FactPrefactura $p, bool $esCotizacion, string $elaboradoPor = 'Ana Pérez'): string
 {
-    $p = $p->fresh(['renglones', 'pagos.formaPago', 'cliente', 'aeronave']);
+    $p = $p->fresh(['renglones', 'pagos.formaPago', 'cliente', 'aeronave.tipoAeronave', 'satelite.categoria']);
 
     return view('pdf.prefactura', [
         'prefactura' => $p,
@@ -29,6 +32,26 @@ function documentoDe(FactPrefactura $p, bool $esCotizacion, string $elaboradoPor
         'importes' => importesDe($p),
         'elaboradoPor' => $elaboradoPor,
     ])->render();
+}
+
+/** Una categoria de aeronave: la tabla exige las tres tarifas, que aqui no importan. */
+function categoriaDeAeronave(string $nombre): FactCategoriaAeronave
+{
+    return FactCategoriaAeronave::create([
+        'nombre' => $nombre, 'tarifa_pernocta' => 1.0, 'tarifa_transito_2h' => 1.0, 'tarifa_transito_12h' => 1.0,
+    ]);
+}
+
+/** La fila `<tr>` del documento que contiene el texto dado: ata una celda a SU renglon y no a la pagina entera. */
+function filaDelDocumento(string $html, string $texto): string
+{
+    preg_match_all('#<tr[^>]*>.*?</tr>#s', $html, $filas);
+
+    $coinciden = array_values(array_filter($filas[0], fn (string $fila) => str_contains($fila, $texto)));
+
+    expect($coinciden)->toHaveCount(1);
+
+    return $coinciden[0];
 }
 
 test('el documento emitido trae el folio, el total SELLADO y cada renglon', function () {
@@ -103,17 +126,31 @@ test('la cotizacion dice COTIZACION, no trae folio y avisa de que no esta emitid
 
 test('un renglon de cortesia sale con su precio y el importe en cero, marcado', function () {
     $p = prefacturaBorrador();
-    $renglon = renglonDe($p, 300.0, 2);
-    $renglon->update(['es_cortesia' => true]);
+    $cortesia = renglonDe($p, 300.0, 2);
+    $cortesia->update(['es_cortesia' => true]);
+    // Un segundo renglon COBRABLE: con la cortesia como unico renglon, subtotal, IVA y total valen
+    // '0.00' y la plantilla los imprime en las tres filas de totales, asi que un `0.00` suelto lo
+    // satisfaria el bloque de totales pase lo que pase en la celda del renglon. El importe y los
+    // totales de este (123.45, 19.75, 143.20) no contienen `0.00`.
+    $cobrable = renglonDe($p, 123.45, 1);
 
     $html = documentoDe($p->fresh(), esCotizacion: true);
 
+    // Se afirma sobre la FILA de cada renglon y sobre la celda exacta: `0.00` suelto aparece tambien
+    // dentro del precio `300.0000`, y `<td class="derecha">0.00</td>` solo lo produce un importe en cero.
+    $filaCortesia = filaDelDocumento($html, '(Cortesía)');
+    $filaCobrable = filaDelDocumento($html, $cobrable->nombre_servicio);
+
     // El documento tiene que mostrar QUE se dejo de cobrar, no esconderlo.
-    expect($html)->toContain('300.0000')     // el precio unitario sigue visible
-        ->and($html)->toContain('Cortesía')
-        ->and($html)->toContain('0.00')
-        // 300 x 2: el importe que la cortesía suprime no puede salir en ningun sitio.
-        ->and($html)->not->toContain('600.00');
+    expect($filaCortesia)->toContain('<td class="derecha">300.0000</td>')   // el precio unitario sigue visible
+        ->and($filaCortesia)->toContain('<td class="derecha">0.00</td>')    // y el importe, en cero
+        // 300 x 2: el importe que la cortesia suprime no puede salir en ningun sitio.
+        ->and($html)->not->toContain('600.00')
+        // El cobrable conserva su importe: una celda que imprimiera cero para todos no pasa.
+        ->and($filaCobrable)->toContain('<td class="derecha">123.45</td>')
+        ->and($filaCobrable)->not->toContain('<td class="derecha">0.00</td>')
+        // Los totales no son cero: el `0.00` de la cortesia ya no puede venir de ellos.
+        ->and($html)->toContain('143.20');
 });
 
 test('el renglon de comision Amex se identifica en el documento', function () {
@@ -267,3 +304,64 @@ test('una clave que falte en importes revienta y no imprime un cero', function (
         'elaboradoPor' => 'Ana Pérez',
     ])->render())->toThrow(ErrorException::class, 'Undefined array key');
 });
+
+test('DATOS DE OPERACION y DETALLES DEL CLIENTE imprimen cada dato en SU etiqueta', function () {
+    // Ninguna prueba afirmaba sobre estos dos bloques, y por eso la aeronave faltó cinco
+    // revisiones. Cada valor es distintivo (no sale en los totales, en el folio ni en otro
+    // campo) y se afirma junto a su etiqueta, para que dos campos cambiados de sitio fallen.
+    [$p] = prefacturaCompleta(100.0, 1);
+    $tipo = TipoAeronave::create(['nombre' => 'Gulfstream G550 Ultra']);
+    $categoria = categoriaDeAeronave('Jet Ejecutivo Pesado');
+    $p->aeronave->update(['aeronave_id' => $tipo->id]);
+    FactAeronave::where('aeronave_id', $p->aeronave_id)->update(['categoria_aeronave_id' => $categoria->id]);
+    $p->cliente->update(['nombre' => 'Aerolineas Zafiro SA', 'telefono' => '722-555-0147', 'correo' => 'cuentas@zafiro-aero.example']);
+    $p->update([
+        'llegada_at' => '2026-04-17 08:15:00',
+        'salida_at' => '2026-04-18 16:40:00',
+        'origen' => 'MMTO Toluca',
+        'destino' => 'KTEB Teterboro',
+    ]);
+    $cerrada = cerrarConSello($p->fresh(), '100.00', '16.00', '116.00');
+
+    $html = documentoDe($cerrada, esCotizacion: false);
+
+    expect($html)->toContain('Matrícula:</span> '.$cerrada->aeronave->matricula)
+        ->and($html)->toContain('Aeronave:</span> Gulfstream G550 Ultra (Jet Ejecutivo Pesado)')
+        ->and($html)->toContain('Llegada:</span> 17/04/2026 08:15')
+        ->and($html)->toContain('Salida:</span> 18/04/2026 16:40')
+        ->and($html)->toContain('Origen:</span> MMTO Toluca')
+        ->and($html)->toContain('Destino:</span> KTEB Teterboro')
+        ->and($html)->toContain('Nombre:</span> Aerolineas Zafiro SA')
+        ->and($html)->toContain('Teléfono:</span> 722-555-0147')
+        ->and($html)->toContain('Correo:</span> cuentas@zafiro-aero.example');
+});
+
+test('lo que falte en esos dos bloques sale como un guion, sin reventar', function () {
+    // Un borrador recien creado no trae cliente, fechas, origen ni destino, y su aeronave no
+    // tiene tipo ni categoria.
+    $html = documentoDe(prefacturaBorrador(), esCotizacion: true);
+
+    foreach (['Aeronave', 'Llegada', 'Salida', 'Origen', 'Destino', 'Nombre', 'Teléfono', 'Correo'] as $etiqueta) {
+        expect($html)->toContain($etiqueta.':</span> —</td>');
+    }
+});
+
+test('la aeronave tolera que falte el tipo o la categoria', function (bool $conTipo, bool $conCategoria, string $esperado) {
+    $p = prefacturaBorrador();
+
+    if ($conTipo) {
+        $p->aeronave->update(['aeronave_id' => TipoAeronave::create(['nombre' => 'Cessna Citation'])->id]);
+    }
+
+    if ($conCategoria) {
+        FactAeronave::where('aeronave_id', $p->aeronave_id)
+            ->update(['categoria_aeronave_id' => categoriaDeAeronave('Jet Ligero')->id]);
+    }
+
+    expect(documentoDe($p, esCotizacion: true))->toContain('Aeronave:</span> '.$esperado.'</td>');
+})->with([
+    'los dos' => [true, true, 'Cessna Citation (Jet Ligero)'],
+    'solo el tipo' => [true, false, 'Cessna Citation'],
+    'solo la categoria' => [false, true, '— (Jet Ligero)'],
+    'ninguno' => [false, false, '—'],
+]);

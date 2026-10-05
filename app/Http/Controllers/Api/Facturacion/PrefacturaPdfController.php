@@ -38,7 +38,7 @@ class PrefacturaPdfController extends Controller
      */
     public function pdf(Request $request, int $id): Response|JsonResponse
     {
-        $prefactura = FactPrefactura::with(['renglones', 'pagos.formaPago', 'cliente', 'aeronave', 'cerradaPor'])
+        $prefactura = FactPrefactura::with(['renglones', 'pagos.formaPago', 'cliente', 'aeronave.tipoAeronave', 'satelite.categoria', 'cerradaPor'])
             ->findOrFail($id);
 
         if ($respuesta = $this->rechazarSiDescartada($prefactura)) {
@@ -116,7 +116,7 @@ class PrefacturaPdfController extends Controller
      */
     public function cotizacion(Request $request, int $id): Response|JsonResponse
     {
-        $prefactura = FactPrefactura::with(['renglones', 'pagos.formaPago', 'cliente', 'aeronave'])
+        $prefactura = FactPrefactura::with(['renglones', 'pagos.formaPago', 'cliente', 'aeronave.tipoAeronave', 'satelite.categoria'])
             ->findOrFail($id);
 
         if ($respuesta = $this->rechazarSiDescartada($prefactura)) {

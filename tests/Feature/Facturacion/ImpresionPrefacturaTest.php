@@ -3,8 +3,10 @@
 use App\Models\Bitacora;
 use App\Models\FactConfiguracion;
 use App\Models\FactPrefactura;
+use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\View;
 
@@ -244,6 +246,95 @@ test('reimprimir dos veces NO duplica nada, da el mismo documento y deja dos ent
     expect(Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)
         ->where('accion', Bitacora::ACCION_EXPORTAR)->where('registro_id', $cerrada->id)->count())->toBe(2);
 });
+
+/** Las nueve claves del contrato de la plantilla, tal como las recibe, mas `cargadas`: las relaciones que traia cargadas. */
+function capturarLoQueRecibeLaVista(array &$recibido): void
+{
+    View::composer('pdf.prefactura', function ($vista) use (&$recibido) {
+        $recibido = Arr::only($vista->getData(), ['prefactura', 'esCotizacion', 'subtotal', 'iva', 'ivaEtiqueta', 'total', 'cambio', 'importes', 'elaboradoPor']);
+
+        // Que relaciones traia YA cargadas, medido ANTES de que la plantilla se evalue: una relacion
+        // que la plantilla cargara de forma perezosa quedaria cargada despues y no se veria.
+        $prefactura = $recibido['prefactura'];
+        $recibido['cargadas'] = [
+            'aeronave' => $prefactura->relationLoaded('aeronave'),
+            'aeronave.tipoAeronave' => $prefactura->relationLoaded('aeronave') && $prefactura->aeronave->relationLoaded('tipoAeronave'),
+            'satelite' => $prefactura->relationLoaded('satelite'),
+            'satelite.categoria' => $prefactura->relationLoaded('satelite') && $prefactura->satelite->relationLoaded('categoria'),
+        ];
+    });
+}
+
+test('el papel trae el nombre de QUIEN CERRO y la fecha de CIERRE, no los de quien imprime ni los de hoy', function () {
+    // Dos usuarios distintos y dos fechas distintas: con un solo usuario, o con el reloj sin
+    // mover, `$request->user()->name` y `now()` darian lo mismo que el dato correcto y esta
+    // prueba no distinguiria el papel nuevo del literal «AJE» del viejo.
+    $cierra = User::factory()->create(['name' => 'Rosa Cerradora']);
+    $imprime = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $imprime->update(['name' => 'Ivan Impresor']);
+    $this->actingAs($imprime);
+
+    [$p] = prefacturaCompleta(100.0, 1);
+    $this->travelTo(Carbon::parse('2026-03-14 10:30:00'));
+    $cerrada = cerrarConSello($p, '100.00', '16.00', '116.00', cierra: $cierra);
+    $this->travelTo(Carbon::parse('2026-03-20 18:00:00'));
+
+    $recibido = [];
+    capturarLoQueRecibeLaVista($recibido);
+
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertOk();
+
+    // La clave que el controlador arma, y lo que la plantilla hace con ella y con la prefactura.
+    $papel = view('pdf.prefactura', $recibido)->render();
+
+    expect($recibido['elaboradoPor'])->toBe('Rosa Cerradora')
+        ->and($papel)->toContain('Elaborado por: Rosa Cerradora')
+        ->and($papel)->not->toContain('Ivan Impresor')
+        ->and($papel)->toContain('Fecha:</span> 14/03/2026')      // la del cierre
+        ->and($papel)->not->toContain('20/03/2026')               // no la de hoy
+        ->and($papel)->not->toContain($cerrada->created_at->format('d/m/Y'));  // ni la de creacion
+});
+
+test('una cerrada sin quien la cerro (un legado) dice Sin registrar y no el nombre de quien imprime', function () {
+    $imprime = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $imprime->update(['name' => 'Ivan Impresor']);
+    $this->actingAs($imprime);
+    [$p] = prefacturaCompleta(100.0, 1);
+    $cerrada = cerrarConSello($p, '100.00', '16.00', '116.00');
+    DB::table('fact_prefacturas')->where('id', $cerrada->id)->update(['cerrada_por' => null]);
+
+    $recibido = [];
+    capturarLoQueRecibeLaVista($recibido);
+
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertOk();
+
+    expect($recibido['elaboradoPor'])->toBe('Sin registrar');
+});
+
+test('las dos acciones cargan la aeronave con su tipo y su categoria: la vista no consulta', function (string $ruta) {
+    // `cerrada` y `borrador` solo se distinguen por la ruta: cada una arma su propio `with()`.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    if ($ruta === 'pdf') {
+        [$p] = prefacturaCompleta(100.0, 1);
+        $p = cerrarConSello($p, '100.00', '16.00', '116.00');
+    } else {
+        $p = prefacturaBorrador();
+        renglonDe($p, 100.0, 1);
+    }
+
+    $recibido = [];
+    capturarLoQueRecibeLaVista($recibido);
+
+    $this->get("/api/facturacion/prefacturas/{$p->id}/{$ruta}")->assertOk();
+
+    expect($recibido['cargadas'])->toBe([
+        'aeronave' => true,
+        'aeronave.tipoAeronave' => true,
+        'satelite' => true,
+        'satelite.categoria' => true,
+    ]);
+})->with(['pdf', 'cotizacion']);
 
 test('si el PDF no se puede armar, no queda en la bitacora un documento que no salio', function () {
     // Renderizar va ANTES de registrar: si DomPDF falla, no debe quedar un «se imprimio»

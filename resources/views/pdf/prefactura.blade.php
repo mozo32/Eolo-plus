@@ -166,7 +166,10 @@
 
         Las nueve claves:
 
-            prefactura   FactPrefactura con renglones, pagos.formaPago, cliente y aeronave
+            prefactura   FactPrefactura con renglones, pagos.formaPago, cliente,
+                         aeronave.tipoAeronave y satelite.categoria (la categoría vive en
+                         FactAeronave, que la prefactura llama `satelite`); quien llama las
+                         carga con `with`, para que la vista no dispare una consulta
             esCotizacion bool: COTIZACIÓN sin folio, o documento emitido
             subtotal     cadena de 2 decimales (sellado o derivado, según el caso)
             iva          cadena de 2 decimales
@@ -230,6 +233,13 @@
     @php
         // La fecha del documento: cuando se cerró si está emitido, hoy si es cotización.
         $fechaDocumento = $esCotizacion ? now() : $prefactura->cerrada_at;
+
+        // La aeronave, con la forma del documento viejo: el tipo y, entre paréntesis, la categoría.
+        // Los dos pueden faltar (una matrícula nueva no los tiene hasta que alguien los captura): el
+        // tipo ausente sale como «—» y la categoría ausente simplemente no se imprime.
+        $tipoAeronave = $prefactura->aeronave?->tipoAeronave?->nombre ?: '—';
+        $categoriaAeronave = $prefactura->satelite?->categoria?->nombre;
+        $aeronaveTexto = $tipoAeronave.($categoriaAeronave ? ' ('.$categoriaAeronave.')' : '');
     @endphp
 
     <div class="seccion">
@@ -238,6 +248,9 @@
             <tr>
                 <td><span class="etiqueta">Matrícula:</span> {{ $prefactura->aeronave?->matricula ?: '—' }}</td>
                 <td><span class="etiqueta">Fecha:</span> {{ $fechaDocumento?->format('d/m/Y') ?? '—' }}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><span class="etiqueta">Aeronave:</span> {{ $aeronaveTexto }}</td>
             </tr>
             <tr>
                 <td><span class="etiqueta">Llegada:</span> {{ $prefactura->llegada_at?->format('d/m/Y H:i') ?? '—' }}</td>
