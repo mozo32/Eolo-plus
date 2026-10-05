@@ -259,6 +259,187 @@ test('si el PDF no se puede armar, no queda en la bitacora un documento que no s
     expect(Bitacora::where('accion', Bitacora::ACCION_EXPORTAR)->count())->toBe(0);
 });
 
+test('la cotizacion de un borrador se descarga como PDF', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    renglonDe($p, 500.0, 1);
+
+    $respuesta = $this->get("/api/facturacion/prefacturas/{$p->id}/cotizacion");
+
+    $respuesta->assertOk()->assertHeader('content-type', 'application/pdf');
+    // getContent() y no streamedContent(): DomPDF devuelve una Response normal, no una
+    // StreamedResponse, asi que streamedContent() no sirve aqui.
+    expect(substr($respuesta->getContent(), 0, 5))->toBe('%PDF-');
+});
+
+test('la cotizacion muestra las cifras DERIVADAS, sin folio y marcada como cotizacion', function () {
+    // Un borrador no tiene sello: si `cotizacion()` leyera las cifras selladas, la hoja
+    // saldria con cadenas vacias. Se comparan las cifras que la plantilla recibe, que son lo
+    // estable; el PDF va comprimido y no se lee dentro de el.
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $this->actingAs($usuario);
+    $p = prefacturaBorrador();
+    renglonDe($p, 500.0, 1);
+
+    $mostrado = null;
+    View::composer('pdf.prefactura', function ($vista) use (&$mostrado) {
+        $mostrado = Arr::only($vista->getData(), ['esCotizacion', 'subtotal', 'iva', 'ivaEtiqueta', 'total', 'cambio', 'elaboradoPor'])
+            + ['folio' => $vista->getData()['prefactura']->folio];
+    });
+
+    $this->get("/api/facturacion/prefacturas/{$p->id}/cotizacion")->assertOk();
+
+    expect($mostrado)->toBe([
+        'esCotizacion' => true,
+        'elaboradoPor' => $usuario->name,
+        'subtotal' => '500.00',
+        'iva' => '80.00',
+        'ivaEtiqueta' => '16%',
+        'total' => '580.00',
+        'cambio' => '0.00',
+        'folio' => null,
+    ]);
+});
+
+test('una cerrada NO se cotiza: ya esta emitida', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    [$p] = prefacturaCompleta(100.0, 1);
+    $cerrada = cerrarConSello($p, '100.00', '16.00', '116.00');
+
+    $this->getJson("/api/facturacion/prefacturas/{$cerrada->id}/cotizacion")
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'ya_cerrada');
+});
+
+test('un borrador descartado no se cotiza', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    renglonDe($p, 100.0, 1);
+    $p->update(['status' => FactPrefactura::STATUS_INACTIVO]);
+
+    $this->getJson("/api/facturacion/prefacturas/{$p->id}/cotizacion")
+        ->assertStatus(409)
+        ->assertJsonPath('codigo', 'ya_descartada');
+});
+
+test('cotizar con un ajuste de renglon ilegible responde 422', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    renglonDe($p, 100.0, 1)->update(['ajuste_precio' => 'raro']);
+
+    $this->getJson("/api/facturacion/prefacturas/{$p->id}/cotizacion")
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'totales_no_calculables');
+});
+
+test('cotizar con un renglon que se corrige entre la carga y las cifras sigue siendo un 422, no un 500', function () {
+    // La misma carrera que en /pdf: `subtotal()` de un borrador RELEE los renglones, asi que
+    // si el ajuste ilegible se corrige despues de la carga esa lectura no lanza y solo los
+    // objetos ya cargados lo hacen, los que recorre `importesDe()`. Si los importes se
+    // calcularan fuera del try, esto seria un 500: la vista se renderiza despues de el.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    renglonDe($p, 100.0, 1)->update(['ajuste_precio' => 'raro']);
+
+    $corregido = false;
+    DB::listen(function ($consulta) use (&$corregido, $p) {
+        if ($corregido || ! str_starts_with(strtolower($consulta->sql), 'select')
+            || ! str_contains($consulta->sql, 'fact_prefactura_renglones')) {
+            return;
+        }
+
+        // La primera lectura de renglones es la carga del controlador: ya trajo 'raro'.
+        $corregido = true;
+        DB::table('fact_prefactura_renglones')->where('prefactura_id', $p->id)->update(['ajuste_precio' => 'ninguno']);
+    });
+
+    $this->getJson("/api/facturacion/prefacturas/{$p->id}/cotizacion")
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'totales_no_calculables');
+
+    expect($corregido)->toBeTrue();
+});
+
+test('cotizar con una tasa que se vuelve ilegible al calcular el cambio es 422, no un 500', function () {
+    // Un borrador lee la tasa de la configuracion cada vez que la necesita: `iva()` (1a),
+    // la etiqueta (2a), `total()` (3a, valida) y `cambio()`, que pasa por `sobrepago()` y
+    // `total()`, la lee una 4a vez y lanza. Lo que lee la tasa en ULTIMO lugar es lo que esta
+    // prueba protege: si `cambio()` saliera del try, o si la etiqueta se moviera detras de el
+    // y pasara a ser la 4a lectura, seria un 500 y no un 422, porque la vista se renderiza
+    // despues.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    renglonDe($p, 100.0, 1);
+    $lectura = corromperTasaTrasLecturas(3);
+
+    $this->getJson("/api/facturacion/prefacturas/{$p->id}/cotizacion")
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'totales_no_calculables');
+
+    expect($lectura->lecturas)->toBeGreaterThanOrEqual(4);
+});
+
+test('cotizar queda en la bitacora y dice que NO se emitio nada', function () {
+    // Es lo que sustituye al codigo '1234' del sistema viejo, que esta en el JavaScript del
+    // cliente y no deja rastro de quien cotizo ni cuando.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    renglonDe($p, 100.0, 1);
+
+    $this->get("/api/facturacion/prefacturas/{$p->id}/cotizacion")->assertOk();
+
+    $registro = Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)
+        ->where('accion', Bitacora::ACCION_EXPORTAR)->sole();
+
+    expect($registro->registro_id)->toBe($p->id)
+        ->and($registro->descripcion)->toContain('cotización')
+        ->and($registro->descripcion)->toContain('no se emitió');
+});
+
+test('cotizar NO escribe nada mas que la bitacora, ni consume folio', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    renglonDe($p, 100.0, 1);
+
+    $sentencias = [];
+    DB::listen(function ($consulta) use (&$sentencias) {
+        $sentencias[] = ltrim(strtolower($consulta->sql));
+    });
+
+    $this->get("/api/facturacion/prefacturas/{$p->id}/cotizacion")->assertOk();
+
+    $escrituras = array_values(array_filter(
+        $sentencias,
+        fn (string $sql) => ! str_starts_with($sql, 'select') && ! str_contains($sql, 'bitacora'),
+    ));
+
+    expect($escrituras)->toBe([])
+        ->and($p->fresh()->folio)->toBeNull()
+        ->and($p->fresh()->estado)->toBe(FactPrefactura::ESTADO_BORRADOR);
+});
+
+test('si la cotizacion no se puede armar, no queda en la bitacora una cotizacion que no salio', function () {
+    // El render es el mismo que el de /pdf, pero el orden renderizar-antes-de-registrar es
+    // de CADA metodo: esta prueba fija el de `cotizacion()`, y la de arriba el de `pdf()`.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    renglonDe($p, 100.0, 1);
+
+    Pdf::shouldReceive('loadView')->once()->andThrow(new RuntimeException('DomPDF no pudo armar el documento'));
+
+    $this->getJson("/api/facturacion/prefacturas/{$p->id}/cotizacion")->assertStatus(500);
+
+    expect(Bitacora::where('accion', Bitacora::ACCION_EXPORTAR)->count())->toBe(0);
+});
+
+test('sin el subdepartamento no se cotiza', function () {
+    $this->actingAs(usuarioSinAcceso());
+    $p = prefacturaBorrador();
+    renglonDe($p, 100.0, 1);
+
+    $this->getJson("/api/facturacion/prefacturas/{$p->id}/cotizacion")->assertForbidden();
+});
+
 test('sin el subdepartamento no se imprime', function () {
     $this->actingAs(usuarioSinAcceso());
     [$p] = prefacturaCompleta(100.0, 1);

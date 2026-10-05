@@ -382,6 +382,9 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(functio
     Route::get('/prefacturas/{id}/pdf', [PrefacturaPdfController::class, 'pdf'])
         ->middleware('subdep:factPrefacturas')->whereNumber('id');
 
+    Route::get('/prefacturas/{id}/cotizacion', [PrefacturaPdfController::class, 'cotizacion'])
+        ->middleware('subdep:factPrefacturas')->whereNumber('id');
+
     Route::middleware('subdep:factCategoriasAeronave')->group(function () {
         Route::post('/categorias-aeronave', [CategoriaAeronaveController::class, 'store']);
         Route::put('/categorias-aeronave/{id}', [CategoriaAeronaveController::class, 'update'])->whereNumber('id');

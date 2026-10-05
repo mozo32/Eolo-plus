@@ -15,8 +15,8 @@ use Symfony\Component\HttpFoundation\Response;
 use UnexpectedValueException;
 
 /**
- * La impresión de una prefactura. Una sola plantilla; por ahora una acción, `pdf()`, y la
- * cotización de un borrador se añadirá aquí.
+ * La impresión de una prefactura. Una sola plantilla y dos acciones: `pdf()`, el documento
+ * oficial de una cerrada, y `cotizacion()`, la hoja de un borrador.
  *
  * ESTE CONTROLADOR NO ESCRIBE NADA salvo la bitácora, y eso es deliberado. En el sistema
  * viejo imprimir escribía: `invoice.php` insertaba el encabezado histórico antes de
@@ -101,6 +101,67 @@ class PrefacturaPdfController extends Controller
             $prefactura,
             "Se imprimió el documento de la prefactura con folio {$prefactura->folio}.",
             ['folio' => $prefactura->folio, 'total' => (string) $prefactura->total_sellado],
+        );
+
+        return $documento;
+    }
+
+    /**
+     * La cotización: la misma hoja de un BORRADOR, con cifras derivadas y sin folio.
+     *
+     * Es la acción menos grave de las tres —no emite nada ni consume folio— y por eso la
+     * puede hacer cualquiera que pueda facturar. Lo que sustituye al código `'1234'` que el
+     * sistema viejo lleva en el JavaScript del cliente es la bitácora: hoy, quién cotizó y
+     * cuándo no queda en ninguna parte.
+     */
+    public function cotizacion(Request $request, int $id): Response|JsonResponse
+    {
+        $prefactura = FactPrefactura::with(['renglones', 'pagos.formaPago', 'cliente', 'aeronave'])
+            ->findOrFail($id);
+
+        if ($respuesta = $this->rechazarSiDescartada($prefactura)) {
+            return $respuesta;
+        }
+
+        if ($prefactura->estaCerrada()) {
+            return response()->json([
+                'message' => 'Esta prefactura ya está emitida con folio '.$prefactura->folio.': imprime el documento, no una cotización.',
+                'codigo' => 'ya_cerrada',
+            ], 422);
+        }
+
+        // Un borrador no tiene sello, así que las cifras son las derivadas. Si un renglón o
+        // la tasa son ilegibles, eso es 422 y no un 500.
+        try {
+            $cifras = [
+                'subtotal' => $prefactura->subtotal(),
+                'iva' => $prefactura->iva(),
+                'ivaEtiqueta' => $prefactura->ivaTasaEtiqueta(),
+                'total' => $prefactura->total(),
+                'cambio' => $prefactura->cambio(),
+                'importes' => $this->importesDe($prefactura),
+            ];
+        } catch (UnexpectedValueException $e) {
+            report($e);
+
+            return response()->json([
+                'message' => 'No se pueden calcular los totales: un renglón o la tasa de IVA tienen un valor que no se reconoce. Corrige el ajuste del renglón o la tasa en la configuración.',
+                'codigo' => 'totales_no_calculables',
+            ], 422);
+        }
+
+        // Se renderiza ANTES de registrar, y el orden importa: si DomPDF fallara, lanzaría
+        // aquí y no quedaría en la bitácora un «se imprimió» de un documento que nunca salió;
+        // y si fallara el registro, lanzaría antes del `return` y no se entregaría un PDF sin
+        // registrar. Ninguna de las dos mitades puede quedar sin la otra.
+        $documento = $this->render($prefactura, esCotizacion: true, cifras: $cifras,
+            elaboradoPor: $request->user()->name);
+
+        $this->registrar(
+            $request->user()->id,
+            $prefactura,
+            "Se imprimió una cotización de la prefactura {$prefactura->id} por {$cifras['total']}: no se emitió ningún documento y no se consumió folio.",
+            ['total' => $cifras['total'], 'emitido' => false],
         );
 
         return $documento;
