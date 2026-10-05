@@ -556,75 +556,105 @@ export default function EditorPrefactura({ id }: Props) {
     };
 
     /**
-     * `imprimirAlCerrar`: «Cerrar e imprimir». Es el MISMO cierre, con sus mismos diálogos; el documento se abre solo si el cierre
-     * terminó bien (si se canceló, había cambios sin guardar o el servidor lo rechazó, no se llega a esa línea).
+     * El cierre: sus diálogos (cambios sin guardar, confirmación, faltante) y la llamada al servidor. Lo usan «Cerrar prefactura» y
+     * «Cerrar e imprimir»; `alCerrar` se llama SOLO si el cierre terminó bien (cancelar, cambios sin guardar o un rechazo del servidor
+     * retornan o lanzan antes de esa línea).
+     */
+    const flujoDeCierre = async (alCerrar: (cerradaAhora: Prefactura) => void) => {
+        // El servidor cierra lo que tiene guardado: un encabezado o una nota a medio capturar quedarían fuera del documento sellado,
+        // y una cerrada ya no se edita. Un solo aviso que dice QUÉ falta guardar.
+        const sinGuardar = [...(encabezadoModificado ? ['el encabezado'] : []), ...notasPendientesRef.current];
+
+        if (sinGuardar.length > 0) {
+            const externa = notasPendientesRef.current.includes('la nota externa');
+
+            await Swal.fire({
+                icon: 'warning',
+                titleText: 'Hay cambios sin guardar',
+                text: `Guarda ${sinGuardar.join(', ')} antes de cerrar la prefactura: una cerrada ya no se puede editar.${externa ? ' La nota externa es la que se imprime en el documento, y saldría sin lo que escribiste.' : ''}`,
+                confirmButtonColor: '#4f46e5',
+            });
+            return;
+        }
+
+        if (sinTotales) return;
+
+        // El total se lee de la ficha vigente: tras un `sin_cobro` la ficha se recargó y el de la closure ya es viejo.
+        const base = () => `Se le asignará un folio: el folio se consume y no se puede reutilizar. Una vez cerrada, la prefactura ya no se podrá editar. Total: ${formatearMonto((prefacturaRef.current ?? prefactura).total)}.`;
+
+        // Lo que falta por cobrar, según lo último que se leyó. null: no hay nada que confirmar. Solo se manda `confirmar_sin_cobro` si
+        // quien opera confirmó ESTE aviso, y el servidor rechaza (`sin_cobro`) un cierre sin confirmar si el cobro cambió desde entonces.
+        let faltante: string | null = esMontoPositivo(prefactura.por_cobrar) ? prefactura.por_cobrar : null;
+        let aviso = '';
+
+        for (;;) {
+            const confirmacion = await Swal.fire({
+                titleText: faltante === null ? 'Cerrar la prefactura' : 'Cerrar sin el cobro completo',
+                text:
+                    faltante === null
+                        ? base()
+                        : `${aviso} Faltan ${formatearMonto(faltante)} por cobrar: si la cierras así, el documento sale con el cobro incompleto y ya no se podrá corregir. ${base()}`.trim(),
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: faltante === null ? 'Sí, cerrar' : 'Sí, cerrar sin cobro completo',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: faltante === null ? '#059669' : '#d97706',
+                reverseButtons: true,
+            });
+            if (!confirmacion.isConfirmed) return;
+
+            try {
+                // Se manda la cifra que el operador VIO: el servidor la compara con el faltante real dentro del cierre y, si ya es otro,
+                // responde `sin_cobro` con el nuevo en lugar de cerrar (abajo, otra vuelta del bucle con otra confirmación).
+                const { prefactura: cerradaAhora, message } = await apiPrefacturas.cerrar(prefactura.id, faltante !== null, faltante ?? undefined);
+                aplicar(cerradaAhora);
+                setAvisoCargos(null);
+                toast.fire({ icon: 'success', titleText: message });
+                alCerrar(cerradaAhora);
+
+                return;
+            } catch (e) {
+                const nuevo = e instanceof ErrorApi && e.codigo === 'sin_cobro' && typeof e.cuerpo.faltante === 'string' ? e.cuerpo.faltante : null;
+                if (!(e instanceof ErrorApi) || nuevo === null) throw e;
+
+                // Alguien cobró o editó entre la lectura y el envío: lo que la pantalla creía ya no vale. No se reintenta solo:
+                // se pone al día la ficha y se vuelve a pedir la confirmación, con el faltante que dijo el servidor.
+                await cargar();
+                aviso = `${e.message} ${faltante === null ? 'La pantalla mostraba el cobro completo.' : `La pantalla mostraba que faltaban ${formatearMonto(faltante)}.`}`;
+                faltante = nuevo;
+            }
+        }
+    };
+
+    /**
+     * `imprimirAlCerrar`: «Cerrar e imprimir». Es el MISMO cierre; al terminar bien, el documento se abre en una pestaña.
+     *
+     * La pestaña se abre ANTES de cualquier `await` y se navega después: tras los diálogos y la petición el navegador puede ya no
+     * considerar la apertura parte del clic del operador y bloquearla como emergente no solicitada. Por eso el `finally` cierra la
+     * pestaña en TODA salida que no la haya usado (cancelar, cambios sin guardar, error del servidor, sello que no cuadra): ninguna deja una en blanco.
      */
     const cerrar = (imprimirAlCerrar = false) =>
         ejecutar('cerrar', 'No se pudo cerrar la prefactura', async () => {
-            // El servidor cierra lo que tiene guardado: un encabezado o una nota a medio capturar quedarían fuera del documento sellado,
-            // y una cerrada ya no se edita. Un solo aviso que dice QUÉ falta guardar.
-            const sinGuardar = [...(encabezadoModificado ? ['el encabezado'] : []), ...notasPendientesRef.current];
+            let pestana: Window | null = imprimirAlCerrar ? window.open('', '_blank') : null;
 
-            if (sinGuardar.length > 0) {
-                const externa = notasPendientesRef.current.includes('la nota externa');
+            try {
+                await flujoDeCierre(cerradaAhora => {
+                    // El servidor no imprime un sello que no cuadra o que no se pudo verificar (409 / 422): en ese caso no se navega la
+                    // pestaña a un error (el `finally` la cierra), y la ficha ya muestra los avisos del sello y el motivo junto a «Imprimir».
+                    if (!imprimirAlCerrar || cerradaAhora.sello_discrepa !== false) return;
 
-                await Swal.fire({
-                    icon: 'warning',
-                    titleText: 'Hay cambios sin guardar',
-                    text: `Guarda ${sinGuardar.join(', ')} antes de cerrar la prefactura: una cerrada ya no se puede editar.${externa ? ' La nota externa es la que se imprime en el documento, y saldría sin lo que escribiste.' : ''}`,
-                    confirmButtonColor: '#4f46e5',
+                    if (pestana === null || pestana.closed) {
+                        // No se abrió (bloqueador) o el operador la cerró: el cierre ya se hizo, y la impresión se recupera con el botón.
+                        toast.fire({ icon: 'info', titleText: `Prefactura cerrada con folio ${cerradaAhora.folio ?? '—'}. No se abrió la pestaña del documento: imprímelo con el botón IMPRIMIR.`, timer: 8000 });
+
+                        return;
+                    }
+
+                    pestana.location.href = urlDocumentoPrefactura(cerradaAhora.id);
+                    pestana = null;
                 });
-                return;
-            }
-
-            if (sinTotales) return;
-
-            // El total se lee de la ficha vigente: tras un `sin_cobro` la ficha se recargó y el de la closure ya es viejo.
-            const base = () => `Se le asignará un folio: el folio se consume y no se puede reutilizar. Una vez cerrada, la prefactura ya no se podrá editar. Total: ${formatearMonto((prefacturaRef.current ?? prefactura).total)}.`;
-
-            // Lo que falta por cobrar, según lo último que se leyó. null: no hay nada que confirmar. Solo se manda `confirmar_sin_cobro` si
-            // quien opera confirmó ESTE aviso, y el servidor rechaza (`sin_cobro`) un cierre sin confirmar si el cobro cambió desde entonces.
-            let faltante: string | null = esMontoPositivo(prefactura.por_cobrar) ? prefactura.por_cobrar : null;
-            let aviso = '';
-
-            for (;;) {
-                const confirmacion = await Swal.fire({
-                    titleText: faltante === null ? 'Cerrar la prefactura' : 'Cerrar sin el cobro completo',
-                    text:
-                        faltante === null
-                            ? base()
-                            : `${aviso} Faltan ${formatearMonto(faltante)} por cobrar: si la cierras así, el documento sale con el cobro incompleto y ya no se podrá corregir. ${base()}`.trim(),
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonText: faltante === null ? 'Sí, cerrar' : 'Sí, cerrar sin cobro completo',
-                    cancelButtonText: 'Cancelar',
-                    confirmButtonColor: faltante === null ? '#059669' : '#d97706',
-                    reverseButtons: true,
-                });
-                if (!confirmacion.isConfirmed) return;
-
-                try {
-                    // Se manda la cifra que el operador VIO: el servidor la compara con el faltante real dentro del cierre y, si ya es otro,
-                    // responde `sin_cobro` con el nuevo en lugar de cerrar (abajo, otra vuelta del bucle con otra confirmación).
-                    const { prefactura: cerradaAhora, message } = await apiPrefacturas.cerrar(prefactura.id, faltante !== null, faltante ?? undefined);
-                    aplicar(cerradaAhora);
-                    setAvisoCargos(null);
-                    toast.fire({ icon: 'success', titleText: message });
-                    // El servidor no imprime un sello que no cuadra o que no se pudo verificar (409 / 422): en ese caso no se abre
-                    // una pestaña con un error, y la ficha ya muestra los avisos del sello y el motivo junto a «Imprimir».
-                    if (imprimirAlCerrar && cerradaAhora.sello_discrepa === false) window.open(urlDocumentoPrefactura(cerradaAhora.id), '_blank');
-
-                    return;
-                } catch (e) {
-                    const nuevo = e instanceof ErrorApi && e.codigo === 'sin_cobro' && typeof e.cuerpo.faltante === 'string' ? e.cuerpo.faltante : null;
-                    if (!(e instanceof ErrorApi) || nuevo === null) throw e;
-
-                    // Alguien cobró o editó entre la lectura y el envío: lo que la pantalla creía ya no vale. No se reintenta solo:
-                    // se pone al día la ficha y se vuelve a pedir la confirmación, con el faltante que dijo el servidor.
-                    await cargar();
-                    aviso = `${e.message} ${faltante === null ? 'La pantalla mostraba el cobro completo.' : `La pantalla mostraba que faltaban ${formatearMonto(faltante)}.`}`;
-                    faltante = nuevo;
-                }
+            } finally {
+                pestana?.close();
             }
         });
 
