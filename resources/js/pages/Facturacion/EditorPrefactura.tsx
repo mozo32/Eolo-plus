@@ -1,9 +1,9 @@
 import AppLayout from '@/layouts/app-layout';
 import { facturacionPrefacturas } from '@/routes';
-import { ErrorApi, apiPrefacturas, mensajeDeError, type DiscrepanciaSello, type Prefactura } from '@/stores/apiFacturacionCatalogos';
+import { ErrorApi, apiPrefacturas, mensajeDeError, urlCotizacionPrefactura, urlDocumentoPrefactura, type DiscrepanciaSello, type Prefactura } from '@/stores/apiFacturacionCatalogos';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { ArrowLeft, Ban, Gift, Globe, Lock, Plus, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, X } from 'lucide-react';
+import { ArrowLeft, Ban, FileText, Gift, Globe, Lock, Plus, Printer, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import CabeceraPantalla from './components/CabeceraPantalla';
@@ -515,6 +515,17 @@ export default function EditorPrefactura({ id }: Props) {
     /** Sin totales no hay nada que sellar: el servidor tampoco cierra. El botón se deshabilita y se dice por qué. */
     const sinTotales = prefactura.totales_error !== null || prefactura.cobro_error !== null || prefactura.por_cobrar === null;
 
+    /**
+     * Solo un sello verificado y bueno (`false`) deja imprimir. `true` es «verificado y no cuadra» (el servidor responde 409) y `null` es
+     * «no se pudo verificar» (422): en los dos el botón se deshabilita, y `!sello_discrepa` dejaría pasar el `null`.
+     */
+    const motivoSinImprimir =
+        prefactura.sello_discrepa === false
+            ? null
+            : prefactura.sello_discrepa === true
+              ? 'El sello no coincide con los renglones: no se puede imprimir hasta aclarar la diferencia.'
+              : 'No se pudo verificar el sello: no se puede imprimir hasta corregirlo.';
+
     const cortesia = (renglonId: number, nombre: string, marcar: boolean, concepto: string | null) =>
         ejecutar(`cortesia-${renglonId}`, 'No se pudo cambiar la cortesía', async () => {
             // Solo al MARCAR: quitar la cortesía vuelve a cobrar la comisión, que es lo que cuadra con la tarjeta.
@@ -525,7 +536,30 @@ export default function EditorPrefactura({ id }: Props) {
             toast.fire({ icon: 'success', titleText: marcar ? `«${nombre}» queda como cortesía: ya no se cobra.` : `«${nombre}» vuelve a cobrarse.` });
         });
 
-    const cerrar = () =>
+    /** La cotización es lo GUARDADO en el servidor, calculado ahí: la pantalla solo abre la URL en una pestaña. */
+    const cotizar = async () => {
+        if (ocupado) return;
+
+        const confirmacion = await Swal.fire({
+            titleText: 'Imprimir una cotización',
+            text: 'El papel lleva precios y NO es un documento emitido: no tiene folio y no consume uno. Muestra lo que está guardado en la prefactura, no lo que esté a medio capturar en pantalla.',
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, abrir la cotización',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#4f46e5',
+            reverseButtons: true,
+        });
+        if (!confirmacion.isConfirmed) return;
+
+        window.open(urlCotizacionPrefactura(prefactura.id), '_blank');
+    };
+
+    /**
+     * `imprimirAlCerrar`: «Cerrar e imprimir». Es el MISMO cierre, con sus mismos diálogos; el documento se abre solo si el cierre
+     * terminó bien (si se canceló, había cambios sin guardar o el servidor lo rechazó, no se llega a esa línea).
+     */
+    const cerrar = (imprimirAlCerrar = false) =>
         ejecutar('cerrar', 'No se pudo cerrar la prefactura', async () => {
             // El servidor cierra lo que tiene guardado: un encabezado o una nota a medio capturar quedarían fuera del documento sellado,
             // y una cerrada ya no se edita. Un solo aviso que dice QUÉ falta guardar.
@@ -576,6 +610,9 @@ export default function EditorPrefactura({ id }: Props) {
                     aplicar(cerradaAhora);
                     setAvisoCargos(null);
                     toast.fire({ icon: 'success', titleText: message });
+                    // El servidor no imprime un sello que no cuadra o que no se pudo verificar (409 / 422): en ese caso no se abre
+                    // una pestaña con un error, y la ficha ya muestra los avisos del sello y el motivo junto a «Imprimir».
+                    if (imprimirAlCerrar && cerradaAhora.sello_discrepa === false) window.open(urlDocumentoPrefactura(cerradaAhora.id), '_blank');
 
                     return;
                 } catch (e) {
@@ -915,17 +952,47 @@ export default function EditorPrefactura({ id }: Props) {
                                 <p className="mt-2 text-[10px] font-bold italic text-slate-400">Las cifras las calcula el sistema; esta pantalla no suma nada.</p>
                             </div>
 
+                            {cerrada && (
+                                <div className="flex flex-col items-end gap-2">
+                                    {motivoSinImprimir !== null && (
+                                        <p role="status" className="max-w-md text-right text-[11px] font-bold text-amber-700">
+                                            Imprimir está deshabilitado. {motivoSinImprimir}
+                                        </p>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => window.open(urlDocumentoPrefactura(prefactura.id), '_blank')}
+                                        disabled={motivoSinImprimir !== null}
+                                        title={motivoSinImprimir ?? 'Abre el documento en una pestaña nueva.'}
+                                        className={BOTON_PRIMARIO}
+                                    >
+                                        <Printer size={14} />
+                                        IMPRIMIR
+                                    </button>
+                                </div>
+                            )}
+
                             {!soloLectura && (
                                 <div className="flex flex-col items-end gap-2">
                                     {sinTotales && (
                                         <p role="status" className="max-w-md text-right text-[11px] font-bold text-amber-700">
-                                            Cerrar está deshabilitado hasta corregirlo. {prefactura.totales_error ?? prefactura.cobro_error ?? 'los totales no se pudieron calcular.'}
+                                            Cerrar y cotizar están deshabilitados hasta corregirlo. {prefactura.totales_error ?? prefactura.cobro_error ?? 'los totales no se pudieron calcular.'}
                                         </p>
                                     )}
                                     <div className="flex flex-wrap items-center justify-end gap-2">
                                         <button type="button" onClick={() => void descartar()} disabled={ocupado} className="flex items-center justify-center gap-2 rounded border border-red-200 bg-white px-4 py-3 text-[10px] font-black text-red-600 transition-all hover:bg-red-50 disabled:opacity-50">
                                             <Ban size={14} />
                                             {accionando === 'descartar' ? 'DESCARTANDO…' : 'DESCARTAR BORRADOR'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => void cotizar()}
+                                            disabled={ocupado || sinTotales}
+                                            title={sinTotales ? 'No se puede cotizar mientras los totales no se puedan calcular.' : 'Abre una cotización con precios: no es un documento emitido.'}
+                                            className={`${BOTON_SECUNDARIO} flex items-center justify-center gap-2 !px-4 !py-3`}
+                                        >
+                                            <FileText size={14} />
+                                            COTIZAR
                                         </button>
                                         <button
                                             type="button"
@@ -936,6 +1003,16 @@ export default function EditorPrefactura({ id }: Props) {
                                         >
                                             <Lock size={14} />
                                             {accionando === 'cerrar' ? 'CERRANDO…' : 'CERRAR PREFACTURA'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => void cerrar(true)}
+                                            disabled={ocupado || sinTotales}
+                                            title={sinTotales ? 'No se puede cerrar mientras los totales no se puedan calcular.' : 'Cierra la prefactura y, si se cierra, abre el documento.'}
+                                            className={`${BOTON_PRIMARIO} !bg-emerald-600 hover:!bg-emerald-700 !px-6 !py-3`}
+                                        >
+                                            <Printer size={14} />
+                                            CERRAR E IMPRIMIR
                                         </button>
                                     </div>
                                 </div>

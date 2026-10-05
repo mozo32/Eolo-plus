@@ -528,6 +528,14 @@ export async function obtenerPrefacturasApi(filtros: FiltrosPrefactura, pagina: 
     return pedir<Pagina<Prefactura>>(`${BASE}/prefacturas?${params.toString()}`);
 }
 
+/**
+ * El PDF y la cotización NO se piden con `pedir()`: se abren en una pestaña, porque son archivos y no JSON.
+ * La sesión viaja en la cookie de Sanctum, así que un `window.open` basta y no hace falta montar una descarga por `fetch`.
+ * El documento es el de una cerrada (con el sello roto o sin verificar el servidor responde 409 o 422); la cotización, el de un borrador.
+ */
+export const urlDocumentoPrefactura = (id: number) => `${BASE}/prefacturas/${id}/pdf`;
+export const urlCotizacionPrefactura = (id: number) => `${BASE}/prefacturas/${id}/cotizacion`;
+
 export const apiPrefacturas = {
     ficha: (id: number) => pedir<{ prefactura: Prefactura }>(`${BASE}/prefacturas/${id}`),
     crear: (datos: Record<string, unknown>) => pedir<{ prefactura: Prefactura }>(`${BASE}/prefacturas`, { method: 'POST', body: datos }),
