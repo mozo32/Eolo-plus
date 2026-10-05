@@ -15,8 +15,8 @@ test('agrupar NO cambia el dinero de la prefactura', function () {
     $antes = [$p->subtotal(), $p->iva(), $p->total()];
 
     foreach ([$a, $b] as $renglon) {
-        $this->patchJson("/api/facturacion/prefacturas/{$p->id}/renglones/{$renglon->id}/grupo", ['grupo' => 'Servicios de rampa'])
-            ->assertOk();
+        $respuesta = $this->patchJson("/api/facturacion/prefacturas/{$p->id}/renglones/{$renglon->id}/grupo", ['grupo' => 'Servicios de rampa']);
+        $respuesta->assertOk();
     }
 
     $fresca = $p->fresh();
@@ -26,7 +26,12 @@ test('agrupar NO cambia el dinero de la prefactura', function () {
         ->and($a->fresh()->importe())->toBe('200.00')
         ->and($b->fresh()->importe())->toBe('50.00')
         // Sin esto un endpoint que no hiciera nada también dejaría el dinero igual.
-        ->and([$a->fresh()->grupo, $b->fresh()->grupo])->toBe(['Servicios de rampa', 'Servicios de rampa']);
+        ->and([$a->fresh()->grupo, $b->fresh()->grupo])->toBe(['Servicios de rampa', 'Servicios de rampa'])
+        // La respuesta es la ficha ya con el cambio: trae la etiqueta y el mismo dinero.
+        ->and(collect($respuesta->json('prefactura.renglones'))->pluck('grupo', 'id')->all())
+        ->toBe([$a->id => 'Servicios de rampa', $b->id => 'Servicios de rampa'])
+        ->and([$respuesta->json('prefactura.subtotal'), $respuesta->json('prefactura.iva'), $respuesta->json('prefactura.total')])
+        ->toBe($antes);
 });
 
 test('desagrupar tampoco cambia el dinero, y NO pierde el margen', function () {
@@ -38,11 +43,14 @@ test('desagrupar tampoco cambia el dinero, y NO pierde el margen', function () {
     $importeOriginal = $renglon->importe();
 
     $this->patchJson("/api/facturacion/prefacturas/{$p->id}/renglones/{$renglon->id}/grupo", ['grupo' => 'Maniobras'])->assertOk();
-    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/renglones/{$renglon->id}/grupo", ['grupo' => null])->assertOk();
+    $respuesta = $this->patchJson("/api/facturacion/prefacturas/{$p->id}/renglones/{$renglon->id}/grupo", ['grupo' => null]);
+    $respuesta->assertOk();
 
     expect($renglon->fresh()->importe())->toBe($importeOriginal)
         ->and($importeOriginal)->toBe('120.00')
-        ->and($renglon->fresh()->grupo)->toBeNull();
+        ->and($renglon->fresh()->grupo)->toBeNull()
+        ->and($respuesta->json('prefactura.renglones.0.grupo'))->toBeNull()
+        ->and($respuesta->json('prefactura.renglones.0.importe'))->toBe('120.00');
 });
 
 test('agrupar queda en la bitacora, con la etiqueta', function () {
@@ -105,23 +113,24 @@ test('desagrupar un renglon que no estaba agrupado no escribe nada', function ()
     expect(Bitacora::where('accion', Bitacora::ACCION_ACTUALIZAR)->count())->toBe($antes);
 });
 
-test('una etiqueta vacia o de solo espacios se rechaza, y NO desagrupa en silencio', function () {
-    // Sin la excepcion de `ConvertEmptyStringsToNull` en bootstrap/app.php, '' llegaria como
-    // `null` y desagruparia con un 200: por eso se parte de un renglon YA agrupado y se
-    // comprueba que sigue en su grupo.
+test('una etiqueta vacia o de solo espacios DESAGRUPA, no se rechaza', function () {
+    // `ConvertEmptyStringsToNull` convierte la cadena vacia en `null` en TODA la aplicacion
+    // (y `TrimStrings` deja '   ' vacia antes), asi que en blanco llega como `null`, que es
+    // el contrato para desagrupar. La pantalla es la que debe exigir una etiqueta no vacia
+    // al agrupar; hacer una excepcion global para que este endpoint distinga '' de `null`
+    // no vale lo que cuesta.
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $p = prefacturaBorrador();
     $renglon = renglonDe($p, 100.0, 1);
-    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/renglones/{$renglon->id}/grupo", ['grupo' => 'Rampa'])->assertOk();
 
-    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/renglones/{$renglon->id}/grupo", ['grupo' => ''])
-        ->assertStatus(422)->assertJsonValidationErrorFor('grupo');
+    foreach (['', '   '] as $enBlanco) {
+        $this->patchJson("/api/facturacion/prefacturas/{$p->id}/renglones/{$renglon->id}/grupo", ['grupo' => 'Rampa'])->assertOk();
+        expect($renglon->fresh()->grupo)->toBe('Rampa');
 
-    // Un texto de solo espacios: `TrimStrings` lo deja vacio antes de validar.
-    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/renglones/{$renglon->id}/grupo", ['grupo' => '   '])
-        ->assertStatus(422)->assertJsonValidationErrorFor('grupo');
+        $this->patchJson("/api/facturacion/prefacturas/{$p->id}/renglones/{$renglon->id}/grupo", ['grupo' => $enBlanco])->assertOk();
 
-    expect($renglon->fresh()->grupo)->toBe('Rampa');
+        expect($renglon->fresh()->grupo)->toBeNull();
+    }
 });
 
 test('sin el campo grupo se rechaza: omitirlo no es lo mismo que desagrupar', function () {

@@ -473,6 +473,7 @@ class PrefacturaController extends Controller
                 'concepto' => $r->concepto,
                 'remision' => $r->remision,
                 'es_cortesia' => $r->es_cortesia,
+                'grupo' => $r->grupo,
             ] + $this->importeDelRenglon($r))->all();
         }
 

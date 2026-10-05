@@ -197,23 +197,18 @@ class PrefacturaRenglonController extends Controller
      * importe de cada renglón, uno por uno, y el grupo solo existe al imprimir. Por eso no
      * hace falta ninguna guarda contra perder dinero: no hay nada que poner en cero.
      *
+     * Una etiqueta en blanco DESAGRUPA: `ConvertEmptyStringsToNull` convierte la cadena vacía
+     * en `null` en toda la aplicación. Exigir una etiqueta no vacía al agrupar es de la pantalla.
+     *
      * Que el grupo quede congelado al cerrar sale de la guarda de `FactPrefacturaRenglon`,
      * que rechaza cualquier escritura por modelo sobre una prefactura cerrada.
      */
     public function grupo(Request $request, int $id, int $renglon): JsonResponse
     {
-        // `filled` es una regla implícita: corre también con `null` y lo rechazaría, así que
-        // solo se exige cuando hay una etiqueta. `bootstrap/app.php` exceptúa esta ruta de
-        // ConvertEmptyStringsToNull, para que '' llegue como '' y no como null.
-        $reglas = $request->input('grupo') === null
-            ? ['present', 'nullable']
-            : ['present', 'string', 'filled', 'max:60'];
-
         $datos = $request->validate(
-            ['grupo' => $reglas],
+            ['grupo' => ['present', 'nullable', 'string', 'max:60']],
             [
                 'grupo.present' => 'Indica la etiqueta del grupo, o null para desagrupar.',
-                'grupo.filled' => 'La etiqueta del grupo no puede estar vacía. Para desagrupar, manda null.',
                 'grupo.max' => 'La etiqueta del grupo no puede pasar de 60 caracteres.',
             ],
         );
