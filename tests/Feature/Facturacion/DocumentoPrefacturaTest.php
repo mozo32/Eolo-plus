@@ -2,7 +2,16 @@
 
 use App\Models\FactConfiguracion;
 use App\Models\FactPrefactura;
+use App\Models\FactPrefacturaRenglon;
 use App\Models\FactServicio;
+
+/** Los importes de los renglones, como quien llama los arma: por id, sobre la coleccion cargada. */
+function importesDe(FactPrefactura $p): array
+{
+    return $p->renglones
+        ->mapWithKeys(fn (FactPrefacturaRenglon $renglon) => [$renglon->id => $renglon->importe()])
+        ->all();
+}
 
 /** El HTML que la plantilla genera para una prefactura. */
 function documentoDe(FactPrefactura $p, bool $esCotizacion, string $elaboradoPor = 'Ana Pérez'): string
@@ -17,6 +26,7 @@ function documentoDe(FactPrefactura $p, bool $esCotizacion, string $elaboradoPor
         'ivaEtiqueta' => $p->ivaTasaEtiqueta(),
         'total' => $esCotizacion ? $p->total() : (string) $p->total_sellado,
         'cambio' => $p->cambio(),
+        'importes' => importesDe($p),
         'elaboradoPor' => $elaboradoPor,
     ])->render();
 }
@@ -67,6 +77,7 @@ test('la vista imprime las cifras que recibe y no las pide al modelo', function 
         'ivaEtiqueta' => '33.33%',
         'total' => '3333.33',
         'cambio' => '4444.44',
+        'importes' => importesDe($cerrada),
         'elaboradoPor' => 'Ana Pérez',
     ])->render();
 
@@ -210,4 +221,45 @@ test('la etiqueta de la tasa de un borrador sigue la tasa vigente de fact_config
     FactConfiguracion::updateOrCreate(['clave' => 'iva_tasa'], ['valor' => '0.08', 'descripcion' => 'Tasa de IVA']);
 
     expect(prefacturaBorrador()->ivaTasaEtiqueta())->toBe('8%');
+});
+
+test('la vista imprime el importe que recibe del renglon y no lo recalcula', function () {
+    $p = prefacturaBorrador();
+    $renglon = renglonDe($p, 100.0, 2);
+    $p = $p->fresh(['renglones', 'pagos.formaPago', 'cliente', 'aeronave']);
+
+    $html = view('pdf.prefactura', [
+        'prefactura' => $p,
+        'esCotizacion' => true,
+        'subtotal' => '99.99',
+        'iva' => '16.00',
+        'ivaEtiqueta' => '16%',
+        'total' => '115.99',
+        'cambio' => '0.00',
+        // Distinto de lo que el renglon derivaria (200.00): si la vista llamara a importe(), saldria 200.00.
+        // (No 100.00 x 1: el precio unitario 100.0000 contiene esa cadena.)
+        'importes' => [$renglon->id => '99.99'],
+        'elaboradoPor' => 'Ana Pérez',
+    ])->render();
+
+    expect($html)->toContain('99.99')
+        ->and($html)->not->toContain('200.00');
+});
+
+test('una clave que falte en importes revienta y no imprime un cero', function () {
+    $p = prefacturaBorrador();
+    renglonDe($p, 100.0, 1);
+    $p = $p->fresh(['renglones', 'pagos.formaPago', 'cliente', 'aeronave']);
+
+    expect(fn () => view('pdf.prefactura', [
+        'prefactura' => $p,
+        'esCotizacion' => true,
+        'subtotal' => '100.00',
+        'iva' => '16.00',
+        'ivaEtiqueta' => '16%',
+        'total' => '116.00',
+        'cambio' => '0.00',
+        'importes' => [],
+        'elaboradoPor' => 'Ana Pérez',
+    ])->render())->toThrow(ErrorException::class);
 });

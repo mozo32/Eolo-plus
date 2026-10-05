@@ -153,51 +153,16 @@
 </head>
 <body>
     {{--
-        Esta vista FORMATEA, no calcula: las cifras de totales llegan ya calculadas en las
-        ocho claves del array que quien la llama arma, y lo demás son atributos y relaciones
-        (más `bccomp`, `number_format` y `format` de fechas, funciones puras sobre esos
-        valores que no lanzan con las cadenas válidas que llegan). Importa porque la vista se
-        renderiza DESPUÉS del try/catch de quien la llama, así que una excepción nacida aquí
-        sería un 500 en lugar de un 422.
+        Esta vista FORMATEA: no llama a ningún método que calcule dinero ni que pueda lanzar.
+        Todo llega en las nueve claves del array, que quien la llama arma dentro de su
+        try/catch, y lo demás son atributos y relaciones (más `bccomp`, `number_format` y
+        `format` de fechas, funciones puras sobre esos valores). Importa porque la vista se
+        renderiza DESPUÉS de ese try/catch: una excepción de cálculo nacida aquí sería un
+        500 en lugar de un 422. Por eso los importes de los renglones también viajan en el
+        array, calculados sobre los mismos objetos que la vista recorre: así la vista no
+        recalcula nada sobre datos que pudieran haber cambiado desde entonces.
 
-        Con UNA excepción, aceptada a sabiendas: el importe de cada renglón se pide a
-        `$renglon->importe()` (abajo, en la tabla), que calcula dinero y lanza
-        `UnexpectedValueException` si el `ajuste_precio` del renglón es desconocido. Se aceptó
-        el riesgo porque los dos puntos de llamada lo cubren, no porque no se pudiera evitar:
-        un importe por renglón cabría en una novena clave indexada por id de renglón, pero eso
-        solo movería la llamada a `importe()` a otro sitio sin quitar el lanzamiento.
-
-        Lo que cubre a cada punto de llamada, con una asimetría:
-        - Documento emitido: la cobertura no tiene hueco. Quien llama verifica
-          `FactPrefactura::discrepanciasDelSello()`, que relee los renglones de la base con
-          `renglones()->get()` y deriva siempre; los renglones de una cerrada son inmutables
-          (la guarda vive en `FactPrefacturaRenglon`), así que entre esa lectura y este
-          render nadie puede cambiarlos.
-        - Cotización: la cobertura tiene un hueco estrecho. `FactPrefactura::subtotal()`
-          (que en un borrador deriva) también relee de la base, no los objetos de la relación
-          cargada que esta vista recorre, y los renglones de un borrador SÍ se pueden
-          cambiar: otra petición podría meter un `ajuste_precio` desconocido entre esa
-          lectura y este render. La consecuencia es un 500 donde debía haber un 422, en una
-          carrera improbable.
-
-        **Quien añada un tercer punto de llamada tiene que calcular los totales antes de
-        renderizar**, o ese 422 se vuelve un 500. Las Tasks 2 y 3 tienen que cubrir
-        `totales_no_calculables` con una prueba cada una; mientras no existan, esto no tiene
-        red.
-
-        `number_format` convierte a `float` por dentro y se acepta: la regla de «ningún
-        float» protege la ARITMÉTICA, donde el error se acumula, y este es el último paso
-        antes de imprimir: nada derivado de estos valores vuelve a entrar en un cálculo. La
-        conversión es exacta mientras todo lo que pase por aquí sea una cadena de EXACTAMENTE
-        dos decimales (`subtotal`, `iva`, `total`, `cambio`, `importe()` y `pago->monto`, que
-        tiene cast `decimal:2`) y no pase de ~10^13: el tope es 9999999999.99 (~10^10; lo
-        fijan el `decimal(12,2)` de los totales sellados y `PagosPrefactura::MONTO_MAXIMO`
-        de un pago), cuatro órdenes de magnitud por debajo de donde un double empieza a
-        perder centavos (~9x10^13). Un total de cotización aún sin sellar no tiene ese tope
-        en la columna, pero tendría que ser absurdo para acercarse a la cota. Si alguna vez entra un valor con más de dos
-        decimales o por encima de esa cota, la conversión deja de ser exacta.
-
-        Las ocho claves:
+        Las nueve claves:
 
             prefactura   FactPrefactura con renglones, pagos.formaPago, cliente y aeronave
             esCotizacion bool: COTIZACIÓN sin folio, o documento emitido
@@ -206,7 +171,24 @@
             ivaEtiqueta  la tasa como porcentaje, p. ej. '16%'
             total        cadena de 2 decimales
             cambio       cadena de 2 decimales; la línea CAMBIO sale si es mayor que cero
+            importes     array<int, string>: el importe de cada renglón (2 decimales),
+                         indexado por id de renglón; la vista lo lee directo, sin valor por
+                         omisión, así que una clave que falte revienta en lugar de imprimir
+                         un cero
             elaboradoPor nombre de quien cerró, o de quien imprime
+
+        `number_format` convierte a `float` por dentro y se acepta: la regla de «ningún
+        float» protege la ARITMÉTICA, donde el error se acumula, y este es el último paso
+        antes de imprimir: nada derivado de estos valores vuelve a entrar en un cálculo. La
+        conversión es exacta mientras todo lo que pase por aquí sea una cadena de EXACTAMENTE
+        dos decimales (`subtotal`, `iva`, `total`, `cambio`, `importes` y `pago->monto`, que
+        tiene cast `decimal:2`) y no pase de ~10^13. El tope de monto es 9999999999.99
+        (~10^10; lo fijan el `decimal(12,2)` de los totales sellados y
+        `PagosPrefactura::MONTO_MAXIMO` de un pago), cuatro órdenes de magnitud por debajo
+        de donde un double empieza a perder centavos (~9x10^13). Un total de cotización aún
+        sin sellar no tiene ese tope en la columna, pero tendría que ser absurdo para
+        acercarse a los ~10^13. Si alguna vez entra un valor con más de dos decimales o por
+        encima de esos ~10^13, la conversión deja de ser exacta.
     --}}
 
     <table>
@@ -302,7 +284,7 @@
                     <td>{{ $renglon->remision ?: '—' }}</td>
                     <td class="derecha">{{ (string) $renglon->precio_unitario }}</td>
                     <td class="centro">{{ $renglon->cantidad }}</td>
-                    <td class="derecha">{{ number_format($renglon->importe(), 2) }}</td>
+                    <td class="derecha">{{ number_format($importes[$renglon->id], 2) }}</td>
                 </tr>
             @endforeach
         </tbody>
