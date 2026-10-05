@@ -555,7 +555,9 @@ export default function EditorPrefactura({ id }: Props) {
         });
         if (!confirmacion.isConfirmed) return;
 
-        window.open(urlCotizacionPrefactura(prefactura.id), '_blank');
+        if (window.open(urlCotizacionPrefactura(prefactura.id), '_blank') === null) {
+            toast.fire({ icon: 'warning', titleText: 'No se pudo abrir la cotización: el navegador bloqueó la ventana. Permite las ventanas emergentes de este sitio.', timer: 8000 });
+        }
     };
 
     /**
@@ -635,14 +637,16 @@ export default function EditorPrefactura({ id }: Props) {
      * `imprimirAlCerrar`: «Cerrar e imprimir». Es el MISMO cierre; al terminar bien, el documento se abre en una pestaña.
      *
      * La pestaña se abre en `alPedirCierre`: justo DESPUÉS de que el operador pulsó «Sí, cerrar» y justo ANTES de la petición. Ese
-     * clic es el gesto que autoriza al navegador a abrir una pestaña, y su autorización dura pocos segundos; la petición de red puede
-     * tardar más, así que abrirla después de esperarla la perdería y el bloqueador de emergentes la impediría. Y no antes: abierta
-     * durante los diálogos, robaría el foco mientras el operador decide y quedaría en blanco si cancela o hay cambios sin guardar.
-     * Si el servidor pide otra confirmación (`sin_cobro`), la pestaña se cierra antes de ese segundo diálogo y se abre de nuevo tras él.
-     * El `finally` cierra la que haya quedado sin usar (error del servidor, sello que no cuadra).
+     * clic es el gesto que autoriza al navegador a abrir una pestaña, y esa autorización caduca (según los navegadores que conocemos,
+     * a los pocos segundos; la duración exacta no se midió aquí); la petición de red puede tardar más, así que abrirla después de
+     * esperarla arriesgaría perderla y que el bloqueador de emergentes la impidiera. Y no antes: abierta durante los diálogos,
+     * robaría el foco mientras el operador decide y quedaría en blanco si cancela o hay cambios sin guardar.
+     * Quién cierra la pestaña que no se usa: si la petición falla (error del servidor, o `sin_cobro` antes de su segundo diálogo), el
+     * `catch` del propio `alPedirCierre`; el `finally` es la red para el sello que no cuadra y para cualquier lanzamiento inesperado.
      */
     const cerrar = (imprimirAlCerrar = false) =>
-        ejecutar('cerrar', 'No se pudo cerrar la prefactura', async () => {
+        // Dos claves: así el indicador «CERRANDO…» sale en el botón que el operador pulsó y no en el otro.
+        ejecutar(imprimirAlCerrar ? 'cerrar-e-imprimir' : 'cerrar', 'No se pudo cerrar la prefactura', async () => {
             let pestana: Window | null = null;
             const cerrarPestana = () => {
                 pestana?.close();
@@ -662,9 +666,15 @@ export default function EditorPrefactura({ id }: Props) {
                         }
                     },
                     cerradaAhora => {
-                        // El servidor no imprime un sello que no cuadra o que no se pudo verificar (409 / 422): en ese caso no se navega la
-                        // pestaña a un error (el `finally` la cierra), y la ficha ya muestra los avisos del sello y el motivo junto a «Imprimir».
-                        if (!imprimirAlCerrar || cerradaAhora.sello_discrepa !== false) return;
+                        if (!imprimirAlCerrar) return;
+
+                        // El servidor no imprime un sello que no cuadra o que no se pudo verificar (409 / 422): no se navega la pestaña a un
+                        // error (el `finally` la cierra), se le dice al operador por qué no hay papel y la ficha ya muestra los avisos del sello.
+                        if (cerradaAhora.sello_discrepa !== false) {
+                            toast.fire({ icon: 'warning', titleText: `Prefactura cerrada con folio ${cerradaAhora.folio ?? '—'}, pero el documento no se pudo emitir: el sello no cuadra o no se pudo verificar. La ficha lo explica.`, timer: 10000 });
+
+                            return;
+                        }
 
                         if (pestana === null || pestana.closed) {
                             // No se abrió (bloqueador) o el operador la cerró: el cierre ya se hizo, y la impresión se recupera con el botón.
@@ -1066,7 +1076,7 @@ export default function EditorPrefactura({ id }: Props) {
                                             className={`${BOTON_PRIMARIO} !bg-emerald-600 hover:!bg-emerald-700 !px-6 !py-3`}
                                         >
                                             <Printer size={14} />
-                                            CERRAR E IMPRIMIR
+                                            {accionando === 'cerrar-e-imprimir' ? 'CERRANDO E IMPRIMIENDO…' : 'CERRAR E IMPRIMIR'}
                                         </button>
                                     </div>
                                 </div>
