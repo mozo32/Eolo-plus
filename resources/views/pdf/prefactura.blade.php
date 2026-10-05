@@ -160,9 +160,9 @@
         cadenas válidas que el contrato garantiza (con una entrada no numérica, `bccomp` y
         `number_format` sí lanzan). Importa porque la vista se renderiza DESPUÉS de ese
         try/catch: una excepción de cálculo nacida aquí sería un 500 en lugar de un 422.
-        Por eso los importes de los renglones también viajan en el array, y tienen que
-        calcularse sobre los mismos objetos que la vista recorre: así la vista no recalcula
-        nada sobre datos que pudieran haber cambiado desde entonces.
+        Por eso las filas del documento también viajan en el array, ya resueltas: quien llama
+        las construye sobre la colección de renglones que cargó, así que la vista no recalcula
+        nada ni relee datos que pudieran haber cambiado desde entonces, y solo imprime.
 
         Las nueve claves:
 
@@ -176,18 +176,21 @@
             ivaEtiqueta  la tasa como porcentaje, p. ej. '16%'
             total        cadena de 2 decimales
             cambio       cadena de 2 decimales; la línea CAMBIO sale si es mayor que cero
-            importes     array<int, string>: el importe de cada renglón (2 decimales),
-                         indexado por id de renglón; la vista lo lee directo, sin valor por
-                         omisión, así que una clave que falte revienta en lugar de imprimir
-                         un cero
+            filas        list<array{concepto: string, cortesia: bool, remision: ?string,
+                         precio: ?string, cantidad: ?int, importe: string}>: las filas de la
+                         tabla, ya resueltas y en el orden en que se imprimen; `importe` es una
+                         cadena de 2 decimales. La vista las imprime tal cual: `remision`,
+                         `precio` y `cantidad` ausentes salen como «—», pero `importe` se lee
+                         directo, sin valor por omisión, así que una fila sin esa clave revienta
+                         en lugar de imprimir un cero
             elaboradoPor nombre de quien cerró, o de quien imprime
 
         `number_format` convierte a `float` por dentro y se acepta: la regla de «ningún
         float» protege la ARITMÉTICA, donde el error se acumula, y este es el último paso
         antes de imprimir: nada derivado de estos valores vuelve a entrar en un cálculo. La
         conversión es exacta mientras todo lo que pase por aquí sea una cadena de EXACTAMENTE
-        dos decimales (`subtotal`, `iva`, `total`, `cambio`, `importes` y `pago->monto`, que
-        tiene cast `decimal:2`) y no pase de 10^13. Ese umbral es un margen deliberado, no el
+        dos decimales (`subtotal`, `iva`, `total`, `cambio`, el `importe` de cada fila y
+        `pago->monto`, que tiene cast `decimal:2`) y no pase de 10^13. Ese umbral es un margen deliberado, no el
         punto donde falla: la cota teórica de un double es 2^53/100, unos 9x10^13, y en la
         práctica los centavos empiezan a perderse antes, entre ~3.5x10^13 y ~7x10^13. El
         tope de monto del sistema es 9999999999.99 (~10^10; lo fijan el `decimal(12,2)` de
@@ -289,18 +292,18 @@
             </tr>
         </thead>
         <tbody>
-            @foreach($prefactura->renglones as $renglon)
+            @foreach($filas as $fila)
                 <tr>
                     <td>
-                        {{ $renglon->nombre_servicio }}
-                        @if($renglon->es_cortesia)
+                        {{ $fila['concepto'] }}
+                        @if($fila['cortesia'])
                             <span class="cortesia">(Cortesía)</span>
                         @endif
                     </td>
-                    <td>{{ $renglon->remision ?: '—' }}</td>
-                    <td class="derecha">{{ (string) $renglon->precio_unitario }}</td>
-                    <td class="centro">{{ $renglon->cantidad }}</td>
-                    <td class="derecha">{{ number_format($importes[$renglon->id], 2) }}</td>
+                    <td>{{ $fila['remision'] ?: '—' }}</td>
+                    <td class="derecha">{{ $fila['precio'] ?? '—' }}</td>
+                    <td class="centro">{{ $fila['cantidad'] ?? '—' }}</td>
+                    <td class="derecha">{{ number_format($fila['importe'], 2) }}</td>
                 </tr>
             @endforeach
         </tbody>

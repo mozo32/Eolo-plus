@@ -55,7 +55,7 @@ class PrefacturaPdfController extends Controller
         // Un sello que ya no corresponde a sus renglones NO se imprime. Un PDF es papel que
         // sale de la oficina: emitir un documento del que el propio sistema sabe que no
         // cuadra es peor que no emitirlo.
-        // El `try` abarca TAMBIÉN las cifras, no solo la verificación: `importesDe()`,
+        // El `try` abarca TAMBIÉN las cifras, no solo la verificación: `filasDe()`,
         // `cambio()` y `ivaTasaEtiqueta()` pueden lanzar, y si lo hicieran fuera de aquí
         // sería un 500 en lugar de un 422 — justo lo que la vista promete que no pasa.
         try {
@@ -67,7 +67,7 @@ class PrefacturaPdfController extends Controller
                 'ivaEtiqueta' => $prefactura->ivaTasaEtiqueta(),
                 'total' => (string) $prefactura->total_sellado,
                 'cambio' => $prefactura->cambio(),
-                'importes' => $this->importesDe($prefactura),
+                'filas' => $this->filasDe($prefactura),
             ];
         } catch (UnexpectedValueException $e) {
             report($e);
@@ -139,7 +139,7 @@ class PrefacturaPdfController extends Controller
                 'ivaEtiqueta' => $prefactura->ivaTasaEtiqueta(),
                 'total' => $prefactura->total(),
                 'cambio' => $prefactura->cambio(),
-                'importes' => $this->importesDe($prefactura),
+                'filas' => $this->filasDe($prefactura),
             ];
         } catch (UnexpectedValueException $e) {
             report($e);
@@ -168,23 +168,33 @@ class PrefacturaPdfController extends Controller
     }
 
     /**
-     * El importe de cada renglón, indexado por su id, calculado sobre la colección YA
-     * CARGADA que la vista itera y no releyendo de la base.
+     * Las filas del documento, ya resueltas, en el orden en que se imprimen.
      *
-     * Las dos cosas importan. Que lo llame el controlador DENTRO de su `try/catch` y no la
-     * vista, porque la vista se renderiza después de ese `try/catch` y una excepción de
-     * `importe()` ahí sería un 500 en lugar de un 422. Y que use estos objetos y no otra
-     * lectura, porque `subtotalDerivado()` sí relee: si alguien corrigiera un
-     * `ajuste_precio` desconocido entre la carga y esa relectura, la verificación no
-     * lanzaría y la vista sí, sobre el objeto viejo, y saldría un 500 en un documento
-     * cuyos datos vigentes están bien.
+     * Las dos cosas que la hacen segura, y que no se pueden cambiar sin romper un
+     * invariante del bloque 4:
      *
-     * @return array<int, string>
+     * - La construye el CONTROLADOR, dentro de su `try/catch`, y no la vista: la vista se
+     *   renderiza después de ese `try/catch`, así que una excepción de `importe()` ahí
+     *   sería un 500 en lugar de un 422.
+     * - Usa la colección `$prefactura->renglones` YA CARGADA y no otra lectura, porque
+     *   `subtotalDerivado()` sí relee: si alguien corrigiera un `ajuste_precio` desconocido
+     *   entre la carga y esa relectura, la verificación no lanzaría y esto sí, sobre el
+     *   objeto viejo, y saldría un 500 en un documento cuyos datos vigentes están bien.
+     *
+     * @return list<array{concepto: string, cortesia: bool, remision: ?string, precio: ?string, cantidad: ?int, importe: string}>
      */
-    private function importesDe(FactPrefactura $prefactura): array
+    private function filasDe(FactPrefactura $prefactura): array
     {
         return $prefactura->renglones
-            ->mapWithKeys(fn (FactPrefacturaRenglon $renglon) => [$renglon->id => $renglon->importe()])
+            ->map(fn (FactPrefacturaRenglon $renglon) => [
+                'concepto' => $renglon->nombre_servicio,
+                'cortesia' => (bool) $renglon->es_cortesia,
+                'remision' => $renglon->remision,
+                'precio' => (string) $renglon->precio_unitario,
+                'cantidad' => $renglon->cantidad,
+                'importe' => $renglon->importe(),
+            ])
+            ->values()
             ->all();
     }
 

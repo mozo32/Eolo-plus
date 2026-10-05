@@ -7,12 +7,21 @@ use App\Models\FactPrefactura;
 use App\Models\FactPrefacturaRenglon;
 use App\Models\FactServicio;
 use App\Models\TipoAeronave;
+use Illuminate\Support\Arr;
 
-/** Los importes de los renglones, como quien llama los arma: por id, sobre la coleccion cargada. */
-function importesDe(FactPrefactura $p): array
+/** Las filas del documento, como quien llama las arma: una por renglon, sobre la coleccion cargada. */
+function filasDe(FactPrefactura $p): array
 {
     return $p->renglones
-        ->mapWithKeys(fn (FactPrefacturaRenglon $renglon) => [$renglon->id => $renglon->importe()])
+        ->map(fn (FactPrefacturaRenglon $renglon) => [
+            'concepto' => $renglon->nombre_servicio,
+            'cortesia' => (bool) $renglon->es_cortesia,
+            'remision' => $renglon->remision,
+            'precio' => (string) $renglon->precio_unitario,
+            'cantidad' => $renglon->cantidad,
+            'importe' => $renglon->importe(),
+        ])
+        ->values()
         ->all();
 }
 
@@ -29,7 +38,7 @@ function documentoDe(FactPrefactura $p, bool $esCotizacion, string $elaboradoPor
         'ivaEtiqueta' => $p->ivaTasaEtiqueta(),
         'total' => $esCotizacion ? $p->total() : (string) $p->total_sellado,
         'cambio' => $p->cambio(),
-        'importes' => importesDe($p),
+        'filas' => filasDe($p),
         'elaboradoPor' => $elaboradoPor,
     ])->render();
 }
@@ -100,7 +109,7 @@ test('la vista imprime las cifras que recibe y no las pide al modelo', function 
         'ivaEtiqueta' => '33.33%',
         'total' => '3333.33',
         'cambio' => '4444.44',
-        'importes' => importesDe($cerrada),
+        'filas' => filasDe($cerrada),
         'elaboradoPor' => 'Ana Pérez',
     ])->render();
 
@@ -276,7 +285,14 @@ test('la vista imprime el importe que recibe del renglon y no lo recalcula', fun
         'cambio' => '0.00',
         // Distinto de lo que el renglon derivaria (200.00): si la vista llamara a importe(), saldria 200.00.
         // (No 100.00 x 1: el precio unitario 100.0000 contiene esa cadena.)
-        'importes' => [$renglon->id => '99.99'],
+        'filas' => [[
+            'concepto' => $renglon->nombre_servicio,
+            'cortesia' => false,
+            'remision' => null,
+            'precio' => '100.0000',
+            'cantidad' => 2,
+            'importe' => '99.99',
+        ]],
         'elaboradoPor' => 'Ana Pérez',
     ])->render();
 
@@ -284,13 +300,74 @@ test('la vista imprime el importe que recibe del renglon y no lo recalcula', fun
         ->and($html)->not->toContain('200.00');
 });
 
-test('una clave que falte en importes revienta y no imprime un cero', function () {
+test('la vista imprime las filas que recibe, en su orden, y no mira los renglones', function () {
+    // El contrato: una fila impresa no corresponde necesariamente a un renglon. Aqui se fija
+    // la forma: la vista imprime la lista recibida y nada mas.
+    [$p] = prefacturaCompleta(100.0, 1);
+    $cerrada = cerrarConSello($p, '100.00', '16.00', '116.00')
+        ->fresh(['renglones', 'pagos.formaPago', 'cliente', 'aeronave']);
+    $nombreReal = $cerrada->renglones->first()->nombre_servicio;
+
+    $html = view('pdf.prefactura', [
+        'prefactura' => $cerrada,
+        'esCotizacion' => false,
+        'subtotal' => '7.77',
+        'iva' => '1.24',
+        'ivaEtiqueta' => '16%',
+        'total' => '9.01',
+        'cambio' => '0.00',
+        'elaboradoPor' => 'Ana Pérez',
+        'filas' => [
+            ['concepto' => 'PRIMERA FILA INVENTADA', 'cortesia' => false, 'remision' => 'R-1', 'precio' => '11.1111', 'cantidad' => 2, 'importe' => '22.22'],
+            ['concepto' => 'SEGUNDA FILA INVENTADA', 'cortesia' => true, 'remision' => null, 'precio' => null, 'cantidad' => null, 'importe' => '0.00'],
+        ],
+    ])->render();
+
+    // Imprime lo que recibe, cada dato en SU fila y en el orden recibido...
+    $primera = filaDelDocumento($html, 'PRIMERA FILA INVENTADA');
+    $segunda = filaDelDocumento($html, 'SEGUNDA FILA INVENTADA');
+
+    expect($nombreReal)->not->toBe('')
+        ->and($primera)->toContain('R-1')
+        ->and($primera)->toContain('11.1111')
+        ->and($primera)->toContain('22.22')
+        ->and($primera)->not->toContain('Cortesía')
+        ->and($segunda)->toContain('(Cortesía)')
+        ->and(strpos($html, 'PRIMERA FILA INVENTADA'))->toBeLessThan(strpos($html, 'SEGUNDA FILA INVENTADA'))
+        // ...y NO el nombre del renglon real, que no viaja en las filas.
+        ->and($html)->not->toContain($nombreReal);
+});
+
+test('una fila sin precio ni cantidad imprime un guion y no revienta', function () {
+    [$p] = prefacturaCompleta(100.0, 1);
+    $cerrada = cerrarConSello($p, '100.00', '16.00', '116.00')
+        ->fresh(['renglones', 'pagos.formaPago', 'cliente', 'aeronave']);
+
+    $html = view('pdf.prefactura', [
+        'prefactura' => $cerrada,
+        'esCotizacion' => false,
+        'subtotal' => '100.00', 'iva' => '16.00', 'ivaEtiqueta' => '16%', 'total' => '116.00',
+        'cambio' => '0.00', 'elaboradoPor' => 'Ana Pérez',
+        'filas' => [
+            ['concepto' => 'Servicios de rampa', 'cortesia' => false, 'remision' => null, 'precio' => null, 'cantidad' => null, 'importe' => '500.00'],
+        ],
+    ])->render();
+
+    $fila = filaDelDocumento($html, 'Servicios de rampa');
+
+    // Las tres celdas sin dato (remision, precio, cantidad) salen como guion, y el importe es el recibido.
+    expect(substr_count($fila, '—'))->toBe(3)
+        ->and($fila)->toContain('500.00');
+});
+
+test('una fila sin su clave importe revienta y no imprime un cero', function () {
     // El framework convierte el aviso en ErrorException en todos los entornos
     // (HandleExceptions::handleError), asi que esto vale tambien en produccion.
     // `php artisan tinker` NO lo lanza: instala su propio manejador de errores.
     $p = prefacturaBorrador();
     renglonDe($p, 100.0, 1);
     $p = $p->fresh(['renglones', 'pagos.formaPago', 'cliente', 'aeronave']);
+    $filaSinImporte = Arr::except(filasDe($p)[0], 'importe');
 
     expect(fn () => view('pdf.prefactura', [
         'prefactura' => $p,
@@ -300,7 +377,7 @@ test('una clave que falte en importes revienta y no imprime un cero', function (
         'ivaEtiqueta' => '16%',
         'total' => '116.00',
         'cambio' => '0.00',
-        'importes' => [],
+        'filas' => [$filaSinImporte],
         'elaboradoPor' => 'Ana Pérez',
     ])->render())->toThrow(ErrorException::class, 'Undefined array key');
 });

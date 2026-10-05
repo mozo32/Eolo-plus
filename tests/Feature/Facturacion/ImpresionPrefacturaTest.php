@@ -76,10 +76,10 @@ test('con un renglon ilegible responde 422 y no un 500', function () {
 });
 
 test('un renglon que se corrige entre la carga y la verificacion sigue siendo un 422, no un 500', function () {
-    // La carrera que obliga a calcular los importes DENTRO del try y sobre los renglones ya
+    // La carrera que obliga a construir las filas DENTRO del try y sobre los renglones ya
     // cargados: `discrepanciasDelSello()` relee de la base, asi que si el ajuste ilegible se
     // corrige despues de la carga, la verificacion pasa y solo los objetos viejos lanzan.
-    // Si los importes se calcularan fuera del try, esto seria un 500.
+    // Si las filas se construyeran fuera del try, esto seria un 500.
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     [$p] = prefacturaCompleta(100.0, 1);
     $cerrada = cerrarConSello($p, '100.00', '16.00', '116.00');
@@ -227,7 +227,7 @@ test('reimprimir dos veces NO duplica nada, da el mismo documento y deja dos ent
     // Las cifras que la plantilla recibe son lo estable que se puede comparar.
     $mostrado = [];
     View::composer('pdf.prefactura', function ($vista) use (&$mostrado) {
-        $mostrado[] = Arr::only($vista->getData(), ['esCotizacion', 'subtotal', 'iva', 'ivaEtiqueta', 'total', 'cambio', 'importes', 'elaboradoPor'])
+        $mostrado[] = Arr::only($vista->getData(), ['esCotizacion', 'subtotal', 'iva', 'ivaEtiqueta', 'total', 'cambio', 'filas', 'elaboradoPor'])
             + ['folio' => $vista->getData()['prefactura']->folio];
     });
 
@@ -251,7 +251,7 @@ test('reimprimir dos veces NO duplica nada, da el mismo documento y deja dos ent
 function capturarLoQueRecibeLaVista(array &$recibido): void
 {
     View::composer('pdf.prefactura', function ($vista) use (&$recibido) {
-        $recibido = Arr::only($vista->getData(), ['prefactura', 'esCotizacion', 'subtotal', 'iva', 'ivaEtiqueta', 'total', 'cambio', 'importes', 'elaboradoPor']);
+        $recibido = Arr::only($vista->getData(), ['prefactura', 'esCotizacion', 'subtotal', 'iva', 'ivaEtiqueta', 'total', 'cambio', 'filas', 'elaboradoPor']);
 
         // Que relaciones traia YA cargadas, medido ANTES de que la plantilla se evalue: una relacion
         // que la plantilla cargara de forma perezosa quedaria cargada despues y no se veria.
@@ -426,8 +426,8 @@ test('cotizar con un ajuste de renglon ilegible responde 422', function () {
 test('cotizar con un renglon que se corrige entre la carga y las cifras sigue siendo un 422, no un 500', function () {
     // La misma carrera que en /pdf: `subtotal()` de un borrador RELEE los renglones, asi que
     // si el ajuste ilegible se corrige despues de la carga esa lectura no lanza y solo los
-    // objetos ya cargados lo hacen, los que recorre `importesDe()`. Si los importes se
-    // calcularan fuera del try, esto seria un 500: la vista se renderiza despues de el.
+    // objetos ya cargados lo hacen, los que recorre `filasDe()`. Si las filas se
+    // construyeran fuera del try, esto seria un 500: la vista se renderiza despues de el.
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $p = prefacturaBorrador();
     renglonDe($p, 100.0, 1)->update(['ajuste_precio' => 'raro']);
