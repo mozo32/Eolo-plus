@@ -6,6 +6,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use Illuminate\Http\Request;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -35,6 +36,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(append: [
             EnsureFrontendRequestsAreStateful::class,
             HandleAppearance::class,
+        ]);
+
+        // La etiqueta de grupo de un renglón distingue `null` (desagrupar) de '' (error): sin
+        // esta excepción, `ConvertEmptyStringsToNull` convertiría '' y '   ' en `null` y una
+        // etiqueta en blanco desagruparía en silencio en vez de rechazarse.
+        $middleware->convertEmptyStringsToNull(except: [
+            fn (Request $request) => $request->is('api/facturacion/prefacturas/*/renglones/*/grupo'),
         ]);
 
         $middleware->alias([

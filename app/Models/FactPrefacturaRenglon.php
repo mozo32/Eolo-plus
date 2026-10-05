@@ -12,7 +12,7 @@ class FactPrefacturaRenglon extends Model
 
     protected $fillable = [
         'prefactura_id', 'servicio_id', 'nombre_servicio', 'precio_unitario', 'cantidad',
-        'es_de_tercero', 'margen', 'ajuste_precio', 'concepto', 'proveedor_id', 'remision', 'orden', 'es_cortesia',
+        'es_de_tercero', 'margen', 'ajuste_precio', 'concepto', 'proveedor_id', 'remision', 'orden', 'es_cortesia', 'grupo',
     ];
 
     protected $casts = [

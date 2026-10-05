@@ -190,6 +190,84 @@ class PrefacturaRenglonController extends Controller
         ]);
     }
 
+    /**
+     * Agrupa o desagrupa un renglón: `grupo` es la etiqueta, o `null` para desagrupar.
+     *
+     * NO toca el dinero, y eso es el invariante del bloque: `subtotal()` sigue sumando el
+     * importe de cada renglón, uno por uno, y el grupo solo existe al imprimir. Por eso no
+     * hace falta ninguna guarda contra perder dinero: no hay nada que poner en cero.
+     *
+     * Que el grupo quede congelado al cerrar sale de la guarda de `FactPrefacturaRenglon`,
+     * que rechaza cualquier escritura por modelo sobre una prefactura cerrada.
+     */
+    public function grupo(Request $request, int $id, int $renglon): JsonResponse
+    {
+        // `filled` es una regla implícita: corre también con `null` y lo rechazaría, así que
+        // solo se exige cuando hay una etiqueta (la ruta no convierte '' en null).
+        $reglas = $request->input('grupo') === null
+            ? ['present', 'nullable']
+            : ['present', 'string', 'filled', 'max:60'];
+
+        $datos = $request->validate(
+            ['grupo' => $reglas],
+            [
+                'grupo.present' => 'Indica la etiqueta del grupo, o null para desagrupar.',
+                'grupo.filled' => 'La etiqueta del grupo no puede estar vacía. Para desagrupar, manda null.',
+                'grupo.max' => 'La etiqueta del grupo no puede pasar de 60 caracteres.',
+            ],
+        );
+        $etiqueta = $datos['grupo'];
+
+        $prefactura = FactPrefactura::findOrFail($id);
+
+        if ($respuesta = $this->rechazoRapido($prefactura)) {
+            return $respuesta;
+        }
+
+        $resultado = DB::transaction(function () use ($request, $id, $renglon, $etiqueta) {
+            $actual = $this->bloquear($id);
+
+            if ($respuesta = $this->rechazarSiDescartada($actual)) {
+                return $respuesta;
+            }
+
+            $fila = $actual->renglones()->whereKey($renglon)->firstOrFail();
+            $anterior = $fila->grupo;
+
+            // Sin cambio no hay escritura ni bitácora.
+            if ($anterior === $etiqueta) {
+                return $actual;
+            }
+
+            $fila->update(['grupo' => $etiqueta]);
+
+            $descripcion = $etiqueta === null
+                ? "Se desagrupó el servicio {$fila->nombre_servicio} de la prefactura {$actual->id}: salía en el grupo «{$anterior}»."
+                : "Se agrupó el servicio {$fila->nombre_servicio} de la prefactura {$actual->id} en el grupo «{$etiqueta}».";
+
+            Bitacora::log(
+                modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
+                accion: Bitacora::ACCION_ACTUALIZAR,
+                descripcion: $descripcion,
+                usuarioId: $request->user()->id,
+                registroId: $actual->id,
+                datosAnteriores: ['renglon_id' => $fila->id, 'grupo' => $anterior],
+                datosNuevos: ['renglon_id' => $fila->id, 'grupo' => $etiqueta],
+            );
+
+            return $actual;
+        });
+
+        if ($resultado instanceof JsonResponse) {
+            return $resultado;
+        }
+
+        return response()->json([
+            'message' => $etiqueta === null ? 'Renglón desagrupado.' : 'Renglón agrupado.',
+            'prefactura' => app(PrefacturaController::class)->fichaDe($resultado->id),
+        ]);
+    }
+
     public function estancia(Request $request, int $id, CargosEstancia $cargos): JsonResponse
     {
         $prefactura = FactPrefactura::findOrFail($id);
