@@ -133,6 +133,20 @@ test('una etiqueta vacia o de solo espacios DESAGRUPA, no se rechaza', function 
     }
 });
 
+test('la etiqueta se recorta: con y sin espacios es el MISMO grupo', function () {
+    // La etiqueta ES la identidad del grupo. Si ' Rampa ' no se recortara, quedaria distinta
+    // de 'Rampa' y el documento imprimiria dos filas donde el operador quiso una.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    $a = renglonDe($p, 100.0, 1);
+    $b = renglonDe($p, 50.0, 1);
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/renglones/{$a->id}/grupo", ['grupo' => ' Rampa '])->assertOk();
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/renglones/{$b->id}/grupo", ['grupo' => 'Rampa'])->assertOk();
+
+    expect([$a->fresh()->grupo, $b->fresh()->grupo])->toBe(['Rampa', 'Rampa']);
+});
+
 test('sin el campo grupo se rechaza: omitirlo no es lo mismo que desagrupar', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $p = prefacturaBorrador();

@@ -194,8 +194,9 @@ class PrefacturaRenglonController extends Controller
      * Agrupa o desagrupa un renglón: `grupo` es la etiqueta, o `null` para desagrupar.
      *
      * NO toca el dinero, y eso es el invariante del bloque: `subtotal()` sigue sumando el
-     * importe de cada renglón, uno por uno, y el grupo solo existe al imprimir. Por eso no
-     * hace falta ninguna guarda contra perder dinero: no hay nada que poner en cero.
+     * importe de cada renglón, uno por uno, y el grupo está pensado solo para el documento
+     * impreso. Por eso no hace falta ninguna guarda contra perder dinero: no hay nada que
+     * poner en cero.
      *
      * Una etiqueta en blanco DESAGRUPA: `ConvertEmptyStringsToNull` convierte la cadena vacía
      * en `null` en toda la aplicación. Exigir una etiqueta no vacía al agrupar es de la pantalla.
