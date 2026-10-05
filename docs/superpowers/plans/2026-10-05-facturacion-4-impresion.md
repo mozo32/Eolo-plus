@@ -100,10 +100,32 @@ documento.
     'esCotizacion' => bool,           // true: COTIZACIÓN sin folio; false: documento emitido
     'subtotal' => string,             // ya calculado: sellado o derivado según el caso
     'iva' => string,
-    'ivaTasa' => string,
+    'ivaEtiqueta' => string,          // la tasa como porcentaje, p. ej. '16%'
     'total' => string,
+    'cambio' => string,               // 2 decimales; la línea CAMBIO sale si es > 0
+    'importes' => array,              // [id de renglón => importe], sobre los objetos cargados
     'elaboradoPor' => string,         // el nombre de quien cerró, o de quien imprime
 ]
+
+**Las nueve claves las arma quien llama, DENTRO de su `try/catch`.** La vista no llama a
+ningún método que calcule dinero ni que pueda lanzar, y eso no es estilo: la vista se
+renderiza **después** de ese `try/catch`, así que una excepción nacida ahí sería un 500 en
+lugar de un 422.
+
+`importes` existe por la misma razón, y hay que armarlo **sobre la colección ya cargada que
+la vista itera**, no releyendo:
+
+```php
+$importes = $prefactura->renglones
+    ->mapWithKeys(fn (FactPrefacturaRenglon $renglon) => [$renglon->id => $renglon->importe()])
+    ->all();
+```
+
+Releer abre una carrera real: `subtotalDerivado()` relee los renglones con
+`renglones()->get()`, así que si alguien **corrige** un `ajuste_precio` desconocido entre la
+carga y esa relectura, la verificación no lanza, la vista sí sobre el objeto viejo, y sale un
+**500 sobre una prefactura cuyos datos vigentes están bien**. Calculando sobre los mismos
+objetos, el agujero no existe.
 ```
 
 **Contexto que el brief no puede saber:**
@@ -349,7 +371,8 @@ En `app/Models/FactPrefactura.php`, junto a las otras relaciones:
    `CANT.` e `IMPORTE`. Por cada renglón: `nombre_servicio`, `remision`,
    `precio_unitario`, `cantidad` y `importe()`. **Si `es_cortesia`**, el importe sale
    `0.00` y la fila lleva la palabra `Cortesía` — el precio unitario **se sigue mostrando**.
-6. **Los totales:** `$subtotal`, `IVA ({{ $ivaTasa }})` con `$iva`, y `TOTAL` con `$total`.
+6. **Los totales:** `$subtotal`, `IVA ({{ $ivaEtiqueta }})` —un porcentaje, `'16%'`, como
+   los cuatro PDF viejos— con `$iva`, y `TOTAL` con `$total`.
 7. **FORMA DE PAGO:** una línea por `$prefactura->pagos`, con
    `$pago->formaPago?->nombre` y `$pago->monto`. Y, si `$prefactura->cambio()` es mayor que
    cero, una línea `CAMBIO`.
@@ -683,9 +706,31 @@ class PrefacturaPdfController extends Controller
         return $this->render($prefactura, esCotizacion: false, cifras: [
             'subtotal' => (string) $prefactura->subtotal_sellado,
             'iva' => (string) $prefactura->iva_sellado,
-            'ivaTasa' => (string) $prefactura->iva_tasa_sellada,
+            'ivaEtiqueta' => $prefactura->ivaTasaEtiqueta(),
             'total' => (string) $prefactura->total_sellado,
+            'cambio' => $prefactura->cambio(),
+            'importes' => $this->importesDe($prefactura),
         ], elaboradoPor: $prefactura->cerradaPor?->name ?? 'Sin registrar');
+    }
+
+    /**
+     * El importe de cada renglón, indexado por su id, calculado sobre la colección YA
+     * CARGADA que la vista itera y no releyendo de la base.
+     *
+     * Las dos cosas importan. Que lo calcule el controlador y no la vista, porque la vista
+     * se renderiza después del `try/catch` y una excepción de `importe()` ahí sería un 500
+     * en lugar de un 422. Y que use estos objetos y no otra lectura, porque
+     * `subtotalDerivado()` sí relee: si alguien corrigiera un `ajuste_precio` desconocido
+     * entre la carga y esa relectura, la verificación no lanzaría y la vista sí, sobre el
+     * objeto viejo, y saldría un 500 en un documento cuyos datos vigentes están bien.
+     *
+     * @return array<int, string>
+     */
+    private function importesDe(FactPrefactura $prefactura): array
+    {
+        return $prefactura->renglones
+            ->mapWithKeys(fn (FactPrefacturaRenglon $renglon) => [$renglon->id => $renglon->importe()])
+            ->all();
     }
 
     /** Arma el PDF. La plantilla solo formatea: las cifras llegan ya calculadas. */
@@ -904,8 +949,10 @@ En `PrefacturaPdfController`:
             $cifras = [
                 'subtotal' => $prefactura->subtotal(),
                 'iva' => $prefactura->iva(),
-                'ivaTasa' => $prefactura->ivaTasa(),
+                'ivaEtiqueta' => $prefactura->ivaTasaEtiqueta(),
                 'total' => $prefactura->total(),
+                'cambio' => $prefactura->cambio(),
+                'importes' => $this->importesDe($prefactura),
             ];
         } catch (UnexpectedValueException $e) {
             report($e);
@@ -1132,7 +1179,8 @@ verdad (`%PDF-` y el `content-type`). Misma garantía, sin dependencia nueva, y 
 rápido.
 
 **Consistencia de tipos.** La vista recibe siempre las mismas siete claves
-(`prefactura`, `esCotizacion`, `subtotal`, `iva`, `ivaTasa`, `total`, `elaboradoPor`), y las
+(`prefactura`, `esCotizacion`, `subtotal`, `iva`, `ivaEtiqueta`, `total`, `cambio`,
+`importes`, `elaboradoPor`), y las
 cuatro de dinero son **cadenas**. `render()` y `registrar()` son privados de
 `PrefacturaPdfController` y los usan sus dos métodos públicos. `sello_discrepa` es
 `boolean | null` en TypeScript, y la Task 4 compara con `!== false` justamente por el `null`.
