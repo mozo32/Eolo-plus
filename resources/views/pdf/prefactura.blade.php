@@ -153,9 +153,22 @@
 </head>
 <body>
     {{--
-        Esta vista FORMATEA, no calcula ni llama a métodos de dinero: todo lo que imprime
-        son atributos, relaciones y las ocho claves del array que quien la llama arma
-        (y por eso la excepción de un cálculo no puede nacer aquí, después de su try/catch):
+        Esta vista FORMATEA, no calcula: las cifras de totales llegan ya calculadas en las
+        ocho claves del array que quien la llama arma, y lo demás son atributos y relaciones.
+        Importa porque la vista se renderiza DESPUÉS del try/catch de quien la llama, así que
+        una excepción nacida aquí sería un 500 en lugar de un 422.
+
+        Con UNA excepción, deliberada: el importe de cada renglón se pide a
+        `$renglon->importe()` (abajo, en la tabla), porque un importe por renglón no cabe en
+        una clave sin duplicar la lista. No puede lanzar aquí porque quien llama ya ejecutó
+        `importe()` sobre TODOS estos renglones dentro de su try/catch antes de renderizar: la
+        cotización al pedir `FactPrefactura::subtotal()` (que en un borrador deriva) y el
+        documento emitido al verificar `FactPrefactura::discrepanciasDelSello()` (que deriva
+        siempre). **Quien añada un tercer punto de llamada tiene que calcular los
+        totales antes de renderizar**, o ese 422 se vuelve un 500. Las dos pruebas de
+        `totales_no_calculables` de ImpresionPrefacturaTest son la red.
+
+        Las ocho claves:
 
             prefactura   FactPrefactura con renglones, pagos.formaPago, cliente y aeronave
             esCotizacion bool: COTIZACIÓN sin folio, o documento emitido
