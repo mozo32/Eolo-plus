@@ -474,7 +474,9 @@ test('el documento de una cerrada se descarga como PDF', function () {
     $respuesta->assertOk()->assertHeader('content-type', 'application/pdf');
     // Un PDF de verdad empieza por %PDF-. No comparamos bytes: cambian con la version
     // de la libreria y con la fecha.
-    expect(substr($respuesta->streamedContent(), 0, 5))->toBe('%PDF-');
+    // getContent() y no streamedContent(): DomPDF devuelve una Response normal, no una
+    // StreamedResponse, asi que streamedContent() no sirve aqui.
+    expect(substr($respuesta->getContent(), 0, 5))->toBe('%PDF-');
 });
 
 test('un borrador NO tiene documento: se cotiza', function () {
@@ -628,6 +630,7 @@ use App\Http\Controllers\Api\Facturacion\Concerns\RechazaPrefacturaCerrada;
 use App\Http\Controllers\Controller;
 use App\Models\Bitacora;
 use App\Models\FactPrefactura;
+use App\Models\FactPrefacturaRenglon;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -824,6 +827,19 @@ git commit -m "El documento de una cerrada: lee el sello, rechaza lo que no se d
   `esCotizacion: true` de la Task 1.
 - Produces: `GET /api/facturacion/prefacturas/{id}/cotizacion`. La Task 4 lo llama.
 
+**Tres trampas que la Task 2 descubrió por las malas. No repitas ninguna:**
+
+- **`streamedContent()` no sirve:** DomPDF devuelve una `Response` normal, no una
+  `StreamedResponse`. Usa **`getContent()`**. Ya está corregido en el código de abajo.
+- **`->first()->update()` sobre una prefactura cerrada lanza en la propia preparación de la
+  prueba**, porque pasa por la guarda del modelo. Para preparar un renglón inválido en una
+  cerrada hay que usar `DB::table('fact_prefactura_renglones')->where(...)->update(...)`, que
+  es el patrón del repositorio. En un **borrador** `->update()` sí vale, y la cotización
+  siempre es un borrador, así que aquí no debería hacerte falta — pero tenlo presente.
+- **Una mutación con `touch()` no muere dentro del mismo segundo**, porque `updated_at` no
+  cambia. Si compruebas que algo no escribe con esa mutación, adelanta el reloj:
+  `$this->travel(5)->seconds()`.
+
 **Contexto:** la cotización es la misma hoja de un **borrador**, con cifras **derivadas**,
 sin folio y marcada como no emitida. Es la acción menos grave de las tres —no emite nada ni
 consume folio— y por eso la puede hacer cualquiera que pueda facturar. **Lo que sustituye al
@@ -843,7 +859,9 @@ test('la cotizacion de un borrador se descarga como PDF', function () {
     $respuesta = $this->get("/api/facturacion/prefacturas/{$p->id}/cotizacion");
 
     $respuesta->assertOk()->assertHeader('content-type', 'application/pdf');
-    expect(substr($respuesta->streamedContent(), 0, 5))->toBe('%PDF-');
+    // getContent() y no streamedContent(): DomPDF devuelve una Response normal, no una
+    // StreamedResponse, asi que streamedContent() no sirve aqui.
+    expect(substr($respuesta->getContent(), 0, 5))->toBe('%PDF-');
 });
 
 test('una cerrada NO se cotiza: ya esta emitida', function () {
