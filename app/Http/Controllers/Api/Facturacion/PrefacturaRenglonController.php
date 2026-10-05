@@ -203,7 +203,8 @@ class PrefacturaRenglonController extends Controller
     public function grupo(Request $request, int $id, int $renglon): JsonResponse
     {
         // `filled` es una regla implícita: corre también con `null` y lo rechazaría, así que
-        // solo se exige cuando hay una etiqueta (la ruta no convierte '' en null).
+        // solo se exige cuando hay una etiqueta. `bootstrap/app.php` exceptúa esta ruta de
+        // ConvertEmptyStringsToNull, para que '' llegue como '' y no como null.
         $reglas = $request->input('grupo') === null
             ? ['present', 'nullable']
             : ['present', 'string', 'filled', 'max:60'];
