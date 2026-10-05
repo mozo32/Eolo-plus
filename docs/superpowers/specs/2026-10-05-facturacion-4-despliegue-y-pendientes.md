@@ -1,6 +1,6 @@
 # Bloque 4 — Guía de despliegue y pendientes abiertos
 
-**Fecha:** 2026-10-05 · **Rama:** `facturacion` (base del bloque: `c97b12a`)
+**Fecha:** 2026-10-05 · **Rama:** `facturacion` (base del bloque: `12440c3`, el último commit del bloque 3; `c97b12a` es el commit del plan del bloque 4 y queda **dentro** de él)
 
 Acompaña a `2026-10-05-facturacion-4-impresion-design.md` y continúa la guía del bloque
 anterior, `2026-10-02-facturacion-3-despliegue-y-pendientes.md`, a la que remite en varios
@@ -13,6 +13,16 @@ se nombra. Donde algo **no** se comprobó, se dice.
 
 **Nada de esta rama llega a `main` hasta que el departamento de facturación pruebe y apruebe.**
 Esta guía es lo que ese departamento y quien despliegue van a leer.
+
+**Los comandos de esta guía son de bash** (`ls -l`, `grep -E`, comentarios con `#`): córrelos desde Git
+Bash o WSL (la pila es XAMPP sobre Windows y `cmd` no los entiende); donde importa, el equivalente de
+PowerShell va junto al comando (se comprobaron las dos versiones en la máquina de desarrollo).
+
+**Antes de desplegar nada hay que subir las ramas: hoy solo existen en local.** `git branch -a` no
+muestra `remotes/origin/facturacion` ni `remotes/origin/reverb-declarado`, y
+`git ls-remote --heads origin` (comprobado el 2026-10-05) solo lista `dev`, `firma-en-entrega-turno`,
+`main` y `produccion`. Sin `git push -u origin facturacion` y `git push -u origin reverb-declarado`
+el servidor no tiene nada que traer.
 
 ## Lo que hizo esta rama
 
@@ -72,11 +82,18 @@ Los rechazos del endpoint, por si el departamento los ve en pantalla:
 tiene y **la primera petición de un PDF falla**. Es el paso que se olvida cuando el despliegue
 «solo trae código».
 
-Hay una segunda razón para que sea obligatorio, y es grave.
+Y hay un asunto aparte, grave, que **no es de esta rama sino de `main`** (la sección siguiente).
 
-## ATENCIÓN: un `composer install` limpio ROMPE la aplicación si `reverb-declarado` no está en producción
+## Dos cosas distintas sobre reverb: desplegar esta rama es seguro, y `main` en producción no
 
-Esto **no es del bloque 4**, pero el bloque 4 lo convierte en peligroso.
+Esto **no es del bloque 4 y no es una condición para desplegarlo**. Son dos asuntos, y conviene no
+mezclarlos:
+
+- **Desplegar `facturacion` es seguro por sí solo** (punto 1 de más abajo).
+- **Aparte y en paralelo, `reverb-declarado` tiene que subir a `main`**, porque la aplicación en
+  producción sobre `main` está a un `composer install` de romperse, con bloque 4 o sin él (punto 2).
+
+El problema de fondo:
 
 `laravel/reverb` y `pusher/pusher-php-server` estaban instalados en `vendor/` **sin figurar ni en
 `composer.json` ni en `composer.lock`**. La aplicación los usa: el `.env` tiene
@@ -85,8 +102,9 @@ Esto **no es del bloque 4**, pero el bloque 4 lo convierte en peligroso.
 (`bootstrap/cache/packages.php`) los referencia.
 
 Un `composer install` limpio **instala lo que dice el lock y retira lo que no está en él**: los
-retiraría, y **`artisan` dejaría de arrancar por completo**. La bomba ya estaba puesta; el
-bloque 4 le pone el detonador al hacer obligatorio ese comando.
+retiraría, y **`artisan` dejaría de arrancar por completo**. La bomba está puesta en `main`, con o
+sin bloque 4: cualquier `composer install` en producción la detona (el bloque 4 solo da un
+motivo más para correrlo, porque instalar DomPDF lo exige).
 
 Se descubrió porque el `composer require` de DomPDF **desinstaló los dos paquetes del `vendor/`
 durante el desarrollo**, y hubo que reinstalarlos desde la caché de Composer (reverb **1.12.0**,
@@ -100,21 +118,29 @@ que no declaraba pusher, lo retiró, y a partir de ese momento **ni `php artisan
 `BROADCAST_CONNECTION=reverb` en el `.env`, la aplicación **no bootea** sin el paquete. Exactamente
 lo que esta sección advierte que pasaría en producción.
 
-**Qué hay que hacer:**
+### 1. Esta rama: instalable por sí sola, sin precondiciones
 
-1. **Ya existe la rama `reverb-declarado`**, creada desde `main` (commit `94a3a19`), que los declara
-   con las versiones que ya estaban corriendo: `laravel/reverb:^1.12` → **v1.12.0** y
-   `pusher/pusher-php-server:^7.3` → **7.3.0**. Su lock gana 13 paquetes —los dos y sus
-   dependencias de ReactPHP— y **no retira ni cambia de versión ninguno**, comprobado comparando
-   el lock antes y después. Suite en esa rama: **229 en verde**.
-2. **Esa rama debe subir a `main` primero**, para que el arreglo no espere a que facturación
-   apruebe: la aplicación en producción está hoy a un `composer install` de romperse, con bloque 4
-   o sin él.
-3. **`facturacion` ya trae ese mismo arreglo fusionado** (commit `7a421c9`), así que **esta rama es
-   instalable por sí sola**: su `composer.json` declara los tres paquetes y su lock los fija
-   (dompdf **v3.1.2**, reverb **v1.12.0**, pusher **7.3.0**). Hizo falta porque, sin eso, el
-   departamento no habría podido ni instalar la rama para probarla.
-4. **Al fusionar las dos habrá conflicto en `composer.lock`**, porque cada una añade paquetes
+**`facturacion` ya trae el arreglo de reverb fusionado** (commit `7a421c9`): su `composer.json`
+declara los tres paquetes y su lock los fija (dompdf **v3.1.2**, reverb **v1.12.0**, pusher
+**7.3.0**). Un `composer install` sobre esta rama lee **su** lock, que declara reverb y pusher, así
+que **no retira nada y no hay nada que romper**. Quien despliegue esta rama para que el departamento
+pruebe **no tiene que confirmar nada en producción ni esperar a nadie**. Hizo falta fusionarlo
+porque, sin eso, el departamento no habría podido ni instalar la rama para probarla.
+
+### 2. Aparte y en paralelo: `reverb-declarado` tiene que subir a `main`
+
+La aplicación en producción **corriendo `main`** está hoy a un `composer install` de romperse, **con
+bloque 4 o sin él**. Es un asunto de `main` y no bloquea el despliegue de esta rama; pero no debe
+esperar a que facturación apruebe.
+
+1. **Existe la rama `reverb-declarado`** —**solo en local**: no está en el remoto (ver arriba)—,
+   creada desde `main` (commit `94a3a19`), que los declara con las versiones que ya estaban
+   corriendo: `laravel/reverb:^1.12` → **v1.12.0** y `pusher/pusher-php-server:^7.3` → **7.3.0**. Su
+   lock gana 13 paquetes —los dos y sus dependencias de ReactPHP— y **no retira ni cambia de versión
+   ninguno**, comprobado comparando el lock antes y después. Suite en esa rama: **229 en verde**.
+2. **Hay que subirla y fusionarla en `main` sin esperar a `facturacion`**: mientras no esté, un
+   `composer install` en producción retira los dos paquetes.
+3. **Al fusionar las dos habrá conflicto en `composer.lock`**, porque cada una añade paquetes
    distintos. Ya ocurrió al traer `reverb-declarado` a `facturacion`, y se resuelve así: tomar el
    lock de la rama que se conserva y regenerarlo con
    `composer update laravel/reverb pusher/pusher-php-server`. **No se resuelve el lock a mano.**
@@ -131,7 +157,10 @@ composer show barryvdh/laravel-dompdf     # debe mostrar la versión 3.1.x
 ## Orden de despliegue
 
 ```bash
-# 0. ANTES DE TODO: confirmar que `reverb-declarado` ya está en producción (ver arriba).
+# Nada que confirmar antes: esta rama es instalable por sí sola (trae reverb y pusher declarados),
+# así que `reverb-declarado` en `main` NO es una condición de este despliegue (ver arriba).
+# Sí hace falta que la rama `facturacion` esté subida al remoto (hoy solo existe en local) y que sea
+# la rama activa del servidor: con `main` activo, `git pull` no trae este bloque.
 
 git pull
 composer install --no-dev --optimize-autoloader
@@ -139,9 +168,10 @@ composer install --no-dev --optimize-autoloader
 # Comprobar que arranca y que las tres dependencias están. SI `artisan` falla, PARAR.
 php artisan --version
 composer show | grep -E 'laravel/reverb|pusher/pusher-php-server|barryvdh/laravel-dompdf'   # deben salir las tres
+# en PowerShell: composer show | Select-String 'laravel/reverb|pusher/pusher-php-server|barryvdh/laravel-dompdf'
 
 # El logo del documento. Si falta, el PDF sale SIN CABECERA Y NO DA ERROR (ver abajo).
-ls -l public/img/logo-facturacion.jpg
+ls -l public/img/logo-facturacion.jpg      # en PowerShell: Get-Item public\img\logo-facturacion.jpg
 
 php artisan optimize:clear
 npm ci && npm run build
@@ -225,6 +255,16 @@ si es lo que el departamento entrega al cliente).
 - [ ] **Una prefactura con cortesía**: el renglón sale con su precio y el importe en `0.00`.
 - [ ] **Una prefactura larga** (decenas de renglones): la firma y el pie no quedan huérfanos ni
       recortados.
+- [ ] **La aeronave en DATOS DE OPERACIÓN**: sale como `tipo (categoría)`, igual que en el papel
+      viejo (`invoice.php:134-135`), y un guion donde falte el dato. Fue lo único de la
+      especificación que el primer borrador de la plantilla se dejó fuera.
+- [ ] **Mirar el precio unitario en la hoja impresa.** El papel lo imprime con **cuatro decimales
+      y sin símbolo de moneda** (`100.0000`), mientras el viejo imprime `$100.00`; los importes y
+      los totales también salen sin `$` donde el viejo ponía `$` por fila y `MXN $` en el total
+      (`invoice.php:225,231,243,253`). Lo manda el plan del bloque; **la especificación no dice
+      nada**, y **nadie ha visto la hoja**: el departamento tiene que decidirlo mirándola, no
+      adivinándolo quien programa. De paso: la tasa se escribe `16 %` con espacio en la pantalla y
+      `16%` sin espacio en el papel.
 
 **El PDF viejo y el nuevo pueden diferir en el aspecto.** El viejo es `fpdf` con posicionamiento
 absoluto; el nuevo es HTML renderizado por DomPDF. **El contenido es el mismo; la maquetación no
@@ -261,10 +301,24 @@ activado y una sin él; y cancelando el diálogo de confirmación (no debe queda
 blanco abierta). Si el cierre sale bien pero el sello no cuadra, el operador ve un aviso de que
 quedó cerrada con su folio pero el documento no se pudo emitir.
 
+**Y una casilla más, que ninguna prueba puede marcar:**
+
+- [ ] **Pegar la URL del PDF en una pestaña nueva** (la de `/api/facturacion/prefacturas/{id}/pdf`,
+      copiada de la barra de direcciones tras pulsar **Imprimir**) y comprobar que **la sesión
+      sirve**. La razón: la pila `api` lleva `EnsureFrontendRequestsAreStateful`, que **solo aplica
+      la sesión cuando la petición trae `Referer` u `Origin` de un dominio de `sanctum.stateful`**
+      (la lista sale de `SANCTUM_STATEFUL_DOMAINS` en `config/sanctum.php`). Una navegación desde el
+      botón sí lo manda, pero **una URL pegada a mano, marcada como favorito o enviada a un
+      compañero puede no mandarlo**, y entonces `auth:sanctum` buscaría un token y respondería
+      **401**. **Ninguna prueba lo detecta**, porque todas usan `actingAs()`, que no pasa por el
+      guard real. Y es un caso natural: la especificación describe reimprimir como «volver a pedir
+      `/pdf`». **Si falla, hay que decidir si las dos rutas de impresión se mueven a la pila
+      `web`.** Hoy solo se documenta: no se tocó la pila de middleware.
+
 ## Resultado de las pruebas al cierre
 
-**1024 pruebas en verde**, medidas con `php artisan test` **en serie** (980 al empezar el
-bloque). `npx tsc --noEmit` solo da el error preexistente de
+**1034 pruebas en verde**, medidas con `php artisan test` **en serie** (980 al empezar el
+bloque; 1024 antes de la revisión final, que añadió pruebas y no quitó ninguna). `npx tsc --noEmit` solo da el error preexistente de
 `resources/js/actions/App/Http/Controllers/Api/WalkAroundController.ts(905,5)`; `eslint` queda
 limpio y `npm run build` termina bien.
 
@@ -278,16 +332,44 @@ comprobación de que el endpoint devuelve un PDF de verdad (`%PDF-` y el `conten
 sobre sqlite en memoria, igual que el resto: lo que sqlite no puede demostrar (puntos 1 a 6 de las
 guías de los bloques 2 y 3) **sigue pendiente** de MySQL real y este bloque no lo cambia.
 
+## ADVERTENCIA PARA EL BLOQUE 6: el CAMBIO de un documento emitido no está sellado, y nada lo verifica
+
+**Es el único camino por el que este bloque podría, en el futuro, emitir dos papeles distintos con
+el mismo folio, y el bloque 6 es quien lo abre.**
+
+- `cambio()` **se deriva**: resta el total (el sellado, en una cerrada) de los pagos **vigentes** que
+  lee de la base (`sobrepago()` y `efectivoPagado()`). **No hay columna `cambio_sellado`**
+  (la migración de pagos lo dice: «NO se guarda el cambio»), mientras que el sistema viejo **sí** lo
+  guardaba: `tb_prefcatura` y `tb_hprefactura` llevan `Cambio` (`Prefectura/invoice.php:30,47`), aunque el dato del viejo no era fiable
+  (la propia migración de pagos mide que está mal en las dos direcciones): lo que falta es **sellar el
+  cambio bien calculado**, no copiar el del viejo.
+- `discrepanciasDelSello()` compara subtotal, IVA, total y tasa. **No compara el cambio**, así que
+  nada avisa si cambia.
+- Hoy el papel es estable **solo** porque el bloque 3 bloquea los pagos de una cerrada
+  (`PagosPrefactura::bloquearBorrador` lanza `RenglonDePrefacturaCerradaException`). Es una
+  protección de otro bloque, no del papel.
+- **El bloque 6 es «corregir una prefactura cerrada»: en el momento en que permita tocar los pagos
+  de una cerrada, una reimpresión imprimirá un cambio distinto del que firmó el cliente, sin 409 y
+  sin aviso.** El folio será el mismo y el papel no.
+- Quien lo herede tiene que decidirlo **antes** de abrir ese camino: o sellar el cambio al cerrar
+  (columna `cambio_sellado`, que `discrepanciasDelSello()` compare y que el documento lea, como ya
+  hace con las otras tres cifras), o dejar escrito que el cambio de un documento emitido es el de
+  hoy y no el de la firma.
+
 ## La deuda que este bloque NO retira
 
 **Nueva o tocada por este bloque:**
 
-- **La ruta `GET /api/ControlMedicamento/exportar-pdf` estaba rota y deja de estarlo.**
+- **La ruta `GET /api/ControlMedicamento/exportar-pdf` estaba rota y deja de estarlo; lo que hay que decidir es su puerta.**
   `ControlMedicamentoController::exportarPdf` importa `Barryvdh\DomPDF\Facade\Pdf`, una clase que
   no existía; al instalar DomPDF **ya existe**, y la ruta pasa de fallar a funcionar. **Nadie la
   llama todavía desde el frontend** (solo aparece en el archivo generado
-  `resources/js/actions/.../ControlMedicamentoController.ts`). Conviene que alguien decida si se
-  usa o se borra; hoy es una ruta autenticada que antes daba error y ahora entrega un PDF.
+  `resources/js/actions/.../ControlMedicamentoController.ts`). **Falta el dato que
+  hace falta para decidir si se usa o se borra:** ese grupo de rutas (`routes/api.php:169`) lleva
+  `['api', 'auth:sanctum']` **y nada más**, sin `subdep`. **No tiene puerta departamental**, así que
+  la ruta entrega el PDF de los cierres de control de medicamentos a **cualquier usuario
+  autenticado**. Antes reventaba por una clase inexistente; ahora funciona. Eso es lo que hay que
+  decidir: si el PDF lleva puerta departamental o si la ruta se borra.
 - **Las dos vías de PDF del repositorio siguen sin unificar.** Este bloque usa DomPDF **en el
   servidor**; el control de medicamentos, la entrega de turno y el walk-around usan
   `@react-pdf/renderer` **en el cliente**. Alguien debería decidirlo antes de que haya una tercera.
@@ -321,6 +403,29 @@ guías de los bloques 2 y 3) **sigue pendiente** de MySQL real y este bloque no 
   `storage/fonts` ni siquiera existe y el PDF sale con DejaVu: por eso no se afirma que haga falta,
   solo que **no se midió**.
 
+- **El `chroot` de DomPDF es la raíz del proyecto, y el logo tiene que vivir DENTRO de ella.** Con
+  la configuración que viene en el paquete (no hay `config/dompdf.php` propio), `chroot` es
+  `realpath(base_path())`: medido en esta máquina, un logo en `public/img/` y uno en `storage/app/`
+  se incrustan en el PDF, y uno **fuera del proyecto** (el directorio temporal) **no**, y **sin
+  ningún error**: el PDF sale sin imagen. Eso significa que mover el logo a `storage/` **no lo
+  rompe**, y que lo que sí lo rompe es sacarlo del proyecto, o que alguien publique
+  `config/dompdf.php` y estreche el `chroot` (por ejemplo a `public_path()`): entonces el logo sí
+  tendría que vivir en `public/`. `enable_remote` está en `false`, así que una URL tampoco serviría.
+  Quien toque el logo, la ruta o esa configuración tiene que volver a mirar la hoja.
+- **El RFC del cliente sale en el papel viejo y no en el nuevo** (`invoice.php:137-138`). La
+  especificación decidió los tres campos del cliente (nombre, teléfono, correo) y está en su derecho,
+  pero es una omisión en un documento que el cliente usa para pedir su factura fiscal. Mejor
+  declararla que descubrirla cuando el departamento la eche en falta.
+- **La cotización mezcla dos lecturas de los renglones.** `subtotal()`, `iva()` y `total()`
+  **releen** los renglones de la base, mientras `importesDe()` usa la colección ya cargada. Una
+  edición concurrente a mitad de petición imprimiría renglones que no suman el subtotal impreso, y
+  **un borrador no tiene sello que lo delate**. La ventana es diminuta y es una cotización, no un
+  documento emitido, así que **no se arregla aquí**; pero es la cara opuesta de la carrera que el
+  documento emitido sí tiene cubierta (ahí los importes se calculan sobre los objetos cargados y el
+  sello se verifica). Además, esas llamadas son **muchas relecturas**: medido sobre sqlite, una
+  cotización consulta los renglones **7 veces** (1 carga y 6 relecturas) y los pagos **3** (1 carga y
+  2 relecturas).
+
 **De los bloques anteriores, sigue abierta sin cambios** (los archivos del bloque no la tocan):
 
 - **La conexión `remota` entra con credenciales de escritura** (`root` contra la base legada). La
@@ -340,12 +445,22 @@ guías de los bloques 2 y 3) **sigue pendiente** de MySQL real y este bloque no 
 
 ## Resumen: lo que hay que hacer, en orden
 
-1. **Confirmar que `reverb-declarado` está en producción.** Si no, **parar**.
+**Desplegar esta rama es seguro por sí solo**: trae reverb y pusher declarados y no hay nada que
+confirmar en producción antes.
+
+1. **Subir `facturacion` al remoto** (hoy solo existe en local) y que sea la rama activa del
+   servidor.
 2. `git pull` y **`composer install --no-dev --optimize-autoloader`** (no basta el `git pull`).
-3. `php artisan --version` y comprobar que las tres dependencias aparecen en `composer show`.
+3. `php artisan --version` y comprobar que las tres dependencias aparecen en `composer show`. Si
+   `artisan` falla, **parar**.
 4. Comprobar que `public/img/logo-facturacion.jpg` está en el servidor.
 5. `php artisan optimize:clear` y `npm ci && npm run build`.
 6. **Que alguien imprima una prefactura real y la compare con una del sistema viejo**, con la
-   lista de arriba, y que pruebe los tres botones en el navegador (sobre todo **Cerrar e
-   imprimir**).
+   lista de arriba (incluidos el precio unitario sin `$` y la URL pegada en una pestaña nueva), y
+   que pruebe los tres botones en el navegador (sobre todo **Cerrar e imprimir**).
 7. Solo entonces, que el departamento decida si aprueba.
+
+**Aparte y en paralelo, sin esperar a los pasos de arriba:** subir `reverb-declarado` y fusionarla
+en `main`, porque la aplicación en producción sobre `main` está a un `composer install` de
+romperse, con bloque 4 o sin él. Y decidir qué se hace con
+`GET /api/ControlMedicamento/exportar-pdf`, que ahora funciona y no tiene puerta departamental.
