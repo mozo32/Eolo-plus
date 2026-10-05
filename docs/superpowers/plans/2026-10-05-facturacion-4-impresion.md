@@ -912,6 +912,21 @@ test('cotizar queda en la bitacora y dice que NO se emitio nada', function () {
         ->and($registro->descripcion)->toContain('no se emitió');
 });
 
+test('si el render falla, NO queda entrada en la bitacora', function () {
+    // El orden es renderizar y despues registrar, justamente para esto: una bitacora que
+    // dice «se imprimio» un documento que nunca salio es peor que no tener entrada.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    renglonDe($p, 100.0, 1);
+
+    // Si no encuentras una forma limpia de hacer fallar el render sin ensuciar el entorno,
+    // dilo en el reporte y deja esta prueba fuera: el orden del codigo es lo que importa.
+    // Una via: apuntar la vista a un nombre inexistente con View::replaceNamespace, o
+    // renombrar temporalmente el logo y comprobar que DomPDF lanza.
+
+    expect(Bitacora::where('accion', Bitacora::ACCION_EXPORTAR)->count())->toBe(0);
+})->skip('Pendiente: decide con el controlador si hay forma limpia de romper el render.');
+
 test('cotizar NO escribe nada mas que la bitacora, ni consume folio', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $p = prefacturaBorrador();
@@ -989,6 +1004,13 @@ En `PrefacturaPdfController`:
             ], 422);
         }
 
+        // Se renderiza ANTES de registrar, y el orden importa: si DomPDF fallara, lanzaría
+        // aquí y no quedaría en la bitácora un «se imprimió» de un documento que nunca salió;
+        // y si fallara el registro, lanzaría antes del `return` y no se entregaría un PDF sin
+        // registrar. Ninguna de las dos mitades puede quedar sin la otra.
+        $respuesta = $this->render($prefactura, esCotizacion: true, cifras: $cifras,
+            elaboradoPor: $request->user()->name);
+
         $this->registrar(
             $request->user()->id,
             $prefactura,
@@ -996,8 +1018,7 @@ En `PrefacturaPdfController`:
             ['total' => $cifras['total'], 'emitido' => false],
         );
 
-        return $this->render($prefactura, esCotizacion: true, cifras: $cifras,
-            elaboradoPor: $request->user()->name);
+        return $respuesta;
     }
 ```
 
