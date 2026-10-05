@@ -320,10 +320,9 @@ class CargosEstancia
      * casos en que no hay nada legítimo que cobrar: si falta cualquiera de las dos tarifas,
      * y si la diferencia sale cero o negativa.
      *
-     * Esa última guarda es la que el sistema viejo no tenía. `aplicar_descuento.php` y la
-     * captura a mano dejaron 10 renglones con precio negativo en el histórico, y dos de
-     * ellos no corresponden a ningún cargo: un ajuste negativo es cobrar de menos sin que
-     * nada lo explique.
+     * Esa última guarda existe porque un ajuste con diferencia cero sería un renglón que no
+     * dice nada, y uno con diferencia negativa, cobrar de menos sin que nada lo explique. El
+     * sistema viejo no tenía ninguna guarda equivalente.
      *
      * Escala 4 porque `precio_unitario` es `decimal(10,4)`, y `bcsub` porque las tarifas
      * llegan como cadenas decimales y aquí no entra ningún `float`.

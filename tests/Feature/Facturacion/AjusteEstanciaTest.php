@@ -88,8 +88,9 @@ test('si la diferencia es NEGATIVA tampoco se cobra', function () {
 
     $resultado = app(CargosEstancia::class)->recalcular($p, 0, 0, 0, ajustes2a12: 1);
 
+    // Cada nombre junto a SU cifra: las dos tarifas son distintas, así que cruzarlas falla.
     expect($p->fresh()->renglones()->where('concepto', FactServicio::CONCEPTO_ESTANCIA_AJUSTE_2H_12H)->count())->toBe(0)
-        ->and($resultado['motivo'])->toContain('de 2 h a 12 h');
+        ->and($resultado['motivo'])->toContain('ajuste de estancia de 2 h a 12 h (cobra la diferencia de dos tarifas y debe salir mayor que cero; tránsito de 12 horas: 1000.00, tránsito de 2 horas: 1500.00)');
 });
 
 test('si falta una de las dos tarifas que la resta necesita, el motivo nombra el ajuste', function () {
@@ -105,9 +106,10 @@ test('si falta una de las dos tarifas que la resta necesita, el motivo nombra el
         ->and($resultado['motivo'])->toContain('tránsito de 12 horas: sin tarifa, tránsito de 2 horas: sin tarifa');
 });
 
-test('si falta SOLO la tarifa menor, el ajuste no cobra la mayor entera', function (string $ajuste, array $tarifas) {
-    // Sin la guarda de null, una tarifa ausente se resta como cero y el ajuste cobra la otra
-    // tarifa completa: el error caro, y el que la prueba de «faltan las dos» no distingue.
+test('si falta SOLO una de las dos tarifas, el ajuste no se cobra', function (string $ajuste, array $tarifas) {
+    // Sin la guarda de null, una tarifa ausente se resta como cero. Si falta la menor, el ajuste
+    // cobraría la otra tarifa completa (el error caro, que «faltan las dos» no distingue); si falta
+    // la mayor, sale negativo y solo lo ataja la guarda de signo, así que va con su propia aserción.
     serviciosDeAjuste();
     $p = prefacturaBorrador();
     $p->satelite->update($tarifas);
@@ -119,16 +121,18 @@ test('si falta SOLO la tarifa menor, el ajuste no cobra la mayor entera', functi
 })->with([
     'de 2 h a 12 h sin tarifa de 2 h' => ['ajustes2a12', ['tarifa_transito_2h' => null, 'tarifa_transito_12h' => '1500.0000', 'tarifa_pernocta' => '2200.0000']],
     'de 12 h a pernocta sin tarifa de 12 h' => ['ajustes12aPernocta', ['tarifa_transito_2h' => '1000.0000', 'tarifa_transito_12h' => null, 'tarifa_pernocta' => '2200.0000']],
+    'de 2 h a 12 h sin tarifa de 12 h' => ['ajustes2a12', ['tarifa_transito_2h' => '1000.0000', 'tarifa_transito_12h' => null, 'tarifa_pernocta' => '2200.0000']],
+    'de 12 h a pernocta sin tarifa de pernocta' => ['ajustes12aPernocta', ['tarifa_transito_2h' => '1000.0000', 'tarifa_transito_12h' => '1500.0000', 'tarifa_pernocta' => null]],
 ]);
 
 test('el motivo del ajuste de 12h a pernocta nombra SUS dos tarifas', function () {
     serviciosDeAjuste();
-    $p = prefacturaConTarifasDeEstancia('1000.0000', '1500.0000', '1500.0000');
+    // Pernocta más barata que el tramo de 12 h: diferencia negativa y cifras distintas.
+    $p = prefacturaConTarifasDeEstancia('900.0000', '1500.0000', '1000.0000');
 
     $resultado = app(CargosEstancia::class)->recalcular($p, 0, 0, 0, ajustes12aPernocta: 1);
 
-    expect($resultado['motivo'])->toContain('ajuste de estancia de 12 h a pernocta')
-        ->and($resultado['motivo'])->toContain('pernocta: 1500.00, tránsito de 12 horas: 1500.00');
+    expect($resultado['motivo'])->toContain('ajuste de estancia de 12 h a pernocta (cobra la diferencia de dos tarifas y debe salir mayor que cero; pernocta: 1000.00, tránsito de 12 horas: 1500.00)');
 });
 
 test('una cantidad de ajuste negativa en el servicio se rechaza', function () {
@@ -227,7 +231,12 @@ test('el endpoint acepta las dos cantidades nuevas y son opcionales', function (
         'ajustes_2h_12h' => 1, 'ajustes_12h_pernocta' => 1,
     ])->assertOk();
 
-    expect($p->fresh()->renglones()->count())->toBe(2);
+    $renglones = $p->fresh()->renglones;
+
+    // Diferencias distintas (500 y 700): confundir un ajuste con el otro cambiaría estos precios.
+    expect($renglones)->toHaveCount(2)
+        ->and((string) $renglones->firstWhere('concepto', FactServicio::CONCEPTO_ESTANCIA_AJUSTE_2H_12H)->precio_unitario)->toBe('500.0000')
+        ->and((string) $renglones->firstWhere('concepto', FactServicio::CONCEPTO_ESTANCIA_AJUSTE_12H_PERNOCTA)->precio_unitario)->toBe('700.0000');
 });
 
 test('una cantidad de ajuste negativa se rechaza con su mensaje en espanol', function () {
