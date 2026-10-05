@@ -42,6 +42,7 @@ use App\Http\Controllers\Api\Facturacion\FormaPagoController;
 use App\Http\Controllers\Api\Facturacion\PrecioCombustibleController;
 use App\Http\Controllers\Api\Facturacion\PrefacturaController;
 use App\Http\Controllers\Api\Facturacion\PrefacturaPagoController;
+use App\Http\Controllers\Api\Facturacion\PrefacturaPdfController;
 use App\Http\Controllers\Api\Facturacion\PrefacturaRenglonController;
 use App\Http\Controllers\Api\Facturacion\ProveedorController;
 use App\Http\Controllers\Api\Facturacion\ServicioController;
@@ -375,6 +376,11 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(functio
     Route::get('/prefacturas', [PrefacturaController::class, 'index']);
     Route::get('/prefacturas/llegadas-sin-facturar', [PrefacturaController::class, 'llegadasSinFacturar']);
     Route::get('/prefacturas/{id}', [PrefacturaController::class, 'show'])->whereNumber('id');
+
+    // Imprimir no escribe nada, así que vive fuera del grupo de escritura; pero exige el
+    // subdepartamento, porque emitir un documento es una acción del departamento.
+    Route::get('/prefacturas/{id}/pdf', [PrefacturaPdfController::class, 'pdf'])
+        ->middleware('subdep:factPrefacturas')->whereNumber('id');
 
     Route::middleware('subdep:factCategoriasAeronave')->group(function () {
         Route::post('/categorias-aeronave', [CategoriaAeronaveController::class, 'store']);
