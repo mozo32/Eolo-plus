@@ -1,9 +1,9 @@
 import AppLayout from '@/layouts/app-layout';
 import { facturacionPrefacturas } from '@/routes';
-import { ErrorApi, apiPrefacturas, mensajeDeError, urlCotizacionPrefactura, urlDocumentoPrefactura, type DiscrepanciaSello, type Prefactura } from '@/stores/apiFacturacionCatalogos';
+import { ErrorApi, apiPrefacturas, mensajeDeError, urlCotizacionPrefactura, urlDocumentoPrefactura, type DiscrepanciaSello, type Prefactura, type RenglonPrefactura } from '@/stores/apiFacturacionCatalogos';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { ArrowLeft, Ban, FileText, Gift, Globe, Lock, Plus, Printer, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, X } from 'lucide-react';
+import { ArrowLeft, Ban, FileText, Gift, Globe, Group, Lock, Plus, Printer, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, Ungroup, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import CabeceraPantalla from './components/CabeceraPantalla';
@@ -16,6 +16,9 @@ import PanelNotas from './components/PanelNotas';
 import SelectorCliente from './components/SelectorCliente';
 
 const TEXTO_MAX = 120;
+
+/** Lo mismo que acepta el servidor para la etiqueta de un grupo. */
+const GRUPO_MAX = 60;
 
 /** Lo que devuelve el cierre del servidor. */
 type RespuestaCierre = Awaited<ReturnType<typeof apiPrefacturas.cerrar>>;
@@ -51,6 +54,49 @@ const formularioDe = (p: Prefactura): FormularioEncabezado => ({
 
 const sonIguales = (a: FormularioEncabezado, b: FormularioEncabezado): boolean =>
     a.clienteId === b.clienteId && a.llegada === b.llegada && a.salida === b.salida && a.origen === b.origen && a.destino === b.destino;
+
+/**
+ * El cuerpo del diálogo de agrupar: la explicación y, si la prefactura ya tiene grupos, un botón por etiqueta que la copia al campo.
+ * La etiqueta ES la identidad del grupo, así que reutilizar una tiene que ser un clic y no haberla tecleado igual. Las etiquetas las
+ * capturó un usuario: se pintan con `textContent`, nunca como HTML.
+ */
+function cuerpoDeAgrupar(existentes: string[]): HTMLElement {
+    const cuerpo = document.createElement('div');
+    cuerpo.style.fontSize = '14px';
+
+    const explicacion = document.createElement('p');
+    explicacion.textContent = 'Los renglones con la misma etiqueta salen juntos, en una sola fila, en el documento. El total no cambia.';
+    cuerpo.append(explicacion);
+
+    if (existentes.length > 0) {
+        const aviso = document.createElement('p');
+        aviso.textContent = 'Grupos que ya hay en esta prefactura (un clic para usar el mismo):';
+        aviso.style.marginTop = '12px';
+        cuerpo.append(aviso);
+
+        const lista = document.createElement('div');
+        lista.style.cssText = 'display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:6px';
+
+        for (const etiqueta of existentes) {
+            const boton = document.createElement('button');
+            boton.type = 'button';
+            boton.textContent = etiqueta;
+            boton.style.cssText = 'border:1px solid #c7d2fe;background:#eef2ff;color:#4338ca;border-radius:9999px;padding:2px 10px;font-weight:700;cursor:pointer';
+            boton.addEventListener('click', () => {
+                const campo = Swal.getInput();
+                if (campo === null) return;
+                campo.value = etiqueta;
+                Swal.resetValidationMessage();
+                campo.focus();
+            });
+            lista.append(boton);
+        }
+
+        cuerpo.append(lista);
+    }
+
+    return cuerpo;
+}
 
 const ETIQUETA_CAMPO_SELLO: Record<string, string> = { subtotal: 'Subtotal', iva: 'IVA', total: 'Total', iva_tasa: 'Tasa de IVA' };
 
@@ -432,6 +478,27 @@ export default function EditorPrefactura({ id }: Props) {
         return confirmacion.isConfirmed;
     };
 
+    /**
+     * Dentro de un grupo el importe de una cortesía cuenta como 0.00 y la fila del grupo no lleva la marca: el cliente deja de ver que ese
+     * servicio fue gratis. El total no cambia. No se bloquea (agrupar una cortesía puede ser lo que se quiere), pero quien opera tiene que
+     * saberlo. `situacion` dice cuál de los dos caminos llega aquí: agrupar una cortesía, o marcar como cortesía un renglón ya agrupado.
+     */
+    const confirmarCortesiaEnGrupo = async (nombre: string, situacion: 'agrupar' | 'marcar'): Promise<boolean> => {
+        const confirmacion = await Swal.fire({
+            // El nombre sale del catálogo: titleText (texto plano), nunca title, que SweetAlert2 interpreta como HTML.
+            titleText: situacion === 'agrupar' ? `Agrupar "${nombre}"` : `Marcar "${nombre}" como cortesía`,
+            text: `${situacion === 'agrupar' ? 'Este renglón es una cortesía.' : 'Este renglón está dentro de un grupo.'} Dentro de un grupo su importe cuenta como 0.00 y la fila del grupo no lleva la marca de cortesía: en el documento el cliente dejará de ver que este servicio fue gratis. El total no cambia. ¿Continuar?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: situacion === 'agrupar' ? 'Sí, agrupar' : 'Sí, marcar como cortesía',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#4f46e5',
+            reverseButtons: true,
+        });
+
+        return confirmacion.isConfirmed;
+    };
+
     const quitarRenglon = (renglonId: number, nombre: string, concepto: string | null) =>
         ejecutar(`quitar-${renglonId}`, 'No se pudo quitar el servicio', async () => {
             const confirmado = esConceptoComisionAmex(concepto)
@@ -529,14 +596,68 @@ export default function EditorPrefactura({ id }: Props) {
               ? 'El sello no coincide con los renglones: no se puede imprimir hasta aclarar la diferencia.'
               : 'No se pudo verificar el sello: no se puede imprimir hasta corregirlo.';
 
-    const cortesia = (renglonId: number, nombre: string, marcar: boolean, concepto: string | null) =>
+    const cortesia = (renglonId: number, nombre: string, marcar: boolean, concepto: string | null, grupo: string | null) =>
         ejecutar(`cortesia-${renglonId}`, 'No se pudo cambiar la cortesía', async () => {
             // Solo al MARCAR: quitar la cortesía vuelve a cobrar la comisión, que es lo que cuadra con la tarjeta.
             if (marcar && esConceptoComisionAmex(concepto) && !(await confirmarSobreComisionAmex(nombre, 'cortesia'))) return;
+            // Marcar la cortesía de un renglón que ya va en un grupo lo esconde igual que agruparlo: se avisa en los dos caminos.
+            if (marcar && grupo !== null && !(await confirmarCortesiaEnGrupo(nombre, 'marcar'))) return;
 
             await apiPrefacturas.cortesia(prefactura.id, renglonId, marcar);
             await cargar();
             toast.fire({ icon: 'success', titleText: marcar ? `«${nombre}» queda como cortesía: ya no se cobra.` : `«${nombre}» vuelve a cobrarse.` });
+        });
+
+    /**
+     * Pide la etiqueta con la que sale el renglón y la manda; el servidor guarda lo que llega (recortado) y esa etiqueta es la identidad
+     * del grupo. Una etiqueta en blanco la leería como «desagrupar» (`ConvertEmptyStringsToNull`), así que el diálogo no deja enviarla:
+     * lo que hay aquí, no el servidor, es lo que impide que el operador crea que agrupó y haya desagrupado.
+     */
+    const agrupar = (renglon: RenglonPrefactura) =>
+        ejecutar(`grupo-${renglon.id}`, 'No se pudo agrupar el servicio', async () => {
+            // Con grupo ya puesto, la cortesía ya estaba escondida: el aviso es solo para el paso de suelto a agrupado.
+            if (renglon.es_cortesia && renglon.grupo === null && !(await confirmarCortesiaEnGrupo(renglon.nombre_servicio, 'agrupar'))) return;
+
+            const existentes = [...new Set(renglones.flatMap(r => (r.grupo !== null && r.grupo !== renglon.grupo ? [r.grupo] : [])))].sort((a, b) => a.localeCompare(b, 'es'));
+
+            const respuesta = await Swal.fire({
+                // El nombre sale del catálogo: titleText (texto plano), nunca title, que SweetAlert2 interpreta como HTML.
+                titleText: renglon.grupo === null ? `Agrupar "${renglon.nombre_servicio}"` : `Cambiar el grupo de "${renglon.nombre_servicio}"`,
+                html: cuerpoDeAgrupar(existentes),
+                input: 'text',
+                inputValue: renglon.grupo ?? '',
+                inputPlaceholder: 'Etiqueta del grupo',
+                inputAttributes: { maxlength: String(GRUPO_MAX), autocomplete: 'off', 'aria-label': 'Etiqueta del grupo' },
+                showCancelButton: true,
+                confirmButtonText: 'Agrupar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#4f46e5',
+                reverseButtons: true,
+                inputValidator: valor => {
+                    const etiqueta = valor.trim();
+                    if (etiqueta === '') return 'Escribe la etiqueta del grupo. Para sacar el renglón de su grupo usa «Desagrupar».';
+                    if (etiqueta.length > GRUPO_MAX) return `La etiqueta no puede pasar de ${GRUPO_MAX} caracteres.`;
+
+                    // Solo difiere en mayúsculas: casi seguro es el mismo grupo tecleado distinto, y juntos no se agruparían.
+                    const parecida = existentes.find(e => e !== etiqueta && e.toLocaleLowerCase('es') === etiqueta.toLocaleLowerCase('es'));
+                    if (parecida !== undefined) return `Ya hay un grupo «${parecida}», que solo se diferencia en mayúsculas. Elígelo de la lista, o escribe otra etiqueta.`;
+
+                    return null;
+                },
+            });
+            if (!respuesta.isConfirmed) return;
+
+            const etiqueta = String(respuesta.value).trim();
+            await apiPrefacturas.grupo(prefactura.id, renglon.id, etiqueta);
+            await cargar();
+            toast.fire({ icon: 'success', titleText: `«${renglon.nombre_servicio}» queda en el grupo «${etiqueta}».` });
+        });
+
+    const desagrupar = (renglon: RenglonPrefactura) =>
+        ejecutar(`grupo-${renglon.id}`, 'No se pudo desagrupar el servicio', async () => {
+            await apiPrefacturas.grupo(prefactura.id, renglon.id, null);
+            await cargar();
+            toast.fire({ icon: 'success', titleText: `«${renglon.nombre_servicio}» sale del grupo y vuelve a salir suelto en el documento.` });
         });
 
     /** La cotización es lo GUARDADO en el servidor, calculado ahí: la pantalla solo abre la URL en una pestaña. */
@@ -950,6 +1071,11 @@ export default function EditorPrefactura({ id }: Props) {
                                                             CORTESÍA
                                                         </span>
                                                     )}
+                                                    {renglon.grupo !== null && (
+                                                        <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-[9px] font-black text-indigo-700" title={`Grupo «${renglon.grupo}»: en el documento los renglones con esta etiqueta salen juntos, en una sola fila.`}>
+                                                            {renglon.grupo}
+                                                        </span>
+                                                    )}
                                                 </p>
                                                 {(renglon.remision || Number(renglon.margen) > 0) && (
                                                     <p className="text-[10px] font-bold text-slate-400">
@@ -975,7 +1101,7 @@ export default function EditorPrefactura({ id }: Props) {
                                                     <div className="flex items-center justify-end gap-1">
                                                         <button
                                                             type="button"
-                                                            onClick={() => void cortesia(renglon.id, renglon.nombre_servicio, !renglon.es_cortesia, renglon.concepto)}
+                                                            onClick={() => void cortesia(renglon.id, renglon.nombre_servicio, !renglon.es_cortesia, renglon.concepto, renglon.grupo)}
                                                             disabled={ocupado}
                                                             aria-pressed={renglon.es_cortesia}
                                                             title={renglon.es_cortesia ? 'Quitar la cortesía: vuelve a cobrarse' : 'Marcar como cortesía: se ve en el documento pero no se cobra'}
@@ -985,6 +1111,30 @@ export default function EditorPrefactura({ id }: Props) {
                                                             <Gift size={12} />
                                                             Cortesía
                                                         </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void agrupar(renglon)}
+                                                            disabled={ocupado}
+                                                            title={ocupado ? 'Hay otra operación en curso: espera a que termine.' : renglon.grupo === null ? 'Agrupar: sale en el documento junto con los renglones de la misma etiqueta' : `Cambiar de grupo (hoy «${renglon.grupo}»)`}
+                                                            aria-label={`${renglon.grupo === null ? 'Agrupar' : 'Cambiar el grupo de'} ${renglon.nombre_servicio}`}
+                                                            className="flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-[9px] font-black uppercase text-slate-400 transition-colors hover:text-indigo-700 disabled:opacity-50"
+                                                        >
+                                                            <Group size={12} />
+                                                            {renglon.grupo === null ? 'Agrupar' : 'Cambiar grupo'}
+                                                        </button>
+                                                        {renglon.grupo !== null && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => void desagrupar(renglon)}
+                                                                disabled={ocupado}
+                                                                title={ocupado ? 'Hay otra operación en curso: espera a que termine.' : `Desagrupar: sale del grupo «${renglon.grupo}» y vuelve a salir suelto`}
+                                                                aria-label={`Desagrupar ${renglon.nombre_servicio}`}
+                                                                className="flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[9px] font-black uppercase text-indigo-700 transition-colors hover:bg-indigo-100 disabled:opacity-50"
+                                                            >
+                                                                <Ungroup size={12} />
+                                                                Desagrupar
+                                                            </button>
+                                                        )}
                                                         <button
                                                             type="button"
                                                             onClick={() => void quitarRenglon(renglon.id, renglon.nombre_servicio, renglon.concepto)}

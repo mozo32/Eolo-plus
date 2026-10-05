@@ -205,8 +205,8 @@ export type Servicio = {
     status: StatusCatalogo;
 };
 
-/** `concepto` es null salvo en las tres que tienen regla propia de cobro: efectivo, Amex y AvCard. */
-export type ConceptoFormaPago = 'efectivo' | 'amex' | 'avcard';
+/** `concepto` es null salvo en las que el sistema identifica: efectivo, Amex y AvCard (con regla de cobro propia) y el saldo a favor (solo se identifica). */
+export type ConceptoFormaPago = 'efectivo' | 'amex' | 'avcard' | 'saldo_a_favor';
 
 export type FormaPago = { id: number; nombre: string; concepto: ConceptoFormaPago | null; status: StatusCatalogo };
 
@@ -420,7 +420,7 @@ async function pedir<T>(url: string, { method, body }: OpcionesPedir = {}): Prom
     return leer<T>(await fetch(url, method ? escritura(method, body) : LECTURA));
 }
 
-/** Un pago de la prefactura. `concepto` es null salvo en Efectivo, Amex y AvCard. */
+/** Un pago de la prefactura. `concepto` es null salvo en Efectivo, Amex, AvCard y Saldo a favor. */
 export interface PagoPrefactura {
     id: number;
     forma_pago_id: number;
@@ -432,6 +432,15 @@ export interface PagoPrefactura {
 }
 
 /** Un renglón de prefactura: congela el precio, el margen y el ajuste que tenía el servicio al agregarse. */
+/** Lo que recibe «Recalcular estancia». Los ajustes cobran la DIFERENCIA entre dos tramos, no el tramo entero. */
+export type DatosEstancia = {
+    pernoctas: number;
+    transitos_2h: number;
+    transitos_12h: number;
+    ajustes_2h_12h?: number;
+    ajustes_12h_pernocta?: number;
+};
+
 export interface RenglonPrefactura {
     id: number;
     servicio_id: number;
@@ -448,6 +457,8 @@ export interface RenglonPrefactura {
     importe_error: string | null;
     /** Un renglón de cortesía se ve en el documento pero su importe es 0.00. */
     es_cortesia: boolean;
+    /** Etiqueta del grupo en el que sale el renglón en el documento; null si va suelto. La etiqueta ES la identidad del grupo. */
+    grupo: string | null;
 }
 
 /** Lo que el sello guardó contra lo que derivan hoy los renglones, por campo. */
@@ -560,11 +571,15 @@ export const apiPrefacturas = {
     /** Una clave ausente deja la nota como estaba; `null` la vacía. */
     guardarNotas: (id: number, datos: { nota_interna?: string | null; nota_externa?: string | null; nota_factura?: string | null }) =>
         pedir<{ message: string; prefactura: Prefactura }>(`${BASE}/prefacturas/${id}/notas`, { method: 'PATCH', body: datos }),
+    /** `grupo` es la etiqueta; `null` desagrupa. El servidor lee una cadena vacía como `null`: quien llame debe exigir una etiqueta no vacía antes de agrupar. */
+    grupo: (id: number, renglon: number, grupo: string | null) =>
+        pedir<{ message: string; prefactura: Prefactura }>(`${BASE}/prefacturas/${id}/renglones/${renglon}/grupo`, { method: 'PATCH', body: { grupo } }),
     cortesia: (id: number, renglon: number, esCortesia: boolean) =>
         pedir<{ message: string; prefactura: Prefactura }>(`${BASE}/prefacturas/${id}/renglones/${renglon}/cortesia`, { method: 'PATCH', body: { es_cortesia: esCortesia } }),
     agregarRenglon: (id: number, datos: Record<string, unknown>) => pedir<{ renglon_id: number }>(`${BASE}/prefacturas/${id}/renglones`, { method: 'POST', body: datos }),
     quitarRenglon: (id: number, renglon: number) => pedir<{ message: string }>(`${BASE}/prefacturas/${id}/renglones/${renglon}`, { method: 'DELETE' }),
-    estancia: (id: number, datos: Record<string, unknown>) => pedir<{ renglones: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/estancia`, { method: 'PATCH', body: datos }),
+    /** Los dos ajustes son opcionales: ausentes cuentan 0. */
+    estancia: (id: number, datos: DatosEstancia) => pedir<{ renglones: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/estancia`, { method: 'PATCH', body: datos }),
     /** `motivo` llega cuando el paquete no se agregó completo; con `renglones` 0 el destino sigue nacional. */
     internacional: (id: number) => pedir<{ renglones: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/internacional`, { method: 'PATCH' }),
     /** Baja lógica de un borrador. 409 (ErrorApi.codigo ya_cerrada o ya_descartada) si ya no es un borrador activo. */
