@@ -153,14 +153,16 @@
 </head>
 <body>
     {{--
-        Esta vista FORMATEA: no llama a ningún método que calcule dinero ni que pueda lanzar.
-        Todo llega en las nueve claves del array, que quien la llama arma dentro de su
-        try/catch, y lo demás son atributos y relaciones (más `bccomp`, `number_format` y
-        `format` de fechas, funciones puras sobre esos valores). Importa porque la vista se
-        renderiza DESPUÉS de ese try/catch: una excepción de cálculo nacida aquí sería un
-        500 en lugar de un 422. Por eso los importes de los renglones también viajan en el
-        array, calculados sobre los mismos objetos que la vista recorre: así la vista no
-        recalcula nada sobre datos que pudieran haber cambiado desde entonces.
+        Esta vista FORMATEA: no llama a ningún método del modelo que calcule dinero ni que
+        pueda lanzar. Todo llega en las nueve claves del array, que quien la llama tiene que
+        armar dentro de su try/catch. Lo demás son atributos y relaciones, más `bccomp`,
+        `number_format` y `format` de fechas: funciones de formato que no lanzan con las
+        cadenas válidas que el contrato garantiza (con una entrada no numérica, `bccomp` y
+        `number_format` sí lanzan). Importa porque la vista se renderiza DESPUÉS de ese
+        try/catch: una excepción de cálculo nacida aquí sería un 500 en lugar de un 422.
+        Por eso los importes de los renglones también viajan en el array, y tienen que
+        calcularse sobre los mismos objetos que la vista recorre: así la vista no recalcula
+        nada sobre datos que pudieran haber cambiado desde entonces.
 
         Las nueve claves:
 
@@ -182,13 +184,14 @@
         antes de imprimir: nada derivado de estos valores vuelve a entrar en un cálculo. La
         conversión es exacta mientras todo lo que pase por aquí sea una cadena de EXACTAMENTE
         dos decimales (`subtotal`, `iva`, `total`, `cambio`, `importes` y `pago->monto`, que
-        tiene cast `decimal:2`) y no pase de ~10^13. El tope de monto es 9999999999.99
-        (~10^10; lo fijan el `decimal(12,2)` de los totales sellados y
-        `PagosPrefactura::MONTO_MAXIMO` de un pago), cuatro órdenes de magnitud por debajo
-        de donde un double empieza a perder centavos (~9x10^13). Un total de cotización aún
-        sin sellar no tiene ese tope en la columna, pero tendría que ser absurdo para
-        acercarse a los ~10^13. Si alguna vez entra un valor con más de dos decimales o por
-        encima de esos ~10^13, la conversión deja de ser exacta.
+        tiene cast `decimal:2`) y no pase de 10^13. Ese umbral es un margen deliberado, no el
+        punto donde falla: la cota teórica de un double es 2^53/100, unos 9x10^13, y en la
+        práctica los centavos empiezan a perderse antes, entre ~3.5x10^13 y ~7x10^13. El
+        tope de monto del sistema es 9999999999.99 (~10^10; lo fijan el `decimal(12,2)` de
+        los totales sellados y `PagosPrefactura::MONTO_MAXIMO` de un pago), tres órdenes de
+        magnitud bajo ese margen. Un total de cotización aún sin sellar no tiene ese tope en
+        la columna, pero tendría que ser absurdo para acercarse. Si alguna vez entra un valor
+        con más de dos decimales o por encima de 10^13, no se puede dar por exacto.
     --}}
 
     <table>

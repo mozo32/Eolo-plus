@@ -231,10 +231,11 @@ test('la vista imprime el importe que recibe del renglon y no lo recalcula', fun
     $html = view('pdf.prefactura', [
         'prefactura' => $p,
         'esCotizacion' => true,
-        'subtotal' => '99.99',
-        'iva' => '16.00',
+        // Los totales no contienen 99.99: asi esa cifra solo puede venir de la fila del renglon.
+        'subtotal' => '7.77',
+        'iva' => '1.24',
         'ivaEtiqueta' => '16%',
-        'total' => '115.99',
+        'total' => '9.01',
         'cambio' => '0.00',
         // Distinto de lo que el renglon derivaria (200.00): si la vista llamara a importe(), saldria 200.00.
         // (No 100.00 x 1: el precio unitario 100.0000 contiene esa cadena.)
@@ -247,6 +248,9 @@ test('la vista imprime el importe que recibe del renglon y no lo recalcula', fun
 });
 
 test('una clave que falte en importes revienta y no imprime un cero', function () {
+    // El framework convierte el aviso en ErrorException en todos los entornos
+    // (HandleExceptions::handleError), asi que esto vale tambien en produccion.
+    // `php artisan tinker` NO lo lanza: instala su propio manejador de errores.
     $p = prefacturaBorrador();
     renglonDe($p, 100.0, 1);
     $p = $p->fresh(['renglones', 'pagos.formaPago', 'cliente', 'aeronave']);
@@ -261,5 +265,5 @@ test('una clave que falte en importes revienta y no imprime un cero', function (
         'cambio' => '0.00',
         'importes' => [],
         'elaboradoPor' => 'Ana Pérez',
-    ])->render())->toThrow(ErrorException::class);
+    ])->render())->toThrow(ErrorException::class, 'Undefined array key');
 });
