@@ -78,8 +78,8 @@ Hay una segunda razón para que sea obligatorio, y es grave.
 
 Esto **no es del bloque 4**, pero el bloque 4 lo convierte en peligroso.
 
-`laravel/reverb` y `pusher/pusher-php-server` están instalados en `vendor/` **pero no figuran ni
-en `composer.json` ni en `composer.lock`**. La aplicación los usa: el `.env` tiene
+`laravel/reverb` y `pusher/pusher-php-server` estaban instalados en `vendor/` **sin figurar ni en
+`composer.json` ni en `composer.lock`**. La aplicación los usa: el `.env` tiene
 `BROADCAST_CONNECTION=reverb`, tres eventos transmiten (`OperacionProgramadaCambio`,
 `RemisionCreada` y `MatriculaRestringidaCambio`) y el manifiesto de paquetes en caché
 (`bootstrap/cache/packages.php`) los referencia.
@@ -92,22 +92,32 @@ Se descubrió porque el `composer require` de DomPDF **desinstaló los dos paque
 durante el desarrollo**, y hubo que reinstalarlos desde la caché de Composer (reverb **1.12.0**,
 pusher **7.3.0**, las versiones que ya estaban).
 
+**Y después se detonó de verdad, lo que confirma que esto no es teórico.** Al preparar el arreglo
+hubo que volver a la rama `facturacion` y correr `composer install`: sincronizó `vendor/` con un lock
+que no declaraba pusher, lo retiró, y a partir de ese momento **ni `php artisan --version` ni
+`php artisan test` arrancaban**. El error era
+`Error::("Class "Pusher\Pusher" not found")` desde `BroadcastManager::pusher()`: con
+`BROADCAST_CONNECTION=reverb` en el `.env`, la aplicación **no bootea** sin el paquete. Exactamente
+lo que esta sección advierte que pasaría en producción.
+
 **Qué hay que hacer:**
 
-1. Está **en marcha una rama aparte, `reverb-declarado`**, creada desde `main`, que los declara
-   con las versiones ya instaladas (`laravel/reverb:^1.12`, `pusher/pusher-php-server:^7.3`).
-   **Esa rama tiene que estar en producción ANTES de desplegar el bloque 4**, para que el
-   arreglo no espere a que facturación apruebe.
-2. **Quien despliegue tiene que comprobar que lo está.** Al escribir esta guía la rama no figuraba
-   entre las ramas locales del repositorio (`git branch --list 'reverb*'` no devolvió nada),
-   así que **no se ha comprobado que exista ni que esté en producción**. Compruébese, no se
-   suponga.
-3. **Si por cualquier razón no está, un `composer install` limpio romperá la aplicación.** En ese
-   caso no se despliega el bloque 4 hasta que lo esté.
-4. Aviso de secuencia: `facturacion` y `reverb-declarado` tocan los dos `composer.json` y
-   `composer.lock`, así que al fusionarlas habrá conflicto en el lock. Lo limpio es fusionar
-   `reverb-declarado` a `main` primero y que `facturacion` traiga `main` después, regenerando el
-   lock.
+1. **Ya existe la rama `reverb-declarado`**, creada desde `main` (commit `94a3a19`), que los declara
+   con las versiones que ya estaban corriendo: `laravel/reverb:^1.12` → **v1.12.0** y
+   `pusher/pusher-php-server:^7.3` → **7.3.0**. Su lock gana 13 paquetes —los dos y sus
+   dependencias de ReactPHP— y **no retira ni cambia de versión ninguno**, comprobado comparando
+   el lock antes y después. Suite en esa rama: **229 en verde**.
+2. **Esa rama debe subir a `main` primero**, para que el arreglo no espere a que facturación
+   apruebe: la aplicación en producción está hoy a un `composer install` de romperse, con bloque 4
+   o sin él.
+3. **`facturacion` ya trae ese mismo arreglo fusionado** (commit `7a421c9`), así que **esta rama es
+   instalable por sí sola**: su `composer.json` declara los tres paquetes y su lock los fija
+   (dompdf **v3.1.2**, reverb **v1.12.0**, pusher **7.3.0**). Hizo falta porque, sin eso, el
+   departamento no habría podido ni instalar la rama para probarla.
+4. **Al fusionar las dos habrá conflicto en `composer.lock`**, porque cada una añade paquetes
+   distintos. Ya ocurrió al traer `reverb-declarado` a `facturacion`, y se resuelve así: tomar el
+   lock de la rama que se conserva y regenerarlo con
+   `composer update laravel/reverb pusher/pusher-php-server`. **No se resuelve el lock a mano.**
 
 **Comprobación inmediata tras el `composer install`**, antes de seguir con nada más:
 
@@ -294,7 +304,8 @@ guías de los bloques 2 y 3) **sigue pendiente** de MySQL real y este bloque no 
   extrayendo el archivo en `c97b12a`, en `55947f4` y en `HEAD`: marcado en los tres; el segundo
   contra `HEAD~1` de la task del editor). **No se reformatearon**, para no mezclar un diff de
   estilo ajeno en una rama que espera aprobación.
-- **`EditorPrefactura.tsx` pasa de las mil líneas** (1033 al cerrar la task del editor). Este
+- **`EditorPrefactura.tsx` pasa de las mil líneas** (**1097** al cerrar el bloque, contadas con
+  `wc -l`). Este
   bloque añadió una fracción y **movió el flujo de cierre a una función** (`flujoDeCierre`,
   alrededor de 90 líneas de código que ya existían), pero el archivo sigue creciendo y **el bloque
   5 lo hereda así**. Partirlo es un refactor que no cabía en una rama que espera aprobación.
