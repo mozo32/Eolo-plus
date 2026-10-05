@@ -220,6 +220,7 @@ test('sin el subdepartamento no se agrupa', function () {
 test('el documento imprime UNA fila por grupo, con la etiqueta y la suma', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     [$p] = prefacturaCompleta(1000.0, 1);
+    $suelto = $p->renglones()->firstOrFail();   // el unico renglon que trae prefacturaCompleta
     $a = renglonDe($p, 100.0, 2);   // 200.00
     $b = renglonDe($p, 50.0, 1);    // 50.00
     $a->update(['grupo' => 'Servicios de rampa']);
@@ -244,7 +245,7 @@ test('el documento imprime UNA fila por grupo, con la etiqueta y la suma', funct
         ->and(collect($filas)->pluck('concepto'))->not->toContain($a->nombre_servicio)
         ->and(collect($filas)->pluck('concepto'))->not->toContain($b->nombre_servicio)
         // Y el renglon sin agrupar si.
-        ->and(collect($filas)->pluck('concepto'))->toContain($p->renglones()->whereNull('grupo')->first()->nombre_servicio)
+        ->and(collect($filas)->pluck('concepto'))->toContain($suelto->nombre_servicio)
         // Dos renglones agrupados y uno suelto: tres renglones, DOS filas.
         ->and($filas)->toHaveCount(2);
 });
@@ -353,4 +354,51 @@ test('la suma de las filas sigue cuadrando con el subtotal', function () {
     $suma = collect($filas)->reduce(fn ($acc, $f) => bcadd($acc, $f['importe'], 2), '0.00');
 
     expect($suma)->toBe($p->fresh()->subtotal());
+});
+
+test('dos grupos entrelazados salen en el orden de su primer renglon, cada uno con su suma', function () {
+    // A, B, A, B: sin `sort()`, porque lo que se comprueba es justo el orden ENTRE grupos, y
+    // con varios renglones por grupo, para que cada uno tenga su propia suma y su propio lugar.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    renglonDe($p, 10.0, 1)->update(['orden' => 1, 'grupo' => 'A']);
+    renglonDe($p, 100.0, 1)->update(['orden' => 2, 'grupo' => 'B']);
+    renglonDe($p, 20.0, 1)->update(['orden' => 3, 'grupo' => 'A']);
+    renglonDe($p, 200.0, 1)->update(['orden' => 4, 'grupo' => 'B']);
+
+    $filas = null;
+    View::composer('pdf.prefactura', function ($vista) use (&$filas) {
+        $filas = $vista->getData()['filas'];
+    });
+
+    $this->get("/api/facturacion/prefacturas/{$p->id}/cotizacion")->assertOk();
+
+    expect(collect($filas)->pluck('concepto')->all())->toBe(['A', 'B'])
+        ->and($filas[0]['importe'])->toBe('30.00')
+        ->and($filas[1]['importe'])->toBe('300.00');
+});
+
+test('un grupo de puras cortesias sale en 0.00 y sin marca: es deliberado, no un defecto', function () {
+    // DECIDIDO, no un error que arreglar: la marca «Cortesia» describe UN renglon y no una
+    // suma, asi que la fila del grupo nunca la lleva; el total sigue correcto porque cada
+    // cortesia ya valia 0.00 en el subtotal; y quien agrupa una cortesia es avisado en la
+    // pantalla (Task 6). El cliente deja de ver que ese servicio fue gratis: es el precio
+    // aceptado de agrupar.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    renglonDe($p, 100.0, 1)->update(['grupo' => 'Regalos', 'es_cortesia' => true]);
+    renglonDe($p, 300.0, 1)->update(['grupo' => 'Regalos', 'es_cortesia' => true]);
+
+    $filas = null;
+    View::composer('pdf.prefactura', function ($vista) use (&$filas) {
+        $filas = $vista->getData()['filas'];
+    });
+
+    $this->get("/api/facturacion/prefacturas/{$p->id}/cotizacion")->assertOk();
+
+    expect($filas)->toHaveCount(1)
+        ->and($filas[0]['concepto'])->toBe('Regalos')
+        ->and($filas[0]['importe'])->toBe('0.00')
+        ->and($filas[0]['cortesia'])->toBeFalse()
+        ->and($p->fresh()->subtotal())->toBe('0.00');
 });
