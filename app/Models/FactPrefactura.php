@@ -62,6 +62,16 @@ class FactPrefactura extends Model
         return $this->belongsTo(FactCliente::class, 'cliente_id');
     }
 
+    /**
+     * Quien cerró la prefactura, que es quien la emitió. El documento lo nombra en
+     * «Elaborado por», en lugar del literal «AJE» que el PDF viejo trae escrito a mano
+     * mientras `id_elaborador` no lo lee nadie.
+     */
+    public function cerradaPor()
+    {
+        return $this->belongsTo(User::class, 'cerrada_por');
+    }
+
     public function scopeBorradores($query)
     {
         return $query->where('estado', self::ESTADO_BORRADOR);
