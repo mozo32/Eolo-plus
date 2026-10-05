@@ -89,6 +89,13 @@ class PrefacturaPdfController extends Controller
             ], 409);
         }
 
+        // Renderizar, registrar, devolver: en ese orden. Si el PDF falla al armarse lanza
+        // antes de registrar, y no queda en la bitácora un «se imprimió» de un documento que
+        // nunca salió; si el registro falla lanza antes de devolver, y no sale un documento
+        // sin dejar rastro. Ninguna de las dos mitades queda sin la otra.
+        $documento = $this->render($prefactura, esCotizacion: false, cifras: $cifras,
+            elaboradoPor: $prefactura->cerradaPor?->name ?? 'Sin registrar');
+
         $this->registrar(
             $request->user()->id,
             $prefactura,
@@ -96,8 +103,7 @@ class PrefacturaPdfController extends Controller
             ['folio' => $prefactura->folio, 'total' => (string) $prefactura->total_sellado],
         );
 
-        return $this->render($prefactura, esCotizacion: false, cifras: $cifras,
-            elaboradoPor: $prefactura->cerradaPor?->name ?? 'Sin registrar');
+        return $documento;
     }
 
     /**
