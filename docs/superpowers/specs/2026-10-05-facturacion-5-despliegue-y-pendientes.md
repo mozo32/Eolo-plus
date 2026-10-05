@@ -24,7 +24,7 @@ en el servidor `git pull` no trae este bloque.
 
 ## Lo que hizo esta rama
 
-Doce commits de producto (de `91ac51a` a `32071d9`), con tres funciones nuevas:
+Doce commits de producto (de `91ac51a` a `32071d9`) con tres funciones nuevas, y uno más, `0311314`, que corrige el importador (ver «El ajuste de estancia depende de que los servicios 109 y 110 estén importados»):
 
 - **Agrupar renglones al imprimir.** Cada renglón gana una etiqueta opcional, `grupo`. En el documento, los
   renglones con la misma etiqueta salen como **una sola fila**: la etiqueta como concepto, la **suma** de sus
@@ -67,7 +67,7 @@ Las mediciones del viejo salen de `fact-fbo-prod` (retrato al 2026-09-28). **Ver
 
 ## Orden de despliegue, y la trampa
 
-Esta vez hay **dos migraciones nuevas y un seeder**, y el orden importa por dos razones distintas.
+Esta vez hay **dos migraciones nuevas y un seeder**, y **el orden del seeder importa** (la trampa de más abajo).
 
 ```bash
 # Nada nuevo en composer ni en npm: el `composer install` es el de la guía del 4.
@@ -77,10 +77,11 @@ php artisan --version                      # debe responder; si falla, PARAR (ve
 
 # DOS migraciones, ambas aditivas. Ninguna borra filas:
 #   2026_09_29_094000_seed_conceptos_de_ajuste_de_estancia
-#       asigna el concepto a DOS servicios YA IMPORTADOS, buscándolos POR NOMBRE EXACTO:
+#       asigna el concepto a DOS servicios que YA ESTÉN IMPORTADOS, buscándolos POR NOMBRE EXACTO
+#       (si el catálogo aún no se importó, no asigna nada: entonces lo hace el importador, por id 109 y 110):
 #         'Ajuste de Estancia_de 2 hrs a 12 hrs'    -> estancia_ajuste_2h_12h
 #         'Ajuste de Estancia_de 12 hrs a pernocta' -> estancia_ajuste_12h_pernocta
-#       Si el servicio no está en fact_servicios, NO HACE NADA y no avisa.
+#       Si el servicio no está en fact_servicios, no hace nada y no avisa.
 #   2026_09_29_094100_add_grupo_to_fact_prefactura_renglones_table
 #       agrega `grupo` (string 60, nula, con índice) después de `remision`
 php artisan migrate
@@ -97,7 +98,7 @@ php artisan facturacion:importar-matriculas --aplicar | tee -a storage/logs/fact
 # La forma de pago «Saldo a favor». SIEMPRE DESPUÉS del importador. Se corre a mano.
 php artisan db:seed --class=FacturacionFormasPagoSeeder
 
-# Los dos conceptos de ajuste: COMPROBAR (SQL de «Verificación») y, si faltan, el UPDATE de abajo.
+# Los dos conceptos de ajuste y la forma «Saldo a favor»: COMPROBAR con el SQL de «Verificación».
 
 php artisan optimize:clear
 npm ci && npm run build
@@ -143,47 +144,54 @@ concepto, se la **adopta** (se le asigna el concepto) en lugar de chocar con el 
 no hay opción. `PanelCobro.tsx` (`resources/js/pages/Facturacion/components/`) solo excluye Amex
 (`status === 'A' && concepto !== 'amex'`), así que la fila aparece por sí sola en cuanto existe y está activa.
 
-### El ajuste de estancia depende del importador, y la migración sola no basta
+### El ajuste de estancia depende de que los servicios 109 y 110 estén importados
 
-**Esto es lo más fácil de dejar mal, y tiene dos mitades que se comprobaron.**
+El ajuste busca dos servicios del catálogo **por concepto** (`estancia_ajuste_2h_12h` y
+`estancia_ajuste_12h_pernocta`). Si no existen, activos y con ese concepto, el operador recibe un 422 al pedirlo
+(`ServicioDeEstanciaNoDisponibleException`: «No existe un servicio activo con concepto
+'estancia_ajuste_2h_12h'…»). Hay **dos caminos** que les ponen el concepto, y conviene saber cuál es cuál:
 
-1. **El importador NO asigna el concepto a los servicios 109 y 110 del origen.** `CONCEPTOS_POR_ID_VIEJO`
-   (`app/Services/ImportadorMatriculas.php:58`) lista solo los ids 7, 2, 3, 4 y 100. Los dos servicios de ajuste
-   se importan **sin concepto**. Comprobado con el importador real contra un origen de prueba que trae los dos
-   servicios: `concepto` queda en `null` en los dos.
-2. **La migración `094000` solo corre una vez, y solo ve lo que ya está en `fact_servicios`.** Si se migra
-   **antes** de importar (el orden de las guías 2 y 3, y el de arriba para el caso (a)), la migración corre con
-   la tabla vacía, **asigna cero filas, no avisa y no vuelve a correr**. Comprobado: sobre una base sqlite
-   recién migrada la migración sale `Ran`, con `fact_servicios` vacía.
+1. **El importador** (`facturacion:importar-matriculas`) los asigna por el **id del origen**, 109 y 110
+   (`CONCEPTOS_POR_ID_VIEJO` en `app/Services/ImportadorMatriculas.php`, junto a los ids 7, 2, 3, 4 y 100). **Es el
+   camino principal.** Los ids son estables porque el sistema viejo los compara literalmente
+   (`insert_ajusteestancia.php`: `if ($ajuste==110)`, `elseif($ajuste==109)`), igual que con los otros cinco.
+   Lo cubren dos pruebas en `ImportadorCatalogosTest.php`; quitar las dos entradas las hace fallar.
+2. **La migración `094000`**, que los busca **por nombre exacto** entre los servicios que **ya** estén en
+   `fact_servicios` cuando corre. Es el camino para una base donde los catálogos ya estaban importados (el 1b o el
+   2 en uso) y no se quiere reimportar. **Corre una sola vez**: si se migra con `fact_servicios` vacía (el orden de
+   las guías 2 y 3), asigna cero filas, no avisa y no vuelve a correr; entonces el concepto lo pone el importador.
 
-La consecuencia, si no se comprueba: **el ajuste de estancia no funciona** y el operador recibe un 422 al
-pedirlo (`ServicioDeEstanciaNoDisponibleException`: «No existe un servicio activo con concepto
-'estancia_ajuste_2h_12h'…»). Por eso el paso de verificación es **obligatorio en las dos bases**.
+> **Historia, por si alguien trae una base anterior:** la rama tuvo durante su desarrollo **solo** el camino 2, y
+> el importador **no** conocía el 109 ni el 110 (se midió: tras importar quedaban con concepto `null`). Una base
+> que se migró **e importó con esa versión** tiene los dos servicios sin concepto: ver la **nota de rescate**, más
+> abajo. Con el importador de este commit el problema no se produce.
 
 **Qué base es esta:**
 
-| Caso | Qué pasó | Qué hacer |
+| Caso | Qué pasa | Qué hacer |
 |---|---|---|
-| **(a)** Los catálogos **no** se han importado (se despliega con los bloques 1b–4, o es una base nueva) | `migrate` corrió con `fact_servicios` vacía: la `094000` no asignó nada. Después el importador trae 109 y 110 **sin concepto** | Importador → seeder → **verificar → casi seguro correr el `UPDATE`** |
-| **(b)** Los catálogos **ya** estaban importados (el 1b o el 2 en uso) | La `094000` los encuentra **por nombre** y asigna | **No correr el importador** (`--forzar` pisa seis tablas). Seeder → **verificar** |
+| **(a)** Los catálogos **no** se han importado | `migrate` corre con `fact_servicios` vacía y la `094000` no asigna nada; después **el importador asigna 109 y 110** | Importador → seeder → **verificar** |
+| **(b)** Los catálogos **ya** estaban importados | La `094000` los encuentra **por nombre** y asigna | **No correr el importador** (`--forzar` pisa seis tablas). Seeder → **verificar** |
 
-**Verificación** (con `SET NAMES utf8mb4;`: el cliente `mysql` de Windows arranca en cp850 y una sentencia con
-acento afecta 0 filas **sin error**). **Tiene que haber exactamente dos filas, con los dos conceptos**, y una
-forma de pago `saldo_a_favor`:
+**Verificación (la comprobación que sigue siendo obligatoria en las dos bases).** Con `SET NAMES utf8mb4;` (el
+cliente `mysql` de Windows arranca en cp850 y una sentencia con acento afecta 0 filas **sin error**). **Tiene que
+haber exactamente dos filas, con los dos conceptos**, y una forma de pago `saldo_a_favor`:
 
 ```sql
 SET NAMES utf8mb4;
 SELECT id, nombre, concepto, status FROM fact_servicios
  WHERE concepto IN ('estancia_ajuste_2h_12h', 'estancia_ajuste_12h_pernocta') ORDER BY concepto;   -- 2 filas, status A
-SELECT id, nombre, concepto FROM fact_servicios WHERE nombre LIKE 'Ajuste de Estancia%' ORDER BY id; -- las candidatas
 SELECT id, nombre, concepto, status FROM fact_formas_pago WHERE concepto = 'saldo_a_favor';          -- 1 fila, status A
 ```
 
-Si la primera no da dos filas, la segunda enseña si los servicios están y con qué nombre (si alguien los renombró
-en pantalla, la búsqueda por nombre no los encuentra: hay que asignar por `id`). Si **no están**, el importador no
-ha traído los servicios 109 y 110 del origen y hay que resolverlo **antes** de seguir. Si están sin concepto,
-**opción B**, un `UPDATE` dirigido que no toca ningún precio y que hace lo mismo que la migración (la fila de `id`
-menor, solo si no tiene concepto):
+Si la primera no da dos filas, el origen no trae los servicios 109 y 110 (o alguien los renombró, en el caso b,
+y la búsqueda por nombre de la migración no los encontró): hay que resolverlo **antes** de seguir. Con el
+importador de este commit, eso solo ocurre si el origen no los tiene.
+
+**Nota de rescate (NO es un paso del despliegue): solo para una base que ya se migró e importó con la versión
+anterior del importador**, y por eso tiene los dos servicios sin concepto. La salida limpia es un `UPDATE`
+dirigido, que no toca ningún precio y hace lo mismo que la migración (la fila de `id` menor, solo si no tiene
+concepto). Volver a importar también los arreglaría, pero exige `--forzar`, que pisa seis tablas:
 
 ```sql
 SET NAMES utf8mb4;
@@ -195,51 +203,54 @@ UPDATE fact_servicios SET concepto = 'estancia_ajuste_12h_pernocta'
 
 **Estas dos sentencias no se probaron contra MySQL** (no hay una base con el catálogo a mano, y el
 `UPDATE ... ORDER BY ... LIMIT` es sintaxis de MySQL que sqlite no admite). El `mysql` en lote **aborta el resto
-del script al primer error** (por ejemplo, un `concepto` que ya lleva otra fila, por el índice único): lo que
-sigue no se ejecuta y la verificación lo refleja con menos filas. **Repite la verificación después.**
+del script al primer error** (por ejemplo, un `concepto` que ya lleva otra fila, por el índice único). **Repite la
+verificación después.**
+
+**Reimportar ya no duplica los dos servicios. Medido** (sqlite, importador real): con los dos servicios ya
+creados **con** su concepto (lo que deja la migración) y reimportando, `fact_servicios` queda con **2** filas; y
+con los dos creados **sin** concepto (el estado de una base de la versión anterior), importar, aplicar la
+migración y reimportar, también **2** filas con sus dos conceptos. El ensayo equivalente antes del arreglo (importar, asignar los conceptos y reimportar) daba **4**.
+Las dos pruebas nuevas del importador fijan el primer caso.
+
+**Un detalle de catálogo que no cambia lo que se cobra:** como los ids 109 y 110 pasan de 93, el importador los
+marca `es_de_tercero` y con `margen` 50 **en el catálogo** (`ULTIMO_SERVICIO_PROPIO = 93`). El ajuste de
+estancia **no lo usa**: `CargosEstancia::recalcular()` crea el renglón con `es_de_tercero = false` y `margen = 0`
+y el precio de la diferencia de tarifas. Se ve en la pantalla de catálogo y puede sorprender; no afecta al cobro.
 
 Qué se comprobó de esta sección: los nombres de las migraciones, de los servicios y de los conceptos, contra los
-archivos de la rama (`database/migrations/`, `FactServicio::CONCEPTO_ESTANCIA_AJUSTE_*`); y las dos migraciones y
-el seeder **se ejecutaron de verdad** sobre una base sqlite recién creada, con `php artisan migrate` y
-`php artisan db:seed --class=FacturacionFormasPagoSeeder`. **Contra MySQL no se ejecutó nada de esto.**
-
-### Un efecto del importador después de la migración: reimportar duplica los dos servicios
-
-**Una vez que los dos servicios tienen concepto, volver a importar crea dos filas más.** El importador busca los
-servicios sin concepto con `whereNull('concepto')->where('nombre', …)`: al no encontrar los de concepto asignado
-(para él son «otros»), **inserta uno nuevo por cada uno**, sin concepto. Medido sobre sqlite: tras importar,
-asignar los conceptos (lo que hace la migración) y reimportar, `fact_servicios` tiene **4** filas con esos dos
-nombres, dos con concepto y dos sin. Hoy el daño es **solo de catálogo** (el ajuste sigue cobrando por las filas
-con concepto, y las copias sin concepto aparecen como dos servicios de catálogo más), pero **la importación del
-bloque 6**, o cualquier reimportación con `--forzar`, lo va a provocar. Ver la deuda: el arreglo es de dos líneas
-en el importador, y esta guía **no lo hace** porque la task es solo documentación.
+archivos de la rama; las dos migraciones y el seeder **se ejecutaron de verdad** sobre una base sqlite recién
+creada, con `php artisan migrate` y `php artisan db:seed --class=FacturacionFormasPagoSeeder`. **Contra MySQL no se
+ejecutó nada de esto.**
 
 ## ATENCIÓN: las advertencias de rollback de los bloques 2, 3 y 4 siguen vigentes
+
+**OJO CON EL ORDEN DE LAS MIGRACIONES: la última del proyecto NO es de este bloque.** Hay una migración
+**posterior** a las dos nuevas, `2026_09_29_099000_add_unique_matricula_to_aeronaves` (los nombres de las del
+bloque llevan fecha 2026-09-29, igual que las anteriores, y `099000` queda después de `094000` y `094100`). Por
+eso **`php artisan migrate:rollback --step=1` revertiría esa**, la restricción única de matrículas, y no
+ninguna de las de este bloque; y `--step=2` revertiría `099000` y `094100` (lo comprobé en sqlite). Para tocar una
+migración concreta, la forma de la guía del 3, **mirando antes lo que va a hacer**:
+`php artisan migrate:rollback --pretend --step=1 --path=database/migrations/<archivo>.php`.
 
 `php artisan migrate:rollback` **no pregunta** y revierte **el último lote entero**, no «una migración». El
 `down()` de la tabla de pagos (`2026_09_29_093100`) es un `dropIfExists`: un rollback **después de que alguien
 cobre pierde TODOS los pagos**. Si los bloques 2, 3 y 5 se desplegaron en un solo `migrate`, el lote incluye todo
 eso. Detalle y reglas en «ATENCIÓN: revertir este bloque DESTRUYE pagos» de la guía del bloque 3.
 
-Lo que añaden **estas** dos migraciones al rollback:
+Lo que añaden **estas** dos migraciones al rollback (el orden, arriba):
 
 - `094100` (`grupo`): su `down()` quita el índice y la columna. **Pierde las etiquetas de grupo**, no dinero:
   los importes no dependen de ellas. Probado en sqlite (`migrate:rollback --step=2` la revirtió y la columna
   desapareció); no en MySQL.
 - `094000` (conceptos): su `down()` pone `concepto = NULL` en las dos filas. No borra nada.
-- **Hay una migración posterior a las dos de este bloque**, `2026_09_29_099000_add_unique_matricula_to_aeronaves`
-  (los nombres de archivo llevan fecha de 2026-09-29 aunque son de este bloque). Por eso
-  `migrate:rollback --step=1` revertiría **esa**, no las de este bloque. Para tocar una migración concreta, la
-  forma de la guía del 3: `php artisan migrate:rollback --pretend --step=1 --path=database/migrations/<archivo>.php`
-  primero, y leer lo que va a hacer.
 - **Dar marcha atrás al código sin migraciones**: el código anterior no lee la columna `grupo` ni los conceptos
   nuevos, así que debería ser seguro; **no se probó** volver atrás sobre una base ya migrada. Lo que se pierde es
   la función.
 
 ## Resultado de las pruebas al cierre
 
-**1086 pruebas en verde (4611 aserciones)**, medidas con `php artisan test` **en serie** el 2026-10-05 (1034 al
-empezar el bloque: **+52**). `npx tsc --noEmit` solo da el error preexistente de
+**1088 pruebas en verde (4615 aserciones)**, medidas con `php artisan test` **en serie** el 2026-10-05 (1034 al
+empezar el bloque: **+54**). `npx tsc --noEmit` solo da el error preexistente de
 `resources/js/actions/App/Http/Controllers/Api/WalkAroundController.ts(905,5)`; `eslint` sobre los tres archivos
 de frontend del bloque sale limpio y `npm run build` termina bien (comprobado hoy: sale 0, y no modifica ningún
 archivo versionado).
@@ -399,21 +410,19 @@ y en las del 1b, 2 y 3:
 
 **Nueva, descubierta o dejada por este bloque:**
 
-- **El importador no conoce los servicios 109 y 110, y reimportar duplica sus filas.** Es el hallazgo más serio
-  de esta guía, y la migración `094000` es un parche que solo funciona si el catálogo ya está importado. El
-  arreglo natural es añadir `109` y `110` a `CONCEPTOS_POR_ID_VIEJO` en
-  `app/Services/ImportadorMatriculas.php:58` (los ids del origen son estables, y la especificación los
-  documenta), con su prueba, y dejar la migración como respaldo inofensivo. Con eso el orden «migrar e importar»
-  funcionaría en cualquier base y desaparecerían el `UPDATE` manual y el duplicado. **No se hizo** porque la task
-  era solo documentación. Mientras tanto, **no reimportar con `--forzar` sin haber leído esta sección**.
+- **Resuelto en este bloque, y es lo más importante que se descubrió:** el importador **no** asignaba el concepto a
+  los servicios 109 y 110, así que en una instalación real el ajuste de estancia no funcionaba, y reimportar
+  duplicaba los dos servicios. Se arregló en `0311314` (`CONCEPTOS_POR_ID_VIEJO` ganó el 109 y el 110) con dos
+  pruebas en `ImportadorCatalogosTest.php`; quitar las dos entradas las hace fallar. Tras el arreglo, reimportar
+  deja **2** filas (antes, 4). Queda la **nota de rescate** de arriba para una base que ya pasó por la versión
+  anterior, y la migración `094000` se conserva como respaldo para las bases ya importadas.
 - **El mensaje de `ServicioDeEstanciaNoDisponibleException` dice «Corre el importador de catálogos», y no
   existe ningún comando con ese nombre.** `app/Console/Commands/` solo tiene `CompararPagos`,
   `CompararPrefacturas` e `ImportarMatriculasPrefactura` (`facturacion:importar-matriculas`, que **sí** importa los
   catálogos pero conserva el nombre del bloque 1a). Falta decidir si el mensaje nombra ese comando o se escribe
-  uno nuevo. **Y ahora importa más:** el ajuste de estancia depende de que esos servicios estén importados, y
-  **correr el importador no basta para arreglarlo** (no asigna el concepto de 109 y 110): el mensaje mandaría al
-  operador a un comando que no resuelve su problema. **El mismo texto vive en `PagosPrefactura.php:199`**, para
-  la comisión Amex (ahí sí lo resuelve el importador, que asigna `comision_amex` al id 100).
+  uno nuevo. **Y ahora importa más:** el ajuste de estancia depende de que esos servicios estén importados, así que
+  el operador que vea ese mensaje necesita saber qué comando correr. **El mismo texto vive en
+  `PagosPrefactura.php:199`**, para la comisión Amex.
 - **`EditorPrefactura.tsx` pasa de las 1.250 líneas** (**1.272** al cerrar el bloque, contadas con `wc -l`; eran
   1.104 en `e22739f` y 1.097 cuando cerró el bloque 4). Está decidido que **no se parte en este bloque**; el
   candidato natural a componente es **la fila de renglón con sus diálogos**.
@@ -422,10 +431,10 @@ y en las del 1b, 2 y 3:
   violaban el estilo antes del bloque**. Comprobado: la versión de `routes/api.php` en `e22739f` y la de `HEAD`
   dan **el mismo resultado** con pint (**67 líneas cambiadas, 128 líneas de diff**, sobre una copia fuera del
   repositorio; la task 4 midió «129» imprimiendo otra cuenta: mismo orden de magnitud), y `npx prettier --check`
-  marca el `EditorPrefactura.tsx` de `e22739f` y el de `HEAD`. Y `pint --dirty` sobre un archivo así lo
+  marca el `EditorPrefactura.tsx` de `e22739f` y el de `HEAD`. **Lo mismo pasa con dos archivos que tocó el arreglo del importador:** `app/Services/ImportadorMatriculas.php` y `tests/Feature/Facturacion/ImportadorCatalogosTest.php` ya fallaban `pint --test` en `HEAD` antes del arreglo, así que tampoco se les corrió `pint --dirty`. Y `pint --dirty` sobre un archivo así lo
   reformatea **entero**: ese es el ruido ajeno que se evitó al descartar su resultado. Es un **conflicto real con
   la regla del `CLAUDE.md` del proyecto** («ejecuta `vendor/bin/pint --dirty` antes de terminar»). Conviene que
-  alguien decida si se formatean esos dos archivos **en un commit propio**, que no mezcle lógica.
+  alguien decida si se formatean esos archivos **en un commit propio**, que no mezcle lógica.
 - **Una mutación sobrevive, y es inalcanzable.** Sumar el grupo con `array_sum` + `number_format` en lugar de
   `bcadd` no rompe ninguna prueba. Se usa `bcadd` **por coherencia con el resto del modelo** (`subtotalDerivado()`
   suma con `bcadd`) y para no depender de `float`, **no por una diferencia que se pueda alcanzar**: el importe de
@@ -460,11 +469,11 @@ y en las del 1b, 2 y 3:
 - **Menores del ajuste de estancia aceptados**: el `.required` de las dos reglas `sometimes` nunca se dispara (lo
   produce el bucle que arma los mensajes), y `detalleSinPrecio()` relee las tarifas en lugar de recibirlas.
   Ninguno afecta al dinero.
-- **No se sabe qué rama sigue el servidor de producción, y `produccion` no tiene el arreglo de reverb.**
+- **PREGUNTA ABIERTA, que solo quien despliega puede contestar: ¿qué rama sigue el servidor de producción?** Importa porque `produccion` no tiene el arreglo de reverb.
   Comprobado el 2026-10-05: el remoto tiene una rama `produccion` (`a30bfb9`) que **no** contiene `94a3a19` y
   tiene un commit que `main` no tiene, mientras el remoto `main` **sí** está en `94a3a19` (reverb ya declarado en
   `main`). Esta rama sigue siendo instalable por sí sola (trae reverb y pusher declarados); es solo una duda para
-  quien despliegue: **confirmar qué rama** corre el servidor.
+  quien despliegue: **confirmar qué rama** corre el servidor. Si es `produccion`, un `composer install` allí retira reverb y pusher (ver la guía del 4) y `artisan` deja de arrancar.
 
 ## Resumen: lo que hay que hacer, en orden
 
@@ -476,13 +485,13 @@ y en las del 1b, 2 y 3:
 5. **Después, y solo después**: `php artisan db:seed --class=FacturacionFormasPagoSeeder`. Al revés, la guarda del
    importador se niega con un aviso falso.
 6. **Comprobar con el SQL de «Verificación»** que hay **dos** servicios con los conceptos de ajuste y **una**
-   forma `saldo_a_favor`. Si faltan los conceptos de ajuste: el `UPDATE` de la opción B y volver a comprobar.
+   forma `saldo_a_favor`. Si faltan los de ajuste, el origen no trae los servicios 109 y 110 (o es una base de la versión anterior del importador: ver la **nota de rescate**).
 7. `php artisan optimize:clear` y `npm ci && npm run build`.
 8. **Que alguien imprima una prefactura con un grupo y mire la hoja** (los tres guiones; la suma contra el
    total), y que pruebe el ajuste con tarifas reales, el saldo a favor (el IVA no baja) y el aviso de agrupar una
    cortesía. Con la lista de arriba.
 9. Solo entonces, que el departamento decida si aprueba.
 
-**Aparte, para quien decida:** el importador y los servicios 109 y 110; el mensaje que nombra un comando
-inexistente; formatear `routes/api.php` y `EditorPrefactura.tsx` en un commit propio; y, para el bloque 6, una
+**Aparte, para quien decida:** qué rama sigue el servidor; el mensaje que nombra un comando
+inexistente; formatear `routes/api.php`, `EditorPrefactura.tsx` y los dos archivos del importador en un commit propio; y, para el bloque 6, una
 copia fresca de la base del viejo.
