@@ -379,6 +379,20 @@ test('cotizar con una tasa que se vuelve ilegible al calcular el cambio es 422, 
     expect($lectura->lecturas)->toBeGreaterThanOrEqual(4);
 });
 
+test('cotizar con la tasa de IVA ilegible desde el principio es 422, no un 500', function () {
+    // El otro extremo de la prueba del cambio: aquella detecta que la lectura de la tasa
+    // quede DETRAS del try, esta que quede ANTES. Con la tasa mala desde la primera lectura,
+    // la que sea que se saque del try lanza fuera de el y seria un 500.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = prefacturaBorrador();
+    renglonDe($p, 100.0, 1);
+    FactConfiguracion::updateOrCreate(['clave' => 'iva_tasa'], ['valor' => 'raro', 'descripcion' => 'Tasa de IVA']);
+
+    $this->getJson("/api/facturacion/prefacturas/{$p->id}/cotizacion")
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'totales_no_calculables');
+});
+
 test('cotizar queda en la bitacora y dice que NO se emitio nada', function () {
     // Es lo que sustituye al codigo '1234' del sistema viejo, que esta en el JavaScript del
     // cliente y no deja rastro de quien cotizo ni cuando.
@@ -400,6 +414,10 @@ test('cotizar NO escribe nada mas que la bitacora, ni consume folio', function (
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $p = prefacturaBorrador();
     renglonDe($p, 100.0, 1);
+
+    // Sin esto `touch()` no escribiria nada: dentro del mismo segundo `updated_at` no
+    // cambia y Eloquent se salta el UPDATE, y la prueba no veria una escritura real.
+    $this->travel(5)->seconds();
 
     $sentencias = [];
     DB::listen(function ($consulta) use (&$sentencias) {
@@ -448,9 +466,11 @@ test('sin el subdepartamento no se imprime', function () {
     $this->getJson("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertForbidden();
 });
 
-test('ninguna ruta de impresion queda sin su subdepartamento', function () {
+test('las dos rutas de impresion existen, y ninguna queda sin su subdepartamento', function () {
     // La tabla de EndpointsPrefacturaTest no sirve para esto: excluye GET y HEAD, asi que
     // una ruta de impresion no aparece ahi nunca. Esta es su contraparte para las de lectura.
+    // Afirma sobre el conjunto de URIs ademas del de middlewares: retirar o renombrar una
+    // de las dos rutas hace fallar la prueba, no solo quitarle el middleware.
     $impresion = [];
 
     foreach (app('router')->getRoutes() as $ruta) {
@@ -462,6 +482,8 @@ test('ninguna ruta de impresion queda sin su subdepartamento', function () {
             ->first(fn ($m) => is_string($m) && str_starts_with($m, 'subdep:'));
     }
 
-    expect($impresion)->not->toBeEmpty()
-        ->and(array_unique(array_values($impresion)))->toBe(['subdep:factPrefacturas']);
+    expect($impresion)->toBe([
+        'api/facturacion/prefacturas/{id}/pdf' => 'subdep:factPrefacturas',
+        'api/facturacion/prefacturas/{id}/cotizacion' => 'subdep:factPrefacturas',
+    ]);
 });
