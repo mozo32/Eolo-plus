@@ -17,6 +17,9 @@ import SelectorCliente from './components/SelectorCliente';
 
 const TEXTO_MAX = 120;
 
+/** Lo que devuelve el cierre del servidor. */
+type RespuestaCierre = Awaited<ReturnType<typeof apiPrefacturas.cerrar>>;
+
 /**
  * Los códigos de negocio que dicen que el estado que se ve ya no es el del servidor (o que el cierre se abortó): obligan a
  * recargar la ficha y se muestran con el mensaje del servidor. `sin_cobro` y `totales_no_calculables` son los del cobro;
@@ -557,10 +560,12 @@ export default function EditorPrefactura({ id }: Props) {
 
     /**
      * El cierre: sus diálogos (cambios sin guardar, confirmación, faltante) y la llamada al servidor. Lo usan «Cerrar prefactura» y
-     * «Cerrar e imprimir»; `alCerrar` se llama SOLO si el cierre terminó bien (cancelar, cambios sin guardar o un rechazo del servidor
-     * retornan o lanzan antes de esa línea).
+     * «Cerrar e imprimir». Dos ganchos para esta última:
+     *  - `alPedirCierre` envuelve CADA petición de cierre, que es justo lo que sigue a una confirmación del operador;
+     *  - `alCerrar` se llama SOLO si el cierre terminó bien (cancelar, cambios sin guardar o un rechazo del servidor retornan o lanzan
+     *    antes de esa línea).
      */
-    const flujoDeCierre = async (alCerrar: (cerradaAhora: Prefactura) => void) => {
+    const flujoDeCierre = async (alPedirCierre: (peticion: () => Promise<RespuestaCierre>) => Promise<RespuestaCierre>, alCerrar: (cerradaAhora: Prefactura) => void) => {
         // El servidor cierra lo que tiene guardado: un encabezado o una nota a medio capturar quedarían fuera del documento sellado,
         // y una cerrada ya no se edita. Un solo aviso que dice QUÉ falta guardar.
         const sinGuardar = [...(encabezadoModificado ? ['el encabezado'] : []), ...notasPendientesRef.current];
@@ -606,7 +611,7 @@ export default function EditorPrefactura({ id }: Props) {
             try {
                 // Se manda la cifra que el operador VIO: el servidor la compara con el faltante real dentro del cierre y, si ya es otro,
                 // responde `sin_cobro` con el nuevo en lugar de cerrar (abajo, otra vuelta del bucle con otra confirmación).
-                const { prefactura: cerradaAhora, message } = await apiPrefacturas.cerrar(prefactura.id, faltante !== null, faltante ?? undefined);
+                const { prefactura: cerradaAhora, message } = await alPedirCierre(() => apiPrefacturas.cerrar(prefactura.id, faltante !== null, faltante ?? undefined));
                 aplicar(cerradaAhora);
                 setAvisoCargos(null);
                 toast.fire({ icon: 'success', titleText: message });
@@ -629,32 +634,51 @@ export default function EditorPrefactura({ id }: Props) {
     /**
      * `imprimirAlCerrar`: «Cerrar e imprimir». Es el MISMO cierre; al terminar bien, el documento se abre en una pestaña.
      *
-     * La pestaña se abre ANTES de cualquier `await` y se navega después: tras los diálogos y la petición el navegador puede ya no
-     * considerar la apertura parte del clic del operador y bloquearla como emergente no solicitada. Por eso el `finally` cierra la
-     * pestaña en TODA salida que no la haya usado (cancelar, cambios sin guardar, error del servidor, sello que no cuadra): ninguna deja una en blanco.
+     * La pestaña se abre en `alPedirCierre`: justo DESPUÉS de que el operador pulsó «Sí, cerrar» y justo ANTES de la petición. Ese
+     * clic es el gesto que autoriza al navegador a abrir una pestaña, y su autorización dura pocos segundos; la petición de red puede
+     * tardar más, así que abrirla después de esperarla la perdería y el bloqueador de emergentes la impediría. Y no antes: abierta
+     * durante los diálogos, robaría el foco mientras el operador decide y quedaría en blanco si cancela o hay cambios sin guardar.
+     * Si el servidor pide otra confirmación (`sin_cobro`), la pestaña se cierra antes de ese segundo diálogo y se abre de nuevo tras él.
+     * El `finally` cierra la que haya quedado sin usar (error del servidor, sello que no cuadra).
      */
     const cerrar = (imprimirAlCerrar = false) =>
         ejecutar('cerrar', 'No se pudo cerrar la prefactura', async () => {
-            let pestana: Window | null = imprimirAlCerrar ? window.open('', '_blank') : null;
+            let pestana: Window | null = null;
+            const cerrarPestana = () => {
+                pestana?.close();
+                pestana = null;
+            };
 
             try {
-                await flujoDeCierre(cerradaAhora => {
-                    // El servidor no imprime un sello que no cuadra o que no se pudo verificar (409 / 422): en ese caso no se navega la
-                    // pestaña a un error (el `finally` la cierra), y la ficha ya muestra los avisos del sello y el motivo junto a «Imprimir».
-                    if (!imprimirAlCerrar || cerradaAhora.sello_discrepa !== false) return;
+                await flujoDeCierre(
+                    async peticion => {
+                        if (imprimirAlCerrar) pestana = window.open('', '_blank');
 
-                    if (pestana === null || pestana.closed) {
-                        // No se abrió (bloqueador) o el operador la cerró: el cierre ya se hizo, y la impresión se recupera con el botón.
-                        toast.fire({ icon: 'info', titleText: `Prefactura cerrada con folio ${cerradaAhora.folio ?? '—'}. No se abrió la pestaña del documento: imprímelo con el botón IMPRIMIR.`, timer: 8000 });
+                        try {
+                            return await peticion();
+                        } catch (e) {
+                            cerrarPestana();
+                            throw e;
+                        }
+                    },
+                    cerradaAhora => {
+                        // El servidor no imprime un sello que no cuadra o que no se pudo verificar (409 / 422): en ese caso no se navega la
+                        // pestaña a un error (el `finally` la cierra), y la ficha ya muestra los avisos del sello y el motivo junto a «Imprimir».
+                        if (!imprimirAlCerrar || cerradaAhora.sello_discrepa !== false) return;
 
-                        return;
-                    }
+                        if (pestana === null || pestana.closed) {
+                            // No se abrió (bloqueador) o el operador la cerró: el cierre ya se hizo, y la impresión se recupera con el botón.
+                            toast.fire({ icon: 'info', titleText: `Prefactura cerrada con folio ${cerradaAhora.folio ?? '—'}. No se abrió la pestaña del documento: imprímelo con el botón IMPRIMIR.`, timer: 8000 });
 
-                    pestana.location.href = urlDocumentoPrefactura(cerradaAhora.id);
-                    pestana = null;
-                });
+                            return;
+                        }
+
+                        pestana.location.href = urlDocumentoPrefactura(cerradaAhora.id);
+                        pestana = null;
+                    },
+                );
             } finally {
-                pestana?.close();
+                cerrarPestana();
             }
         });
 
