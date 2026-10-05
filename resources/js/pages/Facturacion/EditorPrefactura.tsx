@@ -58,7 +58,8 @@ const sonIguales = (a: FormularioEncabezado, b: FormularioEncabezado): boolean =
 /**
  * El cuerpo del diálogo de agrupar: la explicación y, si la prefactura ya tiene grupos, un botón por etiqueta que la copia al campo.
  * La etiqueta ES la identidad del grupo, así que reutilizar una tiene que ser un clic y no haberla tecleado igual. Las etiquetas las
- * capturó un usuario: se pintan con `textContent`, nunca como HTML.
+ * capturó un usuario: se pintan con `textContent`, nunca como HTML. Los estilos van en línea y no como clases de Tailwind porque el
+ * cuerpo se arma con DOM fuera de JSX, y el escáner de Tailwind solo genera las clases que ve escritas en el fuente: así no dependemos de eso.
  */
 function cuerpoDeAgrupar(existentes: string[]): HTMLElement {
     const cuerpo = document.createElement('div');
@@ -629,7 +630,7 @@ export default function EditorPrefactura({ id }: Props) {
                 inputPlaceholder: 'Etiqueta del grupo',
                 inputAttributes: { maxlength: String(GRUPO_MAX), autocomplete: 'off', 'aria-label': 'Etiqueta del grupo' },
                 showCancelButton: true,
-                confirmButtonText: 'Agrupar',
+                confirmButtonText: renglon.grupo === null ? 'Agrupar' : 'Cambiar grupo',
                 cancelButtonText: 'Cancelar',
                 confirmButtonColor: '#4f46e5',
                 reverseButtons: true,
@@ -648,9 +649,26 @@ export default function EditorPrefactura({ id }: Props) {
             if (!respuesta.isConfirmed) return;
 
             const etiqueta = String(respuesta.value).trim();
-            await apiPrefacturas.grupo(prefactura.id, renglon.id, etiqueta);
+            // El validador ya lo impide; esto hace evidente que una etiqueta vacía jamás sale de aquí (el servidor la leería como «desagrupar»).
+            if (etiqueta === '') return;
+
+            const { prefactura: ficha } = await apiPrefacturas.grupo(prefactura.id, renglon.id, etiqueta);
             await cargar();
-            toast.fire({ icon: 'success', titleText: `«${renglon.nombre_servicio}» queda en el grupo «${etiqueta}».` });
+
+            // El servidor recorta la etiqueta con su propio criterio, que no es el de `trim()`: una hecha solo de caracteres invisibles pasa el
+            // validador y llega vacía, y entonces el servidor desagrupa. Se confía en lo que devolvió, no en lo que se mandó.
+            const grupoFinal = ficha.renglones?.find(r => r.id === renglon.id)?.grupo ?? null;
+            if (grupoFinal === null) {
+                await Swal.fire({
+                    icon: 'warning',
+                    titleText: 'El servicio no quedó agrupado',
+                    text: `El sistema no aceptó esa etiqueta (la leyó como vacía) y «${renglon.nombre_servicio}» queda sin grupo. Escribe una etiqueta con letras o números.`,
+                    confirmButtonColor: '#4f46e5',
+                });
+                return;
+            }
+
+            toast.fire({ icon: 'success', titleText: `«${renglon.nombre_servicio}» queda en el grupo «${grupoFinal}».` });
         });
 
     const desagrupar = (renglon: RenglonPrefactura) =>

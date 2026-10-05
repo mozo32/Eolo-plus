@@ -431,7 +431,6 @@ export interface PagoPrefactura {
     es_comision_amex: boolean;
 }
 
-/** Un renglón de prefactura: congela el precio, el margen y el ajuste que tenía el servicio al agregarse. */
 /** Lo que recibe «Recalcular estancia». Los ajustes cobran la DIFERENCIA entre dos tramos, no el tramo entero. */
 export type DatosEstancia = {
     pernoctas: number;
@@ -441,6 +440,7 @@ export type DatosEstancia = {
     ajustes_12h_pernocta?: number;
 };
 
+/** Un renglón de prefactura: congela el precio, el margen y el ajuste que tenía el servicio al agregarse. */
 export interface RenglonPrefactura {
     id: number;
     servicio_id: number;
