@@ -335,9 +335,16 @@ En `app/Models/FactPrefactura.php`, junto a las otras relaciones:
    `PREFACTURA DE SERVICIOS` con `FOLIO: {{ $prefactura->folio }}` a la derecha, o
    `COTIZACIÓN` con la leyenda `Sin folio — no es un documento emitido` cuando
    `$esCotizacion`.
-3. **DATOS DE OPERACIÓN:** matrícula (`$prefactura->aeronave?->matricula`), fecha,
-   llegada y salida, origen y destino.
-4. **DETALLES DEL CLIENTE:** nombre, teléfono y correo del `$prefactura->cliente`.
+3. **DATOS DE OPERACIÓN:** matrícula (`$prefactura->aeronave?->matricula`), la fecha,
+   `llegada_at` y `salida_at`, `origen` y `destino`.
+
+   **No hay columna `fecha`.** La fecha del documento es **`cerrada_at`** en uno emitido —la
+   de su emisión, no la de su impresión— y **la de hoy** en una cotización. Y las tres
+   fechas pueden llegar nulas: `cerrarConSello()` no pone `cerrada_at`, y un borrador recién
+   creado no tiene llegada ni salida. La plantilla imprime `—` ante una fecha nula en lugar
+   de reventar.
+4. **DETALLES DEL CLIENTE:** nombre, teléfono y correo del `$prefactura->cliente`, con `?->`
+   y `—` cuando falten: `prefacturaBorrador()` no crea cliente y siete pruebas lo usan.
 5. **La tabla de renglones**, con cabeceras `CONCEPTO / SERVICIO`, `REMISIÓN`, `PRECIO U.`,
    `CANT.` e `IMPORTE`. Por cada renglón: `nombre_servicio`, `remision`,
    `precio_unitario`, `cantidad` y `importe()`. **Si `es_cortesia`**, el importe sale
@@ -412,9 +419,13 @@ git commit -m "La plantilla del documento de prefactura, con el sello y no la de
 - **`auth:sanctum` funciona con un enlace del navegador** porque este proyecto usa el modo de
   cookie de Sanctum (`EnsureFrontendRequestsAreStateful` está en `bootstrap/app.php`). Por
   eso la Task 4 puede abrir el PDF en una pestaña sin montar una descarga por `fetch`.
-- **La tabla de rutas protegidas** de `tests/Feature/Facturacion/EndpointsPrefacturaTest.php`,
-  alrededor de la **línea 158**, tiene que recibir las dos rutas nuevas, o esa prueba falla —
-  y debe fallar: es la que garantiza que ningún endpoint queda sin permiso.
+- **NO toques la tabla de rutas protegidas** de
+  `tests/Feature/Facturacion/EndpointsPrefacturaTest.php:157`. Es tentador, porque es la que
+  garantiza que ningún endpoint queda sin permiso, pero construye su lado real iterando el
+  router con `array_diff($ruta->methods(), ['GET','HEAD'])`: **una ruta GET no puede aparecer
+  ahí nunca**, así que agregarla al `$esperado` rompería el `toEqual` para siempre. Esa tabla
+  es la de las rutas de **escritura**, y las de impresión no escriben. El mismo invariante se
+  conserva con una aserción propia en `ImpresionPrefacturaTest`, que está más abajo.
 - **`Bitacora::log()` tiene esta firma**, con argumentos con nombre:
   `log(string $modulo, string $accion, string $descripcion, ?int $usuarioId = null, ?string $elabora = null, ?int $registroId = null, ?array $datosAnteriores = null, ?array $datosNuevos = null)`.
   Usa `Bitacora::ACCION_EXPORTAR`, que ya existe, y
@@ -477,15 +488,13 @@ test('un borrador descartado no se imprime', function () {
         ->assertJsonPath('codigo', 'ya_descartada');
 });
 
-test('con la tasa de IVA ilegible responde 422 y no un 500', function () {
+test('con un renglon ilegible responde 422 y no un 500', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
-    App\Models\FactConfiguracion::updateOrCreate(
-        ['clave' => 'iva_tasa'],
-        ['valor' => 'abc', 'descripcion' => 'Tasa ilegible de prueba'],
-    );
     [$p] = prefacturaCompleta(100.0, 1);
     $cerrada = cerrarConSello($p, '100.00', '16.00', '116.00');
-    // El sello se lee sin la tasa, pero verificarlo contra los renglones si la necesita.
+    // Verificar el sello SI deriva de los renglones, y un ajuste que no se reconoce no se
+    // interpreta: lanza. La tasa no sirve para provocarlo en una cerrada, porque `ivaTasa()`
+    // devuelve la SELLADA y no lee la configuracion.
     $cerrada->renglones()->first()->update(['ajuste_precio' => 'raro']);
 
     $this->getJson("/api/facturacion/prefacturas/{$cerrada->id}/pdf")
@@ -554,11 +563,29 @@ test('sin el subdepartamento no se imprime', function () {
 });
 ```
 
-Y añade las dos rutas nuevas a la tabla de rutas protegidas de `EndpointsPrefacturaTest.php`:
+Y añade esta prueba, que es la que conserva el invariante sin romper la tabla de las rutas
+de escritura. **Agrégala en esta task aunque `/cotizacion` no exista todavía**: hasta la
+Task 3 solo habrá una ruta de impresión, así que afirma sobre las que hay y no sobre un
+número fijo.
 
 ```php
-        'GET api/facturacion/prefacturas/{id}/pdf' => 'subdep:factPrefacturas',
-        'GET api/facturacion/prefacturas/{id}/cotizacion' => 'subdep:factPrefacturas',
+test('ninguna ruta de impresion queda sin su subdepartamento', function () {
+    // La tabla de EndpointsPrefacturaTest no sirve para esto: excluye GET y HEAD, asi que
+    // una ruta de impresion no aparece ahi nunca. Esta es su contraparte para las de lectura.
+    $impresion = [];
+
+    foreach (app('router')->getRoutes() as $ruta) {
+        if (! preg_match('#^api/facturacion/prefacturas/\{id\}/(pdf|cotizacion)$#', $ruta->uri())) {
+            continue;
+        }
+
+        $impresion[$ruta->uri()] = collect($ruta->gatherMiddleware())
+            ->first(fn ($m) => is_string($m) && str_starts_with($m, 'subdep:'));
+    }
+
+    expect($impresion)->not->toBeEmpty()
+        ->and(array_unique(array_values($impresion)))->toBe(['subdep:factPrefacturas']);
+});
 ```
 
 - [ ] **Step 2: Córrelas para verificar que fallan**
@@ -708,8 +735,8 @@ Y el `use App\Http\Controllers\Api\Facturacion\PrefacturaPdfController;` arriba.
 
 - [ ] **Step 5: Corre las pruebas**
 
-Run: `php artisan test tests/Feature/Facturacion/ImpresionPrefacturaTest.php tests/Feature/Facturacion/EndpointsPrefacturaTest.php`
-Expected: PASS.
+Run: `php artisan test tests/Feature/Facturacion/ImpresionPrefacturaTest.php`
+Expected: PASS, 10 pruebas.
 
 Run: `php artisan test`
 Expected: PASS.
@@ -726,7 +753,7 @@ Restaura con `git checkout -- app/Http/Controllers/Api/Facturacion/PrefacturaPdf
 - [ ] **Step 7: Commit**
 
 ```bash
-git add app/Http/Controllers/Api/Facturacion/PrefacturaPdfController.php routes/api.php tests/Feature/Facturacion/ImpresionPrefacturaTest.php tests/Feature/Facturacion/EndpointsPrefacturaTest.php
+git add app/Http/Controllers/Api/Facturacion/PrefacturaPdfController.php routes/api.php tests/Feature/Facturacion/ImpresionPrefacturaTest.php
 git commit -m "El documento de una cerrada: lee el sello, rechaza lo que no se debe emitir, y no escribe"
 ```
 
@@ -911,7 +938,7 @@ En `PrefacturaPdfController`:
 - [ ] **Step 5: Corre las pruebas**
 
 Run: `php artisan test tests/Feature/Facturacion/ImpresionPrefacturaTest.php`
-Expected: PASS, 15 pruebas (9 de la Task 2 y 6 de esta).
+Expected: PASS, 16 pruebas (10 de la Task 2 y 6 de esta).
 
 Run: `php artisan test`
 Expected: PASS.
