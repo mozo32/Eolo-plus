@@ -202,6 +202,8 @@ class PrefacturaRenglonController extends Controller
             'pernoctas' => ['required', 'integer', 'min:0', 'max:999'],
             'transitos_2h' => ['required', 'integer', 'min:0', 'max:999'],
             'transitos_12h' => ['required', 'integer', 'min:0', 'max:999'],
+            'ajustes_2h_12h' => ['sometimes', 'integer', 'min:0', 'max:999'],
+            'ajustes_12h_pernocta' => ['sometimes', 'integer', 'min:0', 'max:999'],
         ], $this->mensajesDeEstancia());
 
         // La transacción de afuera deja la bitácora en la misma que el servicio:
@@ -214,7 +216,14 @@ class PrefacturaRenglonController extends Controller
                     return $respuesta;
                 }
 
-                $resultado = $cargos->recalcular($prefactura, $datos['pernoctas'], $datos['transitos_2h'], $datos['transitos_12h']);
+                $resultado = $cargos->recalcular(
+                    $prefactura,
+                    $datos['pernoctas'],
+                    $datos['transitos_2h'],
+                    $datos['transitos_12h'],
+                    $datos['ajustes_2h_12h'] ?? 0,
+                    $datos['ajustes_12h_pernocta'] ?? 0,
+                );
 
                 Bitacora::log(
                     modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
@@ -316,7 +325,7 @@ class PrefacturaRenglonController extends Controller
     {
         $mensajes = [];
 
-        foreach (['pernoctas' => 'las pernoctas', 'transitos_2h' => 'los tránsitos de 2 horas', 'transitos_12h' => 'los tránsitos de 12 horas'] as $campo => $nombre) {
+        foreach (['pernoctas' => 'las pernoctas', 'transitos_2h' => 'los tránsitos de 2 horas', 'transitos_12h' => 'los tránsitos de 12 horas', 'ajustes_2h_12h' => 'los ajustes de 2 h a 12 h', 'ajustes_12h_pernocta' => 'los ajustes de 12 h a pernocta'] as $campo => $nombre) {
             $mensajes["{$campo}.required"] = "Indica la cantidad de {$nombre} (puede ser 0).";
             $mensajes["{$campo}.integer"] = "La cantidad de {$nombre} debe ser un número entero.";
             $mensajes["{$campo}.min"] = "La cantidad de {$nombre} no puede ser negativa.";

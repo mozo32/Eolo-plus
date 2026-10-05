@@ -397,7 +397,7 @@ test('los avisos se concatenan al motivo previo, en orden: motivo, conservadas, 
     $resultado = $cargos->recalcular($p->fresh(), pernoctas: 1, transitos2h: 1, transitos12h: 0);
 
     expect($resultado['motivo'])->toBe(
-        'No hay tarifa de pernocta ni en la matrícula ni en su categoría, así que no se cobró. '
+        'No se pudo determinar el precio de pernocta (sin tarifa en la matrícula ni en su categoría), así que no se cobró. '
         .'Se conservó la cortesía de 1 renglón de estancia: tránsito de 2 horas (no se cobran 1144.50). '
         .'Se perdió la cortesía de 1 renglón de estancia que dejó de existir: pernocta. Si ese concepto vuelve a tener cantidad, se cobrará completo.'
     );
@@ -414,7 +414,7 @@ test('sin tarifa y sin conservar nada, la cortesia perdida se avisa pegada al mo
     $resultado = $cargos->recalcular($p->fresh(), pernoctas: 1, transitos2h: 0, transitos12h: 0);
 
     expect($resultado['motivo'])->toBe(
-        'No hay tarifa de pernocta ni en la matrícula ni en su categoría, así que no se cobró. '
+        'No se pudo determinar el precio de pernocta (sin tarifa en la matrícula ni en su categoría), así que no se cobró. '
         .'Se perdió la cortesía de 1 renglón de estancia que dejó de existir: pernocta. Si ese concepto vuelve a tener cantidad, se cobrará completo.'
     );
 });

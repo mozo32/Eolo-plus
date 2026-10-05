@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/FactServicio.php
 
 namespace App\Models;
@@ -10,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 class FactServicio extends Model
 {
     public const STATUS_ACTIVO = 'A';
+
     public const STATUS_INACTIVO = 'N';
 
     /** Sin ajuste: el precio se cobra tal cual. */
@@ -27,12 +29,17 @@ class FactServicio extends Model
     /** El servicio cuyo precio sigue al precio Eolo del combustible. */
     public const CONCEPTO_COMBUSTIBLE = 'combustible';
 
-    /** Los tres de estancia: su precio NO sale del catálogo, sale de la tarifa de la matrícula. */
+    /** Los cinco de estancia: su precio NO sale del catálogo, sale de la tarifa de la matrícula. */
     public const CONCEPTO_ESTANCIA_PERNOCTA = 'estancia_pernocta';
 
     public const CONCEPTO_ESTANCIA_TRANSITO_2H = 'estancia_transito_2h';
 
     public const CONCEPTO_ESTANCIA_TRANSITO_12H = 'estancia_transito_12h';
+
+    /** El ajuste cobra la DIFERENCIA entre dos tramos, no el tramo entero. */
+    public const CONCEPTO_ESTANCIA_AJUSTE_2H_12H = 'estancia_ajuste_2h_12h';
+
+    public const CONCEPTO_ESTANCIA_AJUSTE_12H_PERNOCTA = 'estancia_ajuste_12h_pernocta';
 
     /** El renglón que agrega el pago Amex: en el origen es `id_servicio = 100`, «Comisión AMEX». */
     public const CONCEPTO_COMISION_AMEX = 'comision_amex';
@@ -42,6 +49,8 @@ class FactServicio extends Model
         self::CONCEPTO_ESTANCIA_PERNOCTA,
         self::CONCEPTO_ESTANCIA_TRANSITO_2H,
         self::CONCEPTO_ESTANCIA_TRANSITO_12H,
+        self::CONCEPTO_ESTANCIA_AJUSTE_2H_12H,
+        self::CONCEPTO_ESTANCIA_AJUSTE_12H_PERNOCTA,
     ];
 
     protected $table = 'fact_servicios';

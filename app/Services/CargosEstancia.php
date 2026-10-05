@@ -14,11 +14,15 @@ use InvalidArgumentException;
  *
  * Dos reglas del sistema viejo que aquí se hacen cumplir:
  *
- * 1. El precio de los tres servicios de estancia NO sale del catálogo —ahí vale
+ * 1. El precio de los servicios de estancia NO sale del catálogo —ahí vale
  *    99.00, que es relleno— sino de la tarifa de la matrícula. `insert22.php`
  *    hace lo mismo pasando `$Costp`, `$costt2` y `$costt12` explícitamente.
  * 2. Solo se cobran si la aeronave está en Tránsito (`if($estatus == 1)` en el
  *    original). Es la regla que el bloque 1a dejó sin aplicar a propósito.
+ *
+ * Los dos ajustes de estancia (de 2 h a 12 h y de 12 h a pernocta) cobran la DIFERENCIA entre
+ * las tarifas de dos tramos, y no se cobran si esa diferencia no es positiva: ver
+ * `diferenciaDeTarifa()`.
  *
  * Las cantidades las teclea la persona. NO se derivan de las fechas: eso
  * cambiaría cobros y necesitaría su propia verificación contra el histórico.
@@ -53,13 +57,19 @@ class CargosEstancia
      * @throws RenglonDePrefacturaCerradaException si la prefactura ya está cerrada.
      * @throws ServicioDeEstanciaNoDisponibleException si falta (o está de baja) el servicio de un concepto con cantidad; se revierte todo.
      */
-    public function recalcular(FactPrefactura $prefactura, int $pernoctas, int $transitos2h, int $transitos12h): array
-    {
-        if ($pernoctas < 0 || $transitos2h < 0 || $transitos12h < 0) {
+    public function recalcular(
+        FactPrefactura $prefactura,
+        int $pernoctas,
+        int $transitos2h,
+        int $transitos12h,
+        int $ajustes2a12 = 0,
+        int $ajustes12aPernocta = 0,
+    ): array {
+        if (min($pernoctas, $transitos2h, $transitos12h, $ajustes2a12, $ajustes12aPernocta) < 0) {
             throw new InvalidArgumentException('Las cantidades de estancia no pueden ser negativas.');
         }
 
-        return DB::transaction(function () use ($prefactura, $pernoctas, $transitos2h, $transitos12h) {
+        return DB::transaction(function () use ($prefactura, $pernoctas, $transitos2h, $transitos12h, $ajustes2a12, $ajustes12aPernocta) {
             $actual = $this->bloquearBorrador($prefactura);
 
             // La ficha se lee aquí, ya con candado, y no de la relación cacheada: el
@@ -96,6 +106,8 @@ class CargosEstancia
                 [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA, $this->etiquetaDe(FactServicio::CONCEPTO_ESTANCIA_PERNOCTA), $pernoctas, $satelite->tarifaPernocta()],
                 [FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H, $this->etiquetaDe(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H), $transitos2h, $satelite->tarifaTransito2h()],
                 [FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H, $this->etiquetaDe(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H), $transitos12h, $satelite->tarifaTransito12h()],
+                [FactServicio::CONCEPTO_ESTANCIA_AJUSTE_2H_12H, $this->etiquetaDe(FactServicio::CONCEPTO_ESTANCIA_AJUSTE_2H_12H), $ajustes2a12, $this->diferenciaDeTarifa($satelite->tarifaTransito12h(), $satelite->tarifaTransito2h())],
+                [FactServicio::CONCEPTO_ESTANCIA_AJUSTE_12H_PERNOCTA, $this->etiquetaDe(FactServicio::CONCEPTO_ESTANCIA_AJUSTE_12H_PERNOCTA), $ajustes12aPernocta, $this->diferenciaDeTarifa($satelite->tarifaPernocta(), $satelite->tarifaTransito12h())],
             ];
 
             // Se reemplazan solo los de estancia. Este borrado es masivo y no pasa
@@ -132,7 +144,7 @@ class CargosEstancia
                 }
 
                 if ($tarifa === null) {
-                    $sinTarifa[] = $etiqueta;
+                    $sinTarifa[] = $this->detalleSinPrecio($concepto, $etiqueta, $satelite);
 
                     continue;
                 }
@@ -162,7 +174,7 @@ class CargosEstancia
             $motivo = null;
 
             if ($sinTarifa !== []) {
-                $motivo = 'No hay tarifa de '.implode(', ', $sinTarifa).' ni en la matrícula ni en su categoría, así que no se cobró.';
+                $motivo = 'No se pudo determinar el precio de '.implode(', ', $sinTarifa).', así que no se cobró.';
             } elseif ($creados === 0) {
                 $motivo = 'Todas las cantidades de estancia están en cero, así que no hay nada que cobrar.';
             }
@@ -301,12 +313,67 @@ class CargosEstancia
         return $prefactura->renglones()->whereIn('concepto', FactServicio::CONCEPTOS_ESTANCIA)->delete();
     }
 
+    /**
+     * El precio de un ajuste de estancia: lo que cuesta subir de un tramo al siguiente.
+     *
+     * Devuelve `null` —y entonces el ajuste no se cobra y el `motivo` lo dice— en los tres
+     * casos en que no hay nada legítimo que cobrar: si falta cualquiera de las dos tarifas,
+     * y si la diferencia sale cero o negativa.
+     *
+     * Esa última guarda es la que el sistema viejo no tenía. `aplicar_descuento.php` y la
+     * captura a mano dejaron 10 renglones con precio negativo en el histórico, y dos de
+     * ellos no corresponden a ningún cargo: un ajuste negativo es cobrar de menos sin que
+     * nada lo explique.
+     *
+     * Escala 4 porque `precio_unitario` es `decimal(10,4)`, y `bcsub` porque las tarifas
+     * llegan como cadenas decimales y aquí no entra ningún `float`.
+     */
+    private function diferenciaDeTarifa(?string $mayor, ?string $menor): ?string
+    {
+        if ($mayor === null || $menor === null) {
+            return null;
+        }
+
+        $diferencia = bcsub($mayor, $menor, 4);
+
+        return bccomp($diferencia, '0', 4) > 0 ? $diferencia : null;
+    }
+
+    /**
+     * Por qué un concepto de estancia no tiene precio, para el `motivo`. Los tres tramos
+     * se quedan sin precio solo si falta su tarifa. Un ajuste, además, si la diferencia
+     * no es positiva, así que dice las dos tarifas que intervienen: sin ellas quien lo
+     * lee no sabe cuál corregir.
+     */
+    private function detalleSinPrecio(string $concepto, string $etiqueta, FactAeronave $satelite): string
+    {
+        $tarifas = match ($concepto) {
+            FactServicio::CONCEPTO_ESTANCIA_AJUSTE_2H_12H => ['tránsito de 12 horas' => $satelite->tarifaTransito12h(), 'tránsito de 2 horas' => $satelite->tarifaTransito2h()],
+            FactServicio::CONCEPTO_ESTANCIA_AJUSTE_12H_PERNOCTA => ['pernocta' => $satelite->tarifaPernocta(), 'tránsito de 12 horas' => $satelite->tarifaTransito12h()],
+            default => null,
+        };
+
+        if ($tarifas === null) {
+            return "{$etiqueta} (sin tarifa en la matrícula ni en su categoría)";
+        }
+
+        $cifras = [];
+
+        foreach ($tarifas as $nombre => $tarifa) {
+            $cifras[] = "{$nombre}: ".($tarifa ?? 'sin tarifa');
+        }
+
+        return "{$etiqueta} (cobra la diferencia de dos tarifas y debe salir mayor que cero; ".implode(', ', $cifras).')';
+    }
+
     private function etiquetaDe(string $concepto): string
     {
         return match ($concepto) {
             FactServicio::CONCEPTO_ESTANCIA_PERNOCTA => 'pernocta',
             FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H => 'tránsito de 2 horas',
             FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H => 'tránsito de 12 horas',
+            FactServicio::CONCEPTO_ESTANCIA_AJUSTE_2H_12H => 'ajuste de estancia de 2 h a 12 h',
+            FactServicio::CONCEPTO_ESTANCIA_AJUSTE_12H_PERNOCTA => 'ajuste de estancia de 12 h a pernocta',
         };
     }
 
