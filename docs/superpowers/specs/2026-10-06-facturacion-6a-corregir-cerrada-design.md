@@ -16,6 +16,8 @@ modelo o el servicio y no en el controlador:
 | 2 | `PagosPrefactura::bloquearBorrador()` | registrar o quitar un pago |
 | 3 | `RechazaPrefacturaCerrada::rechazarSiCerrada()` | editar las notas y la cabecera |
 | 4 | `PrefacturaController::descartar()` (`where estado = borrador`) | descartar un documento emitido (409 `ya_cerrada`) |
+
+> **Corregido 2026-10-06, medido en la Task 5.** Esta especificación daba `descartar()` por bueno tal cual («DEJAR: así una reabierta no se descarta, que es el invariante»). El invariante sí se cumplía, pero **el mensaje mentía**: una reabierta no es `cerrada`, así que caía en la rama del `else` y el sistema respondía «Este borrador ya estaba descartado» —sobre un documento emitido, con folio consumido y que nadie había descartado—. Lleva rama propia, con `codigo: reabierta`. La lección: que un filtro preserve un invariante no significa que el código que lo rodea diga la verdad.
 | 5 | `CierrePrefactura::cerrar()` | volver a cerrar (`PrefacturaYaCerradaException`) |
 
 Y el sello se verifica en **cada lectura** (`discrepanciasDelSello()`), así que ni una
