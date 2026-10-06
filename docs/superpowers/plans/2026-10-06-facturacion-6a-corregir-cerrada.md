@@ -443,8 +443,11 @@ function prefacturaCerradaParaDocumento(): App\Models\FactPrefactura
 
     renglonDe($p, 100.0, 1);
 
-    // Un pago, para que el documento lleve la tabla de pagos y una linea de CAMBIO que
-    // comparar: sin pagos, la mitad del contrato de la vista no se ejercita.
+    // Un pago EXACTO, para que el documento lleve su tabla de pagos: sin pagos, la mitad
+    // del contrato de la vista no se ejercita. Pagar exacto deja `cambio` en 0.00 y la
+    // linea CAMBIO NO sale en el papel: esa rama se cubre en una prueba aparte, con una
+    // prefactura que paga de mas. Y el ayudante tiene que seguir pagando exacto, porque la
+    // prueba de sobrepago de la Task 4 crea el sobrepago CORRIGIENDO a la baja.
     // `formasDePago()` y `pagoDe()` son los ayudantes que ya usa todo el proyecto
     // (`tests/Pest.php`): en la base de pruebas NO hay formas de pago sembradas, porque
     // corren las migraciones y no los seeders, asi que hay que crearlas.
@@ -1614,6 +1617,8 @@ git commit -m "feat(facturacion): el papel dice a que version sustituye, y la su
 ### Task 7: la prueba maestra
 
 Es la que hace seguro el acoplamiento de §6 de la especificación: **falla el día en que la plantilla lea algo que el JSON no guarda.** Va en su propia tarea porque necesita todo lo anterior y porque es la prueba que más vale del bloque.
+
+**Antes de escribirla, lee lo que la Task 2 ya dejó.** Allí nació una prueba que no estaba en el plan y que es más fuerte que esta: renderiza `pdf.prefactura` con la prefactura viva y con `hidratar(json_decode(json_encode(instantanea)))`, y exige **HTML idéntico** con `toBe`, sin normalizar. Compara el papel, no el arreglo que recibe la vista. **No la dupliques.** Lo que esta tarea añade sobre ella es el recorrido completo: imprimir, reabrir, corregir algo de cada una de las cuatro clases, volver a cerrar, y reimprimir la versión 1 **por el endpoint**, que es el camino que usará el departamento. Si al escribirla ves que la de la Task 2 ya cubre una parte, apóyate en ella y dilo en el informe.
 
 **Files:**
 - Test: `tests/Feature/Facturacion/DocumentoDeVersionTest.php`
