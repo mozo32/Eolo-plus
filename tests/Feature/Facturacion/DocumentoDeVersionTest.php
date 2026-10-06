@@ -556,7 +556,8 @@ test('LA PRUEBA MAESTRA: el ciclo entero por la API, y la version 1 reimpresa es
     // (a) el importe de un renglon: el original, de 100.00, pasa a cortesia y deja de cobrarse.
     $this->patchJson("/api/facturacion/prefacturas/{$viva->id}/renglones/{$viva->renglones()->first()->id}/cortesia", ['es_cortesia' => true])->assertSuccessful();
     // (b) falta un servicio: 2 x 250.00.
-    renglonDe($viva->fresh(), 250.0, 2);
+    $servicioNuevo = App\Models\FactServicio::create(['nombre' => 'Servicio que faltaba', 'precio_unitario' => 250]);
+    $this->postJson("/api/facturacion/prefacturas/{$viva->id}/renglones", ['servicio_id' => $servicioNuevo->id, 'cantidad' => 2])->assertSuccessful();
     // (c) el cobro: se quita el pago exacto y se registra uno mayor, con cambio.
     $this->deleteJson("/api/facturacion/prefacturas/{$viva->id}/pagos/{$viva->pagos()->first()->id}")->assertSuccessful();
     $this->postJson("/api/facturacion/prefacturas/{$viva->id}/pagos", ['forma_pago_id' => $efectivo->id, 'monto' => '600.00'])->assertSuccessful();
