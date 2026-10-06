@@ -1,8 +1,9 @@
+import { type AuthUser } from '@/components/navigation';
 import AppLayout from '@/layouts/app-layout';
 import { facturacionPrefacturas } from '@/routes';
 import { ErrorApi, apiPrefacturas, mensajeDeError, urlCotizacionPrefactura, urlDocumentoPrefactura, urlVersionPrefactura, type DiscrepanciaSello, type Prefactura, type RenglonPrefactura, type VersionPrefactura } from '@/stores/apiFacturacionCatalogos';
 import { type BreadcrumbItem } from '@/types';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { ArrowLeft, Ban, FileText, Gift, Globe, Group, History, Lock, LockOpen, Plus, Printer, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, Ungroup, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
@@ -14,6 +15,7 @@ import ModalReabrir from './components/ModalReabrir';
 import ModalRenglon, { type DatosRenglon } from './components/ModalRenglon';
 import PanelCobro from './components/PanelCobro';
 import PanelNotas from './components/PanelNotas';
+import { puedeReabrirPrefactura } from './components/permisos';
 import SelectorCliente from './components/SelectorCliente';
 
 const TEXTO_MAX = 120;
@@ -278,6 +280,10 @@ interface Props {
  *    reacción distinta: ver `manejarError`.
  */
 export default function EditorPrefactura({ id }: Props) {
+    // Reabrir es un permiso aparte: quien no lo tiene no ve el botón (el servidor sigue siendo la autoridad y responde 403 si los permisos cambiaron).
+    const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
+    const puedeReabrir = puedeReabrirPrefactura(auth.user);
+
     const [prefactura, setPrefactura] = useState<Prefactura | null>(null);
     const [cargando, setCargando] = useState(true);
     const [errorCarga, setErrorCarga] = useState<string | null>(null);
@@ -1334,16 +1340,18 @@ export default function EditorPrefactura({ id }: Props) {
                                         </p>
                                     )}
                                     <div className="flex flex-wrap items-center justify-end gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setModal('reabrir')}
-                                            disabled={ocupado}
-                                            title="Deshace el cierre para corregirla: el documento actual queda guardado como versión y se conserva el folio."
-                                            className={`${BOTON_SECUNDARIO} flex items-center justify-center gap-2 !px-4 !py-3`}
-                                        >
-                                            <LockOpen size={14} />
-                                            REABRIR PARA CORREGIR
-                                        </button>
+                                        {puedeReabrir && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setModal('reabrir')}
+                                                disabled={ocupado}
+                                                title="Deshace el cierre para corregirla: el documento actual queda guardado como versión y se conserva el folio."
+                                                className={`${BOTON_SECUNDARIO} flex items-center justify-center gap-2 !px-4 !py-3`}
+                                            >
+                                                <LockOpen size={14} />
+                                                REABRIR PARA CORREGIR
+                                            </button>
+                                        )}
                                         <button
                                             type="button"
                                             onClick={imprimir}

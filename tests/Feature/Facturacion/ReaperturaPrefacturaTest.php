@@ -501,3 +501,48 @@ test('una prefactura sin versiones las trae como lista vacia, y el indice no las
     expect($fila)->not->toBeNull()
         ->and($fila)->not->toHaveKey('versiones');
 });
+
+/**
+ * Lo que la pantalla decide con `puedeReabrirPrefactura()` (permisos.ts): lo que `HandleInertiaRequests` comparte de verdad.
+ * Un usuario se asigna como lo hace la aplicacion: el subdepartamento Y su departamento.
+ */
+function permisoCompartidoPorInertia(App\Models\User $usuario): array
+{
+    test()->actingAs($usuario);
+
+    $usuario->departamentos()->syncWithoutDetaching($usuario->subdepartamentos->pluck('departamento_id')->all());
+
+    $props = test()->get('/facturacion/prefacturas')->assertOk()->viewData('page')['props']['auth']['user'];
+
+    return [
+        'isAdmin' => $props['isAdmin'],
+        'subdepartamentos' => collect($props['departamentos'])->flatMap(fn ($d) => collect($d['subdepartamentos'])->pluck('nombre'))->all(),
+    ];
+}
+
+test('la pantalla sabe quien puede reabrir: el admin por isAdmin, con la lista vacia, y el resto por el subdepartamento', function () {
+    // Para el admin `departamentos` viaja VACIO y el middleware lo deja pasar: buscar solo en la lista le ocultaria el boton.
+    $admin = permisoCompartidoPorInertia(usuarioAdmin());
+    expect($admin['isAdmin'])->toBeTrue()
+        ->and($admin['subdepartamentos'])->toBe([]);
+
+    $conPermiso = permisoCompartidoPorInertia(usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion'));
+    expect($conPermiso['isAdmin'])->toBeFalse()
+        ->and($conPermiso['subdepartamentos'])->toContain('factReabrirPrefactura');
+
+    // Capturar no es reabrir: el de factPrefacturas no trae el otro.
+    $soloCapturar = permisoCompartidoPorInertia(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    expect($soloCapturar['isAdmin'])->toBeFalse()
+        ->and($soloCapturar['subdepartamentos'])->toContain('factPrefacturas')
+        ->and($soloCapturar['subdepartamentos'])->not->toContain('factReabrirPrefactura');
+});
+
+test('el servidor concuerda con lo que la pantalla ofrece: el admin reabre, el de capturar no', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", ['motivo' => 'Motivo suficiente.'])->assertForbidden();
+
+    $this->actingAs(usuarioAdmin());
+    $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", ['motivo' => 'Motivo suficiente.'])->assertSuccessful();
+});
