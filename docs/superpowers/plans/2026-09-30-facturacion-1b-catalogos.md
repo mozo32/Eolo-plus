@@ -20,7 +20,7 @@
 - Los Form Requests devuelven `true` en `authorize()` y llevan mensajes en español.
 - Nada fuera de `app/Services/ImportadorMatriculas.php` y `app/Console/Commands/` puede usar `DB::connection('remota')`. Hay una prueba que lo verifica.
 - Fechas locales de México; nunca `toISOString()` en el frontend.
-- **Las migraciones de este bloque se numeran entre `2026_09_29_090000` y `2026_09_29_099000`.** El bloque anterior dejó una prueba (`tests/Feature/Facturacion/MatriculaUnicaTest.php`) que exige que la migración del índice único en `aeronaves` sea la última por orden alfabético, para que si falla listando matrículas repetidas no deje nada pendiente detrás. Una migración con fecha posterior rompe esa prueba.
+- **Las migraciones de este bloque se numeran entre `2026_09_29_090000` y `2026_09_29_099000`.** El bloque anterior dejó una prueba (`tests/Feature/Facturacion/MatriculaUnicaTest.php`) que exige que la migración del índice único en `aeronaves` sea la última por orden alfabético, para que si falla listando matrículas repetidas no deje nada pendiente detrás. Una migración con fecha posterior rompe esa prueba. **[Corregido 2026-10-06: ya no. La prueba exige que sea la última de las migraciones que MENCIONAN `aeronaves`, así que una migración posterior que no toque esa tabla ya no la rompe. Lo que sigue en pie es la razón: el índice único tiene que correr después de todo lo que escribe en `aeronaves`.]**
 - **El baseline es 382 pruebas en verde.** Correr `php artisan test` completo antes de cada commit.
 - Verificación de frontend: `npx tsc --noEmit` (solo debe quedar el error preexistente de `WalkAroundController.ts(905,5)`), `npx eslint` sin errores ni advertencias, y `npm run build`.
 
