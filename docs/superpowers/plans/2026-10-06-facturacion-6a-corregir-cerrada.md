@@ -179,8 +179,9 @@ return new class extends Migration
             $table->foreignId('prefactura_id')->constrained('fact_prefacturas')->cascadeOnDelete();
             $table->unsignedSmallInteger('version');
 
-            // Desnormalizado a propósito: una versión sin folio legible no sirve de nada,
-            // y el folio de la prefactura puede no estar si alguien la dejó reabierta.
+            // Desnormalizado a propósito: la versión es un registro histórico y no debe
+            // depender de leer una fila que sí cambia. (NO es porque el folio pueda faltar:
+            // reabrir lo CONSERVA, y eso es el invariante de la Task 4.)
             $table->unsignedInteger('folio');
 
             // Mismos tipos que las columnas selladas de `fact_prefacturas`: decimal(12,2)
