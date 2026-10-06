@@ -17,7 +17,7 @@ use Illuminate\Http\JsonResponse;
  */
 class RenglonDePrefacturaCerradaException extends DomainException
 {
-    public function __construct(string $message = 'La prefactura está cerrada: sus renglones ya no se pueden modificar.')
+    public function __construct(string $message = 'La prefactura está cerrada: sus renglones no se editan. Para corregirla hay que reabrirla.')
     {
         parent::__construct($message);
     }

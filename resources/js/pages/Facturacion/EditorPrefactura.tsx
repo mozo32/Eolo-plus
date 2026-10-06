@@ -989,7 +989,7 @@ export default function EditorPrefactura({ id }: Props) {
                         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3" role="status">
                             <Lock size={18} className="text-emerald-700" />
                             <p className="text-sm font-black uppercase text-emerald-800">Cerrada con folio {prefactura.folio ?? '—'}</p>
-                            <p className="text-[11px] font-bold text-emerald-700">el {fechaHoraSinZona(prefactura.cerrada_at)}. Un documento emitido no se modifica.</p>
+                            <p className="text-[11px] font-bold text-emerald-700">el {fechaHoraSinZona(prefactura.cerrada_at)}. Un documento emitido no se edita: para corregirlo hay que reabrirlo.</p>
                         </div>
                     )}
 

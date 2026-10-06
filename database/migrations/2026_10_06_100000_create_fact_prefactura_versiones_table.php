@@ -43,13 +43,15 @@ return new class extends Migration
             // `timestamp` lo convierte con la zona de la sesión y la hora de la versión
             // dejaría de coincidir con la del documento que esta tabla conserva.
             $table->dateTime('cerrada_at')->nullable();
-            $table->foreignId('cerrada_por')->nullable()->constrained('users');
+            // `nullOnDelete`, igual que `fact_prefacturas.cerrada_por`, que guarda el MISMO hecho: borrar la cuenta de quien cerro
+            // no puede quedar bloqueado por una version suya (el papel de la version imprime el nombre congelado en el JSON, no esta columna).
+            $table->foreignId('cerrada_por')->nullable()->constrained('users')->nullOnDelete();
 
             // `dateTime` y no `timestamp`: en MySQL (sin explicit_defaults_for_timestamp) un
             // `timestamp` NOT NULL tras otro `timestamp` recibe default 0000-00-00 y la
             // migración falla con NO_ZERO_DATE. Sqlite no lo detecta.
             $table->dateTime('reabierta_at');
-            $table->foreignId('reabierta_por')->nullable()->constrained('users');
+            $table->foreignId('reabierta_por')->nullable()->constrained('users')->nullOnDelete();
             $table->string('motivo', 500);
 
             $table->json('documento');

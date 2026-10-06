@@ -112,6 +112,48 @@ export default function ModalReabrir({ folio, onCerrar, onGuardar }: Props) {
                         <strong>no se puede imprimir ni cotizar</strong>: hay
                         que volver a cerrarla.
                     </p>
+                    <div
+                        role="note"
+                        className="rounded border-2 border-orange-300 bg-orange-50 p-3 text-[11px] font-semibold text-orange-900"
+                    >
+                        <p className="font-black uppercase">
+                            Reabrir no se puede deshacer
+                        </p>
+                        <p className="mt-1">
+                            No existe «cancelar la reapertura»: lo único que se
+                            puede hacer es volver a cerrarla, y al cerrarla de
+                            nuevo, aunque no corrijas nada:
+                        </p>
+                        <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                            <li>
+                                el documento sale con la{' '}
+                                <strong>fecha de hoy</strong>, no con la
+                                original;
+                            </li>
+                            <li>
+                                «Elaborado por» pasa a ser{' '}
+                                <strong>quien lo cierre</strong>;
+                            </li>
+                            <li>
+                                el papel sale marcado «Corregida — sustituye a
+                                la versión del …», aunque nadie haya corregido
+                                nada;
+                            </li>
+                            <li>
+                                la versión actual queda guardada{' '}
+                                <strong>para siempre</strong>;
+                            </li>
+                            <li>
+                                si mientras tanto cambió la tasa de IVA, cambian
+                                el IVA y el total.
+                            </li>
+                        </ul>
+                        <p className="mt-1">
+                            Reabre solo si hay algo que corregir. Si abriste la
+                            fila equivocada, cancela aquí: todavía no se ha
+                            hecho nada.
+                        </p>
+                    </div>
 
                     <div>
                         <div className="mb-1 flex items-center justify-between gap-2">

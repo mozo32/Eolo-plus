@@ -23,7 +23,7 @@ trait RechazaPrefacturaCerrada
         }
 
         return response()->json([
-            'message' => 'Esta prefactura ya está cerrada: un documento emitido no se modifica.',
+            'message' => 'Esta prefactura ya está cerrada: un documento emitido no se edita. Para corregirlo hay que reabrirlo.',
             'codigo' => 'ya_cerrada',
         ], 409);
     }

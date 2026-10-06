@@ -45,7 +45,9 @@ class PrefacturaPdfController extends Controller
      */
     public function pdf(Request $request, int $id): Response|JsonResponse
     {
-        $prefactura = FactPrefactura::with(['renglones', 'pagos.formaPago', 'cliente', 'aeronave.tipoAeronave', 'satelite.categoria', 'cerradaPor', 'versiones'])
+        $prefactura = FactPrefactura::with(['renglones', 'pagos.formaPago', 'cliente', 'aeronave.tipoAeronave', 'satelite.categoria', 'cerradaPor'])
+            // De las versiones solo se lee la fecha de cierre de la última: sin el JSON `documento`, que pesa y aquí no se usa.
+            ->with(['versiones' => fn ($versiones) => $versiones->select(['id', 'prefactura_id', 'version', 'cerrada_at'])])
             ->findOrFail($id);
 
         if ($respuesta = $this->rechazarSiDescartada($prefactura)) {

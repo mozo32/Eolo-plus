@@ -15,8 +15,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Los pagos de una prefactura. Solo en borrador: al cerrar quedan congelados como
- * los renglones y los totales, porque un documento emitido no cambia.
+ * Los pagos de una prefactura. Solo mientras es editable (borrador o reabierta): al cerrar quedan
+ * congelados como los renglones y los totales, porque un documento emitido no se edita; para
+ * corregirlo se reabre.
  *
  * `RenglonDePrefacturaCerradaException` y `PrefacturaDescartadaException` tienen su
  * propio `render()` y se traducen solas a 409; aquí solo se atrapa lo que es propio

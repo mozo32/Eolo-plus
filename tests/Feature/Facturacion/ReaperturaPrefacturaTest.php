@@ -568,3 +568,79 @@ test('el middleware subdep sin usuario responde 401', function () {
     expect(fn () => $middleware->handle($peticion, fn () => response('ok'), 'factReabrirPrefactura'))
         ->toThrow(fn (Symfony\Component\HttpKernel\Exception\HttpException $e) => $e->getStatusCode() === 401 && $e->getMessage() === 'No autenticado');
 });
+
+test('editar la cabecera de una reabierta queda en la bitacora como lo que es, no como un borrador', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $usuario = usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion');
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, $usuario->id, 'Motivo suficiente.');
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->putJson("/api/facturacion/prefacturas/{$cerrada->id}", [
+        'aeronave_id' => $cerrada->aeronave_id,
+        'cliente_id' => $cerrada->cliente_id,
+        'tipo_destino' => $cerrada->tipo_destino,
+        'origen' => 'MMUN',
+    ])->assertOk();
+
+    $registro = Bitacora::where('registro_id', $cerrada->id)
+        ->where('accion', Bitacora::ACCION_ACTUALIZAR)
+        ->where('descripcion', 'like', '%cabecera%')
+        ->sole();
+
+    // El folio ya se gasto y hay un documento emitido: la bitacora es con lo que se reconstruye que le paso al folio.
+    expect($registro->descripcion)->toContain('reabierta')
+        ->toContain((string) $cerrada->folio)
+        ->not->toContain('borrador');
+});
+
+test('borrar la cuenta de quien cerro o reabrio ya no se bloquea por una version suya', function () {
+    // Mismo comportamiento que `fact_prefacturas.cerrada_por` (nullOnDelete): la version conserva el nombre congelado en su JSON.
+    $cerrada = prefacturaCerradaParaDocumento();
+    $quienCerro = $cerrada->cerradaPor;
+    $quienReabre = usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion');
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, $quienReabre->id, 'Motivo suficiente.');
+
+    $version = $cerrada->fresh()->versiones->sole();
+    expect($version->cerrada_por)->toBe($quienCerro->id)
+        ->and($version->reabierta_por)->toBe($quienReabre->id);
+
+    $quienCerro->delete();
+    $quienReabre->delete();
+
+    $version = $version->fresh();
+    expect($version)->not->toBeNull()
+        ->and($version->cerrada_por)->toBeNull()
+        ->and($version->reabierta_por)->toBeNull()
+        ->and($version->documento['elaboradoPor'])->toBe($quienCerro->name);
+});
+
+test('los rechazos de una cerrada no dicen que un documento emitido no se modifica: dicen que se reabre', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->putJson("/api/facturacion/prefacturas/{$cerrada->id}", ['aeronave_id' => $cerrada->aeronave_id, 'tipo_destino' => 'nacional'])
+        ->assertStatus(409)
+        ->assertJsonPath('codigo', 'ya_cerrada')
+        ->assertJsonPath('message', fn ($m) => str_contains($m, 'reabrir') && ! str_contains($m, 'no se modifica'));
+
+    $this->postJson("/api/facturacion/prefacturas/{$cerrada->id}/renglones", ['servicio_id' => 1, 'cantidad' => 1])
+        ->assertStatus(409)
+        ->assertJsonPath('codigo', 'ya_cerrada')
+        ->assertJsonPath('message', fn ($m) => str_contains($m, 'reabrir'));
+});
+
+test('imprimir el documento vigente no lee de la base el JSON de las versiones', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $usuario = usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion');
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, $usuario->id, 'Motivo suficiente.');
+    app(App\Services\CierrePrefactura::class)->cerrar($cerrada->fresh(), $usuario->id, confirmarSinCobro: true);
+    $this->actingAs(usuarioAdmin());
+
+    DB::enableQueryLog();
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertOk();
+    $consultas = collect(DB::getQueryLog())->pluck('query')->filter(fn ($q) => str_contains($q, 'fact_prefactura_versiones'));
+
+    // Solo se necesita la fecha de cierre de la ultima para la marca «Corregida»: el papel sigue saliendo marcado.
+    expect($consultas)->not->toBeEmpty()
+        ->and($consultas->contains(fn ($q) => str_contains($q, 'documento') || str_contains($q, '*')))->toBeFalse();
+});

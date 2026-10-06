@@ -131,7 +131,7 @@ class DocumentoDePrefactura
      *
      * Las claves salen de LEER la plantilla, no de suponer: son exactamente lo que
      * `pdf.prefactura` lee de `$prefactura` más las cifras calculadas. `tipo_destino` no va
-     * porque la plantilla no lo lee; la tasa que de él se derivó viaja en `ivaEtiqueta`.
+     * porque la plantilla no lo lee.
      *
      * @throws \UnexpectedValueException si un renglón o la tasa no se reconocen.
      */

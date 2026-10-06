@@ -206,10 +206,16 @@ class PrefacturaController extends Controller
             $antes = $this->datosRegistrados($prefactura);
             $prefactura->update($request->validated());
 
+            // Una reabierta NO es un borrador: tiene folio gastado, documento emitido y versión guardada. La bitácora es con lo que se
+            // reconstruye qué le pasó al folio, así que la descripción dice lo que el documento es en este momento.
+            $descripcion = $prefactura->estaReabierta()
+                ? "Se editó la cabecera de la prefactura {$prefactura->id} (folio {$prefactura->folio}), reabierta para corregirse."
+                : "Se editó el borrador de prefactura {$prefactura->id}.";
+
             Bitacora::log(
                 modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
                 accion: Bitacora::ACCION_ACTUALIZAR,
-                descripcion: "Se editó el borrador de prefactura {$prefactura->id}.",
+                descripcion: $descripcion,
                 usuarioId: $request->user()->id,
                 registroId: $prefactura->id,
                 datosAnteriores: $antes,
@@ -343,8 +349,8 @@ class PrefacturaController extends Controller
     }
 
     /**
-     * Las tres notas. Solo en borrador: al cerrar, el documento ya salió, y la nota
-     * externa se imprime en él.
+     * Las tres notas. Solo mientras la prefactura es editable (borrador o reabierta): al cerrar, el
+     * documento ya salió, y la nota externa se imprime en él.
      */
     public function notas(UpdateNotasRequest $request, int $id): JsonResponse
     {
