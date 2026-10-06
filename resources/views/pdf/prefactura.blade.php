@@ -204,10 +204,13 @@
                          directo, sin valor por omisión, así que una fila sin esa clave revienta
                          en lugar de imprimir un cero
             elaboradoPor nombre de quien cerró, o de quien imprime
-            sustituye    ?string: la fecha (d/m/Y) de la versión anterior que este documento
-                         corrige; `''` si hay versión anterior pero no se sabe cuándo se
-                         cerró (el aviso sale igual, sin fecha); null si no sustituye nada. Solo la lleva el documento VIGENTE de una prefactura
-                         que se reabrió y se volvió a cerrar
+            sustituye    ?array{fecha: ?string}: null si el documento no sustituye nada; si
+                         sustituye a una versión anterior, un arreglo con `fecha`, la fecha
+                         (d/m/Y) en que se cerró esa versión, o null si no se sabe (el aviso
+                         sale igual, sin fecha: un documento corregido siempre lo dice). Solo
+                         la lleva el documento VIGENTE de una prefactura que se reabrió y se
+                         volvió a cerrar. Misma forma que `versionSustituida` a propósito: un
+                         arreglo con clave es verdadero aunque la fecha sea null
             versionSustituida
                          ?array{version: int, reemplazada: string}: solo en la reimpresión de
                          una versión que ya NO es vigente; `reemplazada` es la fecha d/m/Y en
@@ -275,7 +278,7 @@
     @elseif($sustituye !== null)
         <table>
             <tr>
-                <td class="aviso-corregida">Corregida — sustituye a la versión {{ $sustituye !== '' ? 'del '.$sustituye : 'anterior' }}.</td>
+                <td class="aviso-corregida">Corregida — sustituye a la versión {{ $sustituye['fecha'] !== null ? 'del '.$sustituye['fecha'] : 'anterior' }}.</td>
             </tr>
         </table>
     @endif

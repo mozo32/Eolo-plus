@@ -190,7 +190,7 @@ test('el documento corregido dice a que version sustituye, y el original no dice
 
     // Despues: la marca con la fecha de la version anterior.
     $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertSuccessful();
-    expect($recibido['sustituye'])->toContain($fechaOriginal->format('d/m/Y'))
+    expect($recibido['sustituye'])->toBe(['fecha' => $fechaOriginal->format('d/m/Y')])
         ->and($recibido['versionSustituida'])->toBeNull()
         ->and($papel())->toContain('Corregida — sustituye a la versión del '.$fechaOriginal->format('d/m/Y'))
         ->and($papel())->not->toContain('NO VIGENTE');
@@ -349,7 +349,7 @@ test('la marca de sustituye es la fecha de CIERRE de la ultima version, no la de
     // La vigente sustituye a la version 2, cerrada el 02/04: no a la 1 (14/03), ni a la fecha en
     // que se reabrio (01/05), ni a la de hoy.
     $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertSuccessful();
-    expect($recibido['sustituye'])->toBe('02/04/2026')
+    expect($recibido['sustituye'])->toBe(['fecha' => '02/04/2026'])
         ->and($papel())->toContain('sustituye a la versión del 02/04/2026');
 
     // La version 1 se reemplazo el 20/03 y la 2 el 01/05.
@@ -405,7 +405,7 @@ test('la plantilla nunca pone Corregida a una version no vigente, ni con las dos
     $cerrada = prefacturaCerradaParaDocumento();
     $servicio = app(DocumentoDePrefactura::class);
 
-    $pintar = fn (?string $sustituye, ?array $versionSustituida): string => preg_replace('/\s+/', ' ', strip_tags(view('pdf.prefactura', [
+    $pintar = fn (?array $sustituye, ?array $versionSustituida): string => preg_replace('/\s+/', ' ', strip_tags(view('pdf.prefactura', [
         'prefactura' => $cerrada,
         'esCotizacion' => false,
         'elaboradoPor' => 'Ana',
@@ -413,11 +413,12 @@ test('la plantilla nunca pone Corregida a una version no vigente, ni con las dos
         'versionSustituida' => $versionSustituida,
     ] + $servicio->cifrasDeCerrada($cerrada))->render()));
 
-    $ambas = $pintar('14/03/2026', ['version' => 3, 'reemplazada' => '20/03/2026']);
+    $ambas = $pintar(['fecha' => '14/03/2026'], ['version' => 3, 'reemplazada' => '20/03/2026']);
 
     expect($ambas)->toContain('VERSIÓN 3 — REEMPLAZADA EL 20/03/2026. NO VIGENTE.')
         ->and($ambas)->not->toContain('Corregida')
-        ->and($pintar('14/03/2026', null))->toContain('Corregida — sustituye a la versión del 14/03/2026.')
+        ->and($pintar(['fecha' => '14/03/2026'], null))->toContain('Corregida — sustituye a la versión del 14/03/2026.')
+        ->and($pintar(['fecha' => null], null))->toContain('Corregida — sustituye a la versión anterior.')
         ->and($pintar(null, null))->not->toContain('Corregida')->not->toContain('NO VIGENTE');
 });
 
@@ -491,7 +492,7 @@ test('un documento corregido SIEMPRE dice que lo es, tambien si la version anter
     $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertSuccessful();
 
     // Sin fecha, pero con la marca: no se inventa una, y tampoco se calla.
-    expect($recibido['sustituye'])->toBe('')
+    expect($recibido['sustituye'])->toBe(['fecha' => null])
         ->and($recibido['versionSustituida'])->toBeNull()
         ->and($papel())->toContain('Corregida — sustituye a la versión anterior.')
         ->and($papel())->not->toContain('sustituye a la versión del');

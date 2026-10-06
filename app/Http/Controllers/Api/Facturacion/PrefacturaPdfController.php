@@ -83,12 +83,15 @@ class PrefacturaPdfController extends Controller
             // DENTRO del try, como las cifras: `last()` sobre la relación no lanza, pero la
             // regla del bloque 4 es que todo lo que la vista recibe se arma aquí.
             //
-            // Si hay una versión sustituida la marca sale SIEMPRE: con su fecha cuando se sabe
-            // y con `''` (sin fecha) cuando no. Una cerrada importada del sistema viejo puede
-            // no traer momento de cierre, y entonces un `null` aquí dejaría el papel corregido
-            // indistinguible de un original. No se inventa una fecha.
+            // Si hay una versión sustituida la marca sale SIEMPRE: un arreglo con la fecha cuando
+            // se sabe y con `fecha => null` cuando no. Una cerrada importada del sistema viejo
+            // puede no traer momento de cierre, y entonces un `null` aquí dejaría el papel
+            // corregido indistinguible de un original. No se inventa una fecha. Es un arreglo
+            // y no una cadena para que sea de la misma forma que `versionSustituida` y un
+            // `@if($sustituye)` a secas siga siendo correcto: un arreglo con clave es verdadero
+            // aunque la fecha sea nula, y una cadena vacía no.
             $ultima = $prefactura->versiones->last();
-            $sustituye = $ultima === null ? null : ($ultima->cerrada_at?->format('d/m/Y') ?? '');
+            $sustituye = $ultima === null ? null : ['fecha' => $ultima->cerrada_at?->format('d/m/Y')];
         } catch (UnexpectedValueException $e) {
             report($e);
 
@@ -255,9 +258,10 @@ class PrefacturaPdfController extends Controller
      * versión lleva `-version-N`: sin eso chocaría con el del documento vigente, que tiene
      * el mismo folio, en la carpeta de descargas del usuario.
      *
+     * @param  array{fecha: ?string}|null  $sustituye
      * @param  array{version: int, reemplazada: string}|null  $versionSustituida
      */
-    private function render(FactPrefactura $prefactura, bool $esCotizacion, array $cifras, string $elaboradoPor, ?string $sustituye = null, ?array $versionSustituida = null): Response
+    private function render(FactPrefactura $prefactura, bool $esCotizacion, array $cifras, string $elaboradoPor, ?array $sustituye = null, ?array $versionSustituida = null): Response
     {
         $pdf = Pdf::loadView('pdf.prefactura', [
             'prefactura' => $prefactura,
