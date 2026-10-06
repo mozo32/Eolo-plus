@@ -247,11 +247,11 @@ test('reimprimir dos veces NO duplica nada, da el mismo documento y deja dos ent
         ->where('accion', Bitacora::ACCION_EXPORTAR)->where('registro_id', $cerrada->id)->count())->toBe(2);
 });
 
-/** Las nueve claves del contrato de la plantilla, tal como las recibe, mas `cargadas`: las relaciones que traia cargadas. */
+/** Las once claves del contrato de la plantilla, tal como las recibe, mas `cargadas`: las relaciones que traia cargadas. */
 function capturarLoQueRecibeLaVista(array &$recibido): void
 {
     View::composer('pdf.prefactura', function ($vista) use (&$recibido) {
-        $recibido = Arr::only($vista->getData(), ['prefactura', 'esCotizacion', 'subtotal', 'iva', 'ivaEtiqueta', 'total', 'cambio', 'filas', 'elaboradoPor']);
+        $recibido = Arr::only($vista->getData(), ['prefactura', 'esCotizacion', 'subtotal', 'iva', 'ivaEtiqueta', 'total', 'cambio', 'filas', 'elaboradoPor', 'sustituye', 'versionSustituida']);
 
         // Que relaciones traia YA cargadas, medido ANTES de que la plantilla se evalue: una relacion
         // que la plantilla cargara de forma perezosa quedaria cargada despues y no se veria.

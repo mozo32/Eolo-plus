@@ -70,6 +70,8 @@ function papelVivoEHidratado(FactPrefactura $cerrada): array
     $comoSeImprime = fn (FactPrefactura $p, array $cifras, string $elaboradoPor): string => view('pdf.prefactura', [
         'prefactura' => $p,
         'esCotizacion' => false,
+        'sustituye' => null,
+        'versionSustituida' => null,
         'elaboradoPor' => $elaboradoPor,
     ] + $cifras)->render();
 
@@ -144,4 +146,277 @@ test('una cerrada que paga exacto no imprime la linea CAMBIO', function () {
     expect($documento['cambio'])->toBe('0.00')
         ->and($viva)->not->toContain('CAMBIO')
         ->and($hidratada)->not->toContain('CAMBIO');
+});
+
+/**
+ * Lo que la vista recibe, TODO: sus once claves mas las seis cifras. No se reutiliza
+ * `capturarLoQueRecibeLaVista()` de `ImpresionPrefacturaTest`: `php artisan test <un archivo>`
+ * no carga los demas, y ademas ese ayudante recorta lo que ve.
+ *
+ * `$recibido` queda con el ULTIMO render; el cierre devuelto lo vuelve a pintar a HTML.
+ */
+function vistaDelPapel(?array &$recibido): Closure
+{
+    $claves = ['prefactura', 'esCotizacion', 'sustituye', 'versionSustituida', 'subtotal', 'iva', 'ivaEtiqueta', 'total', 'cambio', 'filas', 'elaboradoPor'];
+
+    View::composer('pdf.prefactura', function ($vista) use (&$recibido, $claves) {
+        $recibido = Illuminate\Support\Arr::only($vista->getData(), $claves);
+    });
+
+    // Solo el texto, en una linea: la plantilla parte los avisos en varias y pone cada dato dentro de su span.
+    return function () use (&$recibido): string {
+        return preg_replace('/\s+/', ' ', strip_tags(view('pdf.prefactura', $recibido)->render()));
+    };
+}
+
+test('el documento corregido dice a que version sustituye, y el original no dice nada', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $this->actingAs($usuario);
+
+    $recibido = [];
+    $papel = vistaDelPapel($recibido);
+
+    // Antes de corregir: sin marca.
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertSuccessful();
+    expect($recibido['sustituye'])->toBeNull()
+        ->and($recibido['versionSustituida'])->toBeNull()
+        ->and($papel())->not->toContain('Corregida')->not->toContain('NO VIGENTE');
+
+    $fechaOriginal = $cerrada->cerrada_at;
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, $usuario->id, 'Faltaba un servicio.');
+    renglonDe($cerrada->fresh(), 250.0, 1);
+    app(App\Services\CierrePrefactura::class)->cerrar($cerrada->fresh(), $usuario->id, confirmarSinCobro: true);
+
+    // Despues: la marca con la fecha de la version anterior.
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertSuccessful();
+    expect($recibido['sustituye'])->toContain($fechaOriginal->format('d/m/Y'))
+        ->and($recibido['versionSustituida'])->toBeNull()
+        ->and($papel())->toContain('Corregida — sustituye a la versión del '.$fechaOriginal->format('d/m/Y'))
+        ->and($papel())->not->toContain('NO VIGENTE');
+});
+
+test('una version sustituida se reimprime marcada como NO vigente, y nunca como corregida', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $this->actingAs($usuario);
+
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, $usuario->id, 'Faltaba un servicio.');
+
+    $recibido = [];
+    $papel = vistaDelPapel($recibido);
+
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/versiones/1/pdf")->assertSuccessful();
+
+    expect($recibido['versionSustituida']['version'])->toBe(1)
+        ->and($recibido['sustituye'])->toBeNull()
+        ->and($recibido['esCotizacion'])->toBeFalse()
+        ->and($papel())->toContain('VERSIÓN 1 — REEMPLAZADA EL '.now()->format('d/m/Y').'. NO VIGENTE.')
+        ->and($papel())->not->toContain('Corregida');
+});
+
+test('una version que no existe da 404', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/versiones/7/pdf")->assertNotFound();
+});
+
+test('la version de OTRA prefactura no se reimprime desde esta', function () {
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $this->actingAs($usuario);
+
+    $conVersion = prefacturaCerradaParaDocumento();
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($conVersion, $usuario->id, 'Faltaba un servicio.');
+    $sinVersion = app(App\Services\CierrePrefactura::class)->cerrar(completarParaCerrar(prefacturaBorrador()), $usuario->id, confirmarSinCobro: true);
+
+    $this->get("/api/facturacion/prefacturas/{$sinVersion->id}/versiones/1/pdf")->assertNotFound();
+    $this->get("/api/facturacion/prefacturas/{$conVersion->id}/versiones/1/pdf")->assertSuccessful();
+});
+
+test('reimprimir una version exige el subdepartamento, como imprimir el documento', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, $usuario->id, 'Faltaba un servicio.');
+
+    $this->actingAs(usuarioSinAcceso());
+
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/versiones/1/pdf")->assertForbidden();
+});
+
+test('una version reimpresa muestra las cifras que se sembraron y NO las de la prefactura ya corregida', function () {
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $this->actingAs($usuario);
+
+    // Efectivo por encima del total: 200.00 sobre 116.00 deja CAMBIO de 84.00. Las cifras se
+    // anclan aqui, a literales, y NO a lo que diga la instantanea: comparar la version contra
+    // su propio documento pasaria aunque `cifrasDeCerrada()` diera cualquier cosa.
+    $cerrada = prefacturaCerradaParaDocumento('200.00');
+
+    expect((string) $cerrada->subtotal_sellado)->toBe('100.00')
+        ->and((string) $cerrada->iva_sellado)->toBe('16.00')
+        ->and((string) $cerrada->total_sellado)->toBe('116.00')
+        ->and($cerrada->cambio())->toBe('84.00');
+
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, $usuario->id, 'Faltaba un servicio.');
+
+    // Se corrige TODO lo que el papel imprime: renglones (subtotal, iva, total, filas), pagos
+    // (cambio), cliente y destino.
+    $reabierta = $cerrada->fresh();
+    renglonDe($reabierta, 250.0, 1);
+    pagoDe($reabierta, formasDePago()[App\Models\FactFormaPago::CONCEPTO_EFECTIVO], '300.00');
+    $reabierta->cliente->update(['nombre' => 'Cliente corregido']);
+    $reabierta->update(['destino' => 'MMUN']);
+
+    app(App\Services\CierrePrefactura::class)->cerrar($reabierta->fresh(), $usuario->id);
+
+    $vigente = $cerrada->fresh();
+    expect((string) $vigente->subtotal_sellado)->toBe('350.00')
+        ->and((string) $vigente->iva_sellado)->toBe('56.00')
+        ->and((string) $vigente->total_sellado)->toBe('406.00')
+        ->and($vigente->cambio())->toBe('94.00');
+
+    $recibido = [];
+    $papel = vistaDelPapel($recibido);
+
+    // La version 1: los literales viejos, en lo que recibe la vista y en lo que imprime.
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/versiones/1/pdf")->assertSuccessful();
+    $viejo = $recibido;
+    $htmlViejo = $papel();
+
+    expect($viejo['subtotal'])->toBe('100.00')
+        ->and($viejo['iva'])->toBe('16.00')
+        ->and($viejo['total'])->toBe('116.00')
+        ->and($viejo['cambio'])->toBe('84.00')
+        ->and($viejo['filas'])->toHaveCount(1)
+        ->and($viejo['filas'][0]['importe'])->toBe('100.00')
+        ->and($viejo['prefactura']->pagos)->toHaveCount(1)
+        ->and($htmlViejo)->toContain('CAMBIO')
+        ->and($htmlViejo)->toContain('84.00')
+        ->and($htmlViejo)->toContain('116.00')
+        ->and($htmlViejo)->toContain('Cliente del documento')
+        ->and($htmlViejo)->toContain('Destino: MMTO')
+        ->and($htmlViejo)->not->toContain('406.00')
+        ->and($htmlViejo)->not->toContain('350.00')
+        ->and($htmlViejo)->not->toContain('94.00')
+        ->and($htmlViejo)->not->toContain('300.00')
+        ->and($htmlViejo)->not->toContain('Cliente corregido')
+        ->and($htmlViejo)->not->toContain('MMUN');
+
+    // La vigente, en la misma prueba: otros literales. Si las dos mostraran lo mismo, la
+    // comparacion de arriba no distinguiria nada.
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertSuccessful();
+    $nuevo = $recibido;
+    $htmlNuevo = $papel();
+
+    expect($nuevo['subtotal'])->toBe('350.00')
+        ->and($nuevo['iva'])->toBe('56.00')
+        ->and($nuevo['total'])->toBe('406.00')
+        ->and($nuevo['cambio'])->toBe('94.00')
+        ->and($nuevo['filas'])->toHaveCount(2)
+        ->and($htmlNuevo)->toContain('406.00')
+        ->and($htmlNuevo)->toContain('94.00')
+        ->and($htmlNuevo)->toContain('Cliente corregido')
+        ->and($htmlNuevo)->toContain('Destino: MMUN')
+        ->and($htmlNuevo)->not->toContain('Cliente del documento');
+});
+
+test('la marca de sustituye es la fecha de CIERRE de la ultima version, no la de reapertura ni la de hoy', function () {
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $this->actingAs($usuario);
+    $reabrir = fn (App\Models\FactPrefactura $p) => app(App\Services\ReaperturaPrefactura::class)->reabrir($p, $usuario->id, 'Correccion.');
+    $cerrar = fn (App\Models\FactPrefactura $p) => app(App\Services\CierrePrefactura::class)->cerrar($p, $usuario->id, confirmarSinCobro: true);
+
+    // Fechas distintas en cada paso: ninguna se confunde con otra.
+    $this->travelTo(Illuminate\Support\Carbon::parse('2026-03-14 10:00:00'));
+    $cerrada = prefacturaCerradaParaDocumento();
+
+    $this->travelTo(Illuminate\Support\Carbon::parse('2026-03-20 10:00:00'));
+    $reabrir($cerrada);
+    $this->travelTo(Illuminate\Support\Carbon::parse('2026-04-02 10:00:00'));
+    $cerrar($cerrada->fresh());
+
+    $this->travelTo(Illuminate\Support\Carbon::parse('2026-05-01 10:00:00'));
+    $reabrir($cerrada->fresh());
+    $this->travelTo(Illuminate\Support\Carbon::parse('2026-05-10 10:00:00'));
+    $cerrar($cerrada->fresh());
+
+    $this->travelTo(Illuminate\Support\Carbon::parse('2026-06-30 10:00:00'));
+
+    $recibido = [];
+    $papel = vistaDelPapel($recibido);
+
+    // La vigente sustituye a la version 2, cerrada el 02/04: no a la 1 (14/03), ni a la fecha en
+    // que se reabrio (01/05), ni a la de hoy.
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertSuccessful();
+    expect($recibido['sustituye'])->toBe('02/04/2026')
+        ->and($papel())->toContain('sustituye a la versión del 02/04/2026');
+
+    // La version 1 se reemplazo el 20/03 y la 2 el 01/05.
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/versiones/1/pdf")->assertSuccessful();
+    expect($recibido['versionSustituida'])->toBe(['version' => 1, 'reemplazada' => '20/03/2026'])
+        ->and($papel())->toContain('VERSIÓN 1 — REEMPLAZADA EL 20/03/2026. NO VIGENTE.')
+        ->and($papel())->toContain('Fecha: 14/03/2026');
+
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/versiones/2/pdf")->assertSuccessful();
+    expect($recibido['versionSustituida'])->toBe(['version' => 2, 'reemplazada' => '01/05/2026'])
+        ->and($papel())->toContain('Fecha: 02/04/2026');
+});
+
+test('el fichero de una version no se llama como el del documento vigente', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $this->actingAs($usuario);
+
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, $usuario->id, 'Faltaba un servicio.');
+    app(App\Services\CierrePrefactura::class)->cerrar($cerrada->fresh(), $usuario->id, confirmarSinCobro: true);
+
+    $folio = $cerrada->folio;
+
+    $vigente = $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertSuccessful();
+    $version = $this->get("/api/facturacion/prefacturas/{$cerrada->id}/versiones/1/pdf")->assertSuccessful();
+
+    expect($vigente->headers->get('content-disposition'))->toContain("filename=prefactura-{$folio}.pdf")
+        ->and($version->headers->get('content-disposition'))->toContain("filename=prefactura-{$folio}-version-1.pdf")
+        ->and($version->headers->get('content-disposition'))->not->toBe($vigente->headers->get('content-disposition'));
+});
+
+test('reimprimir una version queda en la bitacora como NO vigente, y no escribe en la prefactura', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $this->actingAs($usuario);
+
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, $usuario->id, 'Faltaba un servicio.');
+    $antes = $cerrada->fresh()->only(['estado', 'folio', 'total_sellado']);
+
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/versiones/1/pdf")->assertSuccessful();
+
+    $registro = App\Models\Bitacora::where('modulo', App\Models\Bitacora::MODULO_FACTURACION_PREFACTURAS)
+        ->where('accion', App\Models\Bitacora::ACCION_EXPORTAR)->where('registro_id', $cerrada->id)->get();
+
+    expect($registro)->toHaveCount(1)
+        ->and($registro[0]->descripcion)->toContain('versión 1')
+        ->and($registro[0]->datos_nuevos)->toMatchArray(['folio' => $cerrada->folio, 'version' => 1, 'vigente' => false])
+        ->and($cerrada->fresh()->only(['estado', 'folio', 'total_sellado']))->toBe($antes)
+        ->and(App\Models\FactPrefacturaVersion::count())->toBe(1);
+});
+
+test('la plantilla nunca pone Corregida a una version no vigente, ni con las dos marcas a la vez', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $servicio = app(DocumentoDePrefactura::class);
+
+    $pintar = fn (?string $sustituye, ?array $versionSustituida): string => preg_replace('/\s+/', ' ', strip_tags(view('pdf.prefactura', [
+        'prefactura' => $cerrada,
+        'esCotizacion' => false,
+        'elaboradoPor' => 'Ana',
+        'sustituye' => $sustituye,
+        'versionSustituida' => $versionSustituida,
+    ] + $servicio->cifrasDeCerrada($cerrada))->render()));
+
+    $ambas = $pintar('14/03/2026', ['version' => 3, 'reemplazada' => '20/03/2026']);
+
+    expect($ambas)->toContain('VERSIÓN 3 — REEMPLAZADA EL 20/03/2026. NO VIGENTE.')
+        ->and($ambas)->not->toContain('Corregida')
+        ->and($pintar('14/03/2026', null))->toContain('Corregida — sustituye a la versión del 14/03/2026.')
+        ->and($pintar(null, null))->not->toContain('Corregida')->not->toContain('NO VIGENTE');
 });

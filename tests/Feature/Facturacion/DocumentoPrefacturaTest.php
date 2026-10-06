@@ -33,6 +33,8 @@ function documentoDe(FactPrefactura $p, bool $esCotizacion, string $elaboradoPor
     return view('pdf.prefactura', [
         'prefactura' => $p,
         'esCotizacion' => $esCotizacion,
+        'sustituye' => null,
+        'versionSustituida' => null,
         'subtotal' => $esCotizacion ? $p->subtotal() : (string) $p->subtotal_sellado,
         'iva' => $esCotizacion ? $p->iva() : (string) $p->iva_sellado,
         'ivaEtiqueta' => $p->ivaTasaEtiqueta(),
@@ -104,6 +106,8 @@ test('la vista imprime las cifras que recibe y no las pide al modelo', function 
     $html = view('pdf.prefactura', [
         'prefactura' => $cerrada,
         'esCotizacion' => false,
+        'sustituye' => null,
+        'versionSustituida' => null,
         'subtotal' => '1111.11',
         'iva' => '2222.22',
         'ivaEtiqueta' => '33.33%',
@@ -277,6 +281,8 @@ test('la vista imprime el importe que recibe del renglon y no lo recalcula', fun
     $html = view('pdf.prefactura', [
         'prefactura' => $p,
         'esCotizacion' => true,
+        'sustituye' => null,
+        'versionSustituida' => null,
         // Los totales no contienen 99.99: asi esa cifra solo puede venir de la fila del renglon.
         'subtotal' => '7.77',
         'iva' => '1.24',
@@ -311,6 +317,8 @@ test('la vista imprime las filas que recibe, en su orden, y no mira los renglone
     $html = view('pdf.prefactura', [
         'prefactura' => $cerrada,
         'esCotizacion' => false,
+        'sustituye' => null,
+        'versionSustituida' => null,
         'subtotal' => '7.77',
         'iva' => '1.24',
         'ivaEtiqueta' => '16%',
@@ -346,6 +354,8 @@ test('una fila sin precio ni cantidad imprime un guion y no revienta', function 
     $html = view('pdf.prefactura', [
         'prefactura' => $cerrada,
         'esCotizacion' => false,
+        'sustituye' => null,
+        'versionSustituida' => null,
         'subtotal' => '100.00', 'iva' => '16.00', 'ivaEtiqueta' => '16%', 'total' => '116.00',
         'cambio' => '0.00', 'elaboradoPor' => 'Ana Pérez',
         'filas' => [
@@ -372,6 +382,8 @@ test('una fila sin su clave importe revienta y no imprime un cero', function () 
     expect(fn () => view('pdf.prefactura', [
         'prefactura' => $p,
         'esCotizacion' => true,
+        'sustituye' => null,
+        'versionSustituida' => null,
         'subtotal' => '100.00',
         'iva' => '16.00',
         'ivaEtiqueta' => '16%',

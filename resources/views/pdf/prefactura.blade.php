@@ -53,6 +53,26 @@
             font-weight: normal;
         }
 
+        .aviso-corregida {
+            margin-top: 6px;
+            padding: 5px 12px;
+            background: #fef3c7;
+            color: #92400e;
+            font-size: 9px;
+            font-weight: bold;
+        }
+
+        .aviso-no-vigente {
+            margin-top: 6px;
+            padding: 10px 12px;
+            background: #b91c1c;
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: bold;
+            text-align: center;
+            border: 2px solid #7f1d1d;
+        }
+
         .seccion {
             margin-top: 12px;
         }
@@ -154,7 +174,7 @@
 <body>
     {{--
         Esta vista FORMATEA: no llama a ningún método del modelo que calcule dinero ni que
-        pueda lanzar. Todo llega en las nueve claves del array, que quien la llama tiene que
+        pueda lanzar. Todo llega en las once claves del array, que quien la llama tiene que
         armar dentro de su try/catch. Lo demás son atributos y relaciones, más `bccomp`,
         `number_format` y `format` de fechas: funciones de formato que no lanzan con las
         cadenas válidas que el contrato garantiza (con una entrada no numérica, `bccomp` y
@@ -164,7 +184,7 @@
         las construye sobre la colección de renglones que cargó, así que la vista no recalcula
         nada ni relee datos que pudieran haber cambiado desde entonces, y solo imprime.
 
-        Las nueve claves:
+        Las once claves:
 
             prefactura   FactPrefactura con renglones, pagos.formaPago, cliente,
                          aeronave.tipoAeronave y satelite.categoria (la categoría vive en
@@ -184,6 +204,15 @@
                          directo, sin valor por omisión, así que una fila sin esa clave revienta
                          en lugar de imprimir un cero
             elaboradoPor nombre de quien cerró, o de quien imprime
+            sustituye    ?string: la fecha (d/m/Y) de la versión anterior que este documento
+                         corrige, o null. Solo la lleva el documento VIGENTE de una prefactura
+                         que se reabrió y se volvió a cerrar
+            versionSustituida
+                         ?array{version: int, reemplazada: string}: solo en la reimpresión de
+                         una versión que ya NO es vigente; `reemplazada` es la fecha d/m/Y en
+                         que se reabrió. Excluyente con `sustituye`: una versión vieja nunca
+                         lleva «Corregida». Las dos se pasan SIEMPRE, también cuando son null,
+                         o Blade revienta por variable indefinida
 
         `number_format` convierte a `float` por dentro y se acepta: la regla de «ningún
         float» protege la ARITMÉTICA, donde el error se acumula, y este es el último paso
@@ -232,6 +261,23 @@
             </td>
         </tr>
     </table>
+
+    @if($versionSustituida !== null)
+        <table>
+            <tr>
+                <td class="aviso-no-vigente">
+                    VERSIÓN {{ $versionSustituida['version'] }} — REEMPLAZADA EL
+                    {{ $versionSustituida['reemplazada'] }}. NO VIGENTE.
+                </td>
+            </tr>
+        </table>
+    @elseif($sustituye !== null)
+        <table>
+            <tr>
+                <td class="aviso-corregida">Corregida — sustituye a la versión del {{ $sustituye }}.</td>
+            </tr>
+        </table>
+    @endif
 
     @php
         // La fecha del documento: cuando se cerró si está emitido, hoy si es cotización.

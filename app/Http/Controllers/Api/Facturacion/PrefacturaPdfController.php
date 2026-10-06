@@ -40,7 +40,7 @@ class PrefacturaPdfController extends Controller
      */
     public function pdf(Request $request, int $id): Response|JsonResponse
     {
-        $prefactura = FactPrefactura::with(['renglones', 'pagos.formaPago', 'cliente', 'aeronave.tipoAeronave', 'satelite.categoria', 'cerradaPor'])
+        $prefactura = FactPrefactura::with(['renglones', 'pagos.formaPago', 'cliente', 'aeronave.tipoAeronave', 'satelite.categoria', 'cerradaPor', 'versiones'])
             ->findOrFail($id);
 
         if ($respuesta = $this->rechazarSiDescartada($prefactura)) {
@@ -74,6 +74,11 @@ class PrefacturaPdfController extends Controller
             $discrepancias = $prefactura->discrepanciasDelSello();
 
             $cifras = $this->documento->cifrasDeCerrada($prefactura);
+
+            // DENTRO del try, como las cifras: `last()` sobre la relación no lanza, pero la
+            // regla del bloque 4 es que todo lo que la vista recibe se arma aquí.
+            $ultima = $prefactura->versiones->last();
+            $sustituye = $ultima?->cerrada_at?->format('d/m/Y');
         } catch (UnexpectedValueException $e) {
             report($e);
 
@@ -99,7 +104,8 @@ class PrefacturaPdfController extends Controller
         // nunca salió; si el registro falla lanza antes de devolver, y no sale un documento
         // sin dejar rastro. Ninguna de las dos mitades queda sin la otra.
         $documento = $this->render($prefactura, esCotizacion: false, cifras: $cifras,
-            elaboradoPor: $this->documento->elaboradoPorDe($prefactura));
+            elaboradoPor: $this->documento->elaboradoPorDe($prefactura),
+            sustituye: $sustituye);
 
         $this->registrar(
             $request->user()->id,
@@ -169,7 +175,7 @@ class PrefacturaPdfController extends Controller
         // y si fallara el registro, lanzaría antes del `return` y no se entregaría un PDF sin
         // registrar. Ninguna de las dos mitades puede quedar sin la otra.
         $documento = $this->render($prefactura, esCotizacion: true, cifras: $cifras,
-            elaboradoPor: $request->user()->name);
+            elaboradoPor: $request->user()->name, sustituye: null, versionSustituida: null);
 
         $this->registrar(
             $request->user()->id,
@@ -181,18 +187,75 @@ class PrefacturaPdfController extends Controller
         return $documento;
     }
 
-    /** Arma el PDF. La plantilla solo formatea: las cifras llegan ya calculadas. */
-    private function render(FactPrefactura $prefactura, bool $esCotizacion, array $cifras, string $elaboradoPor): Response
+    /**
+     * Reimprime una versión SUSTITUIDA: el papel que el cliente tiene en la mano y que el
+     * sistema ya no considera vigente.
+     *
+     * No lee la prefactura viva para nada del documento: se hidrata un modelo desde el JSON
+     * guardado. Si leyera la viva daría el documento viejo con la cabecera nueva. Las cifras
+     * también salen del JSON y NO se recalculan: ya están resueltas, y la viva ya está
+     * corregida. Por eso aquí no hace falta `try/catch`: nada de esto calcula dinero.
+     */
+    public function version(Request $request, int $id, int $version): Response|JsonResponse
+    {
+        $prefactura = FactPrefactura::findOrFail($id);
+
+        $guardada = $prefactura->versiones()->where('version', $version)->firstOrFail();
+
+        $documento = $guardada->documento;
+        $hidratada = $this->documento->hidratar($documento);
+
+        $cifras = [
+            'subtotal' => $documento['subtotal'],
+            'iva' => $documento['iva'],
+            'ivaEtiqueta' => $documento['ivaEtiqueta'],
+            'total' => $documento['total'],
+            'cambio' => $documento['cambio'],
+            'filas' => $documento['filas'],
+        ];
+
+        $pdf = $this->render($hidratada, esCotizacion: false, cifras: $cifras,
+            elaboradoPor: $documento['elaboradoPor'],
+            versionSustituida: [
+                'version' => $guardada->version,
+                'reemplazada' => $guardada->reabierta_at->format('d/m/Y'),
+            ]);
+
+        $this->registrar(
+            $request->user()->id,
+            $prefactura,
+            "Se reimprimió la versión {$version} —sustituida— de la prefactura con folio {$guardada->folio}.",
+            ['folio' => $guardada->folio, 'version' => $version, 'vigente' => false],
+        );
+
+        return $pdf;
+    }
+
+    /**
+     * Arma el PDF. La plantilla solo formatea: las cifras llegan ya calculadas.
+     *
+     * `sustituye` y `versionSustituida` se pasan SIEMPRE, también `null`: Blade revienta por
+     * variable indefinida. Son excluyentes (ver la plantilla). El nombre del fichero de una
+     * versión lleva `-version-N`: sin eso chocaría con el del documento vigente, que tiene
+     * el mismo folio, en la carpeta de descargas del usuario.
+     *
+     * @param  array{version: int, reemplazada: string}|null  $versionSustituida
+     */
+    private function render(FactPrefactura $prefactura, bool $esCotizacion, array $cifras, string $elaboradoPor, ?string $sustituye = null, ?array $versionSustituida = null): Response
     {
         $pdf = Pdf::loadView('pdf.prefactura', [
             'prefactura' => $prefactura,
             'esCotizacion' => $esCotizacion,
             'elaboradoPor' => $elaboradoPor,
+            'sustituye' => $sustituye,
+            'versionSustituida' => $versionSustituida,
         ] + $cifras)->setPaper('letter', 'portrait');
 
-        $nombre = $esCotizacion
-            ? "cotizacion-{$prefactura->id}.pdf"
-            : "prefactura-{$prefactura->folio}.pdf";
+        $nombre = match (true) {
+            $esCotizacion => "cotizacion-{$prefactura->id}.pdf",
+            $versionSustituida !== null => "prefactura-{$prefactura->folio}-version-{$versionSustituida['version']}.pdf",
+            default => "prefactura-{$prefactura->folio}.pdf",
+        };
 
         return $pdf->stream($nombre);
     }
