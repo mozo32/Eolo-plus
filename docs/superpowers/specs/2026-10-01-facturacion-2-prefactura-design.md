@@ -438,5 +438,5 @@ Tres cosas que **sqlite no puede demostrar** y que van a la guía de despliegue:
 - **La importación del histórico**, que hoy es parcial por construcción porque
   pagos y notas no tienen tabla. Cuando la tengan hay que decidir dos cosas: qué
   hacer con los 207 folios duplicados (consolidar, marcar, o dejarlos en el
-  sistema viejo) y qué hacer con los 37 totales discrepantes. **El usuario pidió
+  sistema viejo) y qué hacer con los 37 totales discrepantes. **[Corregido 2026-10-06: la cifra se midió y son 830, el 22% de los 3,764 folios, no 37; la peor diferencia es el folio 3544 por 561,749.93, no el 2622 por 29,000. Ver la guía de despliegue del bloque 5.]** **El usuario pidió
   aviso explícito cuando esto sea posible.**

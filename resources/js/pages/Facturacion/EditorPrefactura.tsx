@@ -111,8 +111,9 @@ function valorSello(campo: string, valor: string | null): string {
 /**
  * Lo que dicen el sello y los totales del servidor. Una discrepancia entre el
  * total sellado y la derivación de los renglones se VE, no se calla: es el
- * defecto que tenían 37 prefacturas del sistema viejo (la peor, por 29,000
- * pesos). Una verificación que no se pudo hacer tampoco se esconde.
+ * defecto que tenían 830 prefacturas del sistema viejo —el 22% de sus 3,764
+ * folios—, la peor por 561,749.93 pesos. Una verificación que no se pudo hacer
+ * tampoco se esconde.
  */
 function AvisosDelServidor({ prefactura }: { prefactura: Prefactura }) {
     // `[]` cuando no hay discrepancias, objeto cuando las hay: Object.entries tolera las dos formas.

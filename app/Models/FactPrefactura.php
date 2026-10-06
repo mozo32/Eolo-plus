@@ -277,9 +277,10 @@ class FactPrefactura extends Model
      * no tiene sello que comparar).
      *
      * Existe porque el sello es redundante a propósito, y toda redundancia puede
-     * separarse: eso es lo que produjo los 37 encabezados del sistema viejo cuyo
-     * total no corresponde a sus renglones. Si al leer una prefactura cerrada la
-     * derivación no coincide con su foto, el sistema lo dice en lugar de callarlo.
+     * separarse: eso es lo que produjo los 830 encabezados del sistema viejo cuyo
+     * total no corresponde a sus renglones —el 22% de sus 3,764 folios, medido—. Si
+     * al leer una prefactura cerrada la derivación no coincide con su foto, el
+     * sistema lo dice en lugar de callarlo.
      * Un campo del sello que falte en una cerrada también cuenta como discrepancia.
      *
      * La derivación usa la tasa sellada, no la vigente: la tasa de hoy puede

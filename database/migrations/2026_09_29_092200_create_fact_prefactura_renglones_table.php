@@ -12,8 +12,8 @@ use Illuminate\Support\Facades\Schema;
  * ningún documento se mueve. El sistema viejo ya lo hace con `precio_u`.
  *
  * `importe` NO se guarda: se deriva. Guardarlo es exactamente la redundancia que
- * produjo los 37 encabezados del sistema viejo cuyo total no corresponde a sus
- * renglones, el peor por 29,000 pesos.
+ * produjo los 830 encabezados del sistema viejo cuyo total no corresponde a sus
+ * renglones —el 22% de sus 3,764 folios—, el peor por 561,749.93 pesos (folio 3544).
  */
 return new class extends Migration
 {
