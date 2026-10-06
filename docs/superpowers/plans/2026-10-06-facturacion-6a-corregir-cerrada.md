@@ -1620,6 +1620,10 @@ Es la que hace seguro el acoplamiento de §6 de la especificación: **falla el d
 
 **Antes de escribirla, lee lo que la Task 2 ya dejó.** Allí nació una prueba que no estaba en el plan y que es más fuerte que esta: renderiza `pdf.prefactura` con la prefactura viva y con `hidratar(json_decode(json_encode(instantanea)))`, y exige **HTML idéntico** con `toBe`, sin normalizar. Compara el papel, no el arreglo que recibe la vista. **No la dupliques.** Lo que esta tarea añade sobre ella es el recorrido completo: imprimir, reabrir, corregir algo de cada una de las cuatro clases, volver a cerrar, y reimprimir la versión 1 **por el endpoint**, que es el camino que usará el departamento. Si al escribirla ves que la de la Task 2 ya cubre una parte, apóyate en ella y dilo en el informe.
 
+**Y el límite de esa prueba, medido en la re-revisión de la Task 2, que esta tarea tiene que cubrir:** la prueba de la Task 2 es **circular en TODAS las cifras**, no solo en el `cambio`. Los dos lados nacen de `cifrasDeCerrada()`, así que se demostró que con un `total` falso en esa función **la prueba sigue pasando**. Ejercita el modelo hidratado y el viaje por JSON, no las cifras.
+
+Por eso la prueba maestra **no puede comparar solo la reimpresión contra la impresión original**: las dos descienden de la misma función aplicada al mismo estado, así que un error constante en `cifrasDeCerrada()` las movría a la vez y pasaría inadvertido. Tiene que **anclar al menos una cifra a algo ajeno a ese par**: los literales con los que la propia prueba montó la prefactura, o las columnas selladas leídas de la base. Concretamente, además de exigir que la versión reimpresa y el original coincidan, exige que el total de la versión reimpresa sea **el literal que la prueba sembró** y que el de la prefactura corregida sea **distinto**: eso es lo que demuestra que el JSON conservó las cifras viejas mientras las vivas se movían.
+
 **Files:**
 - Test: `tests/Feature/Facturacion/DocumentoDeVersionTest.php`
 
