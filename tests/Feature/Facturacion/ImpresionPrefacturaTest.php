@@ -426,7 +426,7 @@ test('cotizar con un ajuste de renglon ilegible responde 422', function () {
 test('cotizar con un renglon que se corrige entre la carga y las cifras sigue siendo un 422, no un 500', function () {
     // La misma carrera que en /pdf: `subtotal()` de un borrador RELEE los renglones, asi que
     // si el ajuste ilegible se corrige despues de la carga esa lectura no lanza y solo los
-    // objetos ya cargados lo hacen, los que recorre `filasDe()`. Si las filas se
+    // objetos ya cargados lo hacen, los que recorre `DocumentoDePrefactura::filas()`. Si las filas se
     // construyeran fuera del try, esto seria un 500: la vista se renderiza despues de el.
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $p = prefacturaBorrador();

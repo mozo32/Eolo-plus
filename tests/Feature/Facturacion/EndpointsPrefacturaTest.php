@@ -205,18 +205,6 @@ test('el seeder crea el subdepartamento nuevo', function () {
 |--------------------------------------------------------------------------
 */
 
-/** Le pone cliente y un renglon a un borrador cualquiera, para que se pueda cerrar. */
-function completarParaCerrar(FactPrefactura $p): FactPrefactura
-{
-    $p->update(['cliente_id' => App\Models\FactCliente::create(['nombre' => 'Cliente '.uniqid()])->id]);
-
-    if ($p->renglones()->count() === 0) {
-        renglonDe($p, 100.0, 1);
-    }
-
-    return $p->fresh();
-}
-
 /**
  * Cierra la prefactura en la misma peticion, DESPUES de que el controlador la leyo
  * (y de que el trait la dio por borrador) y ANTES de que la operacion tome su

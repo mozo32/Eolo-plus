@@ -316,3 +316,72 @@ function pagoDe(App\Models\FactPrefactura $p, App\Models\FactFormaPago $forma, s
         'user_id' => $p->user_id,
     ]);
 }
+
+/**
+ * Le pone cliente y un renglon a un borrador cualquiera, para que se pueda cerrar.
+ *
+ * Vive aqui y no en un archivo de prueba porque la usan pruebas de varios archivos, y
+ * `php artisan test <un archivo>` no carga los demas.
+ */
+function completarParaCerrar(App\Models\FactPrefactura $p): App\Models\FactPrefactura
+{
+    $p->update(['cliente_id' => App\Models\FactCliente::create(['nombre' => 'Cliente '.uniqid()])->id]);
+
+    if ($p->renglones()->count() === 0) {
+        renglonDe($p, 100.0, 1);
+    }
+
+    return $p->fresh();
+}
+
+/**
+ * Una cerrada completa, con TODO lo que la plantilla imprime: cliente con sus tres campos,
+ * aeronave con tipo y categoria, fechas, origen y destino, nota externa, un renglon y un pago.
+ *
+ * Se apoya en `prefacturaBorrador()` en vez de crear la prefactura a mano, porque
+ * `fact_prefacturas.aeronave_id` es NOT NULL y ese ayudante ya encadena las tres tablas.
+ * Lo que SI hay que anadirle: `prefacturaBorrador()` crea la aeronave sin tipo y el satelite
+ * sin categoria, y la plantilla imprime los dos.
+ */
+function prefacturaCerradaParaDocumento(): App\Models\FactPrefactura
+{
+    $p = prefacturaBorrador();
+
+    // `aeronaves.aeronave_id` apunta al TIPO.
+    $tipo = App\Models\TipoAeronave::create(['nombre' => 'Learjet 45']);
+    $p->aeronave->update(['aeronave_id' => $tipo->id]);
+
+    // La categoria vive en el SATELITE, `fact_aeronaves`, cuyo `aeronave_id` apunta a `aeronaves.id`.
+    $categoria = App\Models\FactCategoriaAeronave::create([
+        'nombre' => 'Mediana',
+        'tarifa_pernocta' => 1,
+        'tarifa_transito_2h' => 1,
+        'tarifa_transito_12h' => 1,
+    ]);
+    App\Models\FactAeronave::where('aeronave_id', $p->aeronave_id)
+        ->update(['categoria_aeronave_id' => $categoria->id]);
+
+    $p->update([
+        'cliente_id' => App\Models\FactCliente::create([
+            'nombre' => 'Cliente del documento',
+            'telefono' => '5555555555',
+            'correo' => 'cliente@example.test',
+        ])->id,
+        'llegada_at' => now()->subDay(),
+        'salida_at' => now(),
+        'origen' => 'MMMX',
+        'destino' => 'MMTO',
+        'nota_externa' => 'Gracias por su visita.',
+    ]);
+
+    renglonDe($p, 100.0, 1);
+
+    // Un pago, para que el documento lleve la tabla de pagos y una linea de CAMBIO que
+    // comparar. En la base de pruebas NO hay formas de pago sembradas (corren las
+    // migraciones, no los seeders): `formasDePago()` las crea.
+    pagoDe($p->fresh(), formasDePago()[App\Models\FactFormaPago::CONCEPTO_EFECTIVO], '116.00');
+
+    return app(App\Services\CierrePrefactura::class)
+        ->cerrar($p->fresh(), usuarioConSubdepartamento('factPrefacturas', 'Facturacion')->id, confirmarSinCobro: true)
+        ->load(['renglones', 'pagos.formaPago', 'cliente', 'aeronave.tipoAeronave', 'satelite.categoria', 'cerradaPor']);
+}
