@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Bitacora;
 use App\Models\FactPrefactura;
 use App\Models\FactPrefacturaVersion;
 
@@ -129,4 +130,198 @@ test('el sello de una version se lee con dos decimales, y la tasa con cuatro', f
 
     expect([$version->subtotal_sellado, $version->iva_sellado, $version->total_sellado, $version->iva_tasa_sellada])
         ->toBe(['100.00', '16.50', '116.50', '0.1600']);
+});
+
+test('reabrir guarda la version, limpia el sello y deja la prefactura editable', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $folio = $cerrada->folio;
+    $selloAnterior = (string) $cerrada->total_sellado;
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+
+    $reabierta = app(App\Services\ReaperturaPrefactura::class)
+        ->reabrir($cerrada, $usuario->id, 'Faltaba el combustible del dia 3.');
+
+    expect($reabierta->estado)->toBe(FactPrefactura::ESTADO_REABIERTA)
+        ->and($reabierta->folio)->toBe($folio)
+        ->and($reabierta->subtotal_sellado)->toBeNull()
+        ->and($reabierta->iva_sellado)->toBeNull()
+        ->and($reabierta->total_sellado)->toBeNull()
+        ->and($reabierta->iva_tasa_sellada)->toBeNull()
+        ->and($reabierta->cerrada_at)->toBeNull()
+        ->and($reabierta->cerrada_por)->toBeNull();
+
+    // Lo mismo, pero leido de la base y no del objeto que devolvio el servicio.
+    $enBase = DB::table('fact_prefacturas')->where('id', $cerrada->id)->first();
+
+    expect($enBase->estado)->toBe(FactPrefactura::ESTADO_REABIERTA)
+        ->and($enBase->folio)->toBe($folio)
+        ->and([$enBase->subtotal_sellado, $enBase->iva_sellado, $enBase->total_sellado, $enBase->iva_tasa_sellada, $enBase->cerrada_at, $enBase->cerrada_por])
+        ->each->toBeNull();
+
+    $version = $reabierta->versiones()->sole();
+
+    expect($version->version)->toBe(1)
+        ->and($version->folio)->toBe($folio)
+        ->and((string) $version->total_sellado)->toBe($selloAnterior)
+        ->and($version->cerrada_at)->not->toBeNull()
+        ->and($version->cerrada_por)->not->toBeNull()
+        ->and($version->motivo)->toBe('Faltaba el combustible del dia 3.')
+        ->and($version->reabierta_por)->toBe($usuario->id)
+        ->and($version->documento['folio'])->toBe($folio)
+        ->and($version->documento['total'])->toBe($selloAnterior);
+});
+
+test('reabierta, los renglones vuelven a aceptar cambios', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $antes = $cerrada->renglones()->count();
+
+    // Cerrada, esto lanza RenglonDePrefacturaCerradaException: los candados del modelo
+    // preguntan por estaCerrada(), y una reabierta no esta cerrada.
+    expect(fn () => renglonDe($cerrada->fresh(), 50.0, 1))
+        ->toThrow(App\Services\RenglonDePrefacturaCerradaException::class);
+
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, $usuario->id, 'Motivo suficiente.');
+
+    renglonDe($cerrada->fresh(), 50.0, 1);
+
+    expect($cerrada->renglones()->count())->toBe($antes + 1);
+});
+
+test('un borrador no se reabre', function () {
+    $borrador = prefacturaBorrador();
+
+    expect(fn () => app(App\Services\ReaperturaPrefactura::class)->reabrir($borrador, 1, 'x'))
+        ->toThrow(App\Services\PrefacturaNoReabribleException::class);
+
+    expect(FactPrefacturaVersion::count())->toBe(0);
+});
+
+test('una reabierta no se reabre otra vez', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $reabierta = app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, $usuario->id, 'Motivo suficiente.');
+
+    expect(fn () => app(App\Services\ReaperturaPrefactura::class)->reabrir($reabierta, $usuario->id, 'Otra vez.'))
+        ->toThrow(App\Services\PrefacturaNoReabribleException::class);
+
+    expect(FactPrefacturaVersion::count())->toBe(1);
+});
+
+test('una cerrada con el sello roto NO se reabre: primero se aclara la diferencia', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+
+    // Se rompe el sello por abajo, sin pasar por el modelo del renglon.
+    DB::table('fact_prefacturas')->where('id', $cerrada->id)->update(['total_sellado' => '99999.00']);
+    $bitacoraAntes = Bitacora::count();
+
+    expect(fn () => app(App\Services\ReaperturaPrefactura::class)
+        ->reabrir($cerrada->fresh(), 1, 'Motivo suficiente.'))
+        ->toThrow(App\Services\PrefacturaNoReabribleException::class);
+
+    // No se guardo nada, ni se toco el sello roto: sigue ahi, a la vista de quien lo aclare.
+    expect(FactPrefacturaVersion::count())->toBe(0)
+        ->and($cerrada->fresh()->estado)->toBe(FactPrefactura::ESTADO_CERRADA)
+        ->and((string) $cerrada->fresh()->total_sellado)->toBe('99999.00')
+        ->and(Bitacora::count())->toBe($bitacoraAntes);
+});
+
+test('un renglon que no se reconoce deja pasar la UnexpectedValueException y no escribe nada', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+
+    // El sello roto no es lo que falla aqui: el renglon no se puede ni valorar.
+    DB::table('fact_prefactura_renglones')->where('prefactura_id', $cerrada->id)->update(['ajuste_precio' => 'inventado']);
+
+    expect(fn () => app(App\Services\ReaperturaPrefactura::class)
+        ->reabrir($cerrada->fresh(), 1, 'Motivo suficiente.'))
+        ->toThrow(UnexpectedValueException::class);
+
+    expect(FactPrefacturaVersion::count())->toBe(0)
+        ->and($cerrada->fresh()->estado)->toBe(FactPrefactura::ESTADO_CERRADA);
+});
+
+test('si otra sesion reabre con la instancia ya leida, la segunda se rechaza y hay UNA version', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $usuario = usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion');
+    $reapertura = app(App\Services\ReaperturaPrefactura::class);
+
+    // Las dos sesiones leyeron la prefactura cuando estaba cerrada, de modo que la
+    // comprobacion rapida de la segunda la deja pasar: solo lo que el servicio lee despues
+    // de tomar el candado la puede parar.
+    $laSegunda = $cerrada->fresh();
+
+    $reapertura->reabrir($cerrada, $usuario->id, 'La otra sesion llego primero.');
+
+    expect($laSegunda->estaCerrada())->toBeTrue()
+        ->and(fn () => $reapertura->reabrir($laSegunda, $usuario->id, 'Y esta llego despues.'))
+        ->toThrow(App\Services\PrefacturaNoReabribleException::class);
+
+    // Una sola version, con el motivo de quien llego primero, y el folio intacto.
+    expect($cerrada->fresh()->versiones()->count())->toBe(1)
+        ->and($cerrada->fresh()->versiones()->sole()->motivo)->toBe('La otra sesion llego primero.')
+        ->and($cerrada->fresh()->folio)->not->toBeNull();
+});
+
+test('la reapertura queda en la bitacora con el motivo y el sello anterior', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $usuario = usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion');
+    $totalAnterior = (string) $cerrada->total_sellado;
+
+    app(App\Services\ReaperturaPrefactura::class)
+        ->reabrir($cerrada, $usuario->id, 'Faltaba el combustible del dia 3.');
+
+    $registro = Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)
+        ->where('registro_id', $cerrada->id)
+        ->where('accion', Bitacora::ACCION_ACTUALIZAR)
+        ->latest('id')
+        ->first();
+
+    expect($registro)->not->toBeNull()
+        ->and($registro->usuario_id)->toBe($usuario->id)
+        ->and($registro->descripcion)->toContain('Faltaba el combustible del dia 3.')
+        ->and($registro->descripcion)->toContain((string) $cerrada->folio);
+
+    // El sello anterior tiene que quedar registrado: es lo que convierte la reapertura en
+    // auditable en vez de en un cambio sin rastro, que es el defecto del sistema viejo.
+    expect($registro->datos_anteriores['total'])->toBe($totalAnterior)
+        ->and($registro->datos_anteriores['estado'])->toBe(FactPrefactura::ESTADO_CERRADA)
+        ->and($registro->datos_nuevos['estado'])->toBe(FactPrefactura::ESTADO_REABIERTA)
+        ->and($registro->datos_nuevos['version_guardada'])->toBe(1);
+});
+
+test('la excepcion de no reabrible se traduce a 409 con su codigo', function () {
+    $respuesta = (new App\Services\PrefacturaNoReabribleException('No.'))->render();
+
+    expect($respuesta->getStatusCode())->toBe(409)
+        ->and($respuesta->getData(true))->toBe(['message' => 'No.', 'codigo' => 'no_reabrible']);
+});
+
+test('una segunda reapertura guarda la version 2 con el documento corregido, sin pisar la 1', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $reapertura = app(App\Services\ReaperturaPrefactura::class);
+
+    $reapertura->reabrir($cerrada, $usuario->id, 'Primera correccion.');
+
+    // `CierrePrefactura` todavia no sabe volver a cerrar una reabierta (es otra tarea), asi
+    // que el nuevo cierre se sella a mano, con cifras que SI cuadran con los renglones.
+    renglonDe($cerrada->fresh(), 50.0, 1);
+    $cerrada->fresh()->forceFill([
+        'estado' => FactPrefactura::ESTADO_CERRADA,
+        'subtotal_sellado' => '150.00',
+        'iva_sellado' => '24.00',
+        'total_sellado' => '174.00',
+        'iva_tasa_sellada' => '0.1600',
+        'cerrada_at' => now(),
+        'cerrada_por' => $usuario->id,
+    ])->save();
+
+    $reapertura->reabrir($cerrada->fresh(), $usuario->id, 'Segunda correccion.');
+
+    $versiones = $cerrada->fresh()->versiones;
+
+    expect($versiones->pluck('version')->all())->toBe([1, 2])
+        ->and($versiones->pluck('motivo')->all())->toBe(['Primera correccion.', 'Segunda correccion.'])
+        ->and($versiones->map(fn ($v) => $v->documento['total'])->all())->toBe(['116.00', '174.00'])
+        ->and($versiones->pluck('folio')->unique()->all())->toBe([$cerrada->folio]);
 });
