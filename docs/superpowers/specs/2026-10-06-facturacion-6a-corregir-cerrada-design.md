@@ -152,8 +152,12 @@ Sale de leer la plantilla, campo por campo, no de suponer:
 - de la aeronave: `matricula`, el nombre del tipo (`aeronave.tipoAeronave.nombre`) y el de
   la categoría (`satelite.categoria.nombre`); todos pueden faltar y la plantilla ya lo
   tolera: ausentes salen «—», y la categoría ausente simplemente no se imprime
-- `tipo_destino` **no** va: la plantilla no lo lee. La tasa que de él se derivó ya viaja
-  resuelta en `ivaEtiqueta`
+- `tipo_destino` **no** va, y por una sola razón: **la plantilla no lo lee**. (Corrección
+  2026-10-06, medida en la revisión final: una versión anterior de esta línea añadía que «la
+  tasa que de él se derivó viaja en `ivaEtiqueta`». **Es falso**: ninguna tasa se deriva de
+  `tipo_destino`. `ivaTasa()` es el único origen y lee `fact_configuracion.iva_tasa`, y los
+  usos de `tipo_destino` en `app/` no tocan el dinero. Importa porque esta lista es el
+  contrato que el bloque 6b va a leer.)
 - las nueve claves calculadas del contrato del bloque 4, ya resueltas: `subtotal`, `iva`,
   `ivaEtiqueta`, `total`, `cambio`, `filas` y `elaboradoPor` (`esCotizacion` es siempre
   falso en una versión, y `prefactura` es el modelo que se hidrata)
@@ -203,8 +207,23 @@ por bueno. Las dos son valores planos calculados en el controlador **dentro** de
 
 | Clave | En el documento vigente | En una versión reimpresa |
 |---|---|---|
-| `sustituye` | la fecha de la versión anterior, o `null` si nunca se corrigió | `null` |
+| `sustituye` | `null` si nunca se corrigió; si sí, `['fecha' => ?string]` con la fecha de la versión anterior | `null` |
 | `versionSustituida` | `null` | el número de versión y la fecha en que se reemplazó |
+
+**Por qué `sustituye` es un arreglo y no una cadena** (decidido al construirlo, 2026-10-06;
+esta sección decía `?string` y se corrige aquí). Con `?string` harían falta **tres** estados en
+dos valores: `null` = no sustituye a nada, `''` = sustituye pero sin fecha conocida, y una
+fecha. El día que alguien escribiera `@if($sustituye)` —lo natural en Blade— **el caso sin
+fecha perdería la marca en silencio**. Con un arreglo, un `@if` honesto funciona en los dos
+casos, y queda simétrico con `versionSustituida`.
+
+**Y el caso sin fecha no es hipotético, que es la otra mitad de la decisión:** si hay versión
+sustituida **la marca sale siempre**, con fecha cuando se sabe y sin ella cuando no —«Corregida
+— sustituye a la versión anterior.»—, y **no se inventa ninguna fecha**. Lo va a producir la
+importación del histórico: el sistema viejo **no tiene marca del momento del cierre**, porque
+su `fecha_pref` se copia de la tabla de borradores, donde se puso con `NOW()` al **crear**. Una
+cerrada importada sin fecha de cierre, reabierta, daría un documento corregido
+**indistinguible de un original** si la marca se callara.
 
 - Documento corregido: «Corregida — sustituye a la versión del 3 de octubre de 2026».
 - Versión sustituida reimpresa: «Versión 1 — reemplazada el 6 de octubre de 2026. No
