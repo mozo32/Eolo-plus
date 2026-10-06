@@ -142,12 +142,16 @@ tabla está vacía y no sobra ni una fila.
 **Qué contiene `documento`.** Exactamente lo que la plantilla necesita, y por eso se
 enumera aquí en vez de dejarlo al plan: es el contrato del que depende §6.
 
-- de la prefactura: `folio`, `cerrada_at`, `nota_externa`, `tipo_destino`, `llegada_at`,
-  `salida_at`, `origen`, `destino`
-- del cliente: su nombre tal como se imprimió
-- de la aeronave: la matrícula, el nombre del tipo y el de la categoría (los dos pueden
-  faltar, y la plantilla ya lo tolera: el tipo ausente sale «—» y la categoría ausente no
-  se imprime)
+Sale de leer la plantilla, campo por campo, no de suponer:
+
+- de la prefactura: `folio`, `cerrada_at`, `llegada_at`, `salida_at`, `origen`, `destino`,
+  `nota_externa`
+- del cliente: `nombre`, `telefono` y `correo` (la plantilla imprime los tres)
+- de la aeronave: `matricula`, el nombre del tipo (`aeronave.tipoAeronave.nombre`) y el de
+  la categoría (`satelite.categoria.nombre`); todos pueden faltar y la plantilla ya lo
+  tolera: ausentes salen «—», y la categoría ausente simplemente no se imprime
+- `tipo_destino` **no** va: la plantilla no lo lee. La tasa que de él se derivó ya viaja
+  resuelta en `ivaEtiqueta`
 - las nueve claves calculadas del contrato del bloque 4, ya resueltas: `subtotal`, `iva`,
   `ivaEtiqueta`, `total`, `cambio`, `filas` y `elaboradoPor` (`esCotizacion` es siempre
   falso en una versión, y `prefactura` es el modelo que se hidrata)
