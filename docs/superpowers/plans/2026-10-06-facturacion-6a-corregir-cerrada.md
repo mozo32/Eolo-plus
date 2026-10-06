@@ -870,7 +870,7 @@ use Illuminate\Http\JsonResponse;
  */
 class PrefacturaNoReabribleException extends DomainException
 {
-    public function aJson(): JsonResponse
+    public function render(): JsonResponse
     {
         return response()->json([
             'message' => $this->getMessage(),
@@ -1330,8 +1330,6 @@ En `PrefacturaController`, junto a `cerrar()`:
                 $request->user()->id,
                 $request->validated()['motivo'],
             );
-        } catch (PrefacturaNoReabribleException $e) {
-            return $e->aJson();
         } catch (UnexpectedValueException $e) {
             report($e);
 
@@ -1340,6 +1338,11 @@ En `PrefacturaController`, junto a `cerrar()`:
                 'codigo' => 'totales_no_calculables',
             ], 422);
         }
+
+        // `PrefacturaNoReabribleException` NO se atrapa aquí: define `render()`, que es el
+        // método que Laravel invoca, y se traduce sola a 409 —igual que ya hace
+        // `RenglonDePrefacturaCerradaException`. (Medido en la Task 3: el plan decía
+        // `aJson()`, que Laravel no llama, y el 409 habría salido como **500**.)
 
         return response()->json([
             'prefactura' => $this->presentar($reabierta, conRenglones: true),
