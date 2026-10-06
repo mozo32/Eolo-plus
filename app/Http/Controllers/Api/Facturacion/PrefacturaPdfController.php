@@ -89,7 +89,7 @@ class PrefacturaPdfController extends Controller
         // nunca salió; si el registro falla lanza antes de devolver, y no sale un documento
         // sin dejar rastro. Ninguna de las dos mitades queda sin la otra.
         $documento = $this->render($prefactura, esCotizacion: false, cifras: $cifras,
-            elaboradoPor: $prefactura->cerradaPor?->name ?? 'Sin registrar');
+            elaboradoPor: $this->documento->elaboradoPorDe($prefactura));
 
         $this->registrar(
             $request->user()->id,

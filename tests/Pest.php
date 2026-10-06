@@ -342,8 +342,11 @@ function completarParaCerrar(App\Models\FactPrefactura $p): App\Models\FactPrefa
  * `fact_prefacturas.aeronave_id` es NOT NULL y ese ayudante ya encadena las tres tablas.
  * Lo que SI hay que anadirle: `prefacturaBorrador()` crea la aeronave sin tipo y el satelite
  * sin categoria, y la plantilla imprime los dos.
+ *
+ * Por omision paga EXACTO (116.00 sobre un total de 116.00, en efectivo): sin cambio. Un
+ * `$montoPagado` mayor da una cerrada con sobrepago en efectivo, y por tanto con CAMBIO.
  */
-function prefacturaCerradaParaDocumento(): App\Models\FactPrefactura
+function prefacturaCerradaParaDocumento(string $montoPagado = '116.00'): App\Models\FactPrefactura
 {
     $p = prefacturaBorrador();
 
@@ -376,10 +379,11 @@ function prefacturaCerradaParaDocumento(): App\Models\FactPrefactura
 
     renglonDe($p, 100.0, 1);
 
-    // Un pago, para que el documento lleve la tabla de pagos y una linea de CAMBIO que
-    // comparar. En la base de pruebas NO hay formas de pago sembradas (corren las
-    // migraciones, no los seeders): `formasDePago()` las crea.
-    pagoDe($p->fresh(), formasDePago()[App\Models\FactFormaPago::CONCEPTO_EFECTIVO], '116.00');
+    // Un pago EXACTO, para que el documento lleve su tabla de pagos. No hay cambio: la rama
+    // CAMBIO de la plantilla se ejercita con `$montoPagado` mayor que el total. En la base de
+    // pruebas NO hay formas de pago sembradas (corren las migraciones, no los seeders):
+    // `formasDePago()` las crea.
+    pagoDe($p->fresh(), formasDePago()[App\Models\FactFormaPago::CONCEPTO_EFECTIVO], $montoPagado);
 
     return app(App\Services\CierrePrefactura::class)
         ->cerrar($p->fresh(), usuarioConSubdepartamento('factPrefacturas', 'Facturacion')->id, confirmarSinCobro: true)

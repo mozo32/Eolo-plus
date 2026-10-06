@@ -44,9 +44,9 @@ class DocumentoDePrefactura
      * Las dos cosas que la hacen segura, y que no se pueden cambiar sin romper un
      * invariante del bloque 4:
      *
-     * - La construye el CONTROLADOR, dentro de su `try/catch`, y no la vista: la vista se
+     * - La construye QUIEN LA LLAMA, dentro de su `try/catch`, y no la vista: la vista se
      *   renderiza después de ese `try/catch`, así que una excepción de `importe()` ahí
-     *   sería un 500 en lugar de un 422.
+     *   sería un 500 en lugar de un 422. Eso no depende de en qué clase viva esta función.
      * - Usa la colección `$prefactura->renglones` YA CARGADA y no otra lectura, porque
      *   `subtotalDerivado()` sí relee: si alguien corrigiera un `ajuste_precio` desconocido
      *   entre la carga y esa relectura, la verificación no lanzaría y esto sí, sobre el
@@ -115,6 +115,18 @@ class DocumentoDePrefactura
     }
 
     /**
+     * Quién emitió el documento: el nombre de quien cerró la prefactura.
+     *
+     * Único lugar donde se decide, para que el papel que se imprime y la instantánea que se
+     * guarda no puedan divergir en la firma. Una cerrada sin `cerrada_por` (las que no
+     * pasaron por el cierre de este sistema) sale como «Sin registrar».
+     */
+    public function elaboradoPorDe(FactPrefactura $prefactura): string
+    {
+        return $prefactura->cerradaPor?->name ?? 'Sin registrar';
+    }
+
+    /**
      * El documento entero, listo para guardar como JSON.
      *
      * Las claves salen de LEER la plantilla, no de suponer: son exactamente lo que
@@ -147,7 +159,7 @@ class DocumentoDePrefactura
                 ->map(fn ($pago) => ['forma' => $pago->formaPago?->nombre, 'monto' => (string) $pago->monto])
                 ->values()
                 ->all(),
-            'elaboradoPor' => $prefactura->cerradaPor?->name ?? 'Sin registrar',
+            'elaboradoPor' => $this->elaboradoPorDe($prefactura),
         ] + $this->cifrasDeCerrada($prefactura);
     }
 
