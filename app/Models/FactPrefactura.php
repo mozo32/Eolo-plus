@@ -11,6 +11,13 @@ class FactPrefactura extends Model
 
     public const ESTADO_CERRADA = 'cerrada';
 
+    /**
+     * Cerrada que volvió a ser editable. Estado propio y NO `borrador` con folio: así
+     * `descartar()`, que filtra por `estado = borrador`, no puede descartar una prefactura
+     * cuyo folio ya se consumió.
+     */
+    public const ESTADO_REABIERTA = 'reabierta';
+
     public const DESTINO_NACIONAL = 'nacional';
 
     public const DESTINO_INTERNACIONAL = 'internacional';
@@ -87,6 +94,11 @@ class FactPrefactura extends Model
         return $this->estado === self::ESTADO_CERRADA;
     }
 
+    public function estaReabierta(): bool
+    {
+        return $this->estado === self::ESTADO_REABIERTA;
+    }
+
     /**
      * La tasa vigente, o la sellada si la prefactura ya se cerró.
      *
@@ -151,6 +163,11 @@ class FactPrefactura extends Model
     public function total(): string
     {
         return $this->sellado('total_sellado') ?? bcadd($this->subtotal(), $this->iva(), 2);
+    }
+
+    public function versiones()
+    {
+        return $this->hasMany(FactPrefacturaVersion::class, 'prefactura_id')->orderBy('version');
     }
 
     /**
