@@ -41,20 +41,41 @@ test('el cierre de una reabierta sella las cifras NUEVAS, no las de la version',
         ->and((string) $recerrada->versiones->sole()->total_sellado)->toBe($totalViejo);
 });
 
-test('un borrador normal sigue consumiendo un folio nuevo', function () {
+test('un borrador sigue consumiendo un folio nuevo cada vez, y una reabierta en medio no mueve el contador', function () {
     $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
-    $contadorAntes = (int) FactConfiguracion::where('clave', CierrePrefactura::CLAVE_FOLIO)->value('valor');
+    $cierre = app(CierrePrefactura::class);
 
-    $borrador = prefacturaBorrador();
-    renglonDe($borrador, 10.0, 1);
-    completarParaCerrar($borrador);
+    // Una cerrada con su folio, ya reabierta, que se vuelve a cerrar ENTRE los dos borradores.
+    $reabierta = prefacturaCerradaParaDocumento();
+    $folioDeLaReabierta = $reabierta->folio;
+    app(ReaperturaPrefactura::class)->reabrir($reabierta, $usuario->id, 'Motivo suficiente.');
 
-    // Sin pagos, cierra sin cobro: confirmado, que es lo que no se ejercita aqui.
-    $cerrada = app(CierrePrefactura::class)->cerrar($borrador->fresh(), $usuario->id, confirmarSinCobro: true);
+    $contadorInicial = (int) FactConfiguracion::where('clave', CierrePrefactura::CLAVE_FOLIO)->value('valor');
 
-    expect($cerrada->folio)->toBe($contadorAntes)
+    // Sin pagos, cada borrador cierra sin cobro: confirmado, que es lo que no se ejercita aqui.
+    $primero = prefacturaBorrador();
+    renglonDe($primero, 10.0, 1);
+    completarParaCerrar($primero);
+    $primero = $cierre->cerrar($primero->fresh(), $usuario->id, confirmarSinCobro: true);
+
+    $contadorTrasElPrimero = (int) FactConfiguracion::where('clave', CierrePrefactura::CLAVE_FOLIO)->value('valor');
+
+    $cierre->cerrar($reabierta->fresh(), $usuario->id);
+
+    $contadorTrasLaReabierta = (int) FactConfiguracion::where('clave', CierrePrefactura::CLAVE_FOLIO)->value('valor');
+
+    $segundo = prefacturaBorrador();
+    renglonDe($segundo, 10.0, 1);
+    completarParaCerrar($segundo);
+    $segundo = $cierre->cerrar($segundo->fresh(), $usuario->id, confirmarSinCobro: true);
+
+    expect($primero->folio)->toBe($contadorInicial)
+        ->and($contadorTrasElPrimero)->toBe($contadorInicial + 1)
+        ->and($contadorTrasLaReabierta)->toBe($contadorTrasElPrimero)
+        ->and($reabierta->fresh()->folio)->toBe($folioDeLaReabierta)
+        ->and($segundo->folio)->toBe($primero->folio + 1)
         ->and((int) FactConfiguracion::where('clave', CierrePrefactura::CLAVE_FOLIO)->value('valor'))
-        ->toBe($contadorAntes + 1);
+        ->toBe($contadorInicial + 2);
 });
 
 test('tres reaperturas dan tres versiones numeradas 1, 2 y 3, con el mismo folio y el contador quieto', function () {

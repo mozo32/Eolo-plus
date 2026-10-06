@@ -36,6 +36,13 @@ class CierrePrefactura
      * aquí, dentro de la transacción y con el candado, no en la pantalla: la pantalla solo
      * sabe lo que leyó hace un rato, y una cerrada no se edita ni se le des-consume el folio.
      *
+     * El folio es del DOCUMENTO, no del estado en que esté: una prefactura que YA trae folio lo
+     * conserva al cerrarse, sea cual sea su estado, y el contador no avanza. El criterio es
+     * «el folio no es nulo» y NO «está reabierta», y es deliberado. Hoy solo lo cumplen las
+     * reabiertas (los borradores se crean sin folio). Cuando llegue la importación del
+     * histórico, servirá también para que un documento viejo se cierre con su folio de origen
+     * (el 3544 sigue siendo el 3544) en vez de renumerarse a nuestra serie.
+     *
      * @param  ?string  $faltanteConfirmado  decimal de dos decimales, o null si no se comparará.
      *
      * @throws PrefacturaSinCobroException si los pagos no cubren el total y no se confirmó, o si se confirmó otra cifra que la del faltante real.
