@@ -467,11 +467,26 @@ export interface DiscrepanciaSello {
     derivado: string;
 }
 
+/**
+ * Una versión SUSTITUIDA de una prefactura: el documento tal como salió antes de que se reabriera para corregirlo. Ya no es el vigente.
+ * Solo viene en la ficha, y sin el documento: el PDF lo arma el servidor (`urlVersionPrefactura`).
+ */
+export interface VersionPrefactura {
+    version: number;
+    /** Cuándo se cerró esa versión. "2026-09-30 14:30:00", sin zona. */
+    cerrada_at: string | null;
+    total_sellado: string;
+    /** Por qué se reabrió: lo que se corrigió. */
+    motivo: string;
+    reabierta_at: string | null;
+}
+
 export interface Prefactura {
     id: number;
-    /** null mientras es borrador: el folio se consume al cerrar. */
+    /** null mientras es borrador: el folio se consume al cerrar. Una reabierta CONSERVA el suyo. */
     folio: number | null;
-    estado: 'borrador' | 'cerrada';
+    /** `reabierta`: una cerrada que se abrió para corregirla; tiene folio, no se imprime ni se cotiza hasta volver a cerrarla. */
+    estado: 'borrador' | 'cerrada' | 'reabierta';
     /** 'N' es un borrador descartado. */
     status: StatusCatalogo;
     matricula: string | null;
@@ -515,12 +530,14 @@ export interface Prefactura {
     cobro_error: string | null;
     /** Solo en la ficha, no en el listado. */
     renglones?: RenglonPrefactura[];
+    /** Solo en la ficha: las versiones sustituidas, de la 1 en adelante. Vacía si nunca se reabrió. */
+    versiones?: VersionPrefactura[];
 }
 
 export interface FiltrosPrefactura {
     /** Matrícula, cliente o folio. */
     q: string;
-    estado: '' | 'borrador' | 'cerrada';
+    estado: '' | 'borrador' | 'cerrada' | 'reabierta';
     desde: string;
     hasta: string;
 }
@@ -546,6 +563,8 @@ export async function obtenerPrefacturasApi(filtros: FiltrosPrefactura, pagina: 
  */
 export const urlDocumentoPrefactura = (id: number) => `${BASE}/prefacturas/${id}/pdf`;
 export const urlCotizacionPrefactura = (id: number) => `${BASE}/prefacturas/${id}/cotizacion`;
+/** El papel de una versión sustituida: lleva la marca de «no vigente» y no se puede confundir con el documento vigente. */
+export const urlVersionPrefactura = (id: number, version: number) => `${BASE}/prefacturas/${id}/versiones/${version}/pdf`;
 
 export const apiPrefacturas = {
     ficha: (id: number) => pedir<{ prefactura: Prefactura }>(`${BASE}/prefacturas/${id}`),
@@ -582,6 +601,11 @@ export const apiPrefacturas = {
     estancia: (id: number, datos: DatosEstancia) => pedir<{ renglones: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/estancia`, { method: 'PATCH', body: datos }),
     /** `motivo` llega cuando el paquete no se agregó completo; con `renglones` 0 el destino sigue nacional. */
     internacional: (id: number) => pedir<{ renglones: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/internacional`, { method: 'PATCH' }),
+    /**
+     * Reabre una cerrada para corregirla (exige el subdepartamento `factReabrirPrefactura`: sin él, 403). El documento actual queda como versión.
+     * Errores de negocio: `no_reabrible` (409, no está cerrada), `totales_no_calculables` (422); el motivo, de 10 a 500 caracteres, falla con 422 por campo.
+     */
+    reabrir: (id: number, motivo: string) => pedir<{ prefactura: Prefactura; message: string }>(`${BASE}/prefacturas/${id}/reabrir`, { method: 'PATCH', body: { motivo } }),
     /** Baja lógica de un borrador. 409 (ErrorApi.codigo ya_cerrada o ya_descartada) si ya no es un borrador activo. */
     descartar: (id: number) => pedir<{ message: string }>(`${BASE}/prefacturas/${id}/descartar`, { method: 'PATCH' }),
 };

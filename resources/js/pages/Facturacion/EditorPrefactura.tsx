@@ -1,15 +1,16 @@
 import AppLayout from '@/layouts/app-layout';
 import { facturacionPrefacturas } from '@/routes';
-import { ErrorApi, apiPrefacturas, mensajeDeError, urlCotizacionPrefactura, urlDocumentoPrefactura, type DiscrepanciaSello, type Prefactura, type RenglonPrefactura } from '@/stores/apiFacturacionCatalogos';
+import { ErrorApi, apiPrefacturas, mensajeDeError, urlCotizacionPrefactura, urlDocumentoPrefactura, urlVersionPrefactura, type DiscrepanciaSello, type Prefactura, type RenglonPrefactura, type VersionPrefactura } from '@/stores/apiFacturacionCatalogos';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { ArrowLeft, Ban, FileText, Gift, Globe, Group, Lock, Plus, Printer, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, Ungroup, X } from 'lucide-react';
+import { ArrowLeft, Ban, FileText, Gift, Globe, Group, History, Lock, LockOpen, Plus, Printer, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, Ungroup, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import CabeceraPantalla from './components/CabeceraPantalla';
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO, TD, TH, campoConError, errorStyle, labelStyle, sectionTitle, toast } from './components/estilos';
 import { aCampoFechaHora, deCampoFechaHora, esConceptoComisionAmex, esConceptoDeEstancia, esMontoPositivo, fechaHoraSinZona, formatearMonto, formatearTasa } from './components/formato';
 import ModalEstancia, { type CantidadesEstancia } from './components/ModalEstancia';
+import ModalReabrir from './components/ModalReabrir';
 import ModalRenglon, { type DatosRenglon } from './components/ModalRenglon';
 import PanelCobro from './components/PanelCobro';
 import PanelNotas from './components/PanelNotas';
@@ -27,8 +28,10 @@ type RespuestaCierre = Awaited<ReturnType<typeof apiPrefacturas.cerrar>>;
  * Los códigos de negocio que dicen que el estado que se ve ya no es el del servidor (o que el cierre se abortó): obligan a
  * recargar la ficha y se muestran con el mensaje del servidor. `sin_cobro` y `totales_no_calculables` son los del cobro;
  * el primero lo atiende el cierre (vuelve a pedir confirmación) y, si llega a otro sitio, se resuelve como los demás.
+ * `no_reabrible` (409: ya no está cerrada, o su sello no cuadra) y `reabierta` (422: se pidió imprimir o cotizar una reabierta) son
+ * los de la reapertura: la ficha que se ve está vieja.
  */
-const CODIGOS_DE_ESTADO = ['incompleta', 'ya_cerrada', 'ya_descartada', 'sello_inconsistente', 'sin_cobro', 'totales_no_calculables'];
+const CODIGOS_DE_ESTADO = ['incompleta', 'ya_cerrada', 'ya_descartada', 'sello_inconsistente', 'sin_cobro', 'totales_no_calculables', 'no_reabrible', 'reabierta'];
 
 interface FormularioEncabezado {
     clienteId: number | null;
@@ -173,6 +176,87 @@ function AvisosDelServidor({ prefactura }: { prefactura: Prefactura }) {
     );
 }
 
+/**
+ * El aviso que no se puede pasar por alto: una reabierta tiene folio y NO tiene documento. Si alguien la deja así, el folio queda como
+ * hueco en la secuencia y el cliente se queda con un papel que el sistema ya no considera vigente. Es permanente: no se cierra.
+ */
+function AvisoDeReabierta({ prefactura }: { prefactura: Prefactura }) {
+    return (
+        <div role="alert" className="rounded-lg border-2 border-orange-400 bg-orange-50 p-4">
+            <p className="flex items-center gap-2 text-sm font-black uppercase text-orange-800">
+                <LockOpen size={18} />
+                Reabierta para corregir · conserva el folio {prefactura.folio ?? '—'}
+            </p>
+            <p className="mt-1 text-[12px] font-bold text-orange-800">
+                No se puede imprimir —ni el documento ni la cotización— hasta volver a cerrarla. Corrige lo que haga falta y usa «Cerrar de nuevo»: si se queda así, el folio {prefactura.folio ?? ''} queda sin documento vigente.
+            </p>
+            <p className="mt-2 text-[11px] font-semibold text-orange-700">
+                La cantidad de un renglón no se edita: para corregir un importe, quita el renglón y vuelve a agregarlo con la cantidad correcta.
+            </p>
+        </div>
+    );
+}
+
+/**
+ * Las versiones sustituidas: lo que el cliente pudo tener en la mano antes de la corrección. Cada una dice «no vigente», igual que su
+ * papel, para que nadie confunda una reimpresión con el documento que vale. El PDF lo arma el servidor (se abre en otra pestaña).
+ */
+function VersionesDePrefactura({ prefacturaId, versiones }: { prefacturaId: number; versiones: VersionPrefactura[] }) {
+    return (
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" aria-labelledby="seccion-versiones">
+            <div className="border-b border-slate-100 px-6 py-4">
+                <h3 id="seccion-versiones" className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    <History size={14} />
+                    {versiones.length} {versiones.length === 1 ? 'versión sustituida' : 'versiones sustituidas'}
+                </h3>
+                <p className="mt-1 text-[11px] font-bold italic text-slate-400">Son los documentos que salieron antes de corregir esta prefactura. Ninguno está vigente: el vigente es el actual.</p>
+            </div>
+
+            <div className="overflow-x-auto custom-scrollbar">
+                <table className="w-full min-w-[720px] border-collapse text-left">
+                    <thead>
+                        <tr className="border-b border-slate-100 bg-white">
+                            <th className="px-6 py-3 text-left text-[9px] font-black uppercase text-slate-400">Versión</th>
+                            <th className="px-6 py-3 text-left text-[9px] font-black uppercase text-slate-400">Se cerró</th>
+                            <th className="px-6 py-3 text-right text-[9px] font-black uppercase text-slate-400">Total</th>
+                            <th className="px-6 py-3 text-left text-[9px] font-black uppercase text-slate-400">Motivo de la corrección</th>
+                            <th className="px-6 py-3 text-right text-[9px] font-black uppercase text-slate-400">Papel</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {versiones.map(v => (
+                            <tr key={v.version} className="border-b border-slate-50">
+                                <td className="px-6 py-3 text-[11px] font-black text-slate-800">
+                                    Versión {v.version}
+                                    <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-black uppercase text-slate-600">No vigente</span>
+                                </td>
+                                <td className="px-6 py-3 text-[11px] font-bold text-slate-600">
+                                    {fechaHoraSinZona(v.cerrada_at)}
+                                    {v.reabierta_at !== null && <span className="block text-[10px] font-bold text-slate-400">sustituida el {fechaHoraSinZona(v.reabierta_at)}</span>}
+                                </td>
+                                <td className="px-6 py-3 text-right text-[11px] font-black text-slate-800">{formatearMonto(v.total_sellado)}</td>
+                                <td className="px-6 py-3 text-[11px] font-semibold text-slate-600">{v.motivo}</td>
+                                <td className="px-6 py-3 text-right">
+                                    <a
+                                        href={urlVersionPrefactura(prefacturaId, v.version)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        aria-label={`Abrir el PDF de la versión ${v.version} (no vigente)`}
+                                        className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800"
+                                    >
+                                        <FileText size={12} />
+                                        PDF · no vigente
+                                    </a>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    );
+}
+
 interface Props {
     id: number;
 }
@@ -186,7 +270,9 @@ interface Props {
  *    rotuladas como tales y con su autoridad en PHP: el importe del renglón
  *    (`ModalRenglon`) y la comisión Amex (`ModalPagoAmex`).
  *  - Una prefactura cerrada es un documento emitido: ni siquiera se ofrece
- *    editarla (el endpoint también lo hace cumplir).
+ *    editarla (el endpoint también lo hace cumplir). Para corregirla se REABRE
+ *    (`ModalReabrir`): queda editable, conserva el folio y no se imprime ni se
+ *    cotiza hasta volver a cerrarla; el documento anterior queda como versión.
  *  - Los códigos de error de negocio (incompleta, ya_cerrada, ya_descartada,
  *    sello_inconsistente, sin_cobro, totales_no_calculables) piden cada uno una
  *    reacción distinta: ver `manejarError`.
@@ -202,7 +288,7 @@ export default function EditorPrefactura({ id }: Props) {
     const [erroresForm, setErroresForm] = useState<Partial<Record<CampoEncabezado, string>>>({});
     const [guardandoEncabezado, setGuardandoEncabezado] = useState(false);
 
-    const [modal, setModal] = useState<'renglon' | 'estancia' | null>(null);
+    const [modal, setModal] = useState<'renglon' | 'estancia' | 'reabrir' | null>(null);
     const [accionando, setAccionando] = useState<string | null>(null);
     const [avisoCargos, setAvisoCargos] = useState<string | null>(null);
 
@@ -259,6 +345,7 @@ export default function EditorPrefactura({ id }: Props) {
      *  - ya_cerrada (409): alguien la cerró o ya estaba: lo que se ve está viejo, se recarga.
      *  - ya_descartada (409): el borrador ya no existe para trabajar: se recarga y se vuelve a la lista.
      *  - sello_inconsistente (409): el cierre se abortó; nada se guardó y reintentar es seguro.
+     *  - no_reabrible (409), reabierta (422): la ficha que se ve está vieja (ya no está cerrada, o se pidió imprimir una reabierta): se dice y se recarga.
      *  - sin_cobro, totales_no_calculables (422): se muestra el mensaje del servidor y se recarga. (El cierre atiende `sin_cobro`
      *    antes de llegar aquí: vuelve a pedir la confirmación con el faltante que trae.)
      *  - 5xx: un mensaje genérico en español, nunca el «Server Error» crudo; se recarga, porque no se sabe cómo quedó.
@@ -290,6 +377,18 @@ export default function EditorPrefactura({ id }: Props) {
                     text: 'Los totales cambiaron mientras se cerraba la prefactura. Nada se guardó y el folio no se consumió: puedes volver a intentar el cierre con seguridad.',
                     confirmButtonColor: '#4f46e5',
                 });
+                await cargar();
+                return;
+            }
+
+            if (e instanceof ErrorApi && e.codigo === 'no_reabrible') {
+                await Swal.fire({ icon: 'info', titleText: 'La prefactura no se puede reabrir', text: e.message, confirmButtonColor: '#4f46e5' });
+                await cargar();
+                return;
+            }
+
+            if (e instanceof ErrorApi && e.codigo === 'reabierta') {
+                await Swal.fire({ icon: 'info', titleText: 'La prefactura está reabierta', text: e.message, confirmButtonColor: '#4f46e5' });
                 await cargar();
                 return;
             }
@@ -354,6 +453,9 @@ export default function EditorPrefactura({ id }: Props) {
     }
 
     const cerrada = prefactura.estado === 'cerrada';
+    // Una reabierta se edita como un borrador (por eso NO entra en `soloLectura`), pero tiene folio y no se descarta, no se cotiza ni se imprime.
+    const reabierta = prefactura.estado === 'reabierta';
+    const versiones = prefactura.versiones ?? [];
     const descartada = prefactura.status === 'N';
     // Una cerrada es un documento emitido y un descartado ya no existe para trabajar: ninguno de los dos se ofrece editar.
     const soloLectura = cerrada || descartada;
@@ -524,6 +626,27 @@ export default function EditorPrefactura({ id }: Props) {
             toast.fire({ icon: 'success', titleText: 'Servicio quitado.' });
             await cargar();
         });
+
+    /**
+     * Reabre la cerrada con el motivo del modal. La respuesta trae la ficha ya reabierta (con la versión que acaba de guardarse), así que
+     * se aplica sin otra lectura. Los códigos de estado cierran el modal y se resuelven aparte; lo demás (el 403 sin permiso, el 422 del
+     * motivo) vuelve al modal para mostrarse junto al campo.
+     */
+    const reabrirPrefactura = async (motivo: string) => {
+        let respuesta;
+
+        try {
+            respuesta = await apiPrefacturas.reabrir(prefactura.id, motivo);
+        } catch (e) {
+            await resolverEnModal(e);
+            return;
+        }
+
+        setModal(null);
+        setAvisoCargos(null);
+        aplicar(respuesta.prefactura);
+        toast.fire({ icon: 'success', titleText: respuesta.message });
+    };
 
     const marcarInternacional = () =>
         ejecutar('internacional', 'No se pudo marcar como internacional', async () => {
@@ -734,7 +857,10 @@ export default function EditorPrefactura({ id }: Props) {
         if (sinTotales) return;
 
         // El total se lee de la ficha vigente: tras un `sin_cobro` la ficha se recargó y el de la closure ya es viejo.
-        const base = () => `Se le asignará un folio: el folio se consume y no se puede reutilizar. Una vez cerrada, la prefactura ya no se podrá editar. Total: ${formatearMonto((prefacturaRef.current ?? prefactura).total)}.`;
+        const base = () =>
+            reabierta
+                ? `Conserva el folio ${prefactura.folio ?? ''}: no se consume otro. Se emite un documento nuevo y el anterior queda como versión no vigente. Total: ${formatearMonto((prefacturaRef.current ?? prefactura).total)}.`
+                : `Se le asignará un folio: el folio se consume y no se puede reutilizar. Una vez cerrada, la prefactura ya no se podrá editar. Total: ${formatearMonto((prefacturaRef.current ?? prefactura).total)}.`;
 
         // Lo que falta por cobrar, según lo último que se leyó. null: no hay nada que confirmar. Solo se manda `confirmar_sin_cobro` si
         // quien opera confirmó ESTE aviso, y el servidor rechaza (`sin_cobro`) un cierre sin confirmar si el cobro cambió desde entonces.
@@ -743,7 +869,7 @@ export default function EditorPrefactura({ id }: Props) {
 
         for (;;) {
             const confirmacion = await Swal.fire({
-                titleText: faltante === null ? 'Cerrar la prefactura' : 'Cerrar sin el cobro completo',
+                titleText: faltante === null ? (reabierta ? 'Cerrar de nuevo la prefactura' : 'Cerrar la prefactura') : 'Cerrar sin el cobro completo',
                 text:
                     faltante === null
                         ? base()
@@ -845,7 +971,7 @@ export default function EditorPrefactura({ id }: Props) {
 
             <div className="p-6 bg-[#f3f4f6] min-h-screen">
                 <div className="space-y-4 animate-in fade-in duration-500">
-                    <CabeceraPantalla titulo={`Prefactura ${prefactura.matricula ?? ''}`.trim()} descripcion={cerrada ? 'Documento cerrado: solo lectura' : descartada ? 'Borrador descartado: solo lectura' : 'Borrador: captura el encabezado, agrega servicios y cierra'}>
+                    <CabeceraPantalla titulo={`Prefactura ${prefactura.matricula ?? ''}`.trim()} descripcion={cerrada ? 'Documento cerrado: solo lectura' : reabierta ? 'Reabierta: corrige y vuelve a cerrarla' : descartada ? 'Borrador descartado: solo lectura' : 'Borrador: captura el encabezado, agrega servicios y cierra'}>
                         <button type="button" onClick={volverALista} className={BOTON_SECUNDARIO}>
                             <span className="flex items-center gap-2">
                                 <ArrowLeft size={14} />
@@ -878,6 +1004,8 @@ export default function EditorPrefactura({ id }: Props) {
                             </button>
                         </div>
                     )}
+
+                    {reabierta && <AvisoDeReabierta prefactura={prefactura} />}
 
                     <AvisosDelServidor prefactura={prefactura} />
 
@@ -1040,6 +1168,12 @@ export default function EditorPrefactura({ id }: Props) {
                             )}
                         </div>
 
+                        {!soloLectura && (
+                            <p className="border-b border-slate-100 bg-slate-50 px-6 py-2 text-[11px] font-bold italic text-slate-500">
+                                La cantidad de un renglón no se edita: para corregirla, quítalo y vuelve a agregarlo con la cantidad correcta.
+                            </p>
+                        )}
+
                         {avisoCargos && (
                             <div role="status" className="flex items-start justify-between gap-3 border-b border-sky-100 bg-sky-50 px-6 py-3 text-[12px] font-bold text-sky-800">
                                 <span>{avisoCargos}</span>
@@ -1199,16 +1333,28 @@ export default function EditorPrefactura({ id }: Props) {
                                             Imprimir está deshabilitado. {motivoSinImprimir}
                                         </p>
                                     )}
-                                    <button
-                                        type="button"
-                                        onClick={imprimir}
-                                        disabled={motivoSinImprimir !== null}
-                                        title={motivoSinImprimir ?? 'Abre el documento en una pestaña nueva.'}
-                                        className={BOTON_PRIMARIO}
-                                    >
-                                        <Printer size={14} />
-                                        IMPRIMIR
-                                    </button>
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setModal('reabrir')}
+                                            disabled={ocupado}
+                                            title="Deshace el cierre para corregirla: el documento actual queda guardado como versión y se conserva el folio."
+                                            className={`${BOTON_SECUNDARIO} flex items-center justify-center gap-2 !px-4 !py-3`}
+                                        >
+                                            <LockOpen size={14} />
+                                            REABRIR PARA CORREGIR
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={imprimir}
+                                            disabled={motivoSinImprimir !== null}
+                                            title={motivoSinImprimir ?? 'Abre el documento en una pestaña nueva.'}
+                                            className={BOTON_PRIMARIO}
+                                        >
+                                            <Printer size={14} />
+                                            IMPRIMIR
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 
@@ -1220,20 +1366,25 @@ export default function EditorPrefactura({ id }: Props) {
                                         </p>
                                     )}
                                     <div className="flex flex-wrap items-center justify-end gap-2">
-                                        <button type="button" onClick={() => void descartar()} disabled={ocupado} className="flex items-center justify-center gap-2 rounded border border-red-200 bg-white px-4 py-3 text-[10px] font-black text-red-600 transition-all hover:bg-red-50 disabled:opacity-50">
-                                            <Ban size={14} />
-                                            {accionando === 'descartar' ? 'DESCARTANDO…' : 'DESCARTAR BORRADOR'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => void cotizar()}
-                                            disabled={ocupado || sinTotales}
-                                            title={sinTotales ? 'No se puede cotizar mientras los totales no se puedan calcular.' : 'Abre una cotización con precios: no es un documento emitido.'}
-                                            className={`${BOTON_SECUNDARIO} flex items-center justify-center gap-2 !px-4 !py-3`}
-                                        >
-                                            <FileText size={14} />
-                                            COTIZAR
-                                        </button>
+                                        {/* Una reabierta ya gastó su folio: no se descarta (dejaría un hueco) ni se cotiza (el servidor tampoco lo permite). */}
+                                        {!reabierta && (
+                                            <button type="button" onClick={() => void descartar()} disabled={ocupado} className="flex items-center justify-center gap-2 rounded border border-red-200 bg-white px-4 py-3 text-[10px] font-black text-red-600 transition-all hover:bg-red-50 disabled:opacity-50">
+                                                <Ban size={14} />
+                                                {accionando === 'descartar' ? 'DESCARTANDO…' : 'DESCARTAR BORRADOR'}
+                                            </button>
+                                        )}
+                                        {!reabierta && (
+                                            <button
+                                                type="button"
+                                                onClick={() => void cotizar()}
+                                                disabled={ocupado || sinTotales}
+                                                title={sinTotales ? 'No se puede cotizar mientras los totales no se puedan calcular.' : 'Abre una cotización con precios: no es un documento emitido.'}
+                                                className={`${BOTON_SECUNDARIO} flex items-center justify-center gap-2 !px-4 !py-3`}
+                                            >
+                                                <FileText size={14} />
+                                                COTIZAR
+                                            </button>
+                                        )}
                                         <button
                                             type="button"
                                             onClick={() => void cerrar()}
@@ -1242,7 +1393,7 @@ export default function EditorPrefactura({ id }: Props) {
                                             className={`${BOTON_PRIMARIO} !bg-emerald-600 hover:!bg-emerald-700 !px-6 !py-3`}
                                         >
                                             <Lock size={14} />
-                                            {accionando === 'cerrar' ? 'CERRANDO…' : 'CERRAR PREFACTURA'}
+                                            {accionando === 'cerrar' ? 'CERRANDO…' : reabierta ? 'CERRAR DE NUEVO' : 'CERRAR PREFACTURA'}
                                         </button>
                                         <button
                                             type="button"
@@ -1252,13 +1403,15 @@ export default function EditorPrefactura({ id }: Props) {
                                             className={`${BOTON_PRIMARIO} !bg-emerald-600 hover:!bg-emerald-700 !px-6 !py-3`}
                                         >
                                             <Printer size={14} />
-                                            {accionando === 'cerrar-e-imprimir' ? 'CERRANDO E IMPRIMIENDO…' : 'CERRAR E IMPRIMIR'}
+                                            {accionando === 'cerrar-e-imprimir' ? 'CERRANDO E IMPRIMIENDO…' : reabierta ? 'CERRAR DE NUEVO E IMPRIMIR' : 'CERRAR E IMPRIMIR'}
                                         </button>
                                     </div>
                                 </div>
                             )}
                         </div>
                     </section>
+
+                    {versiones.length > 0 && <VersionesDePrefactura prefacturaId={prefactura.id} versiones={versiones} />}
 
                     <PanelCobro prefactura={prefactura} onCambio={cargar} onError={manejarError} />
 
@@ -1268,6 +1421,7 @@ export default function EditorPrefactura({ id }: Props) {
 
             {modal === 'renglon' && <ModalRenglon onCerrar={() => setModal(null)} onGuardar={agregarRenglon} />}
             {modal === 'estancia' && <ModalEstancia onCerrar={() => setModal(null)} onGuardar={recalcularEstancia} />}
+            {modal === 'reabrir' && <ModalReabrir folio={prefactura.folio} onCerrar={() => setModal(null)} onGuardar={reabrirPrefactura} />}
         </AppLayout>
     );
 }

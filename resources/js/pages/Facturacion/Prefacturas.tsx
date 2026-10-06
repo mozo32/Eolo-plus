@@ -3,7 +3,7 @@ import { facturacionEditorPrefactura } from '@/routes';
 import { FILTROS_PREFACTURA_VACIOS, obtenerPrefacturasApi, type FiltrosPrefactura, type Prefactura } from '@/stores/apiFacturacionCatalogos';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { Plus, X } from 'lucide-react';
+import { LockOpen, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import CabeceraPantalla from './components/CabeceraPantalla';
 import { BOTON_PRIMARIO, FILTRO, TD, TH } from './components/estilos';
@@ -38,7 +38,31 @@ function AvisoSelloFila({ prefactura }: { prefactura: Prefactura }) {
 }
 
 /**
- * Lista de prefacturas: borradores por omisión (es el trabajo pendiente) o cerradas. Cada fila lleva al editor.
+ * El estado de una fila. Una reabierta tiene folio como una cerrada pero está pendiente como un borrador: no es ninguna de las dos, y
+ * quien la vea en la lista tiene que distinguirla (si se queda así, su folio no tiene documento).
+ */
+function InsigniaDeEstado({ estado }: { estado: Prefactura['estado'] }) {
+    if (estado === 'cerrada') {
+        return <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase text-emerald-700">Cerrada</span>;
+    }
+
+    if (estado === 'reabierta') {
+        return (
+            <span
+                className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-3 py-1 text-[10px] font-black uppercase text-orange-800 ring-1 ring-orange-400"
+                title="Reabierta para corregirla: conserva su folio y no se imprime hasta volver a cerrarla."
+            >
+                <LockOpen size={11} />
+                Reabierta
+            </span>
+        );
+    }
+
+    return <span className="rounded-full bg-amber-100 px-3 py-1 text-[10px] font-black uppercase text-amber-700">Borrador</span>;
+}
+
+/**
+ * Lista de prefacturas: borradores por omisión (es el trabajo pendiente), cerradas o reabiertas. Cada fila lleva al editor.
  * El total que se muestra es el que calcula el servidor.
  */
 export default function Prefacturas() {
@@ -86,6 +110,7 @@ export default function Prefacturas() {
                                 >
                                     <option value="borrador">BORRADORES</option>
                                     <option value="cerrada">CERRADAS</option>
+                                    <option value="reabierta">REABIERTAS</option>
                                     <option value="">TODAS</option>
                                 </select>
 
@@ -183,11 +208,7 @@ export default function Prefacturas() {
                                                     )}
                                                 </td>
                                                 <td className={TD}>
-                                                    {row.estado === 'cerrada' ? (
-                                                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase text-emerald-700">Cerrada</span>
-                                                    ) : (
-                                                        <span className="rounded-full bg-amber-100 px-3 py-1 text-[10px] font-black uppercase text-amber-700">Borrador</span>
-                                                    )}
+                                                    <InsigniaDeEstado estado={row.estado} />
                                                     <AvisoSelloFila prefactura={row} />
                                                 </td>
                                             </tr>
