@@ -27,7 +27,7 @@ class StoreRenglonRequest extends FormRequest
 
     /**
      * Los cinco servicios de estancia no se agregan a mano: su precio real sale de la
-     * tarifa de la matrícula y el del catálogo (99.00) es relleno. Agregarlos aquí
+     * tarifa de la matrícula y el del catálogo es relleno (99.00 en los tres tramos y 0.0000 en los dos ajustes). Agregarlos aquí
      * congelaría ese relleno en el renglón, sin forma de corregirlo, y además
      * duplicaría el cobro cuando se recalcule la estancia.
      */

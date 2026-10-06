@@ -38,7 +38,7 @@ class ImportarMatriculasPrefactura extends Command
         FactTipoMotor::class => 'tarifa de aterrizaje',
         FactPrecioCombustible::class => 'el precio vigente, solo si coincide la fecha de inicio',
         FactCliente::class => 'RFC, correo y teléfono',
-        FactServicio::class => 'es de tercero, categoría, precio, margen y ajuste de precio; el nombre solo en los cuatro con concepto (en los demás es la llave: renombrar en pantalla y reimportar recrea el original y quedan dos)',
+        FactServicio::class => 'es de tercero, categoría, precio, margen y ajuste de precio; el nombre solo en los servicios que llevan concepto (en los demás es la llave: renombrar en pantalla y reimportar recrea el original y quedan dos)',
     ];
 
     /**

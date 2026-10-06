@@ -163,7 +163,7 @@ ocupa el lugar de su primer renglón.
 En la fila de un grupo:
 
 - **CONCEPTO / SERVICIO:** la etiqueta del grupo.
-- **REMISIÓN, PRECIO U. y CANT.:** en blanco. No tienen un valor único, e inventar uno mentiría.
+- **REMISIÓN, PRECIO U. y CANT.:** sin valor, y **la plantilla los imprime como un guion «—»**, no como celdas vacías (enmendado tras la implementación; una prueba exige exactamente tres guiones en esa fila). No tienen un valor único, e inventar uno mentiría.
 - **IMPORTE:** la suma de los importes de sus renglones, calculada con `bcadd` sobre los valores
   que el controlador ya pasa en la clave `importes`.
 
@@ -188,7 +188,7 @@ resuelta; el detalle exacto lo fija el plan.
 |---|---|
 | Agrupar en una prefactura **cerrada** | La guarda del modelo lanza `RenglonDePrefacturaCerradaException`; el endpoint responde `409 ya_cerrada` |
 | Agrupar en una **descartada** | `409 ya_descartada`, por el trait compartido |
-| Etiqueta vacía o solo espacios | `422`: desagrupar es una acción propia, no una etiqueta en blanco |
+| Etiqueta vacía o solo espacios | **`200`, y DESAGRUPA** (enmendado tras la implementación; el diseño original pedía `422`). Laravel convierte la cadena vacía en `null` (`ConvertEmptyStringsToNull`) antes de validar, y `null` ya es el contrato para desagrupar; abrir una excepción en el middleware global por un solo endpoint se descartó. La exigencia de etiqueta no vacía vive **en la pantalla**, que además comprueba contra la respuesta que el renglón quedó agrupado. Una prueba fija este contrato |
 | Etiqueta de más de 60 caracteres | `422` |
 | Un renglón que no es de esa prefactura | `404` |
 
@@ -340,7 +340,7 @@ Lo que hay que probar, y cada punto tiene que poder fallar:
   nombres de los renglones agrupados.
 - El grupo ocupa el lugar del `orden` menor de sus renglones.
 - Una cortesía dentro de un grupo contribuye `0.00` a la suma.
-- Agrupar en una cerrada responde 409; en una descartada, 409; con etiqueta vacía, 422.
+- Agrupar en una cerrada responde 409; en una descartada, 409; con etiqueta vacía, **200 y desagrupa** (enmendado: ver «Qué se rechaza»).
 - Un «Otros» capturado a mano **sobrevive** a desagrupar — la prueba que el defecto del sistema
   viejo exige.
 

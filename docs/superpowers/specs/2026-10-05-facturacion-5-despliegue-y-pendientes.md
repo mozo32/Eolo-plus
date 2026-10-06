@@ -181,8 +181,11 @@ haber exactamente dos filas, con los dos conceptos**, y una forma de pago `saldo
 SET NAMES utf8mb4;
 SELECT id, nombre, concepto, status FROM fact_servicios
  WHERE concepto IN ('estancia_ajuste_2h_12h', 'estancia_ajuste_12h_pernocta') ORDER BY concepto;   -- 2 filas, status A
+SELECT id, nombre, concepto FROM fact_servicios WHERE nombre LIKE 'Ajuste de Estancia%' ORDER BY id; -- tiene que haber SOLO esas 2 (ver abajo)
 SELECT id, nombre, concepto, status FROM fact_formas_pago WHERE concepto = 'saldo_a_favor';          -- 1 fila, status A
 ```
+
+**La primera consulta no ve las filas duplicadas**, porque filtra por concepto: una base que reimportó con la versión anterior del importador y quedó con **cuatro** filas pasa esa verificación enseñando dos. Por eso está la segunda, que lista **todas** las que se llaman «Ajuste de Estancia…»: si salen más de dos, las que no tienen concepto son copias. **El arreglo del importador (`0311314`) impide crear copias nuevas pero no limpia las viejas**; borrarlas o dejarlas es una decisión a mano (comprobar antes que ningún renglón las use), y no se escribe aquí un `DELETE`.
 
 Si la primera no da dos filas, el origen no trae los servicios 109 y 110 (o alguien los renombró, en el caso b,
 y la búsqueda por nombre de la migración no los encontró): hay que resolverlo **antes** de seguir. Con el
@@ -190,8 +193,9 @@ importador de este commit, eso solo ocurre si el origen no los tiene.
 
 **Nota de rescate (NO es un paso del despliegue): solo para una base que ya se migró e importó con la versión
 anterior del importador**, y por eso tiene los dos servicios sin concepto. La salida limpia es un `UPDATE`
-dirigido, que no toca ningún precio y hace lo mismo que la migración (la fila de `id` menor, solo si no tiene
-concepto). Volver a importar también los arreglaría, pero exige `--forzar`, que pisa seis tablas:
+dirigido, que no toca ningún precio. **No es idéntico a la migración**: la migración toma la fila de `id` menor
+con ese nombre **sea cual sea su concepto** (no filtra `concepto IS NULL`); este `UPDATE` solo toca filas **sin**
+concepto, así que es más prudente. En el caso realista (dos filas sin concepto) da lo mismo. Volver a importar también los arreglaría, pero exige `--forzar`, que pisa seis tablas:
 
 ```sql
 SET NAMES utf8mb4;
@@ -249,7 +253,7 @@ Lo que añaden **estas** dos migraciones al rollback (el orden, arriba):
 
 ## Resultado de las pruebas al cierre
 
-**1088 pruebas en verde (4615 aserciones)**, medidas con `php artisan test` **en serie** el 2026-10-05 (1034 al
+**1088 pruebas en verde (4616 aserciones)**, medidas con `php artisan test` **en serie** el 2026-10-05 (1034 al
 empezar el bloque: **+54**). `npx tsc --noEmit` solo da el error preexistente de
 `resources/js/actions/App/Http/Controllers/Api/WalkAroundController.ts(905,5)`; `eslint` sobre los tres archivos
 de frontend del bloque sale limpio y `npm run build` termina bien (comprobado hoy: sale 0, y no modifica ningún
@@ -330,6 +334,13 @@ matrícula real que tenga las tres tarifas** (`tarifa_transito_2h`, `tarifa_tran
       las dos tarifas.
 - [ ] Recalcular otra vez **reemplaza** los ajustes anteriores y **conserva** la cortesía que alguien les marcó.
 - [ ] **No se puede agregar a mano** un renglón de ajuste de estancia (el alta de renglones lo rechaza).
+- [ ] **Cómo sale el nombre en el papel.** La hoja nueva imprime el nombre del servicio tal cual está en el
+      catálogo: **«Ajuste de Estancia_de 2 hrs a 12 hrs»** y **«Ajuste de Estancia_de 12 hrs a pernocta»**, con el
+      guion bajo. **El papel viejo los reescribía a «Ajuste de Estancia»** (`invoice21.php:189`, y lo mismo en
+      `invoice.php:190` e `invoicecot.php:190`). Es una decisión pendiente y no un defecto descubierto al imprimir:
+      **preguntar al departamento si lo quieren así.** No se arregla renombrando el servicio en el catálogo: la
+      siguiente importación le devuelve el nombre del origen (para las filas con concepto el nombre viaja con los
+      valores que importa `ImportadorMatriculas::importarServicioConConcepto`).
 - [ ] **Hay que haber hecho antes la verificación SQL de arriba**; sin ella esto da 422.
 
 ### 4. Un pago con saldo a favor: el IVA no baja
@@ -369,8 +380,7 @@ Sin pruebas de frontend, **que alguien las use**:
   prefactura y **rechaza una que solo difiera en mayúsculas** («Rampa»/«rampa»), pero **no cubre acentos ni
   espacios internos**: «Rampa» y «Rámpa», o «Rampa norte» y «Rampa  norte», son **dos grupos** y el documento
   imprimiría dos filas donde el operador quiso una. La etiqueta **es** la identidad del grupo.
-- **Una etiqueta en blanco desagrupa**, porque el servidor la lee como nula (`ConvertEmptyStringsToNull`; se
-  decidió **no** crear una excepción en el middleware global por un solo endpoint). La pantalla lo impide, y
+- **Una etiqueta en blanco desagrupa (200), y esto CONTRADICE lo que la especificación decía** (la tabla «Qué se rechaza» pedía 422 para «etiqueta vacía o solo espacios»; la especificación se **enmendó** en esta ronda para decir lo que se entrega). Es una desviación decidida, no un descuido: quien apruebe comparando ambos documentos no debe encontrar una contradicción sin explicación. La razón: **`ConvertEmptyStringsToNull`** convierte el blanco en `null` antes de validar, que es el contrato para desagrupar, y se prefirió no abrir una excepción en el middleware global por un solo endpoint. La pantalla lo impide, y
   además **comprueba contra la respuesta del servidor** que el renglón quedó agrupado de verdad: si la etiqueta
   llegó vacía (por ejemplo, de solo caracteres invisibles, que el `trim` de JavaScript no recorta y el de Laravel
   sí), sale una advertencia y no el aviso de éxito. **Quien llame al endpoint directamente, sin la pantalla,
@@ -424,22 +434,40 @@ y en las del 1b, 2 y 3:
   el operador que vea ese mensaje necesita saber qué comando correr. **El mismo texto vive en
   `PagosPrefactura.php:199`**, para la comisión Amex.
 - **`EditorPrefactura.tsx` pasa de las 1.250 líneas** (**1.272** al cerrar el bloque, contadas con `wc -l`; eran
-  1.104 en `e22739f` y 1.097 cuando cerró el bloque 4). Está decidido que **no se parte en este bloque**; el
+  1.104 al empezar el bloque, en `bd21cd0` y en `e22739f`: el 1.097 de la guía del 4 era el valor **antes** de su revisión final, así que el bloque 5 añadió **168 líneas**, no 175). Está decidido que **no se parte en este bloque**; el
   candidato natural a componente es **la fila de renglón con sus diálogos**.
-- **`pint --dirty` no se puede correr sobre `routes/api.php`**, y el equivalente para `EditorPrefactura.tsx` es
-  **`prettier`** (pint solo toca PHP; el `package.json` tiene `format` y `format:check`): **los dos archivos
-  violaban el estilo antes del bloque**. Comprobado: la versión de `routes/api.php` en `e22739f` y la de `HEAD`
+- **`pint --dirty` no se puede correr sobre seis archivos que este bloque tocó**: **`routes/api.php`**,
+  **`ImportadorMatriculas.php`** e **`ImportadorCatalogosTest.php`** (PHP: `pint`) y **`EditorPrefactura.tsx`**,
+  **`ModalEstancia.tsx`** y **`apiFacturacionCatalogos.ts`** (TypeScript: `prettier`, no pint, que solo toca PHP; el
+  `package.json` tiene `format` y `format:check`). **Los seis violaban el estilo antes del bloque.** Comprobado: la versión de `routes/api.php` en `e22739f` y la de `HEAD`
   dan **el mismo resultado** con pint (**67 líneas cambiadas, 128 líneas de diff**, sobre una copia fuera del
   repositorio; la task 4 midió «129» imprimiendo otra cuenta: mismo orden de magnitud), y `npx prettier --check`
-  marca el `EditorPrefactura.tsx` de `e22739f` y el de `HEAD`. **Lo mismo pasa con dos archivos que tocó el arreglo del importador:** `app/Services/ImportadorMatriculas.php` y `tests/Feature/Facturacion/ImportadorCatalogosTest.php` ya fallaban `pint --test` en `HEAD` antes del arreglo, así que tampoco se les corrió `pint --dirty`. Y `pint --dirty` sobre un archivo así lo
+  marca los tres `.tsx`/`.ts` en `e22739f` y en `HEAD` (comprobado archivo por archivo); y `ImportadorMatriculas.php` e `ImportadorCatalogosTest.php` ya fallaban `pint --test` en `HEAD` antes del arreglo del importador (copias fuera del repositorio). Por eso a ninguno se le corrió `pint --dirty`, y las correcciones de la revisión final se hicieron a mano. Y `pint --dirty` sobre un archivo así lo
   reformatea **entero**: ese es el ruido ajeno que se evitó al descartar su resultado. Es un **conflicto real con
   la regla del `CLAUDE.md` del proyecto** («ejecuta `vendor/bin/pint --dirty` antes de terminar»). Conviene que
-  alguien decida si se formatean esos archivos **en un commit propio**, que no mezcle lógica.
+  alguien decida si se formatean esos seis archivos **en un commit propio**, que no mezcle lógica.
+- **El papel nuevo imprime los nombres crudos del catálogo, y el viejo reescribía varios.** Es una capa entera de
+  reescritura que la plantilla del bloque 4 no replica, y es **más grande que los dos nombres de ajuste**. En
+  `invoice21.php:187-189` (y en `invoice.php` e `invoicecot.php`, con la misma lógica; los tres definen
+  `$ids = [91, 103];`): los servicios **91 y 103** salen como **«Otros servicios»**; `Comisariato_Manny` y
+  `Comisariato_Avemex` salen como **«Comisariato»**; y los dos ajustes de estancia salen como **«Ajuste de
+  Estancia»**. La plantilla nueva imprime `nombre_servicio` tal cual. **Importa dos veces:** por este hallazgo
+  generalizado (todo el departamento va a ver nombres distintos en el papel), **y porque el servicio 91 es
+  exactamente donde viven los 4 negativos de «Saldo a favor»** que el bloque 6 va a importar, cuya hoja antigua
+  decía «Otros servicios». **No se tocó la impresión en este bloque** (es territorio del bloque 4 y afecta a más
+  servicios): hay que decidir si la plantilla replica la reescritura, y dónde vive esa regla (renombrar en el
+  catálogo no basta: la importación devuelve el nombre del origen).
+- **El índice de `grupo` no tiene hoy ninguna consulta que servir** (nada filtra ni ordena por esa columna). Lo pedía
+  la especificación y es inocuo; se deja.
+- **El alcance de `--forzar` creció:** el aviso que imprime el importador dice ahora «el nombre solo en los
+  servicios que llevan concepto», sin número (decía «cuatro»; con este bloque son **siete** —ids 7, 2, 3, 4, 100,
+  109 y 110— y era la tercera vez que esa frase envejecía). No se pudo usar `count(self::CONCEPTOS_POR_ID_VIEJO)`:
+  `SOBREESCRIBEN` es una constante y `count()` no se admite en una expresión constante.
 - **Una mutación sobrevive, y es inalcanzable.** Sumar el grupo con `array_sum` + `number_format` en lugar de
   `bcadd` no rompe ninguna prueba. Se usa `bcadd` **por coherencia con el resto del modelo** (`subtotalDerivado()`
   suma con `bcadd`) y para no depender de `float`, **no por una diferencia que se pueda alcanzar**: el importe de
   un renglón llega a ~10^10 (`decimal(12,2)`), con margen máximo a ~10^11, y un `double` no pierde el centavo hasta
-  ~10^13; harían falta cientos de renglones en el máximo. Un revisor hizo la cuenta por su lado y coincide. Se
+  ~10^13; harían falta cientos de renglones en el máximo. **Y hay un argumento mejor, de la revisión final:** todos los sumandos son múltiplos exactos de 0.01, así que la suma exacta también lo es y **nunca cae sobre un medio centavo**; para que el redondeo eligiera mal haría falta un error acumulado de 0.005 o más, es decir magnitudes de ~10^13. No es improbable: es **inalcanzable**. Un revisor hizo la cuenta por su lado y coincide. Se
   declara en lugar de callarla: una mutación superviviente declarada vale más que una silenciosa.
 - **Hay dos bases del sistema viejo.** `conexion.php` (`Prefectura/conexion.php`) lee `fact-fbo`, que llega al
   **2026-08-21**; las mediciones de este bloque (folio 932, los 54 «Otros», los 10 renglones negativos, los 5

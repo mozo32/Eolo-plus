@@ -353,7 +353,9 @@ test('la suma de las filas sigue cuadrando con el subtotal', function () {
 
     $suma = collect($filas)->reduce(fn ($acc, $f) => bcadd($acc, $f['importe'], 2), '0.00');
 
-    expect($suma)->toBe($p->fresh()->subtotal());
+    // 200 + 50 agrupados + 3 x 33.33: la literal evita que la prueba pase en vacio si el ayudante deja de producir importes.
+    expect($suma)->toBe($p->fresh()->subtotal())
+        ->and($suma)->toBe('349.99');
 });
 
 test('dos grupos entrelazados salen en el orden de su primer renglon, cada uno con su suma', function () {

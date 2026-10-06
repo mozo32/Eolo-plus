@@ -15,7 +15,7 @@ use InvalidArgumentException;
  * Dos reglas del sistema viejo que aquí se hacen cumplir:
  *
  * 1. El precio de los servicios de estancia NO sale del catálogo —ahí vale
- *    99.00, que es relleno— sino de la tarifa de la matrícula. `insert22.php`
+ *    99.00 en los tres tramos y 0.0000 en los dos ajustes, que es relleno— sino de la tarifa de la matrícula. `insert22.php`
  *    hace lo mismo pasando `$Costp`, `$costt2` y `$costt12` explícitamente.
  * 2. Solo se cobran si la aeronave está en Tránsito (`if($estatus == 1)` en el
  *    original). Es la regla que el bloque 1a dejó sin aplicar a propósito.
