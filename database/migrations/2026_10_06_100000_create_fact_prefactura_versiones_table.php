@@ -26,8 +26,9 @@ return new class extends Migration
             $table->foreignId('prefactura_id')->constrained('fact_prefacturas')->cascadeOnDelete();
             $table->unsignedSmallInteger('version');
 
-            // Desnormalizado a propósito: una versión sin folio legible no sirve de nada,
-            // y el folio de la prefactura puede no estar si alguien la dejó reabierta.
+            // Desnormalizado a propósito: la versión es un registro histórico y no debe
+            // depender de leer una fila que sí cambia. Reabrir CONSERVA el folio de la
+            // prefactura; esta copia existe para que la versión se identifique sola.
             $table->unsignedInteger('folio');
 
             // Mismos tipos que las columnas selladas de `fact_prefacturas`: decimal(12,2)
@@ -38,7 +39,10 @@ return new class extends Migration
             $table->decimal('total_sellado', 12, 2);
             $table->decimal('iva_tasa_sellada', 5, 4);
 
-            $table->timestamp('cerrada_at')->nullable();
+            // `dateTime`, igual que `fact_prefacturas.cerrada_at`: copiar un datetime a un
+            // `timestamp` lo convierte con la zona de la sesión y la hora de la versión
+            // dejaría de coincidir con la del documento que esta tabla conserva.
+            $table->dateTime('cerrada_at')->nullable();
             $table->foreignId('cerrada_por')->nullable()->constrained('users');
 
             // `dateTime` y no `timestamp`: en MySQL (sin explicit_defaults_for_timestamp) un

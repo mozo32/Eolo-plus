@@ -88,7 +88,7 @@ revienta.
 git pull
 composer install --no-dev --optimize-autoloader
 
-# 1. Migraciones. La última crea el índice único en aeronaves.matricula y lleva
+# 1. Migraciones. La última QUE TOCA aeronaves crea el índice único en aeronaves.matricula y lleva
 #    guardia: si hay matrículas repetidas, falla listándolas sin dejar nada a
 #    medias. Nota: `migrate --step` NO excluye migraciones, solo las separa en
 #    lotes; no sirve para dejar el índice para después.

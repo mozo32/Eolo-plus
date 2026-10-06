@@ -1,4 +1,5 @@
 <?php
+
 // tests/Feature/Facturacion/MatriculaUnicaTest.php
 
 use App\Models\Aeronave;
@@ -146,15 +147,19 @@ function migracionIndiceUnico(): Illuminate\Database\Migrations\Migration
     return require database_path('migrations/2026_09_29_099000_add_unique_matricula_to_aeronaves.php');
 }
 
-test('la migracion del indice unico es la ultima', function () {
-    // Del bloque 1a (las del 2026_09_29): los bloques posteriores traen sus propias
-    // migraciones, que por fuerza van despues y no cambian lo que esta prueba protege.
-    $ultima = collect(glob(database_path('migrations/2026_09_29_*.php')))
+test('la migracion del indice unico es la ultima que toca aeronaves', function () {
+    // Lo que se protege: que el indice unico corra DESPUES de todo lo que toca `aeronaves`,
+    // para que, si hay matriculas repetidas, falle listandolas y no a media migracion. Por
+    // eso se mide contra las migraciones que mencionan `aeronaves` (tambien `fact_aeronaves`
+    // y las claves foraneas hacia ella) y no contra «la ultima del directorio»: una
+    // migracion de otro bloque, que no toca esa tabla, puede ir despues sin dano.
+    $queTocanAeronaves = collect(glob(database_path('migrations/*.php')))
+        ->filter(fn ($ruta) => str_contains(file_get_contents($ruta), 'aeronaves'))
         ->map(fn ($ruta) => basename($ruta))
         ->sort()
-        ->last();
+        ->values();
 
-    expect($ultima)->toBe('2026_09_29_099000_add_unique_matricula_to_aeronaves.php');
+    expect($queTocanAeronaves->last())->toBe('2026_09_29_099000_add_unique_matricula_to_aeronaves.php');
 });
 
 test('la migracion del indice unico falla listando las matriculas repetidas', function () {
