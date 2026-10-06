@@ -502,3 +502,147 @@ test('un documento corregido SIEMPRE dice que lo es, tambien si la version anter
     expect($recibido['sustituye'])->toBeNull()
         ->and($papel())->toContain('NO VIGENTE')->not->toContain('Corregida');
 });
+
+test('LA PRUEBA MAESTRA: el ciclo entero por la API, y la version 1 reimpresa es el papel que salio, no el corregido', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $quienCerroElOriginal = App\Models\User::findOrFail($cerrada->cerrada_por);
+    $jefe = usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion');
+    $captura = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $efectivo = formasDePago()[App\Models\FactFormaPago::CONCEPTO_EFECTIVO];
+
+    // Las cifras que ESTA prueba sembro: 100.00 + 16.00 = 116.00, pagados exactos. Son el ancla:
+    // no salen de `cifrasDeCerrada()` ni de la instantanea, que descienden de la misma funcion.
+    expect((string) $cerrada->subtotal_sellado)->toBe('100.00')
+        ->and((string) $cerrada->iva_sellado)->toBe('16.00')
+        ->and((string) $cerrada->total_sellado)->toBe('116.00')
+        ->and($cerrada->cambio())->toBe('0.00');
+
+    // Lo que la plantilla lee de $prefactura: si manana lee un campo mas y el JSON no lo guarda,
+    // la comparacion contra el original lo delata.
+    $delModelo = fn (FactPrefactura $p) => [
+        'folio' => $p->folio,
+        'cerrada_at' => $p->cerrada_at?->format('d/m/Y'),
+        'llegada_at' => $p->llegada_at?->format('d/m/Y H:i'),
+        'salida_at' => $p->salida_at?->format('d/m/Y H:i'),
+        'origen' => $p->origen,
+        'destino' => $p->destino,
+        'nota_externa' => $p->nota_externa,
+        'cliente' => [$p->cliente?->nombre, $p->cliente?->telefono, $p->cliente?->correo],
+        'matricula' => $p->aeronave?->matricula,
+        'tipo' => $p->aeronave?->tipoAeronave?->nombre,
+        'categoria' => $p->satelite?->categoria?->nombre,
+        'pagos' => $p->pagos->map(fn ($g) => [$g->formaPago?->nombre, (string) $g->monto])->all(),
+    ];
+
+    $recibido = [];
+    $papel = vistaDelPapel($recibido);
+
+    // 1. Se imprime el documento. Lo que reciba la vista es lo que el cliente se lleva.
+    $this->actingAs($captura);
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertSuccessful();
+    $original = $recibido;
+    $modeloOriginal = $delModelo($recibido['prefactura']);
+    $htmlOriginal = $papel();
+
+    // 2. Se reabre POR LA API, con el permiso propio: quien solo captura no puede.
+    $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", ['motivo' => 'Correccion completa de prueba.'])->assertForbidden();
+    $this->actingAs($jefe);
+    $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", ['motivo' => 'Correccion completa de prueba.'])->assertSuccessful();
+
+    // 3. Se corrige algo de CADA clase que el departamento nombro, con los permisos normales.
+    $this->actingAs($captura);
+    $viva = $cerrada->fresh();
+
+    // (a) el importe de un renglon: el original, de 100.00, pasa a cortesia y deja de cobrarse.
+    $this->patchJson("/api/facturacion/prefacturas/{$viva->id}/renglones/{$viva->renglones()->first()->id}/cortesia", ['es_cortesia' => true])->assertSuccessful();
+    // (b) falta un servicio: 2 x 250.00.
+    renglonDe($viva->fresh(), 250.0, 2);
+    // (c) el cobro: se quita el pago exacto y se registra uno mayor, con cambio.
+    $this->deleteJson("/api/facturacion/prefacturas/{$viva->id}/pagos/{$viva->pagos()->first()->id}")->assertSuccessful();
+    $this->postJson("/api/facturacion/prefacturas/{$viva->id}/pagos", ['forma_pago_id' => $efectivo->id, 'monto' => '600.00'])->assertSuccessful();
+    // (d) la cabecera: destino, nota externa y cliente.
+    $this->putJson("/api/facturacion/prefacturas/{$viva->id}", [
+        'aeronave_id' => $viva->aeronave_id,
+        'tipo_destino' => $viva->tipo_destino,
+        'destino' => 'MMUN',
+    ])->assertSuccessful();
+    $this->patchJson("/api/facturacion/prefacturas/{$viva->id}/notas", ['nota_externa' => 'Nota corregida.'])->assertSuccessful();
+    $clienteNuevo = completarParaCerrar($viva->fresh())->cliente;
+
+    // 4. Se vuelve a cerrar. Paga 600.00 sobre 580.00: sin confirmaciones.
+    $this->patchJson("/api/facturacion/prefacturas/{$viva->id}/cerrar")->assertSuccessful();
+
+    $vigente = $cerrada->fresh();
+    expect($vigente->folio)->toBe($cerrada->folio)
+        ->and((string) $vigente->subtotal_sellado)->toBe('500.00')
+        ->and((string) $vigente->iva_sellado)->toBe('80.00')
+        ->and((string) $vigente->total_sellado)->toBe('580.00')
+        ->and($vigente->cambio())->toBe('20.00')
+        ->and(App\Models\FactPrefacturaVersion::count())->toBe(1);
+
+    // 5. Se reimprime la version 1 POR SU ENDPOINT.
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/versiones/1/pdf")->assertSuccessful();
+    $reimpresa = $recibido;
+    $htmlReimpreso = $papel();
+
+    // Ancla: la version 1 trae los literales SEMBRADOS. Un `total` falso en `cifrasDeCerrada()`
+    // movia a la vez la impresion original y la reimpresion; contra un literal ya no pasa.
+    expect($reimpresa['subtotal'])->toBe('100.00')
+        ->and($reimpresa['iva'])->toBe('16.00')
+        ->and($reimpresa['ivaEtiqueta'])->toBe('16%')
+        ->and($reimpresa['total'])->toBe('116.00')
+        ->and($reimpresa['cambio'])->toBe('0.00')
+        ->and($reimpresa['filas'])->toHaveCount(1)
+        ->and($reimpresa['filas'][0]['importe'])->toBe('100.00')
+        ->and($reimpresa['elaboradoPor'])->toBe($quienCerroElOriginal->name)
+        ->and($reimpresa['prefactura']->folio)->toBe($cerrada->folio)
+        ->and($reimpresa['prefactura']->destino)->toBe('MMTO')
+        ->and($reimpresa['prefactura']->nota_externa)->toBe('Gracias por su visita.')
+        ->and($reimpresa['prefactura']->cliente->nombre)->toBe('Cliente del documento')
+        ->and($reimpresa['prefactura']->pagos)->toHaveCount(1)
+        ->and((string) $reimpresa['prefactura']->pagos[0]->monto)->toBe('116.00')
+        ->and($htmlReimpreso)->toContain('116.00')->toContain('Destino: MMTO')->toContain('Cliente del documento')->toContain('Gracias por su visita.')
+        ->and($htmlReimpreso)->not->toContain('CAMBIO')
+        ->and($htmlReimpreso)->not->toContain('580.00')->not->toContain('500.00')->not->toContain('600.00')
+        ->and($htmlReimpreso)->not->toContain('MMUN')->not->toContain('Nota corregida.')->not->toContain($clienteNuevo->nombre);
+
+    // Y reimprimir es el papel que salio: cifras, filas, firma y todo lo que la plantilla lee del modelo.
+    foreach (['subtotal', 'iva', 'ivaEtiqueta', 'total', 'cambio', 'filas', 'elaboradoPor', 'esCotizacion'] as $clave) {
+        expect($reimpresa[$clave])->toEqual($original[$clave], "cambio la clave {$clave}");
+    }
+    expect($delModelo($reimpresa['prefactura']))->toEqual($modeloOriginal);
+
+    // La unica diferencia con lo que salio: la marca.
+    $marca = 'VERSIÓN 1 — REEMPLAZADA EL '.now()->format('d/m/Y').'. NO VIGENTE.';
+    expect($original['versionSustituida'])->toBeNull()
+        ->and($original['sustituye'])->toBeNull()
+        ->and($reimpresa['sustituye'])->toBeNull()
+        ->and($reimpresa['versionSustituida']['version'])->toBe(1)
+        ->and($htmlOriginal)->not->toContain('NO VIGENTE')
+        ->and($htmlReimpreso)->toContain($marca)
+        ->and(trim(preg_replace('/\s+/', ' ', str_replace($marca, '', $htmlReimpreso))))->toBe(trim($htmlOriginal));
+
+    // 6. La vigente, en la misma prueba: otros literales en las cuatro clases. Si la vigente y la
+    // version mostraran lo mismo, nada de lo de arriba distinguiria el antes del despues.
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertSuccessful();
+    $nueva = $recibido;
+    $htmlNuevo = $papel();
+
+    expect($nueva['subtotal'])->toBe('500.00')
+        ->and($nueva['iva'])->toBe('80.00')
+        ->and($nueva['total'])->toBe('580.00')
+        ->and($nueva['total'])->not->toBe($reimpresa['total'])
+        ->and($nueva['cambio'])->toBe('20.00')
+        ->and($nueva['filas'])->toHaveCount(2)
+        ->and($nueva['prefactura']->folio)->toBe($reimpresa['prefactura']->folio)
+        ->and($nueva['prefactura']->destino)->toBe('MMUN')
+        ->and($nueva['prefactura']->nota_externa)->toBe('Nota corregida.')
+        ->and($nueva['prefactura']->cliente->nombre)->toBe($clienteNuevo->nombre)
+        ->and((string) $nueva['prefactura']->pagos[0]->monto)->toBe('600.00')
+        ->and($nueva['elaboradoPor'])->toBe($captura->name)
+        ->and($nueva['elaboradoPor'])->not->toBe($reimpresa['elaboradoPor'])
+        ->and($nueva['versionSustituida'])->toBeNull()
+        ->and($nueva['sustituye'])->toBe(['fecha' => $cerrada->cerrada_at->format('d/m/Y')])
+        ->and($htmlNuevo)->toContain('580.00')->toContain('CAMBIO')->toContain('Destino: MMUN')->toContain('Nota corregida.')->toContain($clienteNuevo->nombre)
+        ->and($htmlNuevo)->not->toContain('116.00')->not->toContain('Cliente del documento')->not->toContain('MMTO')->not->toContain('NO VIGENTE');
+});
