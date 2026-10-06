@@ -497,11 +497,16 @@ y en las del 1b, 2 y 3:
 - **Menores del ajuste de estancia aceptados**: el `.required` de las dos reglas `sometimes` nunca se dispara (lo
   produce el bucle que arma los mensajes), y `detalleSinPrecio()` relee las tarifas en lugar de recibirlas.
   Ninguno afecta al dinero.
-- **PREGUNTA ABIERTA, que solo quien despliega puede contestar: ¿qué rama sigue el servidor de producción?** Importa porque `produccion` no tiene el arreglo de reverb.
-  Comprobado el 2026-10-05: el remoto tiene una rama `produccion` (`a30bfb9`) que **no** contiene `94a3a19` y
-  tiene un commit que `main` no tiene, mientras el remoto `main` **sí** está en `94a3a19` (reverb ya declarado en
-  `main`). Esta rama sigue siendo instalable por sí sola (trae reverb y pusher declarados); es solo una duda para
-  quien despliegue: **confirmar qué rama** corre el servidor. Si es `produccion`, un `composer install` allí retira reverb y pusher (ver la guía del 4) y `artisan` deja de arrancar.
+- **La rama de producción es `main`, y ya tiene el arreglo de reverb. RESUELTO el 2026-10-06.**
+  Lo confirmó el responsable del proyecto. Comprobado: `origin/main` está en **`94a3a19`**, cuyo
+  `composer.json` declara `laravel/reverb: ^1.12` y `pusher/pusher-php-server: ^7.3`. Así que
+  **un `composer install` limpio en producción ya no rompe `artisan`**, que era el riesgo que la guía
+  del bloque 4 dejaba abierto.
+
+  Queda una nota, no un riesgo: el remoto tiene además una rama `produccion` (`a30bfb9`) que **no**
+  contiene `94a3a19` y tiene un commit que `main` no tiene. **No es la rama del servidor**, pero si
+  alguien la despliega alguna vez, ahí sí falta el arreglo. Conviene fusionarla o retirarla para que
+  no confunda a quien venga después.
 
 ## Resumen: lo que hay que hacer, en orden
 
@@ -520,6 +525,7 @@ y en las del 1b, 2 y 3:
    cortesía. Con la lista de arriba.
 9. Solo entonces, que el departamento decida si aprueba.
 
-**Aparte, para quien decida:** qué rama sigue el servidor; el mensaje que nombra un comando
+**Aparte, para quien decida:** la rama `produccion` del remoto, que no es la del servidor y no tiene el
+arreglo de reverb; el mensaje que nombra un comando
 inexistente; formatear `routes/api.php`, `EditorPrefactura.tsx` y los dos archivos del importador en un commit propio; y, para el bloque 6, una
 copia fresca de la base del viejo.
