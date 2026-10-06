@@ -228,13 +228,26 @@ ejecutó nada de esto.**
 
 ## ATENCIÓN: las advertencias de rollback de los bloques 2, 3 y 4 siguen vigentes
 
-**OJO CON EL ORDEN DE LAS MIGRACIONES: la última del proyecto NO es de este bloque.** Hay una migración
-**posterior** a las dos nuevas, `2026_09_29_099000_add_unique_matricula_to_aeronaves` (los nombres de las del
-bloque llevan fecha 2026-09-29, igual que las anteriores, y `099000` queda después de `094000` y `094100`). Por
-eso **`php artisan migrate:rollback --step=1` revertiría esa**, la restricción única de matrículas, y no
-ninguna de las de este bloque; y `--step=2` revertiría `099000` y `094100` (lo comprobé en sqlite). Para tocar una
-migración concreta, la forma de la guía del 3, **mirando antes lo que va a hacer**:
-`php artisan migrate:rollback --pretend --step=1 --path=database/migrations/<archivo>.php`.
+**CORREGIDO el 2026-10-06, midiendo sobre una base MySQL de verdad.** Una versión anterior de esta sección
+decía que `migrate:rollback --step=1` revertiría `2026_09_29_099000_add_unique_matricula_to_aeronaves` «y no
+ninguna de las de este bloque». **Era falso, y la verdad es peor.** Aquel dato salía de una prueba en sqlite con
+migraciones frescas, donde **todo cae en un solo lote** y el orden inverso por id coincide con el orden inverso
+por nombre de archivo. En una base migrada de verdad no coincide.
+
+Lo medido en una base donde los bloques 1a y 1b ya estaban migrados y los bloques 2 a 5 se migraron ahora:
+
+- `099000_add_unique_matricula_to_aeronaves` está en el **lote 40**: corrió hace tiempo, con el bloque 1a.
+- Las **diez** migraciones de los bloques 2 a 5 cayeron todas en el **lote 43**, el más alto.
+- **`migrate:rollback --step=1`** revierte **`094100_add_grupo_to_fact_prefactura_renglones`** — quita el
+  índice y la columna `grupo`, y nada más. Comprobado con `--pretend`, que no escribe.
+- **`migrate:rollback` a secas** revierte **el lote 43 entero: las diez**, y entre ellas
+  **`093100_create_fact_prefactura_pagos`**, cuyo `down()` es un `dropIfExists`. Es decir: **borra la tabla de
+  pagos**. Comprobado con `--pretend`.
+
+**Conclusión práctica:** el comando peligroso es **`migrate:rollback` sin argumentos**, no `--step=1`. Y lo que
+`--step=1` revierta depende de **en qué orden se migró esa base**, no del nombre de los archivos: compruébalo
+siempre en la base concreta antes de revertir, con
+`php artisan migrate:rollback --pretend --step=1`, que **no escribe nada** y dice exactamente qué haría.
 
 `php artisan migrate:rollback` **no pregunta** y revierte **el último lote entero**, no «una migración». El
 `down()` de la tabla de pagos (`2026_09_29_093100`) es un `dropIfExists`: un rollback **después de que alguien
