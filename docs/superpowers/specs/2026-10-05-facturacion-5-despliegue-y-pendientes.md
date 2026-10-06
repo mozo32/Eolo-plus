@@ -172,6 +172,35 @@ El ajuste busca dos servicios del catálogo **por concepto** (`estancia_ajuste_2
 |---|---|---|
 | **(a)** Los catálogos **no** se han importado | `migrate` corre con `fact_servicios` vacía y la `094000` no asigna nada; después **el importador asigna 109 y 110** | Importador → seeder → **verificar** |
 | **(b)** Los catálogos **ya** estaban importados | La `094000` los encuentra **por nombre** y asigna | **No correr el importador** (`--forzar` pisa seis tablas). Seeder → **verificar** |
+| **(c)** **Mixto**: están las aeronaves, categorías y motores (corrió el 1a) y los demás catálogos están **vacíos** | La `094000` no asigna nada (`fact_servicios` vacía) y el importador **se niega sin `--forzar`**, porque la guarda ve las filas del 1a | **Medir primero si se editó algo** (consulta abajo). Importador `--aplicar --forzar` → seeder → **verificar** |
+
+**El caso (c) no es teórico: es lo que tenía la base local de desarrollo la primera vez que se corrió esta guía
+de principio a fin** (2026-10-06). Lo produce cualquier máquina donde el 1a se aplicó y el 1b no. La guarda del
+importador no distingue «esta tabla tiene filas mías» de «tiene filas editadas a mano», así que obliga a
+`--forzar` aunque no haya nada que perder. **La pregunta que decide no es si hay filas, es si alguna se editó
+después de importarse**, y eso se mide:
+
+```sql
+SET NAMES utf8mb4;
+SELECT 'fact_aeronaves' t, COUNT(*) filas, SUM(updated_at > created_at) editadas FROM fact_aeronaves
+UNION ALL SELECT 'fact_categorias_aeronave', COUNT(*), SUM(updated_at > created_at) FROM fact_categorias_aeronave
+UNION ALL SELECT 'fact_tipos_motor', COUNT(*), SUM(updated_at > created_at) FROM fact_tipos_motor
+UNION ALL SELECT 'fact_precios_combustible', COUNT(*), SUM(updated_at > created_at) FROM fact_precios_combustible;
+```
+
+Si `editadas` es **0** en las tres primeras, `--forzar` reescribe los mismos valores: no se pierde nada. El precio
+de combustible es aparte y **no hace falta que dé 0**, porque el importador lo protege por diseño (avisa «Ya hay
+precios de combustible en Eolo-plus: no se importa el de `tb_combustible` para no reemplazar el vigente»); en la
+corrida real tenía **una fila editada y siguió intacta**, con `precios_combustible: 0` en el contador. Si en las
+tres primeras `editadas` **no** es 0, hay ediciones de pantalla en juego y `--forzar` las pisa: eso ya no es un
+paso de despliegue sino una decisión, y hay que ver **qué** se editó antes de correrlo.
+
+**Qué se ve en una corrida del caso (c) que salió bien** (la del 2026-10-06, para tener con qué comparar):
+`aeronaves_creadas: 0` — **no es un fallo**, es que las 835 ya existían y se actualizaron; `precios_combustible: 0`
+— el vigente protegido; y los catálogos que estaban vacíos quedan con 194 clientes, 54 servicios, 13 categorías de
+servicio, 7 formas de pago y 5 proveedores. La verificación de abajo dio **dos** filas `Ajuste de Estancia_*` (no
+cuatro), que es la prueba de que el arreglo `0311314` del importador funciona: la `094000` no pudo asignar nada
+porque corrió con `fact_servicios` vacía, así que los conceptos los puso el importador.
 
 **Verificación (la comprobación que sigue siendo obligatoria en las dos bases).** Con `SET NAMES utf8mb4;` (el
 cliente `mysql` de Windows arranca en cp850 y una sentencia con acento afecta 0 filas **sin error**). **Tiene que
