@@ -303,18 +303,11 @@ test('una segunda reapertura guarda la version 2 con el documento corregido, sin
 
     $reapertura->reabrir($cerrada, $usuario->id, 'Primera correccion.');
 
-    // `CierrePrefactura` todavia no sabe volver a cerrar una reabierta (es otra tarea), asi
-    // que el nuevo cierre se sella a mano, con cifras que SI cuadran con los renglones.
+    // El nuevo cierre es el REAL: un estado sellado a mano es un estado que nadie garantiza
+    // que el sistema produzca. El total sube a 174.00 y lo pagado es 116.00, asi que cierra
+    // sin cobro completo, confirmado.
     renglonDe($cerrada->fresh(), 50.0, 1);
-    $cerrada->fresh()->forceFill([
-        'estado' => FactPrefactura::ESTADO_CERRADA,
-        'subtotal_sellado' => '150.00',
-        'iva_sellado' => '24.00',
-        'total_sellado' => '174.00',
-        'iva_tasa_sellada' => '0.1600',
-        'cerrada_at' => now(),
-        'cerrada_por' => $usuario->id,
-    ])->save();
+    app(App\Services\CierrePrefactura::class)->cerrar($cerrada->fresh(), $usuario->id, confirmarSinCobro: true);
 
     $reapertura->reabrir($cerrada->fresh(), $usuario->id, 'Segunda correccion.');
 

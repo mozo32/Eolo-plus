@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\DB;
 use UnexpectedValueException;
 
 /**
- * Cierra una prefactura: le asigna folio, le sella los totales y lo registra.
+ * Cierra una prefactura: le asigna folio (o conserva el que ya trae, si es una reabierta),
+ * le sella los totales y lo registra.
  *
  * Todo en una transacción, y el folio sale de un contador leído con
  * `lockForUpdate()`. NO se usa `MAX(folio) + 1`: eso es lo que hace el sistema
@@ -119,15 +120,20 @@ class CierrePrefactura
                 }
             }
 
-            $folio = $this->siguienteFolio();
+            // Una reabierta YA tiene folio: es el mismo documento corregido, no otro. Pedir uno
+            // nuevo quemaría un folio por cada corrección y le cambiaría el número al papel que
+            // el cliente ya tiene en la mano. Se lee de la instancia leída CON CANDADO, no de la
+            // que llegó por parámetro, que pudo quedar vieja.
+            $folio = $prefactura->folio ?? $this->siguienteFolio();
 
             // Respaldo, no mecanismo: la fila ya está en X por el `lockForUpdate` de
             // arriba, así que ninguna otra sesión pudo cerrarla desde entonces. Si aun
             // así no afecta ninguna fila, no se emite nada y la transacción se revierte
-            // con el folio incluido.
+            // con el folio incluido. Alcanza a un borrador y a una reabierta, y NUNCA a una
+            // cerrada: por eso dos cierres simultáneos siguen dando un solo documento.
             $filas = FactPrefactura::query()
                 ->where('id', $prefactura->id)
-                ->where('estado', FactPrefactura::ESTADO_BORRADOR)
+                ->whereIn('estado', [FactPrefactura::ESTADO_BORRADOR, FactPrefactura::ESTADO_REABIERTA])
                 ->update([
                     'folio' => $folio,
                     'estado' => FactPrefactura::ESTADO_CERRADA,
