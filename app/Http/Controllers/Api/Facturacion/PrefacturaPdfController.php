@@ -15,8 +15,10 @@ use Symfony\Component\HttpFoundation\Response;
 use UnexpectedValueException;
 
 /**
- * La impresión de una prefactura. Una sola plantilla y dos acciones: `pdf()`, el documento
- * oficial de una cerrada, y `cotizacion()`, la hoja de un borrador.
+ * La impresión de una prefactura. Una sola plantilla y tres acciones: `pdf()`, el documento
+ * oficial de una cerrada; `cotizacion()`, la hoja de un borrador; y `version()`, la
+ * reimpresión de una versión SUSTITUIDA (el papel que el cliente tiene en la mano y que el
+ * sistema ya no da por vigente).
  *
  * ESTE CONTROLADOR NO ESCRIBE NADA salvo la bitácora, y eso es deliberado. En el sistema
  * viejo imprimir escribía: `invoice.php` insertaba el encabezado histórico antes de
@@ -24,7 +26,10 @@ use UnexpectedValueException;
  * insertar en cada reimpresión, sin guarda. Es una de las causas de sus 207 folios
  * duplicados, y explica que 424 de las filas repetidas tengan cliente.
  *
- * Por eso aquí **reimprimir no tiene ruta propia**: es volver a pedir `pdf()`.
+ * Por eso **reimprimir el documento vigente no tiene ruta propia**: es volver a pedir `pdf()`,
+ * que no escribe nada en la prefactura. La única ruta de reimpresión aparte es `version()`, y
+ * es otra cosa: no reimprime el documento vigente sino una versión ya sustituida, leída del
+ * JSON que se guardó al reabrir. Tampoco escribe nada salvo la bitácora.
  */
 class PrefacturaPdfController extends Controller
 {
@@ -77,8 +82,13 @@ class PrefacturaPdfController extends Controller
 
             // DENTRO del try, como las cifras: `last()` sobre la relación no lanza, pero la
             // regla del bloque 4 es que todo lo que la vista recibe se arma aquí.
+            //
+            // Si hay una versión sustituida la marca sale SIEMPRE: con su fecha cuando se sabe
+            // y con `''` (sin fecha) cuando no. Una cerrada importada del sistema viejo puede
+            // no traer momento de cierre, y entonces un `null` aquí dejaría el papel corregido
+            // indistinguible de un original. No se inventa una fecha.
             $ultima = $prefactura->versiones->last();
-            $sustituye = $ultima?->cerrada_at?->format('d/m/Y');
+            $sustituye = $ultima === null ? null : ($ultima->cerrada_at?->format('d/m/Y') ?? '');
         } catch (UnexpectedValueException $e) {
             report($e);
 
@@ -199,6 +209,12 @@ class PrefacturaPdfController extends Controller
     public function version(Request $request, int $id, int $version): Response|JsonResponse
     {
         $prefactura = FactPrefactura::findOrFail($id);
+
+        // Igual que `pdf()`: un papel de una prefactura dada de baja no sale, tampoco el de
+        // una de sus versiones.
+        if ($respuesta = $this->rechazarSiDescartada($prefactura)) {
+            return $respuesta;
+        }
 
         $guardada = $prefactura->versiones()->where('version', $version)->firstOrFail();
 

@@ -205,7 +205,8 @@
                          en lugar de imprimir un cero
             elaboradoPor nombre de quien cerró, o de quien imprime
             sustituye    ?string: la fecha (d/m/Y) de la versión anterior que este documento
-                         corrige, o null. Solo la lleva el documento VIGENTE de una prefactura
+                         corrige; `''` si hay versión anterior pero no se sabe cuándo se
+                         cerró (el aviso sale igual, sin fecha); null si no sustituye nada. Solo la lleva el documento VIGENTE de una prefactura
                          que se reabrió y se volvió a cerrar
             versionSustituida
                          ?array{version: int, reemplazada: string}: solo en la reimpresión de
@@ -274,7 +275,7 @@
     @elseif($sustituye !== null)
         <table>
             <tr>
-                <td class="aviso-corregida">Corregida — sustituye a la versión del {{ $sustituye }}.</td>
+                <td class="aviso-corregida">Corregida — sustituye a la versión {{ $sustituye !== '' ? 'del '.$sustituye : 'anterior' }}.</td>
             </tr>
         </table>
     @endif

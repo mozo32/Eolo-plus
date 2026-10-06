@@ -420,3 +420,84 @@ test('la plantilla nunca pone Corregida a una version no vigente, ni con las dos
         ->and($pintar('14/03/2026', null))->toContain('Corregida — sustituye a la versión del 14/03/2026.')
         ->and($pintar(null, null))->not->toContain('Corregida')->not->toContain('NO VIGENTE');
 });
+
+test('la version reimpresa conserva la TASA con que se emitio, aunque la vigente ya se selle con otra', function () {
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $this->actingAs($usuario);
+
+    // Cerrada al 16 %: IVA de 16.00 sobre 100.00.
+    $cerrada = prefacturaCerradaParaDocumento();
+    expect((string) $cerrada->iva_sellado)->toBe('16.00')
+        ->and($cerrada->ivaTasaEtiqueta())->toBe('16%');
+
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, $usuario->id, 'Cambio de tasa.');
+
+    // Entre reabrir y volver a cerrar alguien cambia la tasa: el cierre re-sella al 8 %.
+    App\Models\FactConfiguracion::updateOrCreate(['clave' => 'iva_tasa'], ['valor' => '0.08', 'descripcion' => 'Tasa de IVA']);
+    app(App\Services\CierrePrefactura::class)->cerrar($cerrada->fresh(), $usuario->id);
+
+    $vigente = $cerrada->fresh();
+    expect((string) $vigente->iva_sellado)->toBe('8.00')
+        ->and($vigente->ivaTasaEtiqueta())->toBe('8%');
+
+    $recibido = [];
+    $papel = vistaDelPapel($recibido);
+
+    // Una tasa recalculada sobre la viva daria «IVA (8%)» sobre un IVA de 16.00 calculado
+    // sobre 100.00: aritmetica imposible en un papel que el cliente tiene y que dice 16 %.
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/versiones/1/pdf")->assertSuccessful();
+    expect($recibido['ivaEtiqueta'])->toBe('16%')
+        ->and($recibido['iva'])->toBe('16.00')
+        ->and($papel())->toContain('IVA (16%) 16.00')
+        ->and($papel())->not->toContain('IVA (8%)');
+
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertSuccessful();
+    expect($recibido['ivaEtiqueta'])->toBe('8%')
+        ->and($papel())->toContain('IVA (8%) 8.00');
+});
+
+test('una prefactura dada de baja no reimprime sus versiones, igual que no imprime su documento', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $this->actingAs($usuario);
+
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, $usuario->id, 'Faltaba un servicio.');
+    app(App\Services\CierrePrefactura::class)->cerrar($cerrada->fresh(), $usuario->id, confirmarSinCobro: true);
+
+    // Hoy ningun camino de la aplicacion pone este estado en una cerrada; si algun dia existe,
+    // las dos rutas tienen que coincidir.
+    App\Models\FactPrefactura::query()->whereKey($cerrada->id)->update(['status' => App\Models\FactPrefactura::STATUS_INACTIVO]);
+
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertStatus(409)->assertJsonPath('codigo', 'ya_descartada');
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/versiones/1/pdf")->assertStatus(409)->assertJsonPath('codigo', 'ya_descartada');
+
+    expect(App\Models\Bitacora::where('accion', App\Models\Bitacora::ACCION_EXPORTAR)->count())->toBe(0);
+});
+
+test('un documento corregido SIEMPRE dice que lo es, tambien si la version anterior no tiene fecha de cierre', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $this->actingAs($usuario);
+
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, $usuario->id, 'Faltaba un servicio.');
+    app(App\Services\CierrePrefactura::class)->cerrar($cerrada->fresh(), $usuario->id, confirmarSinCobro: true);
+
+    // Una importada del sistema viejo no trae momento de cierre: la version guardada queda sin fecha.
+    App\Models\FactPrefacturaVersion::query()->update(['cerrada_at' => null]);
+
+    $recibido = [];
+    $papel = vistaDelPapel($recibido);
+
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")->assertSuccessful();
+
+    // Sin fecha, pero con la marca: no se inventa una, y tampoco se calla.
+    expect($recibido['sustituye'])->toBe('')
+        ->and($recibido['versionSustituida'])->toBeNull()
+        ->and($papel())->toContain('Corregida — sustituye a la versión anterior.')
+        ->and($papel())->not->toContain('sustituye a la versión del');
+
+    // Y la version sigue reimprimiendose como no vigente.
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/versiones/1/pdf")->assertSuccessful();
+    expect($recibido['sustituye'])->toBeNull()
+        ->and($papel())->toContain('NO VIGENTE')->not->toContain('Corregida');
+});
