@@ -7,7 +7,7 @@ use App\Models\SubDepartamento;
 use Illuminate\Database\Seeder;
 
 /**
- * Departamento Facturación y los subdepartamentos de los bloques 1a, 1b y 2.
+ * Departamento Facturación y los subdepartamentos de los bloques 1a, 1b, 2 y 6a.
  *
  * Cada pantalla lleva el suyo porque el menú se arma a partir de los
  * subdepartamentos del usuario: `HandleInertiaRequests` publica
@@ -23,6 +23,7 @@ class FacturacionSubdepartamentosSeeder extends Seeder
         foreach ([
             'factAeronaves', 'factCategoriasAeronave', 'factTiposMotor', 'factCombustible',
             'factClientes', 'factServicios', 'factFormasPago', 'factProveedores', 'factPrefacturas',
+            'factReabrirPrefactura',
         ] as $nombre) {
             SubDepartamento::firstOrCreate(
                 ['departamento_id' => $departamento->id, 'nombre' => $nombre],

@@ -118,6 +118,15 @@ class PrefacturaPdfController extends Controller
             return $respuesta;
         }
 
+        // Una reabierta no es un borrador: su folio ya se consumió. Cotizarla sacaría un
+        // presupuesto, sin folio, de un trabajo ya facturado.
+        if ($prefactura->estaReabierta()) {
+            return response()->json([
+                'message' => 'Esta prefactura está reabierta para corregirse: no se cotiza ni se imprime hasta que se vuelva a cerrar.',
+                'codigo' => 'reabierta',
+            ], 422);
+        }
+
         if ($prefactura->estaCerrada()) {
             return response()->json([
                 'message' => 'Esta prefactura ya está emitida con folio '.$prefactura->folio.': imprime el documento, no una cotización.',

@@ -166,6 +166,7 @@ test('cada ruta de escritura de prefacturas lleva su subdepartamento', function 
         'PATCH api/facturacion/prefacturas/{id}/estancia' => 'subdep:factPrefacturas',
         'PATCH api/facturacion/prefacturas/{id}/internacional' => 'subdep:factPrefacturas',
         'PATCH api/facturacion/prefacturas/{id}/descartar' => 'subdep:factPrefacturas',
+        'PATCH api/facturacion/prefacturas/{id}/reabrir' => 'subdep:factReabrirPrefactura',
         'POST api/facturacion/prefacturas/{id}/pagos' => 'subdep:factPrefacturas',
         'POST api/facturacion/prefacturas/{id}/pagos/amex' => 'subdep:factPrefacturas',
         'DELETE api/facturacion/prefacturas/{id}/pagos/{pago}' => 'subdep:factPrefacturas',
@@ -195,7 +196,8 @@ test('el seeder crea el subdepartamento nuevo', function () {
     expect(App\Models\SubDepartamento::where('departamento_id', $departamento->id)->pluck('nombre')->sort()->values()->all())
         ->toBe([
             'factAeronaves', 'factCategoriasAeronave', 'factClientes', 'factCombustible',
-            'factFormasPago', 'factPrefacturas', 'factProveedores', 'factServicios', 'factTiposMotor',
+            'factFormasPago', 'factPrefacturas', 'factProveedores', 'factReabrirPrefactura',
+            'factServicios', 'factTiposMotor',
         ]);
 });
 

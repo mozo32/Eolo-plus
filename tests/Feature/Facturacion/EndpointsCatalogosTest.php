@@ -407,7 +407,8 @@ test('el seeder crea el departamento Facturacion con sus subdepartamentos y es i
     expect(App\Models\SubDepartamento::where('departamento_id', $departamento->id)->pluck('nombre')->sort()->values()->all())
         ->toBe([
             'factAeronaves', 'factCategoriasAeronave', 'factClientes', 'factCombustible',
-            'factFormasPago', 'factPrefacturas', 'factProveedores', 'factServicios', 'factTiposMotor',
+            'factFormasPago', 'factPrefacturas', 'factProveedores', 'factReabrirPrefactura',
+            'factServicios', 'factTiposMotor',
         ]);
 });
 

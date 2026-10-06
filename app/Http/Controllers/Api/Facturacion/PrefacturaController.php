@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Facturacion;
 
 use App\Http\Controllers\Api\Facturacion\Concerns\RechazaPrefacturaCerrada;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Facturacion\ReabrirPrefacturaRequest;
 use App\Http\Requests\Facturacion\StorePrefacturaRequest;
 use App\Http\Requests\Facturacion\UpdateNotasRequest;
 use App\Http\Requests\Facturacion\UpdatePrefacturaRequest;
@@ -16,6 +17,7 @@ use App\Services\PrefacturaDescartadaException;
 use App\Services\PrefacturaIncompletaException;
 use App\Services\PrefacturaSinCobroException;
 use App\Services\PrefacturaYaCerradaException;
+use App\Services\ReaperturaPrefactura;
 use App\Services\RenglonDePrefacturaCerradaException;
 use App\Services\SelloInconsistenteException;
 use App\Services\TotalesNoCalculablesException;
@@ -68,7 +70,11 @@ class PrefacturaController extends Controller
             ->where('status', FactPrefactura::STATUS_ACTIVO)
             ->orderByDesc('id');
 
-        if (in_array($request->query('estado'), [FactPrefactura::ESTADO_BORRADOR, FactPrefactura::ESTADO_CERRADA], true)) {
+        if (in_array($request->query('estado'), [
+            FactPrefactura::ESTADO_BORRADOR,
+            FactPrefactura::ESTADO_CERRADA,
+            FactPrefactura::ESTADO_REABIERTA,
+        ], true)) {
             $query->where('estado', $request->query('estado'));
         }
 
@@ -297,6 +303,43 @@ class PrefacturaController extends Controller
     }
 
     /**
+     * Reabre una cerrada para corregirla. El documento anterior queda guardado como versión
+     * antes de que nada cambie.
+     */
+    public function reabrir(ReabrirPrefacturaRequest $request, int $id, ReaperturaPrefactura $reapertura): JsonResponse
+    {
+        $prefactura = FactPrefactura::findOrFail($id);
+
+        if ($respuesta = $this->rechazarSiDescartada($prefactura)) {
+            return $respuesta;
+        }
+
+        try {
+            $reabierta = $reapertura->reabrir(
+                $prefactura,
+                $request->user()->id,
+                $request->validated()['motivo'],
+            );
+        } catch (UnexpectedValueException $e) {
+            report($e);
+
+            return response()->json([
+                'message' => 'No se puede guardar el documento anterior: un renglón o la tasa de IVA tienen un valor que no se reconoce. Corrígelo antes de reabrir.',
+                'codigo' => 'totales_no_calculables',
+            ], 422);
+        }
+
+        // `PrefacturaNoReabribleException` NO se atrapa aquí: define `render()`, que es el
+        // método que Laravel invoca, y se traduce sola a 409 —igual que ya hace
+        // `RenglonDePrefacturaCerradaException`.
+
+        return response()->json([
+            'message' => "Prefactura {$reabierta->folio} reabierta para corregirse.",
+            'prefactura' => $this->presentar($reabierta, conRenglones: true),
+        ]);
+    }
+
+    /**
      * Las tres notas. Solo en borrador: al cerrar, el documento ya salió, y la nota
      * externa se imprime en él.
      */
@@ -355,10 +398,12 @@ class PrefacturaController extends Controller
 
     /**
      * Baja lógica de un borrador abierto por error. Atómica, como el resto del
-     * proyecto: `WHERE id = ? AND status = 'A' AND estado = 'borrador'`.
+     * proyecto: `WHERE id = ? AND status = 'A' AND estado = 'borrador'`. El `estado` excluye
+     * a propósito a las REABIERTAS: su folio ya se consumió, y descartarlas lo perdería y
+     * haría desaparecer de la lista un documento que ya salió al cliente.
      *
      * Una prefactura cerrada NO se descarta: ya es un documento emitido con su
-     * folio consumido. Corregir una cerrada es del bloque 3.
+     * folio consumido. Para corregirla se reabre (ver `reabrir()`).
      */
     public function descartar(Request $request, int $id): JsonResponse
     {
@@ -375,6 +420,13 @@ class PrefacturaController extends Controller
                 // antes y decidir con eso daría el motivo equivocado si otra sesión
                 // cierra en medio.
                 $actual = FactPrefactura::query()->findOrFail($id);
+
+                if ($actual->estaReabierta()) {
+                    return response()->json([
+                        'message' => 'Esta prefactura está reabierta para corregirse: su folio ya se consumió y no se descarta.',
+                        'codigo' => 'reabierta',
+                    ], 409);
+                }
 
                 return $actual->estaCerrada()
                     ? response()->json([

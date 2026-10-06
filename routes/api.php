@@ -446,6 +446,12 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(functio
         Route::delete('/prefacturas/{id}/pagos/{pago}', [PrefacturaPagoController::class, 'destroy'])->whereNumber('id')->whereNumber('pago');
     });
 
+    // Reabrir lleva subdepartamento PROPIO: es deshacer un documento que ya salió al
+    // cliente. Editarla después usa los permisos normales.
+    Route::patch('/prefacturas/{id}/reabrir', [PrefacturaController::class, 'reabrir'])
+        ->whereNumber('id')
+        ->middleware('subdep:factReabrirPrefactura');
+
     Route::middleware('subdep:factFormasPago')->group(function () {
         Route::post('/formas-pago', [FormaPagoController::class, 'store']);
         Route::put('/formas-pago/{id}', [FormaPagoController::class, 'update'])->whereNumber('id');

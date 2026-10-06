@@ -318,3 +318,125 @@ test('una segunda reapertura guarda la version 2 con el documento corregido, sin
         ->and($versiones->map(fn ($v) => $v->documento['total'])->all())->toBe(['116.00', '174.00'])
         ->and($versiones->pluck('folio')->unique()->all())->toBe([$cerrada->folio]);
 });
+
+test('reabrir por API exige el subdepartamento propio: con el de capturar no basta', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", ['motivo' => 'Motivo suficiente.'])
+        ->assertForbidden();
+
+    expect($cerrada->fresh()->estado)->toBe(FactPrefactura::ESTADO_CERRADA);
+});
+
+test('con el subdepartamento de reabrir, se reabre y se responde con la prefactura reabierta', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $folio = $cerrada->folio;
+    $this->actingAs(usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion'));
+
+    $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", ['motivo' => 'Faltaba el combustible.'])
+        ->assertSuccessful()
+        ->assertJsonPath('prefactura.estado', FactPrefactura::ESTADO_REABIERTA)
+        ->assertJsonPath('prefactura.folio', $folio);
+
+    expect($cerrada->fresh()->versiones()->count())->toBe(1)
+        ->and($cerrada->fresh()->versiones()->first()->motivo)->toBe('Faltaba el combustible.');
+});
+
+test('sin motivo no se reabre', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $this->actingAs(usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion'));
+
+    $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", [])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('motivo');
+
+    // Un motivo de puros espacios tampoco: ConvertEmptyStringsToNull lo deja en null
+    // DESPUES de TrimStrings, asi que `required` lo atrapa.
+    $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", ['motivo' => '   '])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('motivo');
+
+    // Y uno demasiado corto, o demasiado largo.
+    $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", ['motivo' => 'error'])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('motivo');
+    $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", ['motivo' => str_repeat('a', 501)])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('motivo');
+
+    expect($cerrada->fresh()->estado)->toBe(FactPrefactura::ESTADO_CERRADA)
+        ->and($cerrada->fresh()->versiones()->count())->toBe(0);
+});
+
+test('reabrir un borrador o una ya reabierta es 409 con su codigo, no 500', function () {
+    $this->actingAs(usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion'));
+
+    $borrador = prefacturaBorrador();
+    $this->patchJson("/api/facturacion/prefacturas/{$borrador->id}/reabrir", ['motivo' => 'Motivo suficiente.'])
+        ->assertStatus(409)
+        ->assertJsonPath('codigo', 'no_reabrible');
+
+    $cerrada = prefacturaCerradaParaDocumento();
+    $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", ['motivo' => 'Motivo suficiente.'])
+        ->assertSuccessful();
+    $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", ['motivo' => 'Otra vez, mismo motivo.'])
+        ->assertStatus(409)
+        ->assertJsonPath('codigo', 'no_reabrible');
+
+    expect($cerrada->fresh()->versiones()->count())->toBe(1);
+});
+
+test('una prefactura inexistente o descartada no se reabre', function () {
+    $this->actingAs(usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion'));
+
+    $this->patchJson('/api/facturacion/prefacturas/999999/reabrir', ['motivo' => 'Motivo suficiente.'])
+        ->assertNotFound();
+
+    $descartada = prefacturaBorrador();
+    $descartada->update(['status' => FactPrefactura::STATUS_INACTIVO]);
+
+    $this->patchJson("/api/facturacion/prefacturas/{$descartada->id}/reabrir", ['motivo' => 'Motivo suficiente.'])
+        ->assertStatus(409)
+        ->assertJsonPath('codigo', 'ya_descartada');
+});
+
+test('una reabierta no se descarta', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, 1, 'Motivo suficiente.');
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/descartar")
+        ->assertStatus(409)
+        ->assertJsonPath('codigo', 'reabierta');
+
+    expect($cerrada->fresh()->status)->toBe(FactPrefactura::STATUS_ACTIVO)
+        ->and($cerrada->fresh()->folio)->not->toBeNull();
+});
+
+test('una reabierta NO se imprime como cotizacion: tiene folio gastado', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, 1, 'Motivo suficiente.');
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/cotizacion")
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'reabierta');
+
+    // Ni como documento: no tiene sello.
+    $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")
+        ->assertStatus(422);
+});
+
+test('el indice puede filtrar por reabierta', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, 1, 'Motivo suficiente.');
+    $borrador = prefacturaBorrador();
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $respuesta = $this->getJson('/api/facturacion/prefacturas?estado=reabierta')->assertSuccessful();
+
+    expect($respuesta->json('data'))->toHaveCount(1)
+        ->and($respuesta->json('data.0.id'))->toBe($cerrada->id)
+        ->and($borrador->fresh()->estado)->toBe(FactPrefactura::ESTADO_BORRADOR);
+});
