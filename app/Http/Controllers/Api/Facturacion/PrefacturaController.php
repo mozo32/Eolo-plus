@@ -11,6 +11,7 @@ use App\Http\Requests\Facturacion\UpdatePrefacturaRequest;
 use App\Models\Bitacora;
 use App\Models\FactPrefactura;
 use App\Models\FactPrefacturaRenglon;
+use App\Models\FactPrefacturaVersion;
 use App\Models\OperacionDiaria;
 use App\Services\CierrePrefactura;
 use App\Services\PrefacturaDescartadaException;
@@ -529,9 +530,32 @@ class PrefacturaController extends Controller
                 'es_cortesia' => $r->es_cortesia,
                 'grupo' => $r->grupo,
             ] + $this->importeDelRenglon($r))->all();
+
+            $datos['versiones'] = $this->versiones($p);
         }
 
         return $datos;
+    }
+
+    /**
+     * Las versiones sustituidas, lo mínimo para listarlas y enlazar a su PDF. NO viaja `documento`: es el
+     * JSON entero de lo que se imprimió, pesa, y la pantalla no lo usa (el PDF lo lee el servidor).
+     *
+     * @return list<array{version: int, cerrada_at: ?string, total_sellado: string, motivo: string, reabierta_at: ?string}>
+     */
+    private function versiones(FactPrefactura $p): array
+    {
+        return $p->versiones()
+            ->select(['id', 'prefactura_id', 'version', 'cerrada_at', 'total_sellado', 'motivo', 'reabierta_at'])
+            ->get()
+            ->map(fn (FactPrefacturaVersion $v) => [
+                'version' => $v->version,
+                'cerrada_at' => $v->cerrada_at?->toDateTimeString(),
+                'total_sellado' => (string) $v->total_sellado,
+                'motivo' => $v->motivo,
+                'reabierta_at' => $v->reabierta_at?->toDateTimeString(),
+            ])
+            ->all();
     }
 
     /** @return array{subtotal: ?string, iva: ?string, iva_tasa: ?string, total: ?string, totales_error: ?string} */

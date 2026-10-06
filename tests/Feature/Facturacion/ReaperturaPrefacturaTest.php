@@ -446,3 +446,58 @@ test('el indice puede filtrar por reabierta', function () {
         ->and($respuesta->json('data.0.id'))->toBe($cerrada->id)
         ->and($borrador->fresh()->estado)->toBe(FactPrefactura::ESTADO_BORRADOR);
 });
+
+test('la ficha de una reabierta trae sus versiones con lo minimo para listarlas, y sin el documento', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $cerradaAt = $cerrada->cerrada_at->toDateTimeString();
+    $usuario = usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion');
+    $reapertura = app(App\Services\ReaperturaPrefactura::class);
+
+    $reapertura->reabrir($cerrada, $usuario->id, 'Primera correccion.');
+    renglonDe($cerrada->fresh(), 50.0, 1);
+    app(App\Services\CierrePrefactura::class)->cerrar($cerrada->fresh(), $usuario->id, confirmarSinCobro: true);
+    $reapertura->reabrir($cerrada->fresh(), $usuario->id, 'Segunda correccion.');
+
+    $this->actingAs($usuario);
+    $ficha = $this->getJson("/api/facturacion/prefacturas/{$cerrada->id}")->assertSuccessful();
+
+    expect($ficha->json('prefactura.estado'))->toBe(FactPrefactura::ESTADO_REABIERTA)
+        ->and($ficha->json('prefactura.versiones'))->toHaveCount(2)
+        ->and(array_column($ficha->json('prefactura.versiones'), 'version'))->toBe([1, 2])
+        ->and(array_column($ficha->json('prefactura.versiones'), 'motivo'))->toBe(['Primera correccion.', 'Segunda correccion.'])
+        ->and(array_column($ficha->json('prefactura.versiones'), 'total_sellado'))->toBe(['116.00', '174.00'])
+        ->and($ficha->json('prefactura.versiones.0.cerrada_at'))->toBe($cerradaAt)
+        ->and($ficha->json('prefactura.versiones.0.reabierta_at'))->not->toBeNull();
+
+    // Solo lo que la pantalla usa: ni el documento entero, ni los usuarios, ni el folio de la version.
+    expect(array_keys($ficha->json('prefactura.versiones.0')))->toEqualCanonicalizing(['version', 'cerrada_at', 'total_sellado', 'motivo', 'reabierta_at']);
+});
+
+test('la respuesta de reabrir ya trae la version que acaba de guardar', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $this->actingAs(usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion'));
+
+    $respuesta = $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", ['motivo' => 'Faltaba el combustible.'])
+        ->assertSuccessful();
+
+    expect($respuesta->json('prefactura.versiones'))->toHaveCount(1)
+        ->and($respuesta->json('prefactura.versiones.0.version'))->toBe(1)
+        ->and($respuesta->json('prefactura.versiones.0.motivo'))->toBe('Faltaba el combustible.');
+});
+
+test('una prefactura sin versiones las trae como lista vacia, y el indice no las trae', function () {
+    $borrador = prefacturaBorrador();
+    $cerrada = prefacturaCerradaParaDocumento();
+    app(App\Services\ReaperturaPrefactura::class)->reabrir($cerrada, 1, 'Motivo suficiente.');
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->getJson("/api/facturacion/prefacturas/{$borrador->id}")
+        ->assertSuccessful()
+        ->assertJsonPath('prefactura.versiones', []);
+
+    // El indice no lleva renglones ni cobro, y cada fila costaria una consulta mas por unas versiones que la lista no muestra.
+    $fila = collect($this->getJson('/api/facturacion/prefacturas?estado=reabierta')->assertSuccessful()->json('data'))->firstWhere('id', $cerrada->id);
+
+    expect($fila)->not->toBeNull()
+        ->and($fila)->not->toHaveKey('versiones');
+});
