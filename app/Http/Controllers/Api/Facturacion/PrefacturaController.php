@@ -28,10 +28,12 @@ use Illuminate\Support\Facades\DB;
 use UnexpectedValueException;
 
 /**
- * Prefacturas: lista, ficha, alta, edición, cierre y descarte.
+ * Prefacturas: lista, ficha, alta, edición, cierre, descarte y reapertura.
  *
  * Consultar es para cualquier usuario con sesión; escribir exige el
- * subdepartamento factPrefacturas (ver routes/api.php). Toda escritura y su
+ * subdepartamento factPrefacturas (ver routes/api.php), con una excepción: reabrir una
+ * cerrada exige el suyo propio, factReabrirPrefactura, porque deshace un documento que ya
+ * salió al cliente (con factPrefacturas solo NO basta). Toda escritura y su
  * registro en bitácora van en la MISMA transacción: si la bitácora falla, la
  * escritura se revierte (el patrón de `CierrePrefactura`).
  *

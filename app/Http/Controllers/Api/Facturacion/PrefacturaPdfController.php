@@ -47,6 +47,16 @@ class PrefacturaPdfController extends Controller
             return $respuesta;
         }
 
+        // Antes que `estaCerrada()`: una reabierta no es un borrador y SÍ tiene folio, así que
+        // el mensaje de abajo mentiría. Mismo `codigo` que `cotizacion()`: para la pantalla es
+        // un solo estado, «reabierta, no se emite nada hasta cerrarla».
+        if ($prefactura->estaReabierta()) {
+            return response()->json([
+                'message' => 'Esta prefactura está reabierta para corregirse: conserva su folio '.$prefactura->folio.', pero no hay documento hasta que se vuelva a cerrar.',
+                'codigo' => 'reabierta',
+            ], 422);
+        }
+
         if (! $prefactura->estaCerrada()) {
             return response()->json([
                 'message' => 'Esta prefactura todavía es un borrador: sin folio no hay documento. Imprime una cotización, o ciérrala primero.',

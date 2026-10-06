@@ -423,9 +423,15 @@ test('una reabierta NO se imprime como cotizacion: tiene folio gastado', functio
         ->assertStatus(422)
         ->assertJsonPath('codigo', 'reabierta');
 
-    // Ni como documento: no tiene sello.
+    // Ni como documento: no tiene sello. Y el texto no miente: no es un borrador, tiene folio,
+    // y no manda a imprimir una cotizacion (que acaba de dar 422).
     $this->get("/api/facturacion/prefacturas/{$cerrada->id}/pdf")
-        ->assertStatus(422);
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'reabierta')
+        ->assertJsonPath('message', fn ($m) => str_contains($m, 'reabierta')
+            && str_contains($m, (string) $cerrada->folio)
+            && ! str_contains($m, 'borrador')
+            && ! str_contains($m, 'cotizaci'));
 });
 
 test('el indice puede filtrar por reabierta', function () {
