@@ -21,6 +21,8 @@
 - La suite corre **en serie**: `php artisan test`. `--parallel` da 22 fallos falsos en esta máquina.
 - El único error aceptable de `npx tsc --noEmit` es el preexistente `resources/js/actions/App/Http/Controllers/Api/WalkAroundController.ts(905,5)`.
 - Los casts se declaran con la **propiedad `protected $casts`**, como `FactPrefactura` y sus hermanos, no con el método `casts()`: manda la convención del proyecto.
+- **`FactPrefactura::create()` exige `aeronave_id`: la columna es NOT NULL.** No se crea una prefactura a mano en una prueba: se usa `prefacturaBorrador()` de `tests/Pest.php`, que ya crea la aeronave y su satélite, y después `update()` para lo que haga falta. (Medido en la Task 1: el plan lo tenía mal.)
+- **En una migración, `dateTime()` y no `timestamp()` para una columna de fecha NOT NULL.** En MariaDB un `TIMESTAMP NOT NULL` que sigue a uno nullable recibe el default `0000-00-00`, y con `NO_ZERO_DATE` la migración falla con el error 1067. **sqlite no lo detecta**, así que la suite en verde no prueba que la migración aplique: hay que correr `php artisan migrate` contra `eolo_plus`. (Medido en la Task 1.)
 - Nada se fusiona a `main`. La rama es `facturacion`.
 
 ---
@@ -402,46 +404,52 @@ test('imprimir una cerrada sigue dando las mismas cifras que antes del refactor'
 **Ojo con el nombre:** no se puede llamar `aeronaveConTarifas()`, que ya existe como función global de Pest en `TarifasPropiasTest.php:15`; redeclararla tumba la suite entera.
 
 ```php
-/** Una cerrada completa: cliente con sus tres campos, aeronave con tipo y categoria, un renglon y un pago. */
-function prefacturaCerradaParaDocumento(): FactPrefactura
+/**
+ * Una cerrada completa, con TODO lo que la plantilla imprime: cliente con sus tres campos,
+ * aeronave con tipo y categoria, fechas, origen y destino, nota externa, un renglon y un pago.
+ *
+ * Se apoya en `prefacturaBorrador()` en vez de crear la prefactura a mano, porque
+ * `fact_prefacturas.aeronave_id` es NOT NULL y ese ayudante ya encadena las tres tablas.
+ * Lo que SI hay que anadirle: `prefacturaBorrador()` crea la aeronave sin tipo y el satelite
+ * sin categoria, y la plantilla imprime los dos.
+ */
+function prefacturaCerradaParaDocumento(): App\Models\FactPrefactura
 {
-    $cliente = App\Models\FactCliente::create([
-        'nombre' => 'Cliente del documento',
-        'telefono' => '5555555555',
-        'correo' => 'cliente@example.test',
-    ]);
+    $p = prefacturaBorrador();
 
-    // Las tres tablas, en el orden en que se encadenan. Ver la tabla de nombres de abajo:
-    // `aeronaves.aeronave_id` apunta al TIPO, y `fact_aeronaves.aeronave_id` a `aeronaves.id`.
+    // `aeronaves.aeronave_id` apunta al TIPO (ver la tabla de nombres mas abajo).
     $tipo = App\Models\TipoAeronave::create(['nombre' => 'Learjet 45']);
-    $aeronave = App\Models\Aeronave::create([
-        'matricula' => 'XA-DOC',
-        'aeronave_id' => $tipo->id,
-    ]);
-    $categoria = App\Models\FactCategoriaAeronave::create(['nombre' => 'Mediana', 'status' => 'A']);
-    App\Models\FactAeronave::create([
-        'aeronave_id' => $aeronave->id,
-        'categoria_aeronave_id' => $categoria->id,
-    ]);
+    $p->aeronave->update(['aeronave_id' => $tipo->id]);
 
-    $prefactura = FactPrefactura::create([
-        'estado' => FactPrefactura::ESTADO_BORRADOR,
-        'aeronave_id' => $aeronave->id,
-        'cliente_id' => $cliente->id,
+    // La categoria vive en el SATELITE, `fact_aeronaves`, cuyo `aeronave_id` apunta a `aeronaves.id`.
+    $categoria = App\Models\FactCategoriaAeronave::create(['nombre' => 'Mediana', 'status' => 'A']);
+    App\Models\FactAeronave::where('aeronave_id', $p->aeronave_id)
+        ->update(['categoria_aeronave_id' => $categoria->id]);
+
+    $p->update([
+        'cliente_id' => App\Models\FactCliente::create([
+            'nombre' => 'Cliente del documento',
+            'telefono' => '5555555555',
+            'correo' => 'cliente@example.test',
+        ])->id,
         'llegada_at' => now()->subDay(),
         'salida_at' => now(),
         'origen' => 'MMMX',
         'destino' => 'MMTO',
-        'tipo_destino' => FactPrefactura::DESTINO_NACIONAL,
         'nota_externa' => 'Gracias por su visita.',
-        'status' => FactPrefactura::STATUS_ACTIVO,
     ]);
 
-    renglonDe($prefactura, 100.0, 1);
-    completarParaCerrar($prefactura);
+    renglonDe($p, 100.0, 1);
+
+    // Un pago, para que el documento lleve la tabla de pagos y una linea de CAMBIO que
+    // comparar: sin pagos, la mitad del contrato de la vista no se ejercita.
+    // `formasDePago()` y `pagoDe()` son los ayudantes que ya usa todo el proyecto
+    // (`tests/Pest.php`): en la base de pruebas NO hay formas de pago sembradas, porque
+    // corren las migraciones y no los seeders, asi que hay que crearlas.
+    pagoDe($p->fresh(), formasDePago()[App\Models\FactFormaPago::CONCEPTO_EFECTIVO], '116.00');
 
     return app(App\Services\CierrePrefactura::class)
-        ->cerrar($prefactura, usuarioConSubdepartamento('factPrefacturas', 'Facturacion')->id)
+        ->cerrar($p->fresh(), usuarioConSubdepartamento('factPrefacturas', 'Facturacion')->id, confirmarSinCobro: true)
         ->load(['renglones', 'pagos.formaPago', 'cliente', 'aeronave.tipoAeronave', 'satelite.categoria', 'cerradaPor']);
 }
 ```
@@ -758,10 +766,7 @@ test('reabierta, los renglones y los pagos vuelven a aceptar cambios', function 
 });
 
 test('un borrador no se reabre', function () {
-    $borrador = FactPrefactura::create([
-        'estado' => FactPrefactura::ESTADO_BORRADOR,
-        'status' => FactPrefactura::STATUS_ACTIVO,
-    ]);
+    $borrador = prefacturaBorrador();
 
     expect(fn () => app(App\Services\ReaperturaPrefactura::class)->reabrir($borrador, 1, 'x'))
         ->toThrow(App\Services\PrefacturaNoReabribleException::class);
@@ -1053,10 +1058,7 @@ test('un borrador normal sigue consumiendo un folio nuevo', function () {
     $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
     $contadorAntes = (int) FactConfiguracion::where('clave', CierrePrefactura::CLAVE_FOLIO)->value('valor');
 
-    $borrador = FactPrefactura::create([
-        'estado' => FactPrefactura::ESTADO_BORRADOR,
-        'status' => FactPrefactura::STATUS_ACTIVO,
-    ]);
+    $borrador = prefacturaBorrador();
     renglonDe($borrador, 10.0, 1);
     completarParaCerrar($borrador);
 
