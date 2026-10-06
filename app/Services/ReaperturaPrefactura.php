@@ -12,8 +12,14 @@ use Illuminate\Support\Facades\DB;
  * deja editable, con su folio.
  *
  * El folio NO se libera ni se vuelve a pedir: es el mismo documento corregido, no otro.
- * Quien lo conserva es `CierrePrefactura::cerrar()`, que pide folio nuevo solo si la
- * prefactura no tiene.
+ * Conservarlo al volver a cerrar es responsabilidad de `CierrePrefactura::cerrar()`, que
+ * tiene que pedir folio nuevo SOLO si la prefactura no trae uno. Mientras eso no esté, una
+ * reabierta no se puede volver a cerrar: el `update` de `cerrar()` filtra por
+ * `estado = borrador`, así que afecta cero filas y la transacción se revierte.
+ *
+ * Quien llame a `reabrir()` tiene que usar el valor DEVUELTO. La instancia que se le pasa
+ * queda vieja a propósito —no se refresca— y seguiría diciendo que está cerrada y con el
+ * sello puesto; responder con ella daría al cliente un documento que ya no existe.
  */
 class ReaperturaPrefactura
 {
