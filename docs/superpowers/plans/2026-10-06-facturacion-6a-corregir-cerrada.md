@@ -69,8 +69,6 @@
 use App\Models\FactPrefactura;
 use App\Models\FactPrefacturaVersion;
 
-uses(Tests\TestCase::class, Illuminate\Foundation\Testing\RefreshDatabase::class);
-
 test('una version guarda el documento como arreglo y se lee por su prefactura', function () {
     $prefactura = FactPrefactura::create([
         'estado' => FactPrefactura::ESTADO_CERRADA,
@@ -324,6 +322,8 @@ Mueve `filasDe()` del controlador de PDF a un servicio compartido y le añade la
 **Files:**
 - Create: `app/Services/DocumentoDePrefactura.php`
 - Modify: `app/Http/Controllers/Api/Facturacion/PrefacturaPdfController.php` (borrar `filasDe()`, delegar; `pdf()` usa `cifrasDeCerrada()`)
+- Modify: `tests/Pest.php` (añadir `prefacturaCerradaParaDocumento()`; **mover** aquí `completarParaCerrar()`)
+- Modify: `tests/Feature/Facturacion/EndpointsPrefacturaTest.php` (quitar `completarParaCerrar()`, que se fue a `Pest.php`)
 - Test: `tests/Feature/Facturacion/DocumentoDeVersionTest.php`
 
 **Interfaces:**
@@ -342,8 +342,6 @@ Mueve `filasDe()` del controlador de PDF a un servicio compartido y le añade la
 
 use App\Models\FactPrefactura;
 use App\Services\DocumentoDePrefactura;
-
-uses(Tests\TestCase::class, Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 test('la instantanea trae todo lo que la plantilla lee de la prefactura', function () {
     $cerrada = prefacturaCerradaParaDocumento();
@@ -397,7 +395,11 @@ test('imprimir una cerrada sigue dando las mismas cifras que antes del refactor'
 });
 ```
 
-El ayudante va al final del fichero de pruebas. **Ojo:** no se puede llamar `aeronaveConTarifas()`, que ya existe como función global de Pest en `TarifasPropiasTest.php:15`; redeclararla tumba la suite entera.
+**El ayudante va en `tests/Pest.php`, NO en el fichero de pruebas**, y esto no es una preferencia de estilo: las tareas 3, 4, 5, 6 y 7 lo usan desde cuatro ficheros distintos, y `php artisan test <un fichero>` no carga los demás. Declarado en `DocumentoDeVersionTest.php` daría «undefined function» en los comandos `Run` de este mismo plan. `Pest.php` ya es la casa de `usuarioConSubdepartamento()`, `renglonDe()` y `prefacturaCompleta()`: va con ellos, en la sección «Functions».
+
+**Y hay que MOVER `completarParaCerrar()` de `tests/Feature/Facturacion/EndpointsPrefacturaTest.php:209` a `tests/Pest.php`, sin dejar copia**, por la misma razón: hoy solo existe si corre ese fichero, y las tareas 2, 4 y 7 lo necesitan desde otros. Dejar dos copias sería peor que el problema. El paso 5 de esta tarea corre `EndpointsPrefacturaTest.php`, así que un movimiento mal hecho se ve enseguida.
+
+**Ojo con el nombre:** no se puede llamar `aeronaveConTarifas()`, que ya existe como función global de Pest en `TarifasPropiasTest.php:15`; redeclararla tumba la suite entera.
 
 ```php
 /** Una cerrada completa: cliente con sus tres campos, aeronave con tipo y categoria, un renglon y un pago. */
@@ -444,7 +446,7 @@ function prefacturaCerradaParaDocumento(): FactPrefactura
 }
 ```
 
-**Antes de escribir el ayudante**, comprobar si `renglonDe()`, `completarParaCerrar()` y `usuarioConSubdepartamento()` son globales accesibles desde este fichero (están en `EndpointsPrefacturaTest.php`; Pest las comparte si el fichero está en el mismo directorio de pruebas, pero hay que verificarlo corriendo la prueba, no suponerlo). Si no lo son, duplicar lo mínimo aquí con otro nombre.
+Ya verificado, no hace falta volver a comprobarlo: `usuarioConSubdepartamento()`, `renglonDe()` y `prefacturaCompleta()` **están en `tests/Pest.php`** y se cargan siempre; `completarParaCerrar()` está en `EndpointsPrefacturaTest.php:209` y hay que **moverlo** a `Pest.php` como dice arriba.
 
 - [ ] **Step 2: correr y ver que falla**
 
@@ -780,20 +782,6 @@ test('una cerrada con el sello roto NO se reabre: primero se aclara la diferenci
     expect(App\Models\FactPrefacturaVersion::count())->toBe(0)
         ->and($cerrada->fresh()->estado)->toBe(FactPrefactura::ESTADO_CERRADA);
 });
-
-test('tres reaperturas dan tres versiones numeradas 1, 2 y 3', function () {
-    $prefactura = prefacturaCerradaParaDocumento();
-    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
-    $cierre = app(App\Services\CierrePrefactura::class);
-    $reapertura = app(App\Services\ReaperturaPrefactura::class);
-
-    foreach (range(1, 3) as $vuelta) {
-        $reapertura->reabrir($prefactura->fresh(), $usuario->id, "Correccion {$vuelta}.");
-        $cierre->cerrar($prefactura->fresh(), $usuario->id);
-    }
-
-    expect($prefactura->fresh()->versiones->pluck('version')->all())->toBe([1, 2, 3]);
-});
 ```
 
 ```php
@@ -849,7 +837,7 @@ test('la reapertura queda en la bitacora con el motivo y el sello anterior', fun
 - [ ] **Step 2: correr y ver que falla**
 
 Run: `php artisan test tests/Feature/Facturacion/ReaperturaPrefacturaTest.php`
-Expected: FAIL con `Class "App\Services\ReaperturaPrefactura" not found`. La última prueba además necesita la Task 4; si falla por el folio, es lo esperado y se arregla allí.
+Expected: FAIL con `Class "App\Services\ReaperturaPrefactura" not found`.
 
 - [ ] **Step 3: la excepción**
 
@@ -994,7 +982,7 @@ class ReaperturaPrefactura
 - [ ] **Step 5: correr**
 
 Run: `php artisan test tests/Feature/Facturacion/ReaperturaPrefacturaTest.php`
-Expected: PASS salvo la de las tres reaperturas, que necesita la Task 4. Si es la única que falla, seguir.
+Expected: PASS, todas. **Ninguna prueba de esta tarea puede quedar roja:** la de las tres reaperturas sucesivas se movió a la Task 4, porque necesita el folio reusado que allí se implementa.
 
 - [ ] **Step 6: commit**
 
@@ -1026,8 +1014,6 @@ use App\Models\FactConfiguracion;
 use App\Models\FactPrefactura;
 use App\Services\CierrePrefactura;
 use App\Services\ReaperturaPrefactura;
-
-uses(Tests\TestCase::class, Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 test('volver a cerrar una reabierta conserva el folio y NO avanza el contador', function () {
     $cerrada = prefacturaCerradaParaDocumento();
@@ -1083,6 +1069,20 @@ test('un borrador normal sigue consumiendo un folio nuevo', function () {
 ```
 
 ```php
+test('tres reaperturas dan tres versiones numeradas 1, 2 y 3', function () {
+    $prefactura = prefacturaCerradaParaDocumento();
+    $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
+    $cierre = app(CierrePrefactura::class);
+    $reapertura = app(ReaperturaPrefactura::class);
+
+    foreach (range(1, 3) as $vuelta) {
+        $reapertura->reabrir($prefactura->fresh(), $usuario->id, "Correccion {$vuelta}.");
+        $cierre->cerrar($prefactura->fresh(), $usuario->id);
+    }
+
+    expect($prefactura->fresh()->versiones->pluck('version')->all())->toBe([1, 2, 3]);
+});
+
 test('si la correccion BAJA el total y el cliente ya pago, queda sobrepago y no se inventa nada', function () {
     $cerrada = prefacturaCerradaParaDocumento();
     $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
@@ -1135,7 +1135,7 @@ El `whereIn` sigue siendo la guarda que buscaba el `where` original: una prefact
 - [ ] **Step 5: correr el cierre entero**
 
 Run: `php artisan test tests/Feature/Facturacion/CierreDeReabiertaTest.php tests/Feature/Facturacion/ReaperturaPrefacturaTest.php tests/Feature/Facturacion/CierreSinCobroTest.php tests/Feature/Facturacion/EndpointsPrefacturaTest.php`
-Expected: PASS, incluidas ya las tres reaperturas de la Task 3.
+Expected: PASS, incluida la de las tres reaperturas sucesivas, que es de esta tarea.
 
 - [ ] **Step 6: commit**
 
