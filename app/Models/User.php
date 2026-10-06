@@ -107,6 +107,40 @@ class User extends Authenticatable
         return $this->roles()->whereIn('slug', $roles)->exists();
     }
 
+    /**
+     * Los roles que se rigen por subdepartamentos. Cualquier otro rol (salvo `admin`, que pasa siempre) no entra
+     * a ningun modulo protegido por `subdep:`.
+     *
+     * @var list<string>
+     */
+    public const ROLES_CON_SUBDEPARTAMENTOS = ['empleado', 'jefe_area', 'fbo'];
+
+    /**
+     * La regla de acceso a un subdepartamento, en UN solo sitio: la usan el middleware `subdep:` (que decide el 403) y la
+     * bandera que la pantalla lee para ofrecer o no un boton (`puede_reabrir`). Si vivieran en dos, podrian divergir.
+     *
+     * El admin pasa siempre. Los roles de `ROLES_CON_SUBDEPARTAMENTOS` necesitan tener el subdepartamento asignado AL USUARIO
+     * (no anidado bajo un departamento). Cualquier otro rol no pasa.
+     */
+    public function puedeEnSubdepartamento(string $nombre): bool
+    {
+        if ($this->hasRole('admin')) {
+            return true;
+        }
+
+        return $this->tieneRolConSubdepartamentos()
+            && $this->subdepartamentos()->where('subdepartamentos.nombre', $nombre)->exists();
+    }
+
+    /**
+     * Distingue, cuando `puedeEnSubdepartamento()` dice que no, QUE mensaje de 403 corresponde: el rol esta permitido pero
+     * falta el subdepartamento, o el rol ni siquiera es de los que se rigen por subdepartamentos.
+     */
+    public function tieneRolConSubdepartamentos(): bool
+    {
+        return $this->hasAnyRole(self::ROLES_CON_SUBDEPARTAMENTOS);
+    }
+
     public function checklists()
     {
         return $this->hasMany(ChecklistEquipoSeguridad::class, 'user_id');

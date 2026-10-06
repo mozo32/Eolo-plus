@@ -4,7 +4,6 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
 
 class CheckSubDepartamento
 {
@@ -16,22 +15,10 @@ class CheckSubDepartamento
             abort(401, 'No autenticado');
         }
 
-        if ($user->hasRole('admin')) {
-            return $next($request);
+        if (! $user->puedeEnSubdepartamento($route)) {
+            abort(403, $user->tieneRolConSubdepartamentos() ? 'No tienes acceso a este módulo' : 'Rol no autorizado');
         }
 
-        if ($user->hasAnyRole(['empleado', 'jefe_area', 'fbo'])) {
-            $tieneAcceso = $user->subdepartamentos()
-                ->where('subdepartamentos.nombre', $route)
-                ->exists();
-
-            if (! $tieneAcceso) {
-                abort(403, 'No tienes acceso a este módulo');
-            }
-
-            return $next($request);
-        }
-
-        abort(403, 'Rol no autorizado');
+        return $next($request);
     }
 }

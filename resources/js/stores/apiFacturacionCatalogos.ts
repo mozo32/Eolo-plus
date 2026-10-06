@@ -532,6 +532,11 @@ export interface Prefactura {
     renglones?: RenglonPrefactura[];
     /** Solo en la ficha: las versiones sustituidas, de la 1 en adelante. Vacía si nunca se reabrió. */
     versiones?: VersionPrefactura[];
+    /**
+     * Solo en la ficha: si quien la pide puede reabrir prefacturas. Lo calcula el servidor con la misma regla que el middleware del endpoint
+     * (`User::puedeEnSubdepartamento`); la pantalla lo lee y NO recalcula permisos. Solo decide si se ofrece el botón.
+     */
+    puede_reabrir?: boolean;
 }
 
 export interface FiltrosPrefactura {

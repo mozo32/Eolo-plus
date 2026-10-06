@@ -532,6 +532,10 @@ class PrefacturaController extends Controller
             ] + $this->importeDelRenglon($r))->all();
 
             $datos['versiones'] = $this->versiones($p);
+
+            // Lo que la pantalla lee para ofrecer o no el boton de reabrir. La regla es la del middleware `subdep:` (el mismo metodo),
+            // asi que la pantalla no puede ofrecer lo que el servidor va a rechazar ni esconder lo que va a aceptar.
+            $datos['puede_reabrir'] = request()->user()?->puedeEnSubdepartamento('factReabrirPrefactura') ?? false;
         }
 
         return $datos;

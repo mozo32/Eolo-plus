@@ -503,46 +503,68 @@ test('una prefactura sin versiones las trae como lista vacia, y el indice no las
 });
 
 /**
- * Lo que la pantalla decide con `puedeReabrirPrefactura()` (permisos.ts): lo que `HandleInertiaRequests` comparte de verdad.
- * Un usuario se asigna como lo hace la aplicacion: el subdepartamento Y su departamento.
+ * Los usuarios que el middleware `subdep:` distingue. La pantalla NO recalcula la regla: lee la bandera `puede_reabrir`
+ * de la ficha, calculada con el MISMO metodo que usa el middleware; estas pruebas fijan que los dos no pueden divergir.
+ *
+ * @return array{0: App\Models\User, 1: bool, 2: ?string} el usuario, si debe poder, y el mensaje del 403 cuando no.
  */
-function permisoCompartidoPorInertia(App\Models\User $usuario): array
+function usuarioParaReabrir(string $caso): array
 {
-    test()->actingAs($usuario);
-
-    $usuario->departamentos()->syncWithoutDetaching($usuario->subdepartamentos->pluck('departamento_id')->all());
-
-    $props = test()->get('/facturacion/prefacturas')->assertOk()->viewData('page')['props']['auth']['user'];
-
-    return [
-        'isAdmin' => $props['isAdmin'],
-        'subdepartamentos' => collect($props['departamentos'])->flatMap(fn ($d) => collect($d['subdepartamentos'])->pluck('nombre'))->all(),
-    ];
+    return match ($caso) {
+        'admin' => [usuarioAdmin(), true, null],
+        'subdepartamento y rol valido' => [usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion'), true, null],
+        // `usuarioConSubdepartamento` no asigna el DEPARTAMENTO: es justo el caso en que el servidor deja pasar y una regla
+        // calculada sobre `departamentos` (como la del menu) ocultaria el boton.
+        'subdepartamento sin el departamento' => [usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion', 'empleado'), true, null],
+        'subdepartamento y rol que no es de los tres' => [usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion', 'visitante'), false, 'Rol no autorizado'],
+        'rol valido sin el subdepartamento' => [usuarioConSubdepartamento('factPrefacturas', 'Facturacion'), false, 'No tienes acceso a este módulo'],
+        default => throw new InvalidArgumentException($caso),
+    };
 }
 
-test('la pantalla sabe quien puede reabrir: el admin por isAdmin, con la lista vacia, y el resto por el subdepartamento', function () {
-    // Para el admin `departamentos` viaja VACIO y el middleware lo deja pasar: buscar solo en la lista le ocultaria el boton.
-    $admin = permisoCompartidoPorInertia(usuarioAdmin());
-    expect($admin['isAdmin'])->toBeTrue()
-        ->and($admin['subdepartamentos'])->toBe([]);
+test('la bandera puede_reabrir de la ficha y lo que responde el endpoint son la misma regla', function (string $caso) {
+    [$usuario, $debePoder, $mensaje403] = usuarioParaReabrir($caso);
+    $cerrada = prefacturaCerradaParaDocumento();
+    $this->actingAs($usuario);
 
-    $conPermiso = permisoCompartidoPorInertia(usuarioConSubdepartamento('factReabrirPrefactura', 'Facturacion'));
-    expect($conPermiso['isAdmin'])->toBeFalse()
-        ->and($conPermiso['subdepartamentos'])->toContain('factReabrirPrefactura');
+    $this->getJson("/api/facturacion/prefacturas/{$cerrada->id}")
+        ->assertSuccessful()
+        ->assertJsonPath('prefactura.puede_reabrir', $debePoder);
 
-    // Capturar no es reabrir: el de factPrefacturas no trae el otro.
-    $soloCapturar = permisoCompartidoPorInertia(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
-    expect($soloCapturar['isAdmin'])->toBeFalse()
-        ->and($soloCapturar['subdepartamentos'])->toContain('factPrefacturas')
-        ->and($soloCapturar['subdepartamentos'])->not->toContain('factReabrirPrefactura');
+    $respuesta = $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", ['motivo' => 'Motivo suficiente.']);
+
+    if ($debePoder) {
+        $respuesta->assertSuccessful();
+        // La respuesta del propio PATCH ya trae la ficha reabierta con la bandera, para que la pantalla no la pierda al aplicarla.
+        expect($respuesta->json('prefactura.puede_reabrir'))->toBeTrue();
+    } else {
+        $respuesta->assertForbidden();
+        expect($respuesta->json('message'))->toBe($mensaje403)
+            ->and($cerrada->fresh()->estado)->toBe(FactPrefactura::ESTADO_CERRADA);
+    }
+})->with([
+    'admin',
+    'subdepartamento y rol valido',
+    'subdepartamento sin el departamento',
+    'subdepartamento y rol que no es de los tres',
+    'rol valido sin el subdepartamento',
+]);
+
+test('un usuario sin ningun rol tampoco puede reabrir, y la bandera lo dice', function () {
+    $cerrada = prefacturaCerradaParaDocumento();
+    $this->actingAs(App\Models\User::factory()->create());
+
+    $this->getJson("/api/facturacion/prefacturas/{$cerrada->id}")->assertJsonPath('prefactura.puede_reabrir', false);
+
+    $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", ['motivo' => 'Motivo suficiente.'])
+        ->assertForbidden()
+        ->assertJsonPath('message', 'Rol no autorizado');
 });
 
-test('el servidor concuerda con lo que la pantalla ofrece: el admin reabre, el de capturar no', function () {
-    $cerrada = prefacturaCerradaParaDocumento();
+test('el middleware subdep sin usuario responde 401', function () {
+    $middleware = new App\Http\Middleware\CheckSubDepartamento;
+    $peticion = Illuminate\Http\Request::create('/x', 'GET');
 
-    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
-    $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", ['motivo' => 'Motivo suficiente.'])->assertForbidden();
-
-    $this->actingAs(usuarioAdmin());
-    $this->patchJson("/api/facturacion/prefacturas/{$cerrada->id}/reabrir", ['motivo' => 'Motivo suficiente.'])->assertSuccessful();
+    expect(fn () => $middleware->handle($peticion, fn () => response('ok'), 'factReabrirPrefactura'))
+        ->toThrow(fn (Symfony\Component\HttpKernel\Exception\HttpException $e) => $e->getStatusCode() === 401 && $e->getMessage() === 'No autenticado');
 });

@@ -1,9 +1,8 @@
-import { type AuthUser } from '@/components/navigation';
 import AppLayout from '@/layouts/app-layout';
 import { facturacionPrefacturas } from '@/routes';
 import { ErrorApi, apiPrefacturas, mensajeDeError, urlCotizacionPrefactura, urlDocumentoPrefactura, urlVersionPrefactura, type DiscrepanciaSello, type Prefactura, type RenglonPrefactura, type VersionPrefactura } from '@/stores/apiFacturacionCatalogos';
 import { type BreadcrumbItem } from '@/types';
-import { Head, router, usePage } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { ArrowLeft, Ban, FileText, Gift, Globe, Group, History, Lock, LockOpen, Plus, Printer, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, Ungroup, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
@@ -15,7 +14,6 @@ import ModalReabrir from './components/ModalReabrir';
 import ModalRenglon, { type DatosRenglon } from './components/ModalRenglon';
 import PanelCobro from './components/PanelCobro';
 import PanelNotas from './components/PanelNotas';
-import { puedeReabrirPrefactura } from './components/permisos';
 import SelectorCliente from './components/SelectorCliente';
 
 const TEXTO_MAX = 120;
@@ -30,8 +28,9 @@ type RespuestaCierre = Awaited<ReturnType<typeof apiPrefacturas.cerrar>>;
  * Los códigos de negocio que dicen que el estado que se ve ya no es el del servidor (o que el cierre se abortó): obligan a
  * recargar la ficha y se muestran con el mensaje del servidor. `sin_cobro` y `totales_no_calculables` son los del cobro;
  * el primero lo atiende el cierre (vuelve a pedir confirmación) y, si llega a otro sitio, se resuelve como los demás.
- * `no_reabrible` (409: ya no está cerrada, o su sello no cuadra) y `reabierta` (422: se pidió imprimir o cotizar una reabierta) son
- * los de la reapertura: la ficha que se ve está vieja.
+ * `no_reabrible` (409: ya no está cerrada, o su sello no cuadra) y `reabierta` (se pidió imprimir, cotizar o descartar una reabierta) son
+ * los de la reapertura: la ficha que se ve está vieja. `reabierta` es el mismo código en las tres acciones, pero el status depende de
+ * la acción (422 en el PDF y la cotización, 409 en descartar).
  */
 const CODIGOS_DE_ESTADO = ['incompleta', 'ya_cerrada', 'ya_descartada', 'sello_inconsistente', 'sin_cobro', 'totales_no_calculables', 'no_reabrible', 'reabierta'];
 
@@ -280,10 +279,6 @@ interface Props {
  *    reacción distinta: ver `manejarError`.
  */
 export default function EditorPrefactura({ id }: Props) {
-    // Reabrir es un permiso aparte: quien no lo tiene no ve el botón (el servidor sigue siendo la autoridad y responde 403 si los permisos cambiaron).
-    const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
-    const puedeReabrir = puedeReabrirPrefactura(auth.user);
-
     const [prefactura, setPrefactura] = useState<Prefactura | null>(null);
     const [cargando, setCargando] = useState(true);
     const [errorCarga, setErrorCarga] = useState<string | null>(null);
@@ -351,7 +346,8 @@ export default function EditorPrefactura({ id }: Props) {
      *  - ya_cerrada (409): alguien la cerró o ya estaba: lo que se ve está viejo, se recarga.
      *  - ya_descartada (409): el borrador ya no existe para trabajar: se recarga y se vuelve a la lista.
      *  - sello_inconsistente (409): el cierre se abortó; nada se guardó y reintentar es seguro.
-     *  - no_reabrible (409), reabierta (422): la ficha que se ve está vieja (ya no está cerrada, o se pidió imprimir una reabierta): se dice y se recarga.
+     *  - no_reabrible (409), reabierta (mismo código con status 422 en PDF/cotización y 409 en descartar): la ficha que se ve está vieja (ya no
+     *    está cerrada, o se pidió imprimir, cotizar o descartar una reabierta): se dice y se recarga.
      *  - sin_cobro, totales_no_calculables (422): se muestra el mensaje del servidor y se recarga. (El cierre atiende `sin_cobro`
      *    antes de llegar aquí: vuelve a pedir la confirmación con el faltante que trae.)
      *  - 5xx: un mensaje genérico en español, nunca el «Server Error» crudo; se recarga, porque no se sabe cómo quedó.
@@ -461,6 +457,9 @@ export default function EditorPrefactura({ id }: Props) {
     const cerrada = prefactura.estado === 'cerrada';
     // Una reabierta se edita como un borrador (por eso NO entra en `soloLectura`), pero tiene folio y no se descarta, no se cotiza ni se imprime.
     const reabierta = prefactura.estado === 'reabierta';
+    // Reabrir es un permiso aparte: quien no lo tiene no ve el botón. La bandera la calcula el servidor con la MISMA regla que su middleware
+    // (la pantalla no recalcula nada); el 403 sigue siendo la red si los permisos cambian después de cargar la ficha.
+    const puedeReabrir = prefactura.puede_reabrir === true;
     const versiones = prefactura.versiones ?? [];
     const descartada = prefactura.status === 'N';
     // Una cerrada es un documento emitido y un descartado ya no existe para trabajar: ninguno de los dos se ofrece editar.
@@ -854,7 +853,7 @@ export default function EditorPrefactura({ id }: Props) {
             await Swal.fire({
                 icon: 'warning',
                 titleText: 'Hay cambios sin guardar',
-                text: `Guarda ${sinGuardar.join(', ')} antes de cerrar la prefactura: una cerrada ya no se puede editar.${externa ? ' La nota externa es la que se imprime en el documento, y saldría sin lo que escribiste.' : ''}`,
+                text: `Guarda ${sinGuardar.join(', ')} antes de cerrar la prefactura: una cerrada no se edita (solo se puede reabrir para corregirla).${externa ? ' La nota externa es la que se imprime en el documento, y saldría sin lo que escribiste.' : ''}`,
                 confirmButtonColor: '#4f46e5',
             });
             return;
@@ -866,7 +865,7 @@ export default function EditorPrefactura({ id }: Props) {
         const base = () =>
             reabierta
                 ? `Conserva el folio ${prefactura.folio ?? ''}: no se consume otro. Se emite un documento nuevo y el anterior queda como versión no vigente. Total: ${formatearMonto((prefacturaRef.current ?? prefactura).total)}.`
-                : `Se le asignará un folio: el folio se consume y no se puede reutilizar. Una vez cerrada, la prefactura ya no se podrá editar. Total: ${formatearMonto((prefacturaRef.current ?? prefactura).total)}.`;
+                : `Se le asignará un folio: el folio se consume y no se puede reutilizar. Una vez cerrada, la prefactura no se edita: solo se puede reabrir para corregirla. Total: ${formatearMonto((prefacturaRef.current ?? prefactura).total)}.`;
 
         // Lo que falta por cobrar, según lo último que se leyó. null: no hay nada que confirmar. Solo se manda `confirmar_sin_cobro` si
         // quien opera confirmó ESTE aviso, y el servidor rechaza (`sin_cobro`) un cierre sin confirmar si el cobro cambió desde entonces.
@@ -879,7 +878,7 @@ export default function EditorPrefactura({ id }: Props) {
                 text:
                     faltante === null
                         ? base()
-                        : `${aviso} Faltan ${formatearMonto(faltante)} por cobrar: si la cierras así, el documento sale con el cobro incompleto y ya no se podrá corregir. ${base()}`.trim(),
+                        : `${aviso} Faltan ${formatearMonto(faltante)} por cobrar: si la cierras así, el documento sale con el cobro incompleto. Si hay que corregirlo después, un usuario con permiso puede reabrirla. ${base()}`.trim(),
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonText: faltante === null ? 'Sí, cerrar' : 'Sí, cerrar sin cobro completo',
