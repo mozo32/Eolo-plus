@@ -147,7 +147,9 @@ function migracionIndiceUnico(): Illuminate\Database\Migrations\Migration
 }
 
 test('la migracion del indice unico es la ultima', function () {
-    $ultima = collect(glob(database_path('migrations/*.php')))
+    // Del bloque 1a (las del 2026_09_29): los bloques posteriores traen sus propias
+    // migraciones, que por fuerza van despues y no cambian lo que esta prueba protege.
+    $ultima = collect(glob(database_path('migrations/2026_09_29_*.php')))
         ->map(fn ($ruta) => basename($ruta))
         ->sort()
         ->last();
