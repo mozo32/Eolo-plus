@@ -7,6 +7,8 @@ interface DateTimeModalSliderInputProps {
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     required?: boolean;
     disabled?: boolean;
+    min?: string;
+    max?: string;
 }
 
 /**
@@ -34,6 +36,8 @@ export default function DateTimeModalSliderInput({
     onChange,
     required = false,
     disabled = false,
+    min,
+    max,
 }: DateTimeModalSliderInputProps) {
     const [open, setOpen] = useState(false);
     const [date, setDate] = useState("");
@@ -112,6 +116,8 @@ export default function DateTimeModalSliderInput({
                             </label>
                             <input
                                 type="date"
+                                min={min}
+                                max={max}
                                 value={date}
                                 onChange={(e) => setDate(e.target.value)}
                                 className="w-full border rounded p-2"

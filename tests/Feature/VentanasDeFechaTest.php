@@ -3,6 +3,7 @@
 use App\Support\VentanasDeFecha;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Validator;
+use Inertia\Testing\AssertableInertia as Assert;
 
 test('una ventana de un dia atras da hoy y ayer', function () {
     Carbon::setTestNow('2026-10-07 15:00:00');
@@ -167,4 +168,25 @@ test('una fecha con zona se compara en el dia de la zona de la aplicacion', func
     ]);
 
     expect($validador->passes())->toBeTrue();
+});
+
+test('las ventanas viajan en las props de Inertia', function () {
+    // Las claves de la tabla llevan punto ('operaciones.llegada') y viajan como claves
+    // literales, así que `where('ventanasDeFecha.operaciones.llegada.min')` las
+    // interpretaría como anidadas y no las encontraría: se lee el arreglo de props.
+    Carbon::setTestNow('2026-10-07 15:00:00');
+    $this->actingAs(App\Models\User::factory()->create());
+
+    $this->get('/dashboard')->assertInertia(function (Assert $page) {
+        $ventanas = $page->toArray()['props']['ventanasDeFecha'];
+
+        expect($ventanas['operaciones.llegada'])
+            ->toBe(['min' => '2026-10-04', 'max' => '2026-10-07'])
+            ->and($ventanas['turno.checklist'])
+            ->toBe(['min' => '2026-10-06', 'max' => '2026-10-07'])
+            ->and($ventanas['programadas.operacion'])
+            ->toBe(['min' => null, 'max' => null])
+            ->and(array_keys($ventanas))
+            ->toBe(array_keys(VentanasDeFecha::CLAVES));
+    });
 });

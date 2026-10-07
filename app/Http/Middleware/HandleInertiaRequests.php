@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\VentanasDeFecha;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -37,6 +38,8 @@ class HandleInertiaRequests extends Middleware
                     ? $this->mapUser($user)
                     : null,
             ],
+
+            'ventanasDeFecha' => VentanasDeFecha::todas(),
 
             'sidebarOpen' =>
                 ! $request->hasCookie('sidebar_state')
