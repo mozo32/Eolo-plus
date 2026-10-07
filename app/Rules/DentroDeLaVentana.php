@@ -11,6 +11,11 @@ use Illuminate\Support\Carbon;
  * Hace cumplir la ventana de un formulario. El calendario del navegador GUÍA; esta regla
  * DECIDE: un `min`/`max` en un input se salta con las herramientas del navegador o con una
  * petición directa, así que sin esto la regla sería decoración.
+ *
+ * EXIGE ir acompañada de `date` y delante de ella: esta regla no valida el formato. Una
+ * fecha ilegible se deja pasar (para que el error no salga dos veces, con dos mensajes) y
+ * eso incluye cualquier valor que no sea una fecha, como un arreglo. Sin `date` en la
+ * lista, la validación pasa con lo que no sea una fecha.
  */
 class DentroDeLaVentana implements ValidationRule
 {
@@ -20,9 +25,10 @@ class DentroDeLaVentana implements ValidationRule
     {
         ['min' => $min, 'max' => $max] = VentanasDeFecha::para($this->clave);
 
-        $fecha = rescue(fn () => Carbon::parse($value)->toDateString(), null, false);
+        $fecha = rescue(fn () => Carbon::parse($value)->setTimezone(config('app.timezone'))->toDateString(), null, false);
 
-        // Una fecha ilegible no es cosa de esta regla: la atrapa `date`, que va antes.
+        // Una fecha ilegible no es cosa de esta regla: solo la atrapa `date`, si quien usa
+        // la regla lo puso en la lista (ver el docblock de la clase).
         if ($fecha === null) {
             return;
         }

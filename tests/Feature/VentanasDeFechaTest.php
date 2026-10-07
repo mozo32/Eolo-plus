@@ -125,6 +125,9 @@ test('una fecha ilegible no es asunto de la regla: solo `date` da el mensaje', f
     expect($sola->passes())->toBeTrue();
 });
 
+// DEUDA: esta prueba usa Reflection porque hoy NINGUNA clave produce una ventana de un solo
+// lado. Cuando aparezca la primera, hay que sustituirla por una prueba con esa clave real y
+// borrar la Reflection.
 test('una ventana sin suelo solo avisa del techo, y una sin techo solo del suelo', function () {
     // Las claves reales no producen estas formas (la excepcion no tiene ni suelo ni techo),
     // asi que se ejercita el mensaje directamente.
@@ -149,6 +152,17 @@ test('la regla compara solo el dia: la hora de una fecha con hora no la saca de 
     Carbon::setTestNow('2026-10-07 15:00:00');
 
     $validador = Validator::make(['fecha' => '2026-10-07 23:59:59'], [
+        'fecha' => [new App\Rules\DentroDeLaVentana('operaciones.llegada')],
+    ]);
+
+    expect($validador->passes())->toBeTrue();
+});
+
+test('una fecha con zona se compara en el dia de la zona de la aplicacion', function () {
+    // 02:00 UTC del dia 8 son las 20:00 del dia 7 en Mexico: es hoy, no manana.
+    Carbon::setTestNow('2026-10-07 15:00:00');
+
+    $validador = Validator::make(['fecha' => '2026-10-08T02:00:00Z'], [
         'fecha' => [new App\Rules\DentroDeLaVentana('operaciones.llegada')],
     ]);
 
