@@ -162,7 +162,7 @@ habría visto este defecto; las de códigos 422 no lo veían.
 
 ## 6. Qué formulario lleva qué ventana
 
-De los 81 calendarios, **12 son filtros** y **20 llevan ventana**. El resto (48) son rangos de
+De los 81 calendarios, **12 son filtros** y **19 llevan ventana**. El resto (48) son rangos de
 búsqueda y de reportes identificados por su nombre (`fechaInicio`, `fechaFin`, `desde`, `hasta`,
 `startDate`, `endDate`, los de PDF).
 
@@ -177,7 +177,6 @@ búsqueda y de reportes identificados por su nombre (`fechaInicio`, `fechaFin`, 
 | Pantalla |
 |---|
 | `Trafico/checkListTurno/CheckListTurnoForm` |
-| `Trafico/checkListTurno/sections/HotTrasComiCoor` |
 | `Rampa/entregaTurnoR/RampaForm` |
 | `Rampa/Autotanque/SeccionInicio` |
 | `Rampa/Autotanque/SeccionCierre` |
@@ -200,7 +199,15 @@ búsqueda y de reportes identificados por su nombre (`fechaInicio`, `fechaFin`, 
 | `seguridad/pernoctaDia/PernoctaDiaForm` |
 | `Trafico/controlMedicamento/ControlMedicamentoForm` |
 
-**Son 20, no 21.** `Trafico/operacionesDiarias/OperacionesDiariasForm` salió de la lista al
+**Son 19, no 21.** Dos pantallas salieron de la lista al implementar, por razones
+distintas. `Trafico/checkListTurno/sections/HotTrasComiCoor` salió porque **su fecha no es
+de registro**: se consultó la base y sus renglones tienen fechas posteriores a la del
+checklist, hasta 15 días, porque son servicios de hotel y transporte **ya reservados**. Es
+una fecha de servicio, como las de Operaciones Programadas, y poner una ventana de dos días
+ahí habría roto una captura que hoy funciona. La cabecera del checklist sí lleva ventana.
+Los números están en `docs/superpowers/notas/2026-10-07-ventanas-de-fecha-datos-reales.md`.
+
+Y `Trafico/operacionesDiarias/OperacionesDiariasForm` salió de la lista al
 implementar: el componente **no está montado en ninguna ruta** y su envío no llega a ningún
 endpoint. Una clave que solo existiera en el navegador contradiría la decisión de que **el
 servidor decide**: parecería protegida y no lo estaría. El componente se queda donde está —
@@ -209,7 +216,7 @@ borrarlo es otra limpieza—, pero sin clave.
 ### Las claves
 
 Las claves siguen el patrón `modulo.formulario` —`turno.entrega`, `operaciones.llegada`—, y
-**el plan de implementación fija la lista exacta**, una por cada una de las 20 pantallas de
+**el plan de implementación fija la lista exacta**, una por cada una de las 19 pantallas de
 arriba. No se escriben aquí para no tener dos listas que puedan desincronizarse: la de la
 tabla de `VentanasDeFecha` es la que manda, y esta especificación dice qué pantalla va en qué
 grupo.

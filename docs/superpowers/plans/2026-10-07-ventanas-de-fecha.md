@@ -58,12 +58,13 @@
 
 ## Las claves
 
-Una por formulario. `turno.checklist` la comparten el formulario y su sección, porque son la
-misma captura.
+Una por formulario. `turno.checklist` es **solo la fecha de cabecera** del checklist: la de
+su sección `HotTrasComiCoor` quedó fuera porque los datos dicen que es una fecha de servicio
+reservado, no de registro (ver la nota de datos reales).
 
 | Clave | atras | futuro | Pantalla |
 |---|---|---|---|
-| `turno.checklist` | 1 | no | `Trafico/checkListTurno/CheckListTurnoForm` y `sections/HotTrasComiCoor` |
+| `turno.checklist` | 1 | no | `Trafico/checkListTurno/CheckListTurnoForm` (solo la cabecera) |
 | `turno.entrega_rampa` | 1 | no | `Rampa/entregaTurnoR/RampaForm` |
 | `autotanque.turno_inicio` | 1 | no | `Rampa/Autotanque/SeccionInicio` |
 | `autotanque.turno_cierre` | 1 | no | `Rampa/Autotanque/SeccionCierre` |
@@ -530,7 +531,7 @@ llamada vive en `resources/js/stores/api<Modulo>.ts` y el controlador en
 
 **Sigue el patrón compartido de arriba**, para cada una de estas pantallas:
 
-- `Trafico/checkListTurno/CheckListTurnoForm` y `sections/HotTrasComiCoor` → **los dos** con `turno.checklist`
+- `Trafico/checkListTurno/CheckListTurnoForm` → `turno.checklist` (**solo el input de cabecera**; la sección `HotTrasComiCoor` NO lleva ventana)
 - `Trafico/prestamoChalecos/PrestamoChalecoForm` → `chalecos.prestamo`
 - `Trafico/servicioComisariato/ServicioComisariatoForm` → `comisariato.entrega`
 - `Trafico/controlMedicamento/ControlMedicamentoForm` → `medicamento.movimiento`
