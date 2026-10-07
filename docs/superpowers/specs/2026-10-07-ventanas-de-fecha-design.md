@@ -244,6 +244,11 @@ pantalla inusable:
   salga en rojo.
 - **Que el endpoint rechaza de verdad**: una petición real con una fecha fuera de ventana
   devuelve 422 con el mensaje que nombra las dos fechas, y **no escribe nada**.
+- **Que lo GUARDADO cae dentro, no solo que la respuesta sea 422.** Una lista de cadenas
+  hostiles —numéricas, con desfase, con espacio, relativas, basura—: de cada una que la regla
+  acepte se **lee la columna de la base** y se exige que el día esté dentro de la ventana. Es la
+  única prueba que ve la clase de defecto de §5 ter, donde la regla y el modelo entienden
+  distinto la misma cadena. Las pruebas de código de respuesta no la veían.
 - **Que los filtros siguen libres**: una consulta por un rango del mes pasado sigue
   funcionando. Es la prueba de que no rompimos los reportes.
 
@@ -254,12 +259,18 @@ pantalla inusable:
   en la tabla, y queda registrado. Un permiso de excepción invitaría a usarlo en lugar de
   corregir la ventana.
   **(Corregido 2026-10-07: esto decía «un cambio de una línea», y ya no lo es.** Una prueba fija
-  la tabla entera con sus 19 valores escritos a mano, así que cambiar una ventana exige tocar
+  la tabla entera con sus 18 valores escritos a mano, así que cambiar una ventana exige tocar
   los dos sitios. Es deliberado: se midió que, sin esa prueba, pasar `csae.entrada` de 3 a 9
   días dejaba la suite en verde, y para una regla de integridad de datos eso pesa más que la
   comodidad de editar un solo renglón.)
 - **Recalcular la ventana en el navegador** para la pestaña abierta de un día para otro. Ver §5.
 - **Un componente de fecha unificado.** Ver §5.
+- **Pruebas en el navegador.** El proyecto no tiene corredor de pruebas JS, y no se añade uno
+  para esto. Consecuencia medida y aceptada: la unión de la ventana con la fecha original
+  (§5 bis) **no está cubierta por nada**; romperla deja la suite en verde. Se acepta porque el
+  servidor valida igual, así que un cableado roto estropea la guía del calendario —no deja
+  reeditar un registro viejo— y no los datos. Si algún día entra un corredor de pruebas JS, esa
+  función es la primera que lo necesita.
 - **Los 48 rangos de búsqueda y reportes**, ni los 12 filtros de §6.
 - **Facturación.** Sus fechas son de llegada y salida de la operación, no de registro, y tienen
   sus propias reglas.
