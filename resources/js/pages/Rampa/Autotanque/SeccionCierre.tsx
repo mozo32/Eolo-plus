@@ -1,6 +1,7 @@
 import React from 'react';
 import { TABLA_CALIBRACION } from './tablaCalibracion';
 import { Clock, Calendar } from 'lucide-react';
+import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
 
 interface SeccionCierreProps {
     nombreCierre: string;
@@ -8,6 +9,8 @@ interface SeccionCierreProps {
     cmCierre: number | null;
     litrosCierre: number | null;
     totalizadorCierre: number | null;
+    /** La fecha de cierre con la que el turno ya esta guardado, si la tiene. */
+    fechaOriginal?: string | null;
     onUpdate: (key: string, val: any) => void;
 }
 
@@ -22,8 +25,11 @@ export const SeccionCierre = ({
     cmCierre,
     litrosCierre,
     totalizadorCierre,
+    fechaOriginal,
     onUpdate
 }: SeccionCierreProps) => {
+    const { min, max } = useVentanaDeFecha('autotanque.turno_cierre', fechaOriginal);
+
     const handleTimeInput = (val: string) => {
         const digits = val.replace(/\D/g, '');
         let formatted = digits;
@@ -37,7 +43,7 @@ export const SeccionCierre = ({
         if (minutes && parseInt(minutes) > 59) minutes = '59';
 
         const finalTime = minutes !== undefined ? `${hours}:${minutes}` : hours;
-        const datePart = fechaCierre.split('T')[0] || new Date().toISOString().split('T')[0];
+        const datePart = fechaCierre.split('T')[0] || new Date().toLocaleDateString('en-CA');
 
         onUpdate('fechaCierre', `${datePart}T${finalTime.slice(0, 5)}`);
     };
@@ -63,6 +69,8 @@ export const SeccionCierre = ({
                         <Calendar size={16} className="text-blue-500" />
                         <input
                             type="date"
+                            min={min}
+                            max={max}
                             value={fechaCierre ? fechaCierre.split('T')[0] : ''}
                             onChange={(e) => {
                                 const time = fechaCierre.split('T')[1] || '00:00';

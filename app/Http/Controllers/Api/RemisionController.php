@@ -18,6 +18,8 @@ use App\Mail\RemisionMail;
 use Illuminate\Http\JsonResponse;
 use App\Models\TurnoAutotanque;
 use App\Events\RemisionCreada;
+use App\Rules\DentroDeLaVentana;
+use Illuminate\Validation\ValidationException;
 
 class RemisionController extends Controller
 {
@@ -25,7 +27,7 @@ class RemisionController extends Controller
     {
         try {
             $validated = $request->validate([
-                'fecha'          => 'required|date',
+                'fecha'          => ['required', 'date_format:Y-m-d', new DentroDeLaVentana('autotanque.servicio')],
                 'operador'       => 'required|string',
                 'cliente'        => 'required|string',
                 'formaPago'      => 'nullable|string',
@@ -86,6 +88,8 @@ class RemisionController extends Controller
                 'id'      => $remision->id
             ], 201);
 
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             return response()->json([
                 'message' => 'Error al procesar el registro',
@@ -339,8 +343,14 @@ class RemisionController extends Controller
         try {
             $remision = Remision::findOrFail($id);
 
+            $recibida = $request->input('fecha');
+
             $validated = $request->validate([
-                'fecha'          => 'required|date',
+                // Una edicion solo juzga la ventana cuando la fecha CAMBIA (cadena identica a la
+                // guardada = no se escribe nada nuevo). `remisiones.fecha` no tiene cast.
+                'fecha'          => is_string($recibida) && $recibida === $remision->fecha
+                    ? ['required', 'date_format:Y-m-d']
+                    : ['required', 'date_format:Y-m-d', new DentroDeLaVentana('autotanque.servicio')],
                 'operador'       => 'required|string',
                 'cliente'        => 'required|string',
                 'formaPago'      => 'nullable|string',
@@ -380,6 +390,8 @@ class RemisionController extends Controller
                 ]);
             });
 
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Error al actualizar el registro',

@@ -5,6 +5,7 @@ import PressureGauge from './PressureGauge';
 import MatriculaAutocomplete from '@/pages/despacho/components/walkAround/MatriculaAutocomplete';
 import { ultimaLectura, obtenerResponsableHistoricosApi, formaPago } from '@/stores/apiRemision';
 import { updateRemision } from '@/stores/apiAutoTanque';
+import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
 
 interface EoloFormData {
     fecha: string;
@@ -111,6 +112,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
     onSuccess?: () => void
 }) => {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
+    const { min, max } = useVentanaDeFecha('autotanque.servicio', isEdit ? externalData?.fecha : undefined);
     const [opcionesPago, setOpcionesPago] = useState<{id: number, name: string}[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
@@ -391,6 +393,8 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
                                 <label className="block text-[10px] font-bold text-slate-400 uppercase ml-1 mb-1">Fecha de Servicio</label>
                                 <input
                                     type="date"
+                                    min={min}
+                                    max={max}
                                     value={data.fecha}
                                     onChange={e => setData('fecha', e.target.value)}
                                     className="bg-slate-50 border-none rounded-xl px-4 py-2 text-sm font-semibold focus:ring-2 focus:ring-blue-500/20 outline-none"

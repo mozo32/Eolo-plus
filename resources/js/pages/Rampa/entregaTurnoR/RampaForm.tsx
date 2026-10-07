@@ -8,6 +8,7 @@ import RampaExtrasSection from './secciones/RampaExtrasSection';
 import RampaSignaturesSection from './secciones/RampaSignaturesSection';
 import { actualizarEntregaTurnoRApi, guardarEntregaTurnoRApi, buscarUsuariosRampaApi } from '@/stores/apiEntregaTurnoR';
 import { getStepErrors } from './validacionEntregaTurnoR';
+import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
 
 interface RampaFormProps {
     initialData?: any;
@@ -56,6 +57,7 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData, onCancel }) => {
     const [step, setStep] = useState(1);
     const [saving, setSaving] = useState(false);
     const totalSteps = 4;
+    const { min, max } = useVentanaDeFecha('turno.entrega_rampa', initialData?.id ? initialData?.encabezado?.fecha : undefined);
 
     // Estados para el autocompletado de encargado de turno
     const [sugerenciasJefe, setSugerenciasJefe] = useState<any[]>([]);
@@ -298,6 +300,8 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData, onCancel }) => {
                                             <label className="text-[11px] font-bold text-slate-400 ml-2 tracking-wider">Fecha</label>
                                             <input
                                                 type="date"
+                                                min={min}
+                                                max={max}
                                                 className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700 border border-slate-100 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50/50 transition-all"
                                                 value={formData.encabezado.fecha}
                                                 onChange={e => handleUpdate(setFormData, 'encabezado', 'fecha', e.target.value)}

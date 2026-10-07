@@ -3,9 +3,13 @@
 use App\Models\ChecklistTurno;
 use App\Models\ControlMedicamento;
 use App\Models\Departamento;
+use App\Models\EntregaTurnoR;
 use App\Models\OperacionDiaria;
 use App\Models\PrestamoChaleco;
+use App\Models\RelacionPlanta;
+use App\Models\Remision;
 use App\Models\ServicioComisariato;
+use App\Models\TurnoAutotanque;
 use App\Models\User;
 use App\Support\VentanasDeFecha;
 use Illuminate\Http\UploadedFile;
@@ -54,6 +58,13 @@ function remotaEnMemoria(): void
         $tabla->integer('id_pernocta');
         $tabla->integer('d_vuelos');
     });
+    // El alta de remisiones y la de turnos de autotanque leen el precio del combustible.
+    Schema::connection('remota')->create('tb_combustible', function ($tabla) {
+        $tabla->increments('id');
+        $tabla->decimal('p_combustible', 10, 2);
+        $tabla->decimal('pasa', 10, 2);
+    });
+    DB::connection('remota')->table('tb_combustible')->insert(['p_combustible' => 20, 'pasa' => 18]);
 }
 
 // Ninguna prueba de este fichero toca la remota real: si una regla se rompiera, el alta seguiria
@@ -1194,3 +1205,808 @@ it('MEDICAMENTO EDICION: lo que la regla deja pasar deja la columna dentro de la
     expect($guardado === $original || enLaVentana($guardado, 'medicamento.movimiento'))
         ->toBeTrue('de '.$original.' paso a '.$guardado.' con la entrada '.json_encode($valor));
 })->with(fn () => hostilesPorPartida());
+
+// ---------------------------------------------------------------------------
+// RAMPA. Tres de sus cinco pantallas NO tienen cast de fecha: el valor va CRUDO a la base y por
+// eso la regla lleva `date_format:...` (la cadena que se juzga ES la que se guarda). Las pruebas
+// de invariante leen la columna guardada (o la clave dentro del JSON), no el codigo de respuesta.
+// ---------------------------------------------------------------------------
+
+/** Formatos que `date` leeria como hoy (o como un dia cercano) pero que no son `Y-m-d`. */
+function formatosQueNoSonSoloElDia(): array
+{
+    return [
+        'dia, mes y anio' => ['d/m/Y'],
+        'con hora' => ['Y-m-d H:i:s'],
+        'ISO con zona' => ['Y-m-d\TH:i:sP'],
+        'sin ceros' => ['Y-n-j'],
+    ];
+}
+
+/** El dia (diez primeros caracteres) de una columna sin cast. */
+function diaDeColumna(mixed $valor): string
+{
+    return substr((string) $valor, 0, 10);
+}
+
+// --- Entrega de turno de rampa: POST/PUT /api/EntregaTurnoR (la fecha vive DENTRO de un JSON) ---
+
+/** @return array<string, mixed> */
+function cargaDeEntregaRampa(mixed $fecha, string $jefe = 'Jefe Uno', bool $enviarFecha = true): array
+{
+    $encabezado = ['fecha' => $fecha, 'jefeTurno' => $jefe];
+    if (! $enviarFecha) {
+        unset($encabezado['fecha']);
+    }
+
+    return [
+        'formData' => ['encabezado' => $encabezado, 'comunicaciones' => ['observaciones' => '']],
+        'vehiculos' => [],
+        'barrasRemolque' => [],
+        'gpus' => [],
+        'carritoGolf' => [],
+        'aeronaves' => [],
+    ];
+}
+
+function entregaRampaParaEditar(string $fecha): EntregaTurnoR
+{
+    return EntregaTurnoR::create([
+        'encabezado' => ['fecha' => $fecha, 'jefeTurno' => 'Original'],
+        'comunicaciones' => [],
+        'vehiculos' => [],
+        'barras_remolque' => [],
+        'gpus' => [],
+        'carrito_golf' => [],
+        'aeronaves' => [],
+        'user_id' => User::factory()->create()->id,
+    ]);
+}
+
+/** El mensaje del campo `formData.encabezado.fecha` (lleva puntos: no se lee con `json('errors.…')`). */
+function mensajeDeEncabezado($respuesta): string
+{
+    return $respuesta->json('errors')['formData.encabezado.fecha'][0] ?? '';
+}
+
+it('RAMPA entrega alta: rechaza con 422 y no escribe una fecha fuera de ventana', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = EntregaTurnoR::count();
+
+    $respuesta = $this->postJson('/api/EntregaTurnoR', cargaDeEntregaRampa(Carbon::today()->addDays($desplazamiento)->toDateString()));
+
+    $respuesta->assertUnprocessable()->assertJsonValidationErrors('formData.encabezado.fecha');
+    ['min' => $min, 'max' => $max] = fechasDelMensaje('turno.entrega_rampa');
+    expect(mensajeDeEncabezado($respuesta))->toContain($min)->toContain($max);
+    expect(EntregaTurnoR::count())->toBe($antes);
+})->with([
+    'en el futuro' => [1],
+    'demasiado antigua' => [-2],
+]);
+
+it('RAMPA entrega alta: no deja pasar una fecha vacia, ausente o ilegible (el required es nuevo)', function (mixed $fecha, bool $enviarFecha) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = EntregaTurnoR::count();
+
+    $this->postJson('/api/EntregaTurnoR', cargaDeEntregaRampa($fecha, 'Jefe Uno', $enviarFecha))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('formData.encabezado.fecha');
+
+    expect(EntregaTurnoR::count())->toBe($antes);
+})->with([
+    'vacia' => ['', true],
+    'ausente' => [null, false],
+    'ilegible' => ['no-es-una-fecha', true],
+    'un arreglo' => [['2026-10-07'], true],
+]);
+
+it('RAMPA entrega alta: exige date_format:Y-m-d, no date (la cadena se guarda LITERAL en el JSON)', function (string $formato) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = EntregaTurnoR::count();
+
+    $this->postJson('/api/EntregaTurnoR', cargaDeEntregaRampa(Carbon::today()->format($formato)))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('formData.encabezado.fecha');
+
+    expect(EntregaTurnoR::count())->toBe($antes);
+})->with(formatosQueNoSonSoloElDia());
+
+it('RAMPA entrega alta: una fecha dentro de ventana escribe (la regla no rechaza todo)', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $fecha = Carbon::today()->addDays($desplazamiento)->toDateString();
+    $antes = EntregaTurnoR::count();
+
+    $this->postJson('/api/EntregaTurnoR', cargaDeEntregaRampa($fecha))->assertCreated();
+
+    expect(EntregaTurnoR::count())->toBe($antes + 1);
+    expect(EntregaTurnoR::latest('id')->first()->encabezado['fecha'])->toBe($fecha);
+})->with([
+    'hoy' => [0],
+    'el borde de atras (ayer)' => [-1],
+]);
+
+it('RAMPA entrega alta: no valida nada mas del cuerpo (sigue siendo de forma libre)', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $carga = cargaDeEntregaRampa(Carbon::today()->toDateString());
+    $carga['formData']['encabezado']['cualquierCosa'] = ['x' => 1];
+
+    $this->postJson('/api/EntregaTurnoR', $carga)->assertCreated();
+});
+
+it('RAMPA entrega edicion: rechaza con 422 y no modifica la fecha de una edicion fuera de ventana', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $original = Carbon::today()->toDateString();
+    $entrega = entregaRampaParaEditar($original);
+
+    $respuesta = $this->putJson("/api/EntregaTurnoR/{$entrega->id}", cargaDeEntregaRampa(Carbon::today()->addDays($desplazamiento)->toDateString(), 'Cambiado'));
+
+    $respuesta->assertUnprocessable()->assertJsonValidationErrors('formData.encabezado.fecha');
+    ['min' => $min, 'max' => $max] = fechasDelMensaje('turno.entrega_rampa');
+    expect(mensajeDeEncabezado($respuesta))->toContain($min)->toContain($max);
+    expect($entrega->fresh()->encabezado)->toBe(['fecha' => $original, 'jefeTurno' => 'Original']);
+})->with([
+    'futuro' => [1],
+    'antigua' => [-2],
+]);
+
+it('RAMPA entrega edicion: deja corregir otros campos de un reporte antiguo si no se toca su fecha', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antigua = Carbon::today()->subDays(10)->toDateString();
+    $entrega = entregaRampaParaEditar($antigua);
+
+    $this->putJson("/api/EntregaTurnoR/{$entrega->id}", cargaDeEntregaRampa($antigua, 'Corregido'))->assertOk();
+
+    expect($entrega->fresh()->encabezado)->toBe(['fecha' => $antigua, 'jefeTurno' => 'Corregido']);
+});
+
+it('RAMPA entrega edicion: no deja pasar de una fecha antigua a OTRA antigua distinta', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antigua = Carbon::today()->subDays(10)->toDateString();
+    $entrega = entregaRampaParaEditar($antigua);
+
+    $this->putJson("/api/EntregaTurnoR/{$entrega->id}", cargaDeEntregaRampa(Carbon::today()->subDays(20)->toDateString()))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('formData.encabezado.fecha');
+
+    expect($entrega->fresh()->encabezado['fecha'])->toBe($antigua);
+});
+
+it('RAMPA entrega edicion: no deja que lleve una fecha ausente o ilegible', function (mixed $fecha, bool $enviarFecha) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $original = Carbon::today()->toDateString();
+    $entrega = entregaRampaParaEditar($original);
+
+    $this->putJson("/api/EntregaTurnoR/{$entrega->id}", cargaDeEntregaRampa($fecha, 'Cambiado', $enviarFecha))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('formData.encabezado.fecha');
+
+    expect($entrega->fresh()->encabezado['fecha'])->toBe($original);
+})->with([
+    'ausente' => [null, false],
+    'ilegible' => ['no-es-una-fecha', true],
+    'con hora (no es Y-m-d)' => [Carbon::today()->format('Y-m-d').' 10:00:00', true],
+]);
+
+it('RAMPA entrega edicion: una fecha valida de hoy escribe la fecha (la edicion tiene camino feliz)', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $hoy = Carbon::today()->toDateString();
+    $entrega = entregaRampaParaEditar(Carbon::today()->subDays(10)->toDateString());
+
+    $this->putJson("/api/EntregaTurnoR/{$entrega->id}", cargaDeEntregaRampa($hoy))->assertOk();
+
+    expect($entrega->fresh()->encabezado['fecha'])->toBe($hoy);
+});
+
+it('RAMPA ENTREGA ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = EntregaTurnoR::count();
+
+    $this->postJson('/api/EntregaTurnoR', cargaDeEntregaRampa($valor));
+
+    if (EntregaTurnoR::count() === $antes) {
+        expect(EntregaTurnoR::count())->toBe($antes);
+
+        return;
+    }
+
+    // La clave DENTRO del JSON: es una cadena literal, y tiene que ser un dia limpio.
+    $guardado = EntregaTurnoR::latest('id')->first()->encabezado['fecha'];
+    expect($guardado)->toMatch('/^\d{4}-\d{2}-\d{2}$/')
+        ->and(enLaVentana($guardado, 'turno.entrega_rampa'))
+        ->toBeTrue('se guardo '.json_encode($guardado).' con la entrada '.json_encode($valor));
+})->with(fn () => fechasHostiles());
+
+it('RAMPA ENTREGA EDICION: lo que la regla deja pasar deja la clave dentro de la ventana, o como estaba', function (mixed $valor, string $partida) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $original = fechaDePartida($partida);
+    $entrega = entregaRampaParaEditar($original);
+
+    $this->putJson("/api/EntregaTurnoR/{$entrega->id}", cargaDeEntregaRampa($valor));
+
+    $guardado = $entrega->fresh()->encabezado['fecha'];
+    expect($guardado === $original || (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $guardado) && enLaVentana($guardado, 'turno.entrega_rampa')))
+        ->toBeTrue('de '.$original.' paso a '.json_encode($guardado).' con la entrada '.json_encode($valor));
+})->with(fn () => hostilesPorPartida());
+
+// --- Turno de autotanque: POST /api/TurnoAutoTanque (fecha y fechaCierre; el mismo `store` edita por `id`) ---
+
+/**
+ * `fecha` y `fechaCierre` son `dateTime` SIN cast y el formulario manda HORA de verdad
+ * (`YYYY-MM-DDTHH:MM`, o con segundos al reenviar lo que devolvio la base). Por eso no sirve
+ * `date_format:Y-m-d`: se exige uno de esos dos formatos y el dia son sus diez primeros caracteres.
+ *
+ * @param  array<string, mixed>  $extra
+ * @return array<string, mixed>
+ */
+function cargaDeTurno(mixed $fecha, array $extra = []): array
+{
+    return array_merge([
+        'nombre' => 'Ana Prueba',
+        'fecha' => $fecha,
+        'cmIni' => 10,
+        'litrosIni' => 100,
+        'totalizadorIni' => 5000,
+        'resumen' => ['totalVendidos' => 0, 'balanceAritmetico' => 0, 'balanceFisico' => 0, 'diferenciaFinal' => 0],
+    ], $extra);
+}
+
+/** El texto con el que el formulario manda un dia a una hora cualquiera. */
+function diaYHora(int $desplazamiento, string $hora = '08:30'): string
+{
+    return Carbon::today()->addDays($desplazamiento)->toDateString().'T'.$hora;
+}
+
+function turnoParaEditar(string $dia, ?string $diaCierre = null): TurnoAutotanque
+{
+    // Tal como lo guarda y lo devuelve MySQL: con espacio y segundos.
+    return TurnoAutotanque::create([
+        'user_id' => User::factory()->create()->id,
+        'nombre' => 'Original',
+        'fecha' => $dia.' 08:30:00',
+        'cmIni' => 10,
+        'litrosIni' => 100,
+        'totalizadorIni' => 5000,
+        'nombreCierre' => '',
+        'fechaCierre' => ($diaCierre ?? $dia).' 08:30:00',
+        'cmCierre' => 0,
+        'litrosCierre' => 0,
+        'totalizadorCierre' => 0,
+        'totalVendidos' => 0,
+        'balanceAritmetico' => 0,
+        'balanceFisico' => 0,
+        'diferenciaFinal' => 0,
+    ]);
+}
+
+it('AUTOTANQUE turno alta: rechaza con 422 y no escribe un inicio fuera de ventana', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = TurnoAutotanque::count();
+
+    $respuesta = $this->postJson('/api/TurnoAutoTanque', cargaDeTurno(diaYHora($desplazamiento)));
+
+    $respuesta->assertUnprocessable()->assertJsonValidationErrors('fecha');
+    ['min' => $min, 'max' => $max] = fechasDelMensaje('autotanque.turno_inicio');
+    expect(mensajeDeFecha($respuesta))->toContain($min)->toContain($max);
+    expect(TurnoAutotanque::count())->toBe($antes);
+})->with([
+    'en el futuro (manana)' => [1],
+    'demasiado antigua' => [-2],
+]);
+
+it('AUTOTANQUE turno alta: rechaza con 422 y no escribe un cierre fuera de ventana', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = TurnoAutotanque::count();
+
+    $respuesta = $this->postJson('/api/TurnoAutoTanque', cargaDeTurno(diaYHora(0), ['fechaCierre' => diaYHora($desplazamiento)]));
+
+    $respuesta->assertUnprocessable()->assertJsonValidationErrors('fechaCierre');
+    ['min' => $min, 'max' => $max] = fechasDelMensaje('autotanque.turno_cierre');
+    expect(mensajeDeFecha($respuesta, 'fechaCierre'))->toContain($min)->toContain($max);
+    expect(TurnoAutotanque::count())->toBe($antes);
+})->with([
+    'en el futuro (manana)' => [1],
+    'demasiado antigua' => [-2],
+]);
+
+it('AUTOTANQUE turno alta: la fecha de inicio no puede faltar ni ser ilegible', function (?string $fecha, bool $enviarFecha) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = TurnoAutotanque::count();
+    $carga = cargaDeTurno($fecha);
+    if (! $enviarFecha) {
+        unset($carga['fecha']);
+    }
+
+    $this->postJson('/api/TurnoAutoTanque', $carga)->assertUnprocessable()->assertJsonValidationErrors('fecha');
+
+    expect(TurnoAutotanque::count())->toBe($antes);
+})->with([
+    'vacia' => ['', true],
+    'ausente' => [null, false],
+    'ilegible' => ['no-es-una-fecha', true],
+]);
+
+it('AUTOTANQUE turno alta: la fecha de cierre sigue siendo opcional (un turno sin cerrar no tiene cierre)', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = TurnoAutotanque::count();
+
+    $this->postJson('/api/TurnoAutoTanque', cargaDeTurno(diaYHora(0)))->assertCreated();
+    $this->postJson('/api/TurnoAutoTanque', cargaDeTurno(diaYHora(0), ['fechaCierre' => null]))->assertCreated();
+
+    expect(TurnoAutotanque::count())->toBe($antes + 2);
+});
+
+it('AUTOTANQUE turno alta: exige fecha y hora exactas, no cualquier cosa que date lea (se guarda LITERAL)', function (string $formato) {
+    // Todas se leen como hoy con `date`, pero ninguna es `Y-m-d\TH:i` ni `Y-m-d\TH:i:s`.
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = TurnoAutotanque::count();
+
+    $this->postJson('/api/TurnoAutoTanque', cargaDeTurno(Carbon::today()->setTime(8, 30)->format($formato)))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('fecha');
+
+    $this->postJson('/api/TurnoAutoTanque', cargaDeTurno(diaYHora(0), ['fechaCierre' => Carbon::today()->setTime(8, 30)->format($formato)]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('fechaCierre');
+
+    expect(TurnoAutotanque::count())->toBe($antes);
+})->with([
+    'solo el dia' => ['Y-m-d'],
+    'con espacio en vez de T' => ['Y-m-d H:i:s'],
+    'ISO con zona' => ['Y-m-d\TH:i:sP'],
+    'ISO con Z' => ['Y-m-d\TH:i:s\Z'],
+    'dia, mes y anio' => ['d/m/Y H:i'],
+    'sin ceros' => ['Y-n-j\TH:i'],
+]);
+
+it('AUTOTANQUE turno alta: una fecha y hora dentro de ventana escriben, con y sin segundos (la regla no rechaza todo)', function (int $desplazamiento, string $hora) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = TurnoAutotanque::count();
+    $dia = Carbon::today()->addDays($desplazamiento)->toDateString();
+
+    $this->postJson('/api/TurnoAutoTanque', cargaDeTurno("{$dia}T{$hora}", ['fechaCierre' => "{$dia}T{$hora}"]))->assertCreated();
+
+    expect(TurnoAutotanque::count())->toBe($antes + 1);
+    $turno = TurnoAutotanque::latest('id')->first();
+    expect(diaDeColumna($turno->fecha))->toBe($dia)->and(diaDeColumna($turno->fechaCierre))->toBe($dia);
+})->with([
+    'hoy' => [0, '08:30'],
+    'hoy con segundos' => [0, '23:59:59'],
+    'el borde de atras (ayer)' => [-1, '00:00'],
+]);
+
+it('AUTOTANQUE turno edicion: cerrar un turno de hace dias reenvia su inicio intacto y no se bloquea', function (string $reenvio) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antigua = Carbon::today()->subDays(10)->toDateString();
+    $turno = turnoParaEditar($antigua);
+
+    // Lo que devuelve la base lo reenvia el formulario con `T` y segundos; otra hora el mismo dia tambien.
+    $this->postJson('/api/TurnoAutoTanque', cargaDeTurno(str_replace('{dia}', $antigua, $reenvio), [
+        'id' => $turno->id,
+        'nombre' => 'Corregido',
+        'nombreCierre' => 'Quien recibe',
+        'fechaCierre' => diaYHora(0),
+    ]))->assertCreated();
+
+    $turno = $turno->fresh();
+    expect($turno->nombre)->toBe('Corregido');
+    expect(diaDeColumna($turno->fecha))->toBe($antigua);
+    expect(diaDeColumna($turno->fechaCierre))->toBe(Carbon::today()->toDateString());
+})->with([
+    'tal como lo reenvia el formulario' => ['{dia}T08:30:00'],
+    'otra hora el mismo dia' => ['{dia}T09:15'],
+]);
+
+it('AUTOTANQUE turno edicion: un turno antiguo cuyo cierre tambien es antiguo conserva ambas fechas', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antigua = Carbon::today()->subDays(10)->toDateString();
+    $turno = turnoParaEditar($antigua, $antigua);
+
+    $this->postJson('/api/TurnoAutoTanque', cargaDeTurno($antigua.'T08:30:00', [
+        'id' => $turno->id,
+        'nombre' => 'Corregido',
+        'fechaCierre' => $antigua.'T08:30:00',
+    ]))->assertCreated();
+
+    expect($turno->fresh()->nombre)->toBe('Corregido');
+});
+
+it('AUTOTANQUE turno edicion: no deja mover el inicio ni el cierre a un dia fuera de ventana, y no escribe nada', function (string $campo, int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $original = Carbon::today()->toDateString();
+    $turno = turnoParaEditar($original);
+    $carga = cargaDeTurno(diaYHora(0), ['id' => $turno->id, 'nombre' => 'Cambiado', 'fechaCierre' => diaYHora(0)]);
+    $carga[$campo] = diaYHora($desplazamiento);
+
+    $respuesta = $this->postJson('/api/TurnoAutoTanque', $carga);
+
+    $respuesta->assertUnprocessable()->assertJsonValidationErrors($campo);
+    expect(TurnoAutotanque::count())->toBe(1);
+    $turno = $turno->fresh();
+    expect($turno->nombre)->toBe('Original');
+    expect(diaDeColumna($turno->fecha))->toBe($original)->and(diaDeColumna($turno->fechaCierre))->toBe($original);
+})->with([
+    'inicio al futuro' => ['fecha', 1],
+    'inicio antiguo' => ['fecha', -2],
+    'cierre al futuro' => ['fechaCierre', 1],
+    'cierre antiguo' => ['fechaCierre', -2],
+]);
+
+it('AUTOTANQUE turno edicion: no deja pasar de un inicio antiguo a OTRO antiguo distinto', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antigua = Carbon::today()->subDays(10)->toDateString();
+    $turno = turnoParaEditar($antigua);
+
+    $this->postJson('/api/TurnoAutoTanque', cargaDeTurno(Carbon::today()->subDays(20)->toDateString().'T08:30', ['id' => $turno->id]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('fecha');
+
+    expect(diaDeColumna($turno->fresh()->fecha))->toBe($antigua);
+});
+
+it('AUTOTANQUE turno edicion: un id que no existe es un alta, y un alta no hereda fechas antiguas', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = TurnoAutotanque::count();
+
+    $this->postJson('/api/TurnoAutoTanque', cargaDeTurno(Carbon::today()->subDays(10)->toDateString().'T08:30', ['id' => 99999]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('fecha');
+
+    expect(TurnoAutotanque::count())->toBe($antes);
+});
+
+it('AUTOTANQUE turno edicion: un desfase en una fecha antigua no se cuela como "sin cambios"', function () {
+    // El dia (diez primeros caracteres) es el mismo, pero MySQL convertiria de zona esa cadena.
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antigua = Carbon::today()->subDays(10)->toDateString();
+    $turno = turnoParaEditar($antigua);
+
+    $this->postJson('/api/TurnoAutoTanque', cargaDeTurno($antigua.'T00:30:00+14:00', ['id' => $turno->id]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('fecha');
+
+    expect($turno->fresh()->fecha)->toBe($antigua.' 08:30:00');
+});
+
+it('AUTOTANQUE turno: a las 19:00 de Mexico (ya es manana en UTC) hoy sigue siendo hoy y manana se rechaza', function () {
+    // Cubre el servidor. El calculo del dia por omision en el navegador (`toLocaleDateString` en
+    // lugar de `toISOString`) NO tiene prueba: no hay corredor de pruebas JS en este proyecto.
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->travelTo(Carbon::parse('2026-10-07 19:00:00', 'America/Mexico_City'));
+    $antes = TurnoAutotanque::count();
+
+    $this->postJson('/api/TurnoAutoTanque', cargaDeTurno('2026-10-08T01:00', ['fechaCierre' => '2026-10-07T19:00']))
+        ->assertUnprocessable()->assertJsonValidationErrors('fecha');
+    $this->postJson('/api/TurnoAutoTanque', cargaDeTurno('2026-10-07T19:00', ['fechaCierre' => '2026-10-08T01:00']))
+        ->assertUnprocessable()->assertJsonValidationErrors('fechaCierre');
+    expect(TurnoAutotanque::count())->toBe($antes);
+
+    $this->postJson('/api/TurnoAutoTanque', cargaDeTurno('2026-10-07T19:00', ['fechaCierre' => '2026-10-07T19:00']))->assertCreated();
+    expect(TurnoAutotanque::count())->toBe($antes + 1);
+});
+
+it('AUTOTANQUE TURNO ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (string $campo, mixed $valor) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = TurnoAutotanque::count();
+    $carga = cargaDeTurno(diaYHora(0), ['fechaCierre' => diaYHora(0)]);
+    $carga[$campo] = $valor;
+
+    $this->postJson('/api/TurnoAutoTanque', $carga);
+
+    if (TurnoAutotanque::count() === $antes) {
+        expect(TurnoAutotanque::count())->toBe($antes);
+
+        return;
+    }
+
+    $turno = TurnoAutotanque::latest('id')->first();
+    $clave = $campo === 'fecha' ? 'autotanque.turno_inicio' : 'autotanque.turno_cierre';
+    $guardado = diaDeColumna($turno->{$campo});
+    expect($guardado)->toMatch('/^\d{4}-\d{2}-\d{2}$/')
+        ->and(enLaVentana($guardado, $clave))
+        ->toBeTrue('se guardo '.json_encode($turno->{$campo}).' con la entrada '.json_encode($valor));
+})->with(function () {
+    foreach (['fecha', 'fechaCierre'] as $campo) {
+        foreach (fechasHostiles() as $nombre => [$valor]) {
+            yield "{$campo}: {$nombre}" => [$campo, $valor];
+        }
+        // Las dos formas validas con hora, en el limite de la ventana.
+        yield "{$campo}: hoy a medianoche" => [$campo, diaYHora(0, '00:00')];
+        yield "{$campo}: ayer a las 23:59:59" => [$campo, diaYHora(-1, '23:59:59')];
+        yield "{$campo}: manana a las 00:00" => [$campo, diaYHora(1, '00:00')];
+    }
+});
+
+it('AUTOTANQUE TURNO EDICION: lo que la regla deja pasar deja las columnas dentro de la ventana, o como estaban', function (string $campo, mixed $valor, string $partida) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $original = fechaDePartida($partida);
+    $turno = turnoParaEditar($original);
+    $carga = cargaDeTurno($original.'T08:30:00', ['id' => $turno->id, 'fechaCierre' => $original.'T08:30:00']);
+    $carga[$campo] = $valor;
+
+    $this->postJson('/api/TurnoAutoTanque', $carga);
+
+    $turno = $turno->fresh();
+    $clave = $campo === 'fecha' ? 'autotanque.turno_inicio' : 'autotanque.turno_cierre';
+    $guardado = diaDeColumna($turno->{$campo});
+    expect($guardado === $original || (preg_match('/^\d{4}-\d{2}-\d{2}$/', $guardado) && enLaVentana($guardado, $clave)))
+        ->toBeTrue('de '.$original.' paso a '.json_encode($turno->{$campo}).' con la entrada '.json_encode($valor));
+})->with(function () {
+    foreach (['fecha', 'fechaCierre'] as $campo) {
+        foreach (hostilesPorPartida() as $nombre => [$valor, $partida]) {
+            yield "{$campo}, {$nombre}" => [$campo, $valor, $partida];
+        }
+    }
+});
+
+// --- Servicio de autotanque (remision): POST /api/Remision/remisiones y PUT /api/Remision/{id} ---
+
+/** @return array<string, mixed> */
+function cargaDeRemision(mixed $fecha, string $cliente = 'Cliente Uno'): array
+{
+    return [
+        'fecha' => $fecha,
+        'operador' => 'Operador Uno',
+        'cliente' => $cliente,
+        'formaPago' => 'Efectivo',
+        'aeronaveTipo' => 'C172',
+        'matricula' => 'XA-REM',
+        'destino' => 'MMTO',
+        'horaLlegada' => '10:30',
+        'lecturaInicial' => 100,
+        'lecturaFinal' => 150,
+    ];
+}
+
+function remisionParaEditar(string $fecha): Remision
+{
+    return Remision::create([
+        'folio' => 'EOLO-'.str_pad((string) (Remision::max('id') + 1), 4, '0', STR_PAD_LEFT),
+        'fecha' => $fecha,
+        'operador' => 'Operador Uno',
+        'cliente' => 'Original',
+        'aeronave_tipo' => 'C172',
+        'matricula' => 'XA-REM',
+        'destino' => 'MMTO',
+        'hora_llegada' => '10:30',
+        'lectura_inicial' => 100,
+        'lectura_final' => 150,
+        'total_litros' => 50,
+        'precio' => 20,
+    ]);
+}
+
+it('AUTOTANQUE servicio alta: rechaza con 422 y no escribe una fecha fuera de ventana', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = Remision::count();
+
+    $respuesta = $this->postJson('/api/Remision/remisiones', cargaDeRemision(Carbon::today()->addDays($desplazamiento)->toDateString()));
+
+    $respuesta->assertUnprocessable()->assertJsonValidationErrors('fecha');
+    ['min' => $min, 'max' => $max] = fechasDelMensaje('autotanque.servicio');
+    expect(mensajeDeFecha($respuesta))->toContain($min)->toContain($max);
+    expect(Remision::count())->toBe($antes);
+})->with([
+    'en el futuro' => [1],
+    'demasiado antigua' => [-4],
+]);
+
+it('AUTOTANQUE servicio alta: no deja pasar una fecha vacia, ausente o ilegible', function (?string $fecha, bool $enviarFecha) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = Remision::count();
+    $carga = cargaDeRemision($fecha);
+    if (! $enviarFecha) {
+        unset($carga['fecha']);
+    }
+
+    $this->postJson('/api/Remision/remisiones', $carga)->assertUnprocessable()->assertJsonValidationErrors('fecha');
+
+    expect(Remision::count())->toBe($antes);
+})->with([
+    'vacia' => ['', true],
+    'ausente' => [null, false],
+    'ilegible' => ['no-es-una-fecha', true],
+]);
+
+it('AUTOTANQUE servicio alta: exige date_format:Y-m-d, no date (la columna no tiene cast)', function (string $formato) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = Remision::count();
+
+    $this->postJson('/api/Remision/remisiones', cargaDeRemision(Carbon::today()->format($formato)))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('fecha');
+
+    expect(Remision::count())->toBe($antes);
+})->with(formatosQueNoSonSoloElDia());
+
+it('AUTOTANQUE servicio alta: una fecha dentro de ventana escribe (la regla no rechaza todo)', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $fecha = Carbon::today()->addDays($desplazamiento)->toDateString();
+    $antes = Remision::count();
+
+    $this->postJson('/api/Remision/remisiones', cargaDeRemision($fecha))->assertCreated();
+
+    expect(Remision::count())->toBe($antes + 1);
+    expect(diaDeColumna(Remision::latest('id')->first()->fecha))->toBe($fecha);
+})->with([
+    'hoy' => [0],
+    'el borde de atras' => [-3],
+]);
+
+it('AUTOTANQUE servicio edicion: rechaza con 422 y no modifica nada con una fecha fuera de ventana', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $original = Carbon::today()->toDateString();
+    $remision = remisionParaEditar($original);
+
+    $respuesta = $this->putJson("/api/Remision/{$remision->id}", cargaDeRemision(Carbon::today()->addDays($desplazamiento)->toDateString(), 'Cambiado'));
+
+    $respuesta->assertUnprocessable()->assertJsonValidationErrors('fecha');
+    ['min' => $min, 'max' => $max] = fechasDelMensaje('autotanque.servicio');
+    expect(mensajeDeFecha($respuesta))->toContain($min)->toContain($max);
+    expect(diaDeColumna($remision->fresh()->fecha))->toBe($original);
+    expect($remision->fresh()->cliente)->toBe('Original');
+})->with([
+    'futuro' => [1],
+    'antigua' => [-4],
+]);
+
+it('AUTOTANQUE servicio edicion: deja corregir otros campos de una remision antigua si no se toca su fecha', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antigua = Carbon::today()->subDays(10)->toDateString();
+    $remision = remisionParaEditar($antigua);
+
+    $this->putJson("/api/Remision/{$remision->id}", cargaDeRemision($antigua, 'Corregido'))->assertOk();
+
+    expect($remision->fresh()->cliente)->toBe('Corregido');
+    expect(diaDeColumna($remision->fresh()->fecha))->toBe($antigua);
+});
+
+it('AUTOTANQUE servicio edicion: no deja pasar de una fecha antigua a OTRA antigua distinta', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antigua = Carbon::today()->subDays(10)->toDateString();
+    $remision = remisionParaEditar($antigua);
+
+    $this->putJson("/api/Remision/{$remision->id}", cargaDeRemision(Carbon::today()->subDays(20)->toDateString()))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('fecha');
+
+    expect(diaDeColumna($remision->fresh()->fecha))->toBe($antigua);
+});
+
+it('AUTOTANQUE servicio edicion: no deja que lleve una fecha ausente o ilegible', function (?string $fecha, bool $enviarFecha) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $original = Carbon::today()->toDateString();
+    $remision = remisionParaEditar($original);
+    $carga = cargaDeRemision($fecha);
+    if (! $enviarFecha) {
+        unset($carga['fecha']);
+    }
+
+    $this->putJson("/api/Remision/{$remision->id}", $carga)->assertUnprocessable()->assertJsonValidationErrors('fecha');
+
+    expect(diaDeColumna($remision->fresh()->fecha))->toBe($original);
+})->with([
+    'ausente' => [null, false],
+    'ilegible' => ['no-es-una-fecha', true],
+]);
+
+it('AUTOTANQUE servicio edicion: una fecha valida de hoy escribe la fecha (la edicion tiene camino feliz)', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $hoy = Carbon::today()->toDateString();
+    $remision = remisionParaEditar(Carbon::today()->subDays(10)->toDateString());
+
+    $this->putJson("/api/Remision/{$remision->id}", cargaDeRemision($hoy))->assertOk();
+
+    expect(diaDeColumna($remision->fresh()->fecha))->toBe($hoy);
+});
+
+it('AUTOTANQUE SERVICIO ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = Remision::count();
+
+    $this->postJson('/api/Remision/remisiones', cargaDeRemision($valor));
+
+    if (Remision::count() === $antes) {
+        expect(Remision::count())->toBe($antes);
+
+        return;
+    }
+
+    $guardado = (string) Remision::latest('id')->first()->fecha;
+    expect($guardado)->toMatch('/^\d{4}-\d{2}-\d{2}$/')
+        ->and(enLaVentana($guardado, 'autotanque.servicio'))
+        ->toBeTrue('se guardo '.json_encode($guardado).' con la entrada '.json_encode($valor));
+})->with(fn () => fechasHostiles());
+
+it('AUTOTANQUE SERVICIO EDICION: lo que la regla deja pasar deja la columna dentro de la ventana, o como estaba', function (mixed $valor, string $partida) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $original = fechaDePartida($partida);
+    $remision = remisionParaEditar($original);
+
+    $this->putJson("/api/Remision/{$remision->id}", cargaDeRemision($valor));
+
+    $guardado = (string) $remision->fresh()->fecha;
+    expect($guardado === $original || (preg_match('/^\d{4}-\d{2}-\d{2}$/', $guardado) && enLaVentana($guardado, 'autotanque.servicio')))
+        ->toBeTrue('de '.$original.' paso a '.json_encode($guardado).' con la entrada '.json_encode($valor));
+})->with(fn () => hostilesPorPartida());
+
+// --- Prestamo de la planta GPU: POST /api/RelacionPlanta/prestar (Form Request; solo alta) ---
+
+/** @return array<string, mixed> */
+function cargaDePrestamoPlanta(mixed $fecha): array
+{
+    return ['fecha' => $fecha, 'empresa' => 'DEMO', 'matricula' => 'XA-GPU', 'horometro_inicio' => 10];
+}
+
+it('PLANTA prestamo: rechaza con 422 y no escribe una fecha fuera de ventana', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = RelacionPlanta::count();
+
+    $respuesta = $this->postJson('/api/RelacionPlanta/prestar', cargaDePrestamoPlanta(Carbon::today()->addDays($desplazamiento)->toDateString()));
+
+    $respuesta->assertUnprocessable()->assertJsonValidationErrors('fecha');
+    ['min' => $min, 'max' => $max] = fechasDelMensaje('planta.prestamo');
+    expect(mensajeDeFecha($respuesta))->toContain($min)->toContain($max);
+    expect(RelacionPlanta::count())->toBe($antes);
+})->with([
+    'en el futuro' => [1],
+    'demasiado antigua' => [-2],
+]);
+
+it('PLANTA prestamo: no deja pasar una fecha vacia, ausente o ilegible', function (?string $fecha, bool $enviarFecha) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = RelacionPlanta::count();
+    $carga = cargaDePrestamoPlanta($fecha);
+    if (! $enviarFecha) {
+        unset($carga['fecha']);
+    }
+
+    $this->postJson('/api/RelacionPlanta/prestar', $carga)->assertUnprocessable()->assertJsonValidationErrors('fecha');
+
+    expect(RelacionPlanta::count())->toBe($antes);
+})->with([
+    'vacia' => ['', true],
+    'ausente' => [null, false],
+    'ilegible' => ['no-es-una-fecha', true],
+]);
+
+it('PLANTA prestamo: sigue exigiendo date_format:Y-m-d, no se sustituyo por date', function (string $formato) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = RelacionPlanta::count();
+
+    $this->postJson('/api/RelacionPlanta/prestar', cargaDePrestamoPlanta(Carbon::today()->format($formato)))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('fecha');
+
+    expect(RelacionPlanta::count())->toBe($antes);
+})->with(formatosQueNoSonSoloElDia());
+
+it('PLANTA prestamo: una fecha dentro de ventana escribe (la regla no rechaza todo)', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $fecha = Carbon::today()->addDays($desplazamiento)->toDateString();
+    $antes = RelacionPlanta::count();
+
+    $this->postJson('/api/RelacionPlanta/prestar', cargaDePrestamoPlanta($fecha))->assertCreated();
+
+    expect(RelacionPlanta::count())->toBe($antes + 1);
+    expect(RelacionPlanta::latest('id')->first()->fecha->toDateString())->toBe($fecha);
+})->with([
+    'hoy' => [0],
+    'el borde de atras (ayer)' => [-1],
+]);
+
+it('PLANTA PRESTAMO: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = RelacionPlanta::count();
+
+    $this->postJson('/api/RelacionPlanta/prestar', cargaDePrestamoPlanta($valor));
+
+    if (RelacionPlanta::count() === $antes) {
+        expect(RelacionPlanta::count())->toBe($antes);
+
+        return;
+    }
+
+    $guardado = RelacionPlanta::latest('id')->first()->fecha->toDateString();
+    expect(enLaVentana($guardado, 'planta.prestamo'))
+        ->toBeTrue('se guardo '.$guardado.' con la entrada '.json_encode($valor));
+})->with(fn () => fechasHostiles());

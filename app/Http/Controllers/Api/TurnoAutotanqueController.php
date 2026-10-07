@@ -7,11 +7,14 @@ use App\Models\Imagen;
 use App\Models\Remision;
 use App\Models\SumaAutotanque;
 use App\Models\TurnoAutotanque;
+use App\Rules\DentroDeLaVentana;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class TurnoAutotanqueController extends Controller
 {
@@ -21,15 +24,31 @@ class TurnoAutotanqueController extends Controller
         $rutasAEliminar = [];
 
         try {
+            $turnoExistente = $this->turnoQueSeEdita($request);
+
             $validated = $request->validate([
                 'id' => 'nullable|integer',
                 'nombre' => 'required|string',
-                'fecha' => 'required|date',
+                'fecha' => [
+                    'required',
+                    'date_format:Y-m-d\TH:i,Y-m-d\TH:i:s',
+                    Rule::when(
+                        $this->cambiaElDia($request->input('fecha'), $turnoExistente?->fecha),
+                        new DentroDeLaVentana('autotanque.turno_inicio'),
+                    ),
+                ],
                 'cmIni' => 'required|numeric',
                 'litrosIni' => 'required|numeric',
                 'totalizadorIni' => 'required|numeric',
                 'nombreCierre' => 'nullable|string',
-                'fechaCierre' => 'nullable|date',
+                'fechaCierre' => [
+                    'nullable',
+                    'date_format:Y-m-d\TH:i,Y-m-d\TH:i:s',
+                    Rule::when(
+                        $this->cambiaElDia($request->input('fechaCierre'), $turnoExistente?->fechaCierre),
+                        new DentroDeLaVentana('autotanque.turno_cierre'),
+                    ),
+                ],
                 'cmCierre' => 'nullable|numeric',
                 'litrosCierre' => 'nullable|numeric',
                 'totalizadorCierre' => 'nullable|numeric',
@@ -250,6 +269,9 @@ class TurnoAutotanqueController extends Controller
                 'data' => $turno,
                 'sumaAutotanque' => $sumas,
             ], 201);
+        } catch (ValidationException $e) {
+            // Un 422 no es un fallo del servidor: sin esto el `catch` de abajo lo devolvia como 500.
+            throw $e;
         } catch (\Throwable $e) {
             if (!empty($rutasGuardadas)) {
                 Storage::disk('public')
@@ -263,6 +285,39 @@ class TurnoAutotanqueController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * El turno que este `store` va a EDITAR (`updateOrCreate` por `id`), o null si es un alta.
+     *
+     * Un `id` que no existe crea el turno con ese id: para la ventana cuenta como alta.
+     */
+    private function turnoQueSeEdita(Request $request): ?TurnoAutotanque
+    {
+        $id = $request->input('id');
+
+        return is_scalar($id) && ctype_digit((string) $id)
+            ? TurnoAutotanque::find((int) $id)
+            : null;
+    }
+
+    /**
+     * Si el DIA de la fecha recibida difiere del que el turno ya tiene guardado.
+     *
+     * Una edicion solo juzga la ventana cuando el dia CAMBIA: cerrar un turno que lleva dos dias
+     * abierto reenvia su fecha de inicio intacta, y exigirle la ventana bloquearia el cierre. Lo
+     * que la ventana impide es poner un dia fuera de ella.
+     *
+     * `turnos_autotanque.fecha` y `fechaCierre` NO tienen cast: el texto va crudo a MySQL, asi
+     * que el dia es literalmente sus diez primeros caracteres. `date_format` (siempre exigido
+     * junto a esto) garantiza que esos diez caracteres son un `Y-m-d` real y que la cadena no
+     * lleva un desfase que MySQL convertiria de zona. Una cadena que no es texto cuenta como
+     * cambio, y entonces rige la ventana completa.
+     */
+    private function cambiaElDia(mixed $recibida, mixed $guardada): bool
+    {
+        return ! is_string($recibida)
+            || substr($recibida, 0, 10) !== substr((string) $guardada, 0, 10);
     }
 
     public function checkActiveTurno()

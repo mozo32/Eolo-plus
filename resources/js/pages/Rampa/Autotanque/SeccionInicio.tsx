@@ -1,6 +1,7 @@
 import React from 'react';
 import { TABLA_CALIBRACION } from './tablaCalibracion';
 import { Calendar, Clock } from 'lucide-react';
+import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
 
 interface SeccionInicioProps {
     nombre: string;
@@ -8,6 +9,8 @@ interface SeccionInicioProps {
     cmIni: number | null;
     litrosIni: number | null;
     totalizadorIni: number | null;
+    /** La fecha con la que el turno ya esta guardado, si se esta editando. */
+    fechaOriginal?: string | null;
     onUpdate: (key: string, val: any) => void;
 }
 
@@ -29,8 +32,11 @@ export const SeccionInicio = ({
     cmIni,
     litrosIni,
     totalizadorIni,
+    fechaOriginal,
     onUpdate
 }: SeccionInicioProps) => {
+    const { min, max } = useVentanaDeFecha('autotanque.turno_inicio', fechaOriginal);
+
 
     const handleCmChange = (cm: number) => {
         onUpdate('cmIni', cm);
@@ -51,7 +57,7 @@ export const SeccionInicio = ({
         if (minutes && parseInt(minutes) > 59) minutes = '59';
 
         const finalValue = minutes !== undefined ? `${hours}:${minutes}` : hours;
-        const date = fecha.split('T')[0] || new Date().toISOString().split('T')[0];
+        const date = fecha.split('T')[0] || new Date().toLocaleDateString('en-CA');
         onUpdate('fecha', `${date}T${finalValue.slice(0, 5)}`);
     };
 
@@ -77,6 +83,8 @@ export const SeccionInicio = ({
                             <Calendar size={16} className="text-blue-500" />
                             <input
                                 type="date"
+                                min={min}
+                                max={max}
                                 value={fecha ? fecha.split('T')[0] : ''}
                                 onChange={(e) => {
                                     const time = fecha.split('T')[1] || '00:00';

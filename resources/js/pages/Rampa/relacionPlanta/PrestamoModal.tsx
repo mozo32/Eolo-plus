@@ -1,5 +1,6 @@
 import InputMatricula from '@/pages/InputMatricula';
 import { fechaHoy } from '@/pages/despacho/operacionesProgramadas/types';
+import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
 import { obtenerEmpresasPlantaApi } from '@/stores/apiRelacionPlanta';
 import { BatteryCharging, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -20,6 +21,7 @@ const ERROR = 'mt-1 text-[10px] font-bold text-red-600';
 
 /** Alta del préstamo: fecha local editable, empresa, matrícula y horómetro inicial. */
 export default function PrestamoModal({ ultimoHorometroFin = null, onCerrar, onGuardar }: Props) {
+    const { min, max } = useVentanaDeFecha('planta.prestamo');
     const [fecha, setFecha] = useState(() => fechaHoy());
     const [empresa, setEmpresa] = useState('');
     const [matricula, setMatricula] = useState('');
@@ -93,7 +95,7 @@ export default function PrestamoModal({ ultimoHorometroFin = null, onCerrar, onG
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
                             <label className={ETIQUETA}>Fecha</label>
-                            <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} className={CAMPO} required />
+                            <input type="date" min={min} max={max} value={fecha} onChange={e => setFecha(e.target.value)} className={CAMPO} required />
                             {errores.fecha && <p className={ERROR}>{errores.fecha}</p>}
                         </div>
                         <div>

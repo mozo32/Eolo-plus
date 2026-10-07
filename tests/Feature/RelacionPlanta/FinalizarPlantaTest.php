@@ -102,7 +102,7 @@ test('tras finalizar la GPU vuelve a estar disponible y se puede prestar de nuev
     $this->getJson('/api/RelacionPlanta/actual')->assertOk()->assertJsonPath('prestamo', null);
 
     $this->postJson('/api/RelacionPlanta/prestar', [
-        'fecha' => '2026-09-14', 'empresa' => 'OTRA', 'matricula' => 'XA-DOS', 'horometro_inicio' => 11,
+        'fecha' => now()->toDateString(), 'empresa' => 'OTRA', 'matricula' => 'XA-DOS', 'horometro_inicio' => 11,
     ])->assertCreated();
 
     expect(RelacionPlanta::count())->toBe(2);
