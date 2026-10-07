@@ -14,6 +14,12 @@
 
 - **`atras` se cuenta inclusive y en días de calendario.** `atras => 1` significa mínimo = hoy − 1 día, es decir **hoy y ayer, dos días**. `atras => 3` da **cuatro** días. El máximo es **hoy**, salvo `futuro => true`, que no pone máximo. `atras => null` no pone mínimo.
 - **Una clave desconocida LANZA.** Nunca un valor por omisión silencioso.
+- **La regla SIEMPRE va acompañada de `date`, y el `required` que ya hubiera se conserva.** Las tres
+  juntas: `['required', 'date', new DentroDeLaVentana('clave')]`. Medido en la Task 2 y no deducido:
+  como toda regla no implícita de Laravel, `DentroDeLaVentana` **no corre con un valor vacío** —`''`,
+  `null`, `'   '` y el campo ausente pasan—, así que quitar el `required` dejaría el campo opcional
+  sin que nada falle. Y **sin `date` delante** deja pasar lo que no sea una fecha: con `fecha[]=…`,
+  `Carbon::parse` de un arreglo lanza, el `rescue` se lo traga y la validación pasa.
 - **Los filtros de búsqueda y reportes NO se tocan.** Son 60 de los 81 calendarios. La lista de los 12 verificados uno a uno está en la §6 de la especificación.
 - **No se sustituye ningún input por un componente nuevo.** Solo se añaden `min` y `max`.
 - Zona horaria: se usa la del servidor (`config('app.timezone')`), la misma que ya usan los modelos. No se introduce otra fuente de «hoy».
