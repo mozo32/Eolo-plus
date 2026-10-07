@@ -28,6 +28,14 @@
   comprueba y lo que se escribe sean el mismo día. Se midió lo contrario: convirtiendo, la cadena
   `\"2026-10-08T00:30:00+14:00\"` se veía como día 7 en México, pasaba, y la base guardaba el 8.
   **No vuelvas a añadir un `setTimezone` ahí.**
+- **El día que se juzga se calcula con UNA función que imita el cast `date` de Eloquent**, caso
+  numérico incluido, y la usan tanto la regla como la comparación de «¿cambió la fecha?». No uses
+  `Carbon::parse` suelto en ninguno de los dos sitios. Medido: el cast trata cualquier cadena numérica
+  como **timestamp Unix**, así que `fecha: "20261007"` pasaba y guardaba `1970-08-23`, y en una
+  edición `fecha: "2026"` se tomaba por «la misma fecha» y se saltaba toda la validación.
+- **El invariante que hay que probar no es el código 422, es lo guardado:** si la regla acepta un
+  valor, **el día que queda en la columna está dentro de la ventana**. Una prueba que solo mira
+  códigos de respuesta no ve este defecto; hay que leer la columna.
 - La suite corre **en serie**: `php artisan test`. `--parallel` da fallos falsos en esta máquina.
 - `npx tsc --noEmit`: el único error aceptable es el preexistente `resources/js/actions/App/Http/Controllers/Api/WalkAroundController.ts(905,5)`.
 - `vendor/bin/pint --dirty` antes de cada commit; revertir lo que toque fuera del cambio.
