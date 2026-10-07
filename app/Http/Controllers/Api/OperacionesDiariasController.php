@@ -15,6 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
 use App\Models\Bitacora;
 use App\Rules\DentroDeLaVentana;
+use App\Support\VentanasDeFecha;
 
 class OperacionesDiariasController extends Controller
 {
@@ -786,10 +787,7 @@ class OperacionesDiariasController extends Controller
      */
     private function validarFechaSiCambia(Request $request, OperacionDiaria $operacion): void
     {
-        $recibida = $request->input('fecha');
-        $recibidaComoDia = is_string($recibida)
-            ? rescue(fn () => Carbon::parse($recibida)->toDateString(), null, false)
-            : null;
+        $recibidaComoDia = VentanasDeFecha::diaQueGuardaElModelo($request->input('fecha'));
 
         if ($recibidaComoDia !== null && $recibidaComoDia === $operacion->fecha?->toDateString()) {
             return;

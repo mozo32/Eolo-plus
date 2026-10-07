@@ -14,6 +14,37 @@ use Illuminate\Support\Facades\Schema;
  */
 
 /**
+ * El alta escribe tambien en la base remota (tablas de catalogo de aeronaves); en las pruebas
+ * se sustituye por una sqlite en memoria para no tocar nunca la real.
+ */
+function remotaEnMemoria(): void
+{
+    config(['database.connections.remota' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']]);
+    DB::purge('remota');
+
+    Schema::connection('remota')->create('tb_tipo', function ($tabla) {
+        $tabla->increments('id_tipo');
+        $tabla->string('tipo');
+    });
+    Schema::connection('remota')->create('tb_matricula', function ($tabla) {
+        $tabla->string('matricula');
+        $tabla->integer('id_estatus');
+        $tabla->integer('id_tipo');
+        $tabla->integer('id_categoria');
+        $tabla->integer('id_motor');
+        $tabla->integer('id_aterrizaje');
+        $tabla->integer('id_transito2h');
+        $tabla->integer('id_transito12h');
+        $tabla->integer('id_pernocta');
+        $tabla->integer('d_vuelos');
+    });
+}
+
+// Ninguna prueba de este fichero toca la remota real: si una regla se rompiera, el alta seguiria
+// y escribiria en `tb_tipo` y `tb_matricula`, que en este proyecto son de solo lectura.
+beforeEach(fn () => remotaEnMemoria());
+
+/**
  * Las dos fechas de una ventana, con el formato en que las nombra el mensaje.
  *
  * @return array{min: string, max: string}
@@ -89,35 +120,7 @@ it('no deja pasar una fecha vacia, ausente o ilegible en el alta', function (?st
     'ilegible' => ['no-es-una-fecha', true],
 ]);
 
-/**
- * El alta escribe tambien en la base remota (tablas de catalogo de aeronaves); en las pruebas
- * se sustituye por una sqlite en memoria para no tocar nunca la real.
- */
-function remotaEnMemoria(): void
-{
-    config(['database.connections.remota' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']]);
-    DB::purge('remota');
-
-    Schema::connection('remota')->create('tb_tipo', function ($tabla) {
-        $tabla->increments('id_tipo');
-        $tabla->string('tipo');
-    });
-    Schema::connection('remota')->create('tb_matricula', function ($tabla) {
-        $tabla->string('matricula');
-        $tabla->integer('id_estatus');
-        $tabla->integer('id_tipo');
-        $tabla->integer('id_categoria');
-        $tabla->integer('id_motor');
-        $tabla->integer('id_aterrizaje');
-        $tabla->integer('id_transito2h');
-        $tabla->integer('id_transito12h');
-        $tabla->integer('id_pernocta');
-        $tabla->integer('d_vuelos');
-    });
-}
-
 it('una regla que rechazara todo no pasa: el alta dentro de ventana escribe', function (int $desplazamiento, string $movimiento) {
-    remotaEnMemoria();
     $this->actingAs(usuarioAdmin(), 'sanctum');
     $fecha = Carbon::today()->addDays($desplazamiento)->toDateString();
     $antes = OperacionDiaria::count();
@@ -136,7 +139,6 @@ it('una regla que rechazara todo no pasa: el alta dentro de ventana escribe', fu
 it('rechaza una fecha con zona que se guardaria como un dia fuera de ventana, y no escribe', function () {
     // Con zona +14, las 00:30 del dia de manana son todavia «hoy» en Mexico, pero el modelo
     // guarda el dia tal como viene escrito: manana. La regla juzga lo que se guarda.
-    remotaEnMemoria();
     $this->actingAs(usuarioAdmin(), 'sanctum');
     $manana = Carbon::today()->addDay()->toDateString();
     $antes = OperacionDiaria::count();
@@ -266,4 +268,155 @@ it('la edicion tampoco acepta una fecha con zona que se guardaria como manana', 
     ])->assertUnprocessable()->assertJsonValidationErrors('fecha');
 
     expect($operacion->fresh()->fecha->toDateString())->toBe($original);
+});
+
+it('una edicion con una fecha valida de hoy escribe la fecha (la edicion tiene camino feliz)', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $hoy = Carbon::today()->toDateString();
+    $operacion = operacionParaEditar('llegada', Carbon::today()->subDays(10)->toDateString());
+
+    $this->putJson("/api/OperacionesDiarias/{$operacion->id}", [
+        'matricula' => 'XA-EDI',
+        'equipo' => 'C172',
+        'hora' => '10:30',
+        'procedencia' => 'MMTO',
+        'pax' => 2,
+        'fecha' => $hoy,
+    ])->assertOk();
+
+    expect($operacion->fresh()->fecha->toDateString())->toBe($hoy);
+});
+
+it('reenviar la misma fecha en otro formato cuenta como sin cambios', function (string $formato) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antigua = Carbon::today()->subDays(10)->toDateString();
+    $operacion = operacionParaEditar('llegada', $antigua);
+
+    $this->putJson("/api/OperacionesDiarias/{$operacion->id}", [
+        'matricula' => 'XA-EDI',
+        'equipo' => 'C172',
+        'hora' => '10:30',
+        'procedencia' => 'MMTO',
+        'pax' => 7,
+        'fecha' => str_replace('{dia}', $antigua, $formato),
+    ])->assertOk();
+
+    expect($operacion->fresh()->pax)->toBe(7);
+    expect($operacion->fresh()->fecha->toDateString())->toBe($antigua);
+})->with([
+    'ISO con Z' => ['{dia}T00:00:00Z'],
+    'con hora' => ['{dia} 00:00:00'],
+    'ISO con desfase' => ['{dia}T00:00:00-06:00'],
+]);
+
+// ---------------------------------------------------------------------------
+// El invariante: si la regla acepta un valor, el dia que QUEDA en la columna esta en la ventana
+// ---------------------------------------------------------------------------
+
+/**
+ * Cadenas hostiles para una fecha: lo que el cast `date` de Eloquent lee distinto de lo que lee
+ * `Carbon::parse`. Se construyen con la fecha de hoy para que la prueba no caduque.
+ *
+ * @return array<string, array{0: mixed}>
+ */
+function fechasHostiles(): array
+{
+    $hoy = Carbon::today();
+    $ayer = $hoy->copy()->subDay();
+    $manana = $hoy->copy()->addDay();
+    $antigua = $hoy->copy()->subDays(10);
+
+    return [
+        'compacta de hoy (la base la leia como timestamp)' => [$hoy->format('Ymd')],
+        'compacta de hoy como numero JSON' => [(int) $hoy->format('Ymd')],
+        'solo el anio' => ['2026'],
+        'solo el anio, como numero' => [2026],
+        'cuatro ceros' => ['0000'],
+        'hhmm' => ['1200'],
+        'timestamp de ahora' => [(string) $hoy->copy()->setTime(12, 0)->timestamp],
+        'timestamp de manana' => [(string) $manana->copy()->setTime(12, 0)->timestamp],
+        'timestamp de hace diez dias' => [(string) $antigua->copy()->setTime(12, 0)->timestamp],
+        'timestamp con decimales' => [$hoy->copy()->setTime(12, 0)->timestamp.'.5'],
+        'notacion cientifica' => ['1e3'],
+        'negativo' => ['-1'],
+        'cero' => ['0'],
+        'hoy con desfase +14' => [$hoy->toDateString().'T00:30:00+14:00'],
+        'manana con desfase +14' => [$manana->toDateString().'T00:30:00+14:00'],
+        'hoy con desfase -12' => [$hoy->toDateString().'T23:59:59-12:00'],
+        'hoy en UTC' => [$hoy->toDateString().'T12:00:00Z'],
+        'manana en UTC' => [$manana->toDateString().'T02:00:00Z'],
+        'ayer con hora' => [$ayer->toDateString().' 10:00:00'],
+        'hoy con espacios alrededor' => ['  '.$hoy->toDateString().'  '],
+        'hoy con mes y dia sin cero' => [$hoy->format('Y-n-j')],
+        'dia, mes y anio' => [$hoy->format('d-m-Y')],
+        'mes, dia y anio con barras' => [$hoy->format('m/d/Y')],
+        'tomorrow' => ['tomorrow'],
+        'yesterday' => ['yesterday'],
+        'today' => ['today'],
+        'now' => ['now'],
+        'next monday' => ['next monday'],
+        '+1 day' => ['+1 day'],
+        '-5 days' => ['-5 days'],
+        'last day of next month' => ['last day of next month'],
+        'noon tomorrow' => ['noon tomorrow'],
+        'basura' => ['no-es-una-fecha'],
+        'vacia' => [''],
+        'espacio' => [' '],
+        'un arreglo' => [['2026-10-07']],
+        'un booleano' => [true],
+    ];
+}
+
+/** Verdadero si el dia esta dentro de la ventana de la clave. */
+function enLaVentana(string $dia, string $clave): bool
+{
+    ['min' => $min, 'max' => $max] = VentanasDeFecha::para($clave);
+
+    return $dia >= $min && $dia <= $max;
+}
+
+it('ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = OperacionDiaria::count();
+    $carga = cargaDeOperacion('Llegada', '');
+    $carga['fecha'] = $valor;
+
+    $this->postJson('/api/OperacionesDiarias', $carga);
+
+    if (OperacionDiaria::count() === $antes) {
+        expect(OperacionDiaria::count())->toBe($antes);
+
+        return;
+    }
+
+    $guardado = OperacionDiaria::latest('id')->first()->fecha->toDateString();
+    expect(enLaVentana($guardado, 'operaciones.llegada'))
+        ->toBeTrue('se guardo '.$guardado.' con la entrada '.json_encode($valor));
+})->with(fn () => fechasHostiles());
+
+it('EDICION: lo que la regla deja pasar deja la columna dentro de la ventana, o como estaba', function (mixed $valor, string $partida) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $original = $partida === 'hoy'
+        ? Carbon::today()->toDateString()
+        : Carbon::today()->subDays(10)->toDateString();
+    $operacion = operacionParaEditar('llegada', $original);
+
+    $this->putJson("/api/OperacionesDiarias/{$operacion->id}", [
+        'matricula' => 'XA-EDI',
+        'equipo' => 'C172',
+        'hora' => '10:30',
+        'procedencia' => 'MMTO',
+        'pax' => 2,
+        'fecha' => $valor,
+    ]);
+
+    $guardado = $operacion->fresh()->fecha->toDateString();
+    expect($guardado === $original || enLaVentana($guardado, 'operaciones.llegada'))
+        ->toBeTrue('de '.$original.' paso a '.$guardado.' con la entrada '.json_encode($valor));
+})->with(function () {
+    foreach (['hoy', 'antigua'] as $partida) {
+        foreach (fechasHostiles() as $nombre => [$valor]) {
+            yield "{$partida}: {$nombre}" => [$valor, $partida];
+        }
+    }
 });

@@ -25,11 +25,9 @@ class DentroDeLaVentana implements ValidationRule
     {
         ['min' => $min, 'max' => $max] = VentanasDeFecha::para($this->clave);
 
-        // Sin convertir de zona A PROPOSITO: el modelo guarda el dia tal como viene escrito en la
-        // cadena (el cast `date` no cambia de zona), asi que la regla tiene que juzgar ese mismo
-        // dia. Convertirlo aqui dejaba pasar `2026-10-08T00:30:00+14:00` como «hoy en Mexico» y
-        // la base lo guardaba como el dia 8.
-        $fecha = rescue(fn () => Carbon::parse($value)->toDateString(), null, false);
+        // Se juzga el dia que GUARDARIA el modelo, no el que `Carbon::parse` leeria: difieren con
+        // una cadena numerica (`"20261007"` se guarda como timestamp) y con un desfase de zona.
+        $fecha = VentanasDeFecha::diaQueGuardaElModelo($value);
 
         // Una fecha ilegible no es cosa de esta regla: solo la atrapa `date`, si quien usa
         // la regla lo puso en la lista (ver el docblock de la clase).

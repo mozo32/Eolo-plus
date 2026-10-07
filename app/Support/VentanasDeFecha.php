@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use InvalidArgumentException;
 
 /**
@@ -74,6 +75,49 @@ final class VentanasDeFecha
             'min' => $atras === null ? null : $hoy->copy()->subDays($atras)->toDateString(),
             'max' => $futuro ? null : $hoy->toDateString(),
         ];
+    }
+
+    /**
+     * El día (`Y-m-d`) que quedaría guardado en una columna con cast `date` si se le asigna
+     * este valor, o null si el valor no se puede leer como día.
+     *
+     * Es la ÚNICA definición de «qué día es esta fecha» para la regla y para la comparación de
+     * la edición. Copia el comportamiento de `HasAttributes::asDateTime()` de la versión
+     * instalada de Laravel (el cast `date` guarda `fromDateTime()` = `asDateTime()` formateado):
+     *
+     * - un valor NUMÉRICO es un timestamp Unix, no una fecha: `"20261007"` es 1970-08-23 y
+     *   `"2026"` es 1969-12-31. `Carbon::parse` los leería como 7 de octubre de 2026 y hoy, y
+     *   la regla dejaría pasar un día que la base no guarda;
+     * - `Y-m-d` exacto se toma tal cual;
+     * - lo demás se intenta como `Y-m-d H:i:s` y, si no, con `Carbon::parse`, conservando el
+     *   desfase que traiga la cadena (no se convierte de zona: el modelo tampoco).
+     *
+     * Si cambia la versión de Laravel, la prueba que lee la columna tras escribir cadenas
+     * hostiles es la que avisa de que esta copia se quedó atrás.
+     */
+    public static function diaQueGuardaElModelo(mixed $valor): ?string
+    {
+        if ((! is_string($valor) && ! is_int($valor) && ! is_float($valor)) || empty($valor)) {
+            return null;
+        }
+
+        return rescue(function () use ($valor): string {
+            if (is_numeric($valor)) {
+                return Date::createFromTimestamp($valor, date_default_timezone_get())->toDateString();
+            }
+
+            if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/', $valor)) {
+                return Date::instance(Carbon::createFromFormat('Y-m-d', $valor)->startOfDay())->toDateString();
+            }
+
+            try {
+                $fecha = Date::createFromFormat('Y-m-d H:i:s', $valor);
+            } catch (InvalidArgumentException) {
+                $fecha = false;
+            }
+
+            return ($fecha ?: Date::parse($valor))->toDateString();
+        }, null, false);
     }
 
     /** @return array<string, array{min: ?string, max: ?string}> */
