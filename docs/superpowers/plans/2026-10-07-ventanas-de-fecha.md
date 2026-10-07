@@ -54,6 +54,10 @@
   toda regla no implícita, con un valor vacío no corre; y sin `date` delante deja pasar `"0"`,
   `0` y `true`. Hoy eso solo lo dice un docblock, así que **el escáner de claves lo exige**:
   si pones `new DentroDeLaVentana(` en un arreglo sin `date` ni `date_format`, la prueba cae.
+- **Y la regla se escribe INLINE, dentro del arreglo de reglas.** Consecuencia de lo
+  anterior: el escáner lee el arreglo que rodea a `new DentroDeLaVentana(`, así que una
+  regla guardada en una variable aparte (`$r = new DentroDeLaVentana(...)`) no tiene arreglo
+  que leer y **falla la prueba**. Si necesitas un ternario, va dentro del arreglo.
 - La suite corre **en serie**: `php artisan test`. `--parallel` da fallos falsos en esta máquina.
 - `npx tsc --noEmit`: el único error aceptable es el preexistente `resources/js/actions/App/Http/Controllers/Api/WalkAroundController.ts(905,5)`.
 - `vendor/bin/pint --dirty` antes de cada commit; revertir lo que toque fuera del cambio.
