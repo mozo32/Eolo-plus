@@ -19,6 +19,11 @@ use InvalidArgumentException;
  * `atras` se cuenta INCLUSIVE y en días de calendario: `1` deja hoy y ayer —dos días—, y
  * `3` deja cuatro. `null` no pone mínimo. `futuro` solo es `true` en Operaciones
  * Programadas, que por naturaleza registra lo que todavía no ha pasado.
+ *
+ * OJO con el punto: las claves lo llevan pero NO son anidamiento. Viajan al navegador como
+ * claves literales, así que no se leen con `->where('ventanasDeFecha.a.b')` ni con
+ * `data_get()` por ruta (los buscarían anidados y no los hallarían): se lee
+ * `$page->toArray()['props']['ventanasDeFecha'][$clave]`.
  */
 final class VentanasDeFecha
 {

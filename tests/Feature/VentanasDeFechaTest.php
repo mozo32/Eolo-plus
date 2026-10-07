@@ -2,6 +2,7 @@
 
 use App\Support\VentanasDeFecha;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Validator;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -185,8 +186,95 @@ test('las ventanas viajan en las props de Inertia', function () {
             ->and($ventanas['turno.checklist'])
             ->toBe(['min' => '2026-10-06', 'max' => '2026-10-07'])
             ->and($ventanas['programadas.operacion'])
-            ->toBe(['min' => null, 'max' => null])
-            ->and(array_keys($ventanas))
-            ->toBe(array_keys(VentanasDeFecha::CLAVES));
+            ->toBe(['min' => null, 'max' => null]);
     });
+});
+
+test('la tabla de ventanas esta fijada a mano: cambiar una exige reconocerlo aqui', function () {
+    // Duplica la tabla A PROPOSITO. Las demas pruebas leen `CLAVES` por ambos lados y se
+    // mueven con ella; esta no, y por eso cambiar una ventana (o quitar, renombrar o
+    // anadir una clave) obliga a tocar dos sitios. Es una regla de integridad de datos.
+    expect(VentanasDeFecha::CLAVES)->toBe([
+        'turno.checklist' => ['atras' => 1, 'futuro' => false],
+        'turno.entrega_rampa' => ['atras' => 1, 'futuro' => false],
+        'autotanque.turno_inicio' => ['atras' => 1, 'futuro' => false],
+        'autotanque.turno_cierre' => ['atras' => 1, 'futuro' => false],
+        'chalecos.prestamo' => ['atras' => 1, 'futuro' => false],
+        'planta.prestamo' => ['atras' => 1, 'futuro' => false],
+        'estacionamiento.ronda' => ['atras' => 1, 'futuro' => false],
+        'operaciones.llegada' => ['atras' => 3, 'futuro' => false],
+        'operaciones.salida' => ['atras' => 3, 'futuro' => false],
+        'operaciones.registro' => ['atras' => 3, 'futuro' => false],
+        'despacho.walk_around' => ['atras' => 3, 'futuro' => false],
+        'despacho.informacion_general' => ['atras' => 3, 'futuro' => false],
+        'autotanque.servicio' => ['atras' => 3, 'futuro' => false],
+        'comisariato.entrega' => ['atras' => 3, 'futuro' => false],
+        'csae.entrada' => ['atras' => 3, 'futuro' => false],
+        'csae.salida' => ['atras' => 3, 'futuro' => false],
+        'pernocta.dia' => ['atras' => 3, 'futuro' => false],
+        'medicamento.movimiento' => ['atras' => 3, 'futuro' => false],
+        'programadas.operacion' => ['atras' => null, 'futuro' => true],
+    ]);
+});
+
+/**
+ * Los usos de una clave en el codigo fuente: [archivo, literal] por cada llamada.
+ *
+ * @param  list<string>  $carpetas
+ * @param  list<string>  $extensiones
+ * @return array{literales: list<array{0: string, 1: string}>, llamadas: int}
+ */
+function usosDeVentana(array $carpetas, array $extensiones, string $patronLlamada, string $patronLiteral, array $excluir = []): array
+{
+    $literales = [];
+    $llamadas = 0;
+
+    foreach ($carpetas as $carpeta) {
+        foreach (File::allFiles(base_path($carpeta)) as $archivo) {
+            $ruta = str_replace('\\', '/', $archivo->getPathname());
+
+            if (! in_array($archivo->getExtension(), $extensiones, true) || in_array(basename($ruta), $excluir, true)) {
+                continue;
+            }
+
+            $codigo = file_get_contents($ruta);
+            $llamadas += preg_match_all($patronLlamada, $codigo);
+
+            if (preg_match_all($patronLiteral, $codigo, $coincidencias)) {
+                foreach ($coincidencias[1] as $literal) {
+                    $literales[] = [$ruta, $literal];
+                }
+            }
+        }
+    }
+
+    return ['literales' => $literales, 'llamadas' => $llamadas];
+}
+
+test('cada clave escrita en el codigo existe en la tabla de ventanas', function () {
+    // `useVentanaDeFecha('csae.entrda')` compila y deja el calendario SIN limites en
+    // silencio, mientras que `para()` si lanza. Esta prueba cierra esa asimetria: lee el
+    // codigo fuente y exige que cada literal exista en `CLAVES`.
+    $js = usosDeVentana(
+        ['resources/js'],
+        ['ts', 'tsx'],
+        '/\buseVentanaDeFecha\(/',
+        '/\buseVentanaDeFecha\(\s*[\'"]([^\'"]*)[\'"]\s*\)/',
+        ['ventanasDeFecha.ts'],
+    );
+    $php = usosDeVentana(
+        ['app'],
+        ['php'],
+        '/\bnew\s+[\w\\\\]*DentroDeLaVentana\(/',
+        '/\bnew\s+[\w\\\\]*DentroDeLaVentana\(\s*[\'"]([^\'"]*)[\'"]\s*\)/',
+    );
+
+    foreach (array_merge($js['literales'], $php['literales']) as [$ruta, $literal]) {
+        $this->assertArrayHasKey($literal, VentanasDeFecha::CLAVES, "Clave de ventana desconocida '{$literal}' en {$ruta}");
+    }
+
+    // Una llamada con una variable o una expresion escapa a la lectura de literales: se
+    // exige que todas las llamadas sean con un literal, para que nada quede sin comprobar.
+    expect($js['llamadas'])->toBe(count($js['literales']), 'useVentanaDeFecha se llama con algo que no es un literal');
+    expect($php['llamadas'])->toBe(count($php['literales']), 'DentroDeLaVentana se instancia con algo que no es un literal');
 });
