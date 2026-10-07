@@ -393,10 +393,16 @@ test('las ventanas viajan en las props de Inertia', function () {
     Carbon::setTestNow('2026-10-07 15:00:00');
     $this->actingAs(App\Models\User::factory()->create());
 
-    $this->get('/dashboard')->assertInertia(fn ($page) => $page
-        ->where('ventanasDeFecha.operaciones.llegada.min', '2026-10-04')
-        ->where('ventanasDeFecha.operaciones.llegada.max', '2026-10-07')
-        ->where('ventanasDeFecha.programadas.operacion.max', null));
+    // OJO: `->where('ventanasDeFecha.operaciones.llegada.min', …)` NO funciona. Las
+    // claves llevan punto y viajan PLANAS, pero `where()` lee el punto como
+    // anidamiento y busca una estructura que no existe. Verificado ejecutandolo:
+    // falla con «Property [...] does not exist». Se lee el arreglo directamente.
+    $this->get('/dashboard')->assertInertia(function (Assert $page) {
+        $ventanas = $page->toArray()['props']['ventanasDeFecha'];
+
+        expect($ventanas['operaciones.llegada'])->toBe(['min' => '2026-10-04', 'max' => '2026-10-07'])
+            ->and($ventanas['programadas.operacion'])->toBe(['min' => null, 'max' => null]);
+    });
 });
 ```
 

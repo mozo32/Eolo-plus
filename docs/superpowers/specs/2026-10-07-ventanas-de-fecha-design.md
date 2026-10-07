@@ -196,8 +196,13 @@ pantalla inusable:
 
 - **Un permiso para saltarse la ventana.** Se consideró y se descartó por ahora: si alguien
   necesita registrar algo de hace una semana, la salida es ampliar la ventana de ese formulario
-  en la tabla, que es un cambio de una línea y queda registrado. Un permiso de excepción
-  invitaría a usarlo en lugar de corregir la ventana.
+  en la tabla, y queda registrado. Un permiso de excepción invitaría a usarlo en lugar de
+  corregir la ventana.
+  **(Corregido 2026-10-07: esto decía «un cambio de una línea», y ya no lo es.** Una prueba fija
+  la tabla entera con sus 19 valores escritos a mano, así que cambiar una ventana exige tocar
+  los dos sitios. Es deliberado: se midió que, sin esa prueba, pasar `csae.entrada` de 3 a 9
+  días dejaba la suite en verde, y para una regla de integridad de datos eso pesa más que la
+  comodidad de editar un solo renglón.)
 - **Recalcular la ventana en el navegador** para la pestaña abierta de un día para otro. Ver §5.
 - **Un componente de fecha unificado.** Ver §5.
 - **Los 48 rangos de búsqueda y reportes**, ni los 12 filtros de §6.
