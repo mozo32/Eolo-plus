@@ -336,6 +336,12 @@ function fechasHostiles(): array
         'timestamp de ahora' => [(string) $hoy->copy()->setTime(12, 0)->timestamp],
         'timestamp de manana' => [(string) $manana->copy()->setTime(12, 0)->timestamp],
         'timestamp de hace diez dias' => [(string) $antigua->copy()->setTime(12, 0)->timestamp],
+        // A las 02:00 UTC el dia de UTC y el de Mexico NO coinciden (en Mexico son las 20:00 del
+        // dia anterior). Los timestamps a las 12:00 de Mexico no lo distinguen: sirven igual en
+        // las dos zonas, y una rama numerica sin zona pasaria inadvertida.
+        'timestamp del borde de atras a las 02:00 UTC' => [(string) Carbon::parse($hoy->copy()->subDays(3)->toDateString().' 02:00:00', 'UTC')->timestamp],
+        'timestamp de hace diez dias a las 02:00 UTC' => [(string) Carbon::parse($antigua->toDateString().' 02:00:00', 'UTC')->timestamp],
+        'timestamp de manana a las 05:00 UTC' => [(string) Carbon::parse($manana->toDateString().' 05:00:00', 'UTC')->timestamp],
         'timestamp con decimales' => [$hoy->copy()->setTime(12, 0)->timestamp.'.5'],
         'notacion cientifica' => ['1e3'],
         'negativo' => ['-1'],

@@ -281,3 +281,15 @@ test('cada clave escrita en el codigo existe en la tabla de ventanas', function 
     expect($js['llamadas'])->toBe(count($js['literales']), 'useVentanaDeFecha se llama con algo que no es un literal');
     expect($php['llamadas'])->toBe(count($php['literales']), 'DentroDeLaVentana se instancia con algo que no es un literal');
 });
+
+test('un valor que date acepta y Eloquent guarda con un anio absurdo tambien se rechaza', function () {
+    // `"20261007120000"` lo lee `date` como fecha y Eloquent lo guarda como un timestamp enorme
+    // (anio 644015). `diaQueGuardaElModelo` devuelve ese texto tal cual y nunca cae en la ventana.
+    Carbon::setTestNow('2026-10-07 15:00:00');
+
+    $validador = Validator::make(['fecha' => '20261007120000'], [
+        'fecha' => ['date', new App\Rules\DentroDeLaVentana('operaciones.llegada')],
+    ]);
+
+    expect($validador->passes())->toBeFalse();
+});

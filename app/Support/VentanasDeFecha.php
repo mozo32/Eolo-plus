@@ -2,8 +2,8 @@
 
 namespace App\Support;
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Date;
 use InvalidArgumentException;
 
 /**
@@ -82,18 +82,19 @@ final class VentanasDeFecha
      * este valor, o null si el valor no se puede leer como día.
      *
      * Es la ÚNICA definición de «qué día es esta fecha» para la regla y para la comparación de
-     * la edición. Copia el comportamiento de `HasAttributes::asDateTime()` de la versión
-     * instalada de Laravel (el cast `date` guarda `fromDateTime()` = `asDateTime()` formateado):
+     * la edición, y NO la reimplementa: le pregunta al propio Eloquent (`fromDateTime()`, lo
+     * que el cast `date` guarda al asignar). Una copia se quedaba atrás sola: así lo demostró
+     * quitarle la zona a la rama de timestamps, que la suite no notó.
      *
-     * - un valor NUMÉRICO es un timestamp Unix, no una fecha: `"20261007"` es 1970-08-23 y
-     *   `"2026"` es 1969-12-31. `Carbon::parse` los leería como 7 de octubre de 2026 y hoy, y
-     *   la regla dejaría pasar un día que la base no guarda;
-     * - `Y-m-d` exacto se toma tal cual;
-     * - lo demás se intenta como `Y-m-d H:i:s` y, si no, con `Carbon::parse`, conservando el
-     *   desfase que traiga la cadena (no se convierte de zona: el modelo tampoco).
+     * Por eso `Carbon::parse` NO sirve para esto: un valor numérico lo guarda Eloquent como
+     * timestamp Unix (`"20261007"` es 1970-08-23, `"2026"` es 1969-12-31) y `parse` lo leería
+     * como el 7 de octubre de 2026 y hoy; y una cadena con desfase conserva el día que trae
+     * escrito, sin convertirlo de zona.
      *
-     * Si cambia la versión de Laravel, la prueba que lee la columna tras escribir cadenas
-     * hostiles es la que avisa de que esta copia se quedó atrás.
+     * El modelo es anónimo a propósito: la usan todos los módulos, no debe quedar atada a uno.
+     * Lo vacío (`""`, `0`, `"0"`, `false`, `null`) y lo que no es string ni número devuelve
+     * null sin preguntarle al modelo: ahí Eloquent devuelve el literal o lanza, y esos valores
+     * los rechazan `required` y `date`, que van delante.
      */
     public static function diaQueGuardaElModelo(mixed $valor): ?string
     {
@@ -101,23 +102,20 @@ final class VentanasDeFecha
             return null;
         }
 
-        return rescue(function () use ($valor): string {
-            if (is_numeric($valor)) {
-                return Date::createFromTimestamp($valor, date_default_timezone_get())->toDateString();
-            }
+        static $modelo = null;
+        $modelo ??= new class extends Model
+        {
+            protected $casts = ['dia' => 'date'];
 
-            if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/', $valor)) {
-                return Date::instance(Carbon::createFromFormat('Y-m-d', $valor)->startOfDay())->toDateString();
-            }
+            protected $dateFormat = 'Y-m-d H:i:s';
+        };
 
-            try {
-                $fecha = Date::createFromFormat('Y-m-d H:i:s', $valor);
-            } catch (InvalidArgumentException) {
-                $fecha = false;
-            }
+        $guardado = rescue(fn () => $modelo->fromDateTime($valor), null, false);
 
-            return ($fecha ?: Date::parse($valor))->toDateString();
-        }, null, false);
+        // Se devuelve el dia TAL COMO lo escribe Eloquent, incluso con un anio de mas de cuatro
+        // cifras (`"20261007120000"` se guarda como el anio 644015). Ese texto nunca cae entre el
+        // suelo y el techo (`Y-m-d`) al compararlos como cadenas, asi que la regla lo rechaza.
+        return is_string($guardado) ? strtok($guardado, ' ') : null;
     }
 
     /** @return array<string, array{min: ?string, max: ?string}> */
