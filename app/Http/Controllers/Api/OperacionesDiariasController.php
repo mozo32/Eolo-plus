@@ -14,13 +14,18 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
 use App\Models\Bitacora;
+use App\Rules\DentroDeLaVentana;
 
 class OperacionesDiariasController extends Controller
 {
     public function store(Request $request)
     {
+        $reglaDeVentana = $request->input('movimiento') === 'Salida'
+            ? new DentroDeLaVentana('operaciones.salida')
+            : new DentroDeLaVentana('operaciones.llegada');
+
         $validated = $request->validate([
-            'fecha' => ['required', 'date'],
+            'fecha' => ['required', 'date', $reglaDeVentana],
             'movimiento' => ['required', 'in:Llegada,Salida'],
             'matricula' => ['required', 'string', 'max:20'],
             'equipo' => ['required', 'string', 'max:50'],
@@ -649,6 +654,8 @@ class OperacionesDiariasController extends Controller
         return DB::transaction(function () use ($request, $id) {
             $operacion = OperacionDiaria::findOrFail($id);
 
+            $this->validarFechaSiCambia($request, $operacion);
+
             $validacionesAnteriores = is_array(
                 $operacion->validaciones
             )
@@ -769,6 +776,32 @@ class OperacionesDiariasController extends Controller
             ]);
         });
     }
+
+    /**
+     * Aplica la ventana de fecha al editar, pero solo si la fecha CAMBIA.
+     *
+     * Corregir los pasajeros de una operación de hace una semana reenvía su fecha
+     * intacta; exigirle la ventana a esa fecha bloquearía cualquier corrección de
+     * registros viejos. Lo que la ventana impide es poner una fecha fuera de ella.
+     */
+    private function validarFechaSiCambia(Request $request, OperacionDiaria $operacion): void
+    {
+        $recibida = $request->input('fecha');
+        $recibidaComoDia = is_string($recibida)
+            ? rescue(fn () => Carbon::parse($recibida)->toDateString(), null, false)
+            : null;
+
+        if ($recibidaComoDia !== null && $recibidaComoDia === $operacion->fecha?->toDateString()) {
+            return;
+        }
+
+        $regla = $operacion->tipo === 'salida'
+            ? new DentroDeLaVentana('operaciones.salida')
+            : new DentroDeLaVentana('operaciones.llegada');
+
+        $request->validate(['fecha' => ['required', 'date', $regla]]);
+    }
+
     /**
      * Cancela una operación diaria: solo cambia status a false.
      *

@@ -10,6 +10,7 @@ import { useMatriculaAutocompleteStore } from "./useMatriculaAutocompleteStore";
 import type { PrecargaProgramada } from "@/pages/despacho/operacionesProgramadas/types";
 import { useDeteccionProgramada } from "@/pages/despacho/operacionesProgramadas/useDeteccionProgramada";
 import { CalendarClock } from "lucide-react";
+import { useVentanaDeFecha } from "@/lib/ventanasDeFecha";
 
 export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datosEdicion, soloLectura = false, borradorId, datosProgramados, onVincularProgramada, onDesvincularProgramada }: {
     alCerrar?: () => void,
@@ -31,6 +32,7 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
     onDesvincularProgramada?: () => void;
 }) => {
     const { obtenerTipo } = useMatriculaAutocompleteStore();
+    const { min, max } = useVentanaDeFecha('operaciones.llegada');
     const [cargando, setCargando] = useState(false);
     const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
     const tienePermisoSeguridadFBO = moduloNombre === 'Seguridad' || nombreRol === 'FBO';
@@ -339,6 +341,8 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
                             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none mb-1">Fecha de Operación</label>
                             <input
                                 type="date"
+                                min={datosEdicion ? undefined : min}
+                                max={datosEdicion ? undefined : max}
                                 value={formData.fecha}
                                 onChange={(e) => cambiarFecha(e.target.value)}
                                 className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer block"

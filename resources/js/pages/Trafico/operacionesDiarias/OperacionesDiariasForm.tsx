@@ -2,6 +2,7 @@ import { useState } from "react";
 import TimePicker24 from "@/pages/TimePicker24";
 import { guardarOperacionesDiariasApi } from "@/stores/apiOperacionesDiarias";
 import Swal from "sweetalert2";
+import { useVentanaDeFecha } from "@/lib/ventanasDeFecha";
 
 type TipoOperacion = "llegada" | "salida";
 
@@ -20,6 +21,7 @@ type Props = {
 export default function OperacionesDiariasForm({
     onSuccess,
 }: Props)  {
+    const { min, max } = useVentanaDeFecha('operaciones.registro');
     const [form, setForm] = useState<OperacionForm>({
         fecha: "",
         tipo: "llegada",
@@ -93,6 +95,8 @@ export default function OperacionesDiariasForm({
                     <label className="text-xs font-semibold text-slate-600">Fecha</label>
                     <input
                         type="date"
+                        min={min}
+                        max={max}
                         className="w-full rounded-md border px-3 py-2"
                         value={form.fecha}
                         onChange={(e) => updateField("fecha", e.target.value)}
