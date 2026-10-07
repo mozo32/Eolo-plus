@@ -171,7 +171,6 @@ búsqueda y de reportes identificados por su nombre (`fechaInicio`, `fechaFin`, 
 |---|
 | `Trafico/operacionesDiarias/FormLlegada` |
 | `Trafico/operacionesDiarias/FormSalida` |
-| `Trafico/operacionesDiarias/OperacionesDiariasForm` |
 | `despacho/components/walkAround/WalkAroundForm` |
 | `despacho/componentes2/steps/GeneralInfo` |
 | `Rampa/Autotanque/EoloForm` |
@@ -180,6 +179,12 @@ búsqueda y de reportes identificados por su nombre (`fechaInicio`, `fechaFin`, 
 | `seguridad/MovimientoAvionesCSAE/MovimientoCSAESalida` |
 | `seguridad/pernoctaDia/PernoctaDiaForm` |
 | `Trafico/controlMedicamento/ControlMedicamentoForm` |
+
+**Son 20, no 21.** `Trafico/operacionesDiarias/OperacionesDiariasForm` salió de la lista al
+implementar: el componente **no está montado en ninguna ruta** y su envío no llega a ningún
+endpoint. Una clave que solo existiera en el navegador contradiría la decisión de que **el
+servidor decide**: parecería protegida y no lo estaría. El componente se queda donde está —
+borrarlo es otra limpieza—, pero sin clave.
 
 ### Las claves
 

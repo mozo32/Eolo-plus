@@ -59,7 +59,6 @@ misma captura.
 | `estacionamiento.ronda` | 1 | no | `seguridad/estacionamientoSubTerraneo/RoundRegisterForm` |
 | `operaciones.llegada` | 3 | no | `Trafico/operacionesDiarias/FormLlegada` |
 | `operaciones.salida` | 3 | no | `Trafico/operacionesDiarias/FormSalida` |
-| `operaciones.registro` | 3 | no | `Trafico/operacionesDiarias/OperacionesDiariasForm` |
 | `despacho.walk_around` | 3 | no | `despacho/components/walkAround/WalkAroundForm` |
 | `despacho.informacion_general` | 3 | no | `despacho/componentes2/steps/GeneralInfo` |
 | `autotanque.servicio` | 3 | no | `Rampa/Autotanque/EoloForm` |
@@ -188,7 +187,6 @@ final class VentanasDeFecha
         // que lo del viernes se captura el lunes.
         'operaciones.llegada' => ['atras' => 3, 'futuro' => false],
         'operaciones.salida' => ['atras' => 3, 'futuro' => false],
-        'operaciones.registro' => ['atras' => 3, 'futuro' => false],
         'despacho.walk_around' => ['atras' => 3, 'futuro' => false],
         'despacho.informacion_general' => ['atras' => 3, 'futuro' => false],
         'autotanque.servicio' => ['atras' => 3, 'futuro' => false],
@@ -505,7 +503,6 @@ llamada vive en `resources/js/stores/api<Modulo>.ts` y el controlador en
 
 - `Trafico/operacionesDiarias/FormLlegada` → `operaciones.llegada`
 - `Trafico/operacionesDiarias/FormSalida` → `operaciones.salida`
-- `Trafico/operacionesDiarias/OperacionesDiariasForm` → `operaciones.registro`
 
 **Dónde está el envío:** `resources/js/stores/apiOperacionesDiarias.ts`.
 
