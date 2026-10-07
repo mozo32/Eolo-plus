@@ -3,6 +3,7 @@ import { useState } from "react";
 import FirmaCanvas from "@/pages/FirmaCanvas";
 import { usePage } from "@inertiajs/react";
 import { guardarControlMedicamentoApi, actualizarControlMedicamentoApi } from "@/stores/apiControlMedicamento";
+import { useVentanaDeFecha } from "@/lib/ventanasDeFecha";
 function FirmaBox({
     label,
     value,
@@ -157,6 +158,7 @@ export default function ControlMedicamentoForm({
 
     const { auth } = usePage<{ auth: { user: AuthUser | null } }>().props;
     const user = auth?.user;
+    const { min, max } = useVentanaDeFecha("medicamento.movimiento", isEdit ? initialData?.fecha : undefined);
     const [form, setForm] = useState<FormState>(() => {
         const meds: Record<string, Medicamento> = {};
 
@@ -267,6 +269,8 @@ export default function ControlMedicamentoForm({
                     />
                     <input
                         type="date"
+                        min={min}
+                        max={max}
                         className="w-full rounded-lg border-2 border-slate-400 px-4 py-3 text-lg font-bold focus:border-[#00677F] focus:outline-none"
                         value={form.fecha}
                         onChange={(e) =>

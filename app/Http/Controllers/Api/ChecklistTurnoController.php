@@ -13,6 +13,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use App\Models\OperacionDiaria;
 use Illuminate\Support\Carbon;
+use App\Rules\DentroDeLaVentana;
+use App\Support\VentanasDeFecha;
+use Illuminate\Validation\ValidationException;
 
 class ChecklistTurnoController extends Controller
 {
@@ -23,7 +26,7 @@ class ChecklistTurnoController extends Controller
         try {
             $validated = $request->validate([
                 'nombreEmpleado' => 'required|string|max:255',
-                'fecha' => 'required|date',
+                'fecha' => ['required', 'date', new DentroDeLaVentana('turno.checklist')],
                 'recibeTurnoCon' => 'nullable|array',
                 'observaciones_recibe' => 'nullable|string',
                 'revisionSalas' => 'nullable|array',
@@ -106,6 +109,10 @@ class ChecklistTurnoController extends Controller
                 'data' => $checklist,
             ], 201);
 
+        } catch (ValidationException $e) {
+            DB::rollBack();
+
+            throw $e;
         } catch (\Throwable $e) {
             DB::rollBack();
 
@@ -115,6 +122,27 @@ class ChecklistTurnoController extends Controller
             ], 500);
         }
     }
+    /**
+     * Las dos ediciones (`update` y `aprobarTurno`) solo juzgan la fecha cuando CAMBIA.
+     *
+     * Un checklist guardado con una fecha que ya quedó fuera de la ventana conserva esa fecha
+     * intacta; exigirle la ventana bloquearía cualquier corrección del resto del registro, y la
+     * aprobación del supervisor, que llega días después. Lo que la ventana impide es poner una
+     * fecha fuera de ella.
+     */
+    private function validarFechaSiCambia(Request $request, ChecklistTurno $checklist): void
+    {
+        $recibidaComoDia = VentanasDeFecha::diaQueGuardaElModelo($request->input('fecha'));
+
+        if ($recibidaComoDia !== null && $recibidaComoDia === $checklist->fecha?->toDateString()) {
+            return;
+        }
+
+        $request->validate([
+            'fecha' => ['required', 'date', new DentroDeLaVentana('turno.checklist')],
+        ]);
+    }
+
     private function generarDescripcionNotaHotTrasComiCoor(array $item): string
     {
         $partes = [];
@@ -304,7 +332,9 @@ class ChecklistTurnoController extends Controller
         DB::beginTransaction();
 
         try {
-            $observacionEntregaAnterior = trim((string) ($checklistTurno->observaciones_entrega ?? ''));
+            $this->validarFechaSiCambia($request, $checklistTurno);
+
+            $observacionEntregaAnterior =trim((string) ($checklistTurno->observaciones_entrega ?? ''));
 
             $hotAnterior = collect($checklistTurno->hot_tras_comi_coor ?? [])
                 ->map(function ($item) {
@@ -398,6 +428,10 @@ class ChecklistTurnoController extends Controller
                 'data' => $checklistTurno,
             ]);
 
+        } catch (ValidationException $e) {
+            DB::rollBack();
+
+            throw $e;
         } catch (\Throwable $e) {
             DB::rollBack();
 
@@ -579,6 +613,8 @@ class ChecklistTurnoController extends Controller
             }
 
             // 3. Ejecutamos la validación (esto devuelve un ARRAY en $validated)
+            $this->validarFechaSiCambia($request, $checklistTurno);
+
             $validated = $request->validate([
                 'nombreEmpleado' => 'required|string|max:255',
                 'fecha' => 'required|date',
@@ -634,6 +670,10 @@ class ChecklistTurnoController extends Controller
                 'data' => $checklistTurno,
             ]);
 
+        } catch (ValidationException $e) {
+            DB::rollBack();
+
+            throw $e;
         } catch (\Throwable $e) {
             DB::rollBack();
 

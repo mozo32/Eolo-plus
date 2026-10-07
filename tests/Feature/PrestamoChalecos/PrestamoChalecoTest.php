@@ -42,7 +42,7 @@ function prestamoChaleco(array $extra = []): PrestamoChaleco
 function datosPrestamo(User $entrega, array $extra = []): array
 {
     return array_merge([
-        'fecha' => '2026-09-22',
+        'fecha' => now()->toDateString(),
         'nombre_recibe' => '  Visitante de prueba  ',
         'usuario_entrega_id' => $entrega->id,
         'foto_ine' => UploadedFile::fake()->image('ine.jpg'),

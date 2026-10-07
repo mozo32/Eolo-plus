@@ -9,6 +9,9 @@ use App\Models\EntregaMedicamento;
 use App\Models\MovimientoMedicamento;
 use App\Models\User;
 use App\Models\Firma;
+use App\Rules\DentroDeLaVentana;
+use App\Support\VentanasDeFecha;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -27,7 +30,7 @@ class ControlMedicamentoController extends Controller
         try {
             $validated = $request->validate([
                 'responsable'   => 'required|string|max:255',
-                'fecha'         => 'required|date',
+                'fecha'         => ['required', 'date', new DentroDeLaVentana('medicamento.movimiento')],
                 'dia'           => 'required|string|max:15',
                 'aparatos'      => 'required|array|min:1',
                 'firma'         => 'required|string',
@@ -74,6 +77,10 @@ class ControlMedicamentoController extends Controller
                 'data'    => $control->load('firmas'),
             ], 201);
 
+        } catch (ValidationException $e) {
+            DB::rollBack();
+
+            throw $e;
         } catch (\Throwable $e) {
             DB::rollBack();
 
@@ -266,6 +273,8 @@ class ControlMedicamentoController extends Controller
         DB::beginTransaction();
 
         try {
+            $this->validarFechaSiCambia($request, $controlMedicamento);
+
             $validated = $request->validate([
                 'responsable'   => 'required|string|max:255',
                 'fecha'         => 'required|date',
@@ -316,6 +325,10 @@ class ControlMedicamentoController extends Controller
                 'data'    => $controlMedicamento->load('firmas'),
             ], 200);
 
+        } catch (ValidationException $e) {
+            DB::rollBack();
+
+            throw $e;
         } catch (\Throwable $e) {
             DB::rollBack();
 
@@ -324,6 +337,26 @@ class ControlMedicamentoController extends Controller
                 'error'   => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Una edición solo juzga la fecha del control cuando CAMBIA.
+     *
+     * Un control guardado con una fecha que ya quedó fuera de la ventana conserva esa fecha
+     * intacta; exigirle la ventana bloquearía cualquier corrección del resto del registro. Lo
+     * que la ventana impide es poner una fecha fuera de ella.
+     */
+    private function validarFechaSiCambia(Request $request, ControlMedicamento $control): void
+    {
+        $recibidaComoDia = VentanasDeFecha::diaQueGuardaElModelo($request->input('fecha'));
+
+        if ($recibidaComoDia !== null && $recibidaComoDia === $control->fecha?->toDateString()) {
+            return;
+        }
+
+        $request->validate([
+            'fecha' => ['required', 'date', new DentroDeLaVentana('medicamento.movimiento')],
+        ]);
     }
 
     public function medicamentos()

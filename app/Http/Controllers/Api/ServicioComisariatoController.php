@@ -5,8 +5,11 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\ServicioComisariato;
+use App\Rules\DentroDeLaVentana;
+use App\Support\VentanasDeFecha;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class ServicioComisariatoController extends Controller
 {
@@ -15,7 +18,7 @@ class ServicioComisariatoController extends Controller
         $validated = $request->validate([
             'catering'       => ['nullable', 'string', 'max:150'],
             'formaPago'      => ['nullable', 'string', 'max:100'],
-            'fechaEntrega'   => ['required', 'date'],
+            'fechaEntrega'   => ['required', 'date', new DentroDeLaVentana('comisariato.entrega')],
             'horaEntrega'    => ['required', 'date_format:H:i'],
             'matricula'      => ['nullable', 'string', 'max:50'],
             'detalle'        => ['nullable', 'string'],
@@ -133,6 +136,8 @@ class ServicioComisariatoController extends Controller
         DB::beginTransaction();
 
         try {
+            $this->validarFechaSiCambia($request, $servicioComisariato);
+
             $validated = $request->validate([
                 'catering'       => ['nullable', 'string', 'max:150'],
                 'formaPago'      => ['nullable', 'string', 'max:100'],
@@ -169,6 +174,10 @@ class ServicioComisariatoController extends Controller
                 'data' => $servicioComisariato,
             ]);
 
+        } catch (ValidationException $e) {
+            DB::rollBack();
+
+            throw $e;
         } catch (\Throwable $e) {
             DB::rollBack();
 
@@ -178,6 +187,26 @@ class ServicioComisariatoController extends Controller
             ], 500);
         }
     }
+    /**
+     * Una edición solo juzga la fecha de entrega cuando CAMBIA.
+     *
+     * Un servicio guardado con una fecha que ya quedó fuera de la ventana conserva esa fecha
+     * intacta; exigirle la ventana bloquearía cualquier corrección del resto del registro. Lo
+     * que la ventana impide es poner una fecha fuera de ella.
+     */
+    private function validarFechaSiCambia(Request $request, ServicioComisariato $servicio): void
+    {
+        $recibidaComoDia = VentanasDeFecha::diaQueGuardaElModelo($request->input('fechaEntrega'));
+
+        if ($recibidaComoDia !== null && $recibidaComoDia === $servicio->fecha_entrega?->toDateString()) {
+            return;
+        }
+
+        $request->validate([
+            'fechaEntrega' => ['required', 'date', new DentroDeLaVentana('comisariato.entrega')],
+        ]);
+    }
+
     public function eliminar($id)
     {
         try {

@@ -1,4 +1,5 @@
 import { obtenerPersonalTraficoApi } from '@/stores/apiPrestamoChalecos';
+import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
 import { fechaHoy } from '@/pages/despacho/operacionesProgramadas/types';
 import { Eraser, Save } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -34,6 +35,7 @@ const errorStyle = 'mt-1 text-sm font-medium text-red-600';
  * datos al padre; no hace ninguna petición HTTP.
  */
 export default function PrestamoChalecoForm({ onGuardado, onCambioCaptura }: Props) {
+    const { min, max } = useVentanaDeFecha('chalecos.prestamo');
     // Solo personal del área de Tráfico; lo filtra el backend.
     const [usuariosTrafico, setUsuariosTrafico] = useState<UsuarioTrafico[]>([]);
     const [guardando, setGuardando] = useState(false);
@@ -152,6 +154,8 @@ export default function PrestamoChalecoForm({ onGuardado, onCambioCaptura }: Pro
                             id="fecha"
                             ref={fechaRef}
                             type="date"
+                            min={min}
+                            max={max}
                             value={form.fecha}
                             onChange={e => actualizar('fecha', e.target.value)}
                             className={campoConError(!!errores.fecha)}
