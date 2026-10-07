@@ -140,9 +140,29 @@ México, **aceptaba**, y la base guardaba el **8**: mañana. Verificado con peti
 comprueba y lo que se escribe coinciden por construcción. Una cadena con desfase que caiga fuera de
 la ventana **se rechaza**, que es lo correcto: el día que importa es el que queda guardado.
 
+**Y la coincidencia es literal, no aproximada.** La misma revisión encontró una segunda forma del
+mismo defecto, que la primera corrección no cerraba: el cast `date` de Eloquent trata **cualquier
+cadena numérica como un timestamp Unix**, mientras `Carbon::parse` la leía como fecha. Medido con
+peticiones reales: `fecha: \"20261007\"` daba **201** y guardaba **1970-08-23**; en una edición,
+`fecha: \"2026\"` se parseaba como «hoy a las 20:26», pasaba por «la misma fecha», **se saltaba toda** 
+la validación y guardaba **1969-12-31**.
+
+Por eso el día que se juzga **no se calcula con `Carbon::parse` suelto**, sino con una sola función
+que **imita el cast de Eloquent**, incluido el caso numérico, y que usan tanto la regla como la
+comparación de «¿cambió la fecha?». Una función, dos llamadores: si alguna vez divergen, divergen
+las dos a la vez y se ven. La alternativa —rechazar las cadenas numéricas con un caso aparte— se
+descartó porque añade una segunda regla que puede quedarse atrás, y porque la comparación de la
+edición necesita de todos modos saber **qué día guardaría** el modelo.
+
+**El invariante, y cómo se prueba:** *si la regla acepta un valor, el día que el modelo escribe en
+la base cae dentro de la ventana.* La prueba que lo fija no comprueba códigos de respuesta: recorre
+una lista de cadenas hostiles —numéricas, con desfase, con espacio, relativas, basura—, y para cada
+una que la regla acepte **lee la columna guardada** y exige que esté dentro. Esa es la prueba que
+habría visto este defecto; las de códigos 422 no lo veían.
+
 ## 6. Qué formulario lleva qué ventana
 
-De los 81 calendarios, **12 son filtros** y **21 llevan ventana**. El resto (48) son rangos de
+De los 81 calendarios, **12 son filtros** y **20 llevan ventana**. El resto (48) son rangos de
 búsqueda y de reportes identificados por su nombre (`fechaInicio`, `fechaFin`, `desde`, `hasta`,
 `startDate`, `endDate`, los de PDF).
 
@@ -189,7 +209,7 @@ borrarlo es otra limpieza—, pero sin clave.
 ### Las claves
 
 Las claves siguen el patrón `modulo.formulario` —`turno.entrega`, `operaciones.llegada`—, y
-**el plan de implementación fija la lista exacta**, una por cada una de las 21 pantallas de
+**el plan de implementación fija la lista exacta**, una por cada una de las 20 pantallas de
 arriba. No se escriben aquí para no tener dos listas que puedan desincronizarse: la de la
 tabla de `VentanasDeFecha` es la que manda, y esta especificación dice qué pantalla va en qué
 grupo.
