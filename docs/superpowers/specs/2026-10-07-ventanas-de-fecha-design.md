@@ -110,6 +110,36 @@ problema sería peor. **El navegador guía y el servidor decide**; quien se encu
 recibe el mensaje con las dos fechas y recarga. Lo que no puede pasar, y no pasa, es que el
 dato entre mal.
 
+## 5 bis. Editar un registro que ya existe
+
+**Descubierto al implementar, y no estaba previsto:** varios endpoints de edición **no validaban
+la fecha en absoluto**. Al añadir la regla aparece un problema que la ventana sola no resuelve:
+si se exigiera siempre, **corregir los pasajeros de un registro de hace una semana daría 422**,
+aunque nadie tocara su fecha.
+
+**La regla al editar: no puedes PONER una fecha fuera de ventana, pero puedes DEJAR la que ya
+estaba.** Es decir, la validación corre solo cuando la fecha recibida **difiere** de la guardada,
+falta, o es ilegible. Verificado con peticiones reales: vieja → la misma pasa; vieja → otra vieja
+distinta se rechaza; vieja → hoy pasa; y volver después a la vieja original se rechaza, así que
+**no se puede «lavar» una fecha** pasando por una válida.
+
+**Y en la pantalla, el calendario refleja esa misma regla**: `useVentanaDeFecha(clave,
+fechaOriginal?)` devuelve la **unión** de la ventana con la fecha que el registro ya tenía, de modo
+que editar un registro viejo no queda bloqueado por el navegador. Se eligió así, y no desactivando
+la validación nativa del formulario con `noValidate`, porque esos formularios tienen más de ocho
+campos `required` que se perderían.
+
+## 5 ter. La regla juzga el MISMO día que se guarda
+
+**Corregido tras un defecto introducido durante la implementación.** La regla llegó a convertir la
+fecha a la zona del servidor antes de juzgarla, mientras el cast `date` del modelo guardaba el día
+que traía el desfase de la cadena. Con `\"2026-10-08T00:30:00+14:00\"` la regla veía el día 7 en
+México, **aceptaba**, y la base guardaba el **8**: mañana. Verificado con peticiones reales.
+
+**La regla no convierte de zona.** Juzga la cadena como la interpretará el modelo, así que lo que se
+comprueba y lo que se escribe coinciden por construcción. Una cadena con desfase que caiga fuera de
+la ventana **se rechaza**, que es lo correcto: el día que importa es el que queda guardado.
+
 ## 6. Qué formulario lleva qué ventana
 
 De los 81 calendarios, **12 son filtros** y **21 llevan ventana**. El resto (48) son rangos de

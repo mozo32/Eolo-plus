@@ -480,7 +480,18 @@ const { min, max } = useVentanaDeFecha('operaciones.llegada')
 'fecha' => ['required', 'date', new DentroDeLaVentana('operaciones.llegada')],
 ```
 
-3. **Una prueba por endpoint** en `tests/Feature/VentanasDeFechaEndpointsTest.php`: una
+3. **Si el endpoint tiene EDICIÓN, valida solo cuando la fecha CAMBIA.** Varios `update` no
+   validaban nada. Exigir la ventana siempre haría que corregir cualquier otro campo de un registro
+   viejo diera 422. Sigue el patrón de `OperacionesDiariasController::validarFechaSiCambia()`, que
+   ya está escrito y probado: valida si la fecha recibida difiere de la guardada, falta o es
+   ilegible. **No inventes otra variante**: cuatro módulos con cuatro semánticas distintas sería
+   peor que no tener regla.
+
+4. **En la pantalla, pásale la fecha original al hook** cuando el formulario edite:
+   `useVentanaDeFecha(clave, fechaOriginal)` devuelve la unión de la ventana con esa fecha, para que
+   el navegador no bloquee guardar un registro viejo.
+
+5. **Una prueba por endpoint** en `tests/Feature/VentanasDeFechaEndpointsTest.php`: una
    petición real con una fecha fuera de ventana devuelve **422**, el mensaje nombra las dos
    fechas, y **no se escribió nada** (contar las filas antes y después).
 
