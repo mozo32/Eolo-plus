@@ -42,7 +42,6 @@ final class VentanasDeFecha
         // que lo del viernes se captura el lunes.
         'operaciones.llegada' => ['atras' => 3, 'futuro' => false],
         'operaciones.salida' => ['atras' => 3, 'futuro' => false],
-        'operaciones.registro' => ['atras' => 3, 'futuro' => false],
         'despacho.walk_around' => ['atras' => 3, 'futuro' => false],
         'despacho.informacion_general' => ['atras' => 3, 'futuro' => false],
         'autotanque.servicio' => ['atras' => 3, 'futuro' => false],

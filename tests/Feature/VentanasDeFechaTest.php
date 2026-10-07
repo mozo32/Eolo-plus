@@ -160,15 +160,17 @@ test('la regla compara solo el dia: la hora de una fecha con hora no la saca de 
     expect($validador->passes())->toBeTrue();
 });
 
-test('una fecha con zona se compara en el dia de la zona de la aplicacion', function () {
-    // 02:00 UTC del dia 8 son las 20:00 del dia 7 en Mexico: es hoy, no manana.
+test('una fecha con zona se juzga por el dia que escribe la cadena, el mismo que guarda el modelo', function () {
+    // 02:00 UTC del dia 8 serian las 20:00 del dia 7 en Mexico, pero el modelo (cast `date`)
+    // guarda el dia 8 tal como viene escrito. La regla tiene que juzgar lo que se guarda, no
+    // el instante: se rechaza porque se guardaria como manana.
     Carbon::setTestNow('2026-10-07 15:00:00');
 
     $validador = Validator::make(['fecha' => '2026-10-08T02:00:00Z'], [
         'fecha' => [new App\Rules\DentroDeLaVentana('operaciones.llegada')],
     ]);
 
-    expect($validador->passes())->toBeTrue();
+    expect($validador->passes())->toBeFalse();
 });
 
 test('las ventanas viajan en las props de Inertia', function () {
@@ -204,7 +206,6 @@ test('la tabla de ventanas esta fijada a mano: cambiar una exige reconocerlo aqu
         'estacionamiento.ronda' => ['atras' => 1, 'futuro' => false],
         'operaciones.llegada' => ['atras' => 3, 'futuro' => false],
         'operaciones.salida' => ['atras' => 3, 'futuro' => false],
-        'operaciones.registro' => ['atras' => 3, 'futuro' => false],
         'despacho.walk_around' => ['atras' => 3, 'futuro' => false],
         'despacho.informacion_general' => ['atras' => 3, 'futuro' => false],
         'autotanque.servicio' => ['atras' => 3, 'futuro' => false],
@@ -252,6 +253,8 @@ function usosDeVentana(array $carpetas, array $extensiones, string $patronLlamad
 }
 
 test('cada clave escrita en el codigo existe en la tabla de ventanas', function () {
+    // El hook admite un segundo argumento (la fecha original, al editar): lo que se exige es
+    // que el PRIMERO sea un literal, por eso el patron acepta `,` o `)` tras la clave.
     // `useVentanaDeFecha('csae.entrda')` compila y deja el calendario SIN limites en
     // silencio, mientras que `para()` si lanza. Esta prueba cierra esa asimetria: lee el
     // codigo fuente y exige que cada literal exista en `CLAVES`.
@@ -259,7 +262,7 @@ test('cada clave escrita en el codigo existe en la tabla de ventanas', function 
         ['resources/js'],
         ['ts', 'tsx'],
         '/\buseVentanaDeFecha\(/',
-        '/\buseVentanaDeFecha\(\s*[\'"]([^\'"]*)[\'"]\s*\)/',
+        '/\buseVentanaDeFecha\(\s*[\'"]([^\'"]*)[\'"]\s*[,)]/',
         ['ventanasDeFecha.ts'],
     );
     $php = usosDeVentana(

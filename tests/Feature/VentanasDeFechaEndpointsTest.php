@@ -4,6 +4,8 @@ use App\Models\OperacionDiaria;
 use App\Models\User;
 use App\Support\VentanasDeFecha;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /*
  * El navegador guía con `min`/`max`; el servidor decide. Cada prueba de este fichero es una
@@ -50,7 +52,7 @@ function cargaDeOperacion(string $movimiento, string $fecha): array
     ];
 }
 
-it('rechaza con 422 y no escribe una llegada con fecha fuera de ventana', function (string $clave, string $movimiento, int $desplazamiento) {
+it('rechaza con 422 y no escribe una llegada o una salida con fecha fuera de ventana', function (string $clave, string $movimiento, int $desplazamiento) {
     $this->actingAs(usuarioAdmin(), 'sanctum');
     $fecha = Carbon::today()->addDays($desplazamiento)->toDateString();
     $antes = OperacionDiaria::count();
@@ -68,7 +70,7 @@ it('rechaza con 422 y no escribe una llegada con fecha fuera de ventana', functi
     'salida demasiado antigua' => ['operaciones.salida', 'Salida', -4],
 ]);
 
-it('no deja pasar una fecha vacia, ausente o ilegible: la regla sola no lo impediria', function (?string $fecha, bool $enviarFecha) {
+it('no deja pasar una fecha vacia, ausente o ilegible en el alta', function (?string $fecha, bool $enviarFecha) {
     $this->actingAs(usuarioAdmin(), 'sanctum');
     $antes = OperacionDiaria::count();
     $carga = cargaDeOperacion('Llegada', (string) $fecha);
@@ -86,6 +88,65 @@ it('no deja pasar una fecha vacia, ausente o ilegible: la regla sola no lo imped
     'ausente' => [null, false],
     'ilegible' => ['no-es-una-fecha', true],
 ]);
+
+/**
+ * El alta escribe tambien en la base remota (tablas de catalogo de aeronaves); en las pruebas
+ * se sustituye por una sqlite en memoria para no tocar nunca la real.
+ */
+function remotaEnMemoria(): void
+{
+    config(['database.connections.remota' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']]);
+    DB::purge('remota');
+
+    Schema::connection('remota')->create('tb_tipo', function ($tabla) {
+        $tabla->increments('id_tipo');
+        $tabla->string('tipo');
+    });
+    Schema::connection('remota')->create('tb_matricula', function ($tabla) {
+        $tabla->string('matricula');
+        $tabla->integer('id_estatus');
+        $tabla->integer('id_tipo');
+        $tabla->integer('id_categoria');
+        $tabla->integer('id_motor');
+        $tabla->integer('id_aterrizaje');
+        $tabla->integer('id_transito2h');
+        $tabla->integer('id_transito12h');
+        $tabla->integer('id_pernocta');
+        $tabla->integer('d_vuelos');
+    });
+}
+
+it('una regla que rechazara todo no pasa: el alta dentro de ventana escribe', function (int $desplazamiento, string $movimiento) {
+    remotaEnMemoria();
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $fecha = Carbon::today()->addDays($desplazamiento)->toDateString();
+    $antes = OperacionDiaria::count();
+
+    $this->postJson('/api/OperacionesDiarias', cargaDeOperacion($movimiento, $fecha))->assertSuccessful();
+
+    expect(OperacionDiaria::count())->toBe($antes + 1);
+    expect(OperacionDiaria::latest('id')->first()->fecha->toDateString())->toBe($fecha);
+})->with([
+    'llegada de hoy' => [0, 'Llegada'],
+    'llegada en el borde de atras' => [-3, 'Llegada'],
+    'salida de hoy' => [0, 'Salida'],
+    'salida en el borde de atras' => [-3, 'Salida'],
+]);
+
+it('rechaza una fecha con zona que se guardaria como un dia fuera de ventana, y no escribe', function () {
+    // Con zona +14, las 00:30 del dia de manana son todavia «hoy» en Mexico, pero el modelo
+    // guarda el dia tal como viene escrito: manana. La regla juzga lo que se guarda.
+    remotaEnMemoria();
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $manana = Carbon::today()->addDay()->toDateString();
+    $antes = OperacionDiaria::count();
+
+    $this->postJson('/api/OperacionesDiarias', cargaDeOperacion('Llegada', "{$manana}T00:30:00+14:00"))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('fecha');
+
+    expect(OperacionDiaria::count())->toBe($antes);
+});
 
 // ---------------------------------------------------------------------------
 // Operaciones diarias: PUT /api/OperacionesDiarias/{id} (editar)
@@ -145,6 +206,25 @@ it('deja corregir otros campos de un registro antiguo si no se toca su fecha', f
     expect($operacion->fresh()->pax)->toBe(5);
 });
 
+it('no deja pasar de una fecha antigua a OTRA antigua distinta, y la guardada no cambia', function () {
+    // La excepcion de `update` solo cubre la fecha SIN cambios; si dejara pasar cualquier
+    // fecha vieja, esta edicion colaria una fecha fuera de ventana.
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antigua = Carbon::today()->subDays(10)->toDateString();
+    $operacion = operacionParaEditar('llegada', $antigua);
+
+    $this->putJson("/api/OperacionesDiarias/{$operacion->id}", [
+        'matricula' => 'XA-EDI',
+        'equipo' => 'C172',
+        'hora' => '10:30',
+        'procedencia' => 'MMTO',
+        'pax' => 2,
+        'fecha' => Carbon::today()->subDays(20)->toDateString(),
+    ])->assertUnprocessable()->assertJsonValidationErrors('fecha');
+
+    expect($operacion->fresh()->fecha->toDateString())->toBe($antigua);
+});
+
 it('no deja que una edicion lleve una fecha ausente o ilegible', function (?string $fecha, bool $enviarFecha) {
     $this->actingAs(usuarioAdmin(), 'sanctum');
     $original = Carbon::today()->toDateString();
@@ -169,3 +249,21 @@ it('no deja que una edicion lleve una fecha ausente o ilegible', function (?stri
     'ausente' => [null, false],
     'ilegible' => ['no-es-una-fecha', true],
 ]);
+
+it('la edicion tampoco acepta una fecha con zona que se guardaria como manana', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $original = Carbon::today()->toDateString();
+    $operacion = operacionParaEditar('llegada', $original);
+    $manana = Carbon::today()->addDay()->toDateString();
+
+    $this->putJson("/api/OperacionesDiarias/{$operacion->id}", [
+        'matricula' => 'XA-EDI',
+        'equipo' => 'C172',
+        'hora' => '10:30',
+        'procedencia' => 'MMTO',
+        'pax' => 2,
+        'fecha' => "{$manana}T00:30:00+14:00",
+    ])->assertUnprocessable()->assertJsonValidationErrors('fecha');
+
+    expect($operacion->fresh()->fecha->toDateString())->toBe($original);
+});

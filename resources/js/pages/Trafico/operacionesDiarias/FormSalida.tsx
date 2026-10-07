@@ -32,7 +32,7 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
     onDesvincularProgramada?: () => void;
 }) => {
     const { obtenerTipo } = useMatriculaAutocompleteStore();
-    const { min, max } = useVentanaDeFecha('operaciones.salida');
+    const { min, max } = useVentanaDeFecha('operaciones.salida', datosEdicion?.fecha);
     const [cargando, setCargando] = useState(false);
     const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
     const obtenerFechaHoy = () => new Date().toLocaleDateString('sv-SE');
@@ -326,8 +326,8 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
                             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none mb-1">Fecha de Operación</label>
                             <input
                                 type="date"
-                                min={datosEdicion ? undefined : min}
-                                max={datosEdicion ? undefined : max}
+                                min={min}
+                                max={max}
                                 value={formData.fecha}
                                 onChange={(e) => cambiarFecha(e.target.value)}
                                 className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer block"

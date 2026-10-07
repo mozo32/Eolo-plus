@@ -32,7 +32,7 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
     onDesvincularProgramada?: () => void;
 }) => {
     const { obtenerTipo } = useMatriculaAutocompleteStore();
-    const { min, max } = useVentanaDeFecha('operaciones.llegada');
+    const { min, max } = useVentanaDeFecha('operaciones.llegada', datosEdicion?.fecha);
     const [cargando, setCargando] = useState(false);
     const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
     const tienePermisoSeguridadFBO = moduloNombre === 'Seguridad' || nombreRol === 'FBO';
@@ -341,8 +341,8 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
                             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none mb-1">Fecha de Operación</label>
                             <input
                                 type="date"
-                                min={datosEdicion ? undefined : min}
-                                max={datosEdicion ? undefined : max}
+                                min={min}
+                                max={max}
                                 value={formData.fecha}
                                 onChange={(e) => cambiarFecha(e.target.value)}
                                 className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer block"
