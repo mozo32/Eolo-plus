@@ -460,7 +460,7 @@ git commit -m "feat: las ventanas de fecha llegan al navegador"
 
 ---
 
-### Tasks 4 a 8: aplicar la ventana, módulo por módulo
+### El patrón compartido de las tareas 4 a 8
 
 Las cinco tienen **la misma forma**, y por eso se describen juntas. Cada una toma un grupo de
 pantallas de la tabla de claves y hace, por cada una:
@@ -488,13 +488,96 @@ const { min, max } = useVentanaDeFecha('operaciones.llegada')
 llamada vive en `resources/js/stores/api<Modulo>.ts` y el controlador en
 `app/Http/Controllers/Api/<Modulo>Controller.php`. Ya verificado que existen todos.
 
-| Task | Pantallas | Store | Controlador |
-|---|---|---|---|
-| **4. Operaciones diarias** | FormLlegada, FormSalida, OperacionesDiariasForm | `apiOperacionesDiarias` | `OperacionesDiariasController` |
-| **5. Tráfico, el resto** | CheckListTurnoForm + HotTrasComiCoor, PrestamoChalecoForm, ServicioComisariatoForm, ControlMedicamentoForm | `apiCheckListTurno`, `apiPrestamoChalecos`, `apiServicioComisariato`, `apiControlMedicamento` | `ChecklistTurnoController`, `PrestamoChalecoController`, `ServicioComisariatoController`, `ControlMedicamentoController` |
-| **6. Rampa** | RampaForm, SeccionInicio, SeccionCierre, EoloForm, PrestamoModal | `apiEntregaTurnoR`, `apiAutoTanque`, `apiRelacionPlanta` | `EntregaTurnoRController`, `TurnoAutotanqueController`, `RelacionPlantaController` |
-| **7. Seguridad** | MovimientoCSAEEntrada, MovimientoCSAESalida, PernoctaDiaForm, RoundRegisterForm | `apiMovimientoCSAE`, `apiPernoctaDia`, `apiEstacionamientoSubterraneo` | `MovimientoCSAEController`, `PernoctaDiaController`, `EstacionamientoSubterraneoController` |
-| **8. Despacho y la excepción** | WalkAroundForm, GeneralInfo, OperacionProgramadaModal | `apiWalkaround`, `apiOperacionesProgramadas` | `WalkAroundController`, el de Operaciones Programadas (usa el Form Request `OperacionProgramada`) |
+### Task 4: Operaciones diarias
+
+**Sigue el patrón compartido de arriba**, para cada una de estas pantallas:
+
+- `Trafico/operacionesDiarias/FormLlegada` → `operaciones.llegada`
+- `Trafico/operacionesDiarias/FormSalida` → `operaciones.salida`
+- `Trafico/operacionesDiarias/OperacionesDiariasForm` → `operaciones.registro`
+
+**Dónde está el envío:** `resources/js/stores/apiOperacionesDiarias.ts`.
+
+**Dónde va la regla:** `app/Http/Controllers/Api/OperacionesDiariasController.php`.
+
+- [ ] **Step 1:** los dos atributos en el input de fecha de cada pantalla, y **solo** en ese: los filtros del mismo fichero no se tocan.
+- [ ] **Step 2:** la regla en la validación que ya existe, como `['required', 'date', new DentroDeLaVentana('clave')]`, **conservando el `required`**.
+- [ ] **Step 3:** una prueba por endpoint en `tests/Feature/VentanasDeFechaEndpointsTest.php` (se **añade** al final): fecha fuera de ventana → **422**, el mensaje nombra las dos fechas, y **no se escribió nada** (contar filas antes y después).
+- [ ] **Step 4:** `vendor/bin/pint --dirty` revirtiendo lo ajeno, `npx tsc --noEmit`, **la suite ENTERA en serie**, y un commit del módulo.
+
+### Task 5: Tráfico, el resto
+
+**Sigue el patrón compartido de arriba**, para cada una de estas pantallas:
+
+- `Trafico/checkListTurno/CheckListTurnoForm` y `sections/HotTrasComiCoor` → **los dos** con `turno.checklist`
+- `Trafico/prestamoChalecos/PrestamoChalecoForm` → `chalecos.prestamo`
+- `Trafico/servicioComisariato/ServicioComisariatoForm` → `comisariato.entrega`
+- `Trafico/controlMedicamento/ControlMedicamentoForm` → `medicamento.movimiento`
+
+**Dónde está el envío:** `apiCheckListTurno.ts`, `apiPrestamoChalecos.ts`, `apiServicioComisariato.ts`, `apiControlMedicamento.ts`.
+
+**Dónde va la regla:** `ChecklistTurnoController`, `PrestamoChalecoController`, `ServicioComisariatoController`, `ControlMedicamentoController`.
+
+- [ ] **Step 1:** los dos atributos en el input de fecha de cada pantalla, y **solo** en ese: los filtros del mismo fichero no se tocan.
+- [ ] **Step 2:** la regla en la validación que ya existe, como `['required', 'date', new DentroDeLaVentana('clave')]`, **conservando el `required`**.
+- [ ] **Step 3:** una prueba por endpoint en `tests/Feature/VentanasDeFechaEndpointsTest.php` (se **añade** al final): fecha fuera de ventana → **422**, el mensaje nombra las dos fechas, y **no se escribió nada** (contar filas antes y después).
+- [ ] **Step 4:** `vendor/bin/pint --dirty` revirtiendo lo ajeno, `npx tsc --noEmit`, **la suite ENTERA en serie**, y un commit del módulo.
+
+### Task 6: Rampa
+
+**Sigue el patrón compartido de arriba**, para cada una de estas pantallas:
+
+- `Rampa/entregaTurnoR/RampaForm` → `turno.entrega_rampa`
+- `Rampa/Autotanque/SeccionInicio` → `autotanque.turno_inicio`
+- `Rampa/Autotanque/SeccionCierre` → `autotanque.turno_cierre`
+- `Rampa/Autotanque/EoloForm` → `autotanque.servicio`
+- `Rampa/relacionPlanta/PrestamoModal` → `planta.prestamo`
+
+**Dónde está el envío:** `apiEntregaTurnoR.ts`, `apiAutoTanque.ts`, `apiRelacionPlanta.ts`.
+
+**Dónde va la regla:** `EntregaTurnoRController`, `TurnoAutotanqueController`, `RelacionPlantaController`.
+
+- [ ] **Step 1:** los dos atributos en el input de fecha de cada pantalla, y **solo** en ese: los filtros del mismo fichero no se tocan.
+- [ ] **Step 2:** la regla en la validación que ya existe, como `['required', 'date', new DentroDeLaVentana('clave')]`, **conservando el `required`**.
+- [ ] **Step 3:** una prueba por endpoint en `tests/Feature/VentanasDeFechaEndpointsTest.php` (se **añade** al final): fecha fuera de ventana → **422**, el mensaje nombra las dos fechas, y **no se escribió nada** (contar filas antes y después).
+- [ ] **Step 4:** `vendor/bin/pint --dirty` revirtiendo lo ajeno, `npx tsc --noEmit`, **la suite ENTERA en serie**, y un commit del módulo.
+
+### Task 7: Seguridad
+
+**Sigue el patrón compartido de arriba**, para cada una de estas pantallas:
+
+- `seguridad/MovimientoAvionesCSAE/MovimientoCSAEEntrada` → `csae.entrada`
+- `seguridad/MovimientoAvionesCSAE/MovimientoCSAESalida` → `csae.salida`
+- `seguridad/pernoctaDia/PernoctaDiaForm` → `pernocta.dia`
+- `seguridad/estacionamientoSubTerraneo/RoundRegisterForm` → `estacionamiento.ronda`
+
+**Dónde está el envío:** `apiMovimientoCSAE.ts`, `apiPernoctaDia.ts`, `apiEstacionamientoSubterraneo.ts`.
+
+**Dónde va la regla:** `MovimientoCSAEController`, `PernoctaDiaController`, `EstacionamientoSubterraneoController`.
+
+- [ ] **Step 1:** los dos atributos en el input de fecha de cada pantalla, y **solo** en ese: los filtros del mismo fichero no se tocan.
+- [ ] **Step 2:** la regla en la validación que ya existe, como `['required', 'date', new DentroDeLaVentana('clave')]`, **conservando el `required`**.
+- [ ] **Step 3:** una prueba por endpoint en `tests/Feature/VentanasDeFechaEndpointsTest.php` (se **añade** al final): fecha fuera de ventana → **422**, el mensaje nombra las dos fechas, y **no se escribió nada** (contar filas antes y después).
+- [ ] **Step 4:** `vendor/bin/pint --dirty` revirtiendo lo ajeno, `npx tsc --noEmit`, **la suite ENTERA en serie**, y un commit del módulo.
+
+### Task 8: Despacho y la excepción
+
+**Sigue el patrón compartido de arriba**, para cada una de estas pantallas:
+
+- `despacho/components/walkAround/WalkAroundForm` → `despacho.walk_around`
+- `despacho/componentes2/steps/GeneralInfo` → `despacho.informacion_general`
+- `despacho/operacionesProgramadas/OperacionProgramadaModal` → `programadas.operacion` (**la excepción**)
+
+**Dónde está el envío:** `apiWalkaround.ts`, `apiOperacionesProgramadas.ts`.
+
+**Dónde va la regla:** `WalkAroundController`, y el de Operaciones Programadas, que valida con el **Form Request** `app/Http/Requests/OperacionProgramada`.
+
+- [ ] **Step 1:** los dos atributos en el input de fecha de cada pantalla, y **solo** en ese: los filtros del mismo fichero no se tocan.
+- [ ] **Step 2:** la regla en la validación que ya existe, como `['required', 'date', new DentroDeLaVentana('clave')]`, **conservando el `required`**.
+- [ ] **Step 3:** una prueba por endpoint en `tests/Feature/VentanasDeFechaEndpointsTest.php` (se **añade** al final): fecha fuera de ventana → **422**, el mensaje nombra las dos fechas, y **no se escribió nada** (contar filas antes y después).
+- [ ] **Step 4:** `vendor/bin/pint --dirty` revirtiendo lo ajeno, `npx tsc --noEmit`, **la suite ENTERA en serie**, y un commit del módulo.
+> Los dos avisos de la Task 8 están justo debajo de este bloque de tareas: **léelos antes de empezar**.
+
 
 **Dos avisos para la Task 8**, que es la que puede salir mal en silencio:
 
