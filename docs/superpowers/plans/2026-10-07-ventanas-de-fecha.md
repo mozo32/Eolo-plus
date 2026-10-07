@@ -95,7 +95,6 @@ reservado, no de registro (ver la nota de datos reales).
 | `estacionamiento.ronda` | 1 | no | `seguridad/estacionamientoSubTerraneo/RoundRegisterForm` |
 | `operaciones.llegada` | 3 | no | `Trafico/operacionesDiarias/FormLlegada` |
 | `operaciones.salida` | 3 | no | `Trafico/operacionesDiarias/FormSalida` |
-| `despacho.walk_around` | 3 | no | `despacho/components/walkAround/WalkAroundForm` |
 | `despacho.informacion_general` | 3 | no | `despacho/componentes2/steps/GeneralInfo` |
 | `autotanque.servicio` | 3 | no | `Rampa/Autotanque/EoloForm` |
 | `comisariato.entrega` | 3 | no | `Trafico/servicioComisariato/ServicioComisariatoForm` |
@@ -608,7 +607,6 @@ llamada vive en `resources/js/stores/api<Modulo>.ts` y el controlador en
 
 **Sigue el patrón compartido de arriba**, para cada una de estas pantallas:
 
-- `despacho/components/walkAround/WalkAroundForm` → `despacho.walk_around`
 - `despacho/componentes2/steps/GeneralInfo` → `despacho.informacion_general`
 - `despacho/operacionesProgramadas/OperacionProgramadaModal` → `programadas.operacion` (**la excepción**)
 
