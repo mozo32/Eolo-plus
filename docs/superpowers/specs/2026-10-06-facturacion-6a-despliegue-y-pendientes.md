@@ -60,6 +60,51 @@ SELECT nombre FROM subdepartamentos
  WHERE nombre LIKE 'fact%' ORDER BY nombre;                        -- 10 filas
 ```
 
+## 2 bis. Traer las prefacturas ABIERTAS del sistema viejo (opcional)
+
+El importador de catálogos **no trae prefacturas**. Para que las que el departamento tiene
+en curso aparezcan en Eolo-plus hay otro comando:
+
+```bash
+# Simula y no escribe nada: enseña qué traería y qué rechazaría.
+php artisan facturacion:importar-prefacturas-abiertas
+
+# Aplica. Se atribuyen al admin de menor id, o al que diga --usuario=<id>.
+php artisan facturacion:importar-prefacturas-abiertas --aplicar
+```
+
+**Entran como borradores y CON su folio de origen.** La regla del cierre lo contempla: una
+prefactura que ya trae folio lo conserva y no toca el contador, así que la 4185 se cerrará
+siendo la 4185. Los folios viejos llegan a 4123 y nuestra serie arranca en 10000, así que
+no chocan.
+
+**Es idempotente por folio**: correrlo dos veces no duplica. Y **requiere los catálogos
+importados antes**; si no, se niega en vez de rechazar cada prefactura una por una.
+
+**Lo que NO trae, y conviene decirlo porque es lo que más se espera:** las prefacturas
+**cerradas** —4,121 folios con 10,473 renglones—. Eso es otro trabajo y depende de cuatro
+decisiones del departamento que siguen abiertas. Si alguien entra y no ve el histórico, no
+está roto.
+
+**Qué esperar** (corrida del 2026-10-07): de 7 abiertas en el origen entran **6**, con 9
+renglones. La séptima, el folio 791, apunta a una matrícula que ya no existe en el catálogo
+del origen y **no se puede importar**: `aeronave_id` es NOT NULL. El comando lo dice en vez
+de inventarse una aeronave.
+
+**Y tres cosas que reporta y hay que mirar antes de cerrar esas prefacturas:**
+
+- El folio **3401** trae **153 días de pernocta por 715,428.00** y un renglón cuyo importe en
+  el origen es `22334.08` mientras su precio unitario es `22334.1`: el sistema viejo redondeó
+  el precio y los dos centavos no cuadran. Entra con el precio y la cantidad del origen, y el
+  comando avisa. Las otras cinco cuadran **al centavo**.
+- El folio **3137** llega con `Estatus = 3` en el origen, distinto del 1 habitual, y sin
+  renglones. Nadie sabe qué significa ese estado.
+- El folio **4185** no tiene fila en `tb_llegadas`: entra sin fechas, sin origen ni destino.
+  Hay que capturarlos antes de cerrarlo.
+
+**Cuatro entran sin cliente**, porque en el origen tienen `id_cliente = 0`. No se podrán
+cerrar hasta que se les ponga uno, y el cierre lo dice con un 422 que nombra lo que falta.
+
 ## 3. A quién hay que dar qué
 
 Esto no lo resuelve el despliegue: es una decisión. Y tiene dos capas que se confunden con
