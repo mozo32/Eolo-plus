@@ -293,3 +293,123 @@ test('un valor que date acepta y Eloquent guarda con un anio absurdo tambien se 
 
     expect($validador->passes())->toBeFalse();
 });
+
+/**
+ * Las lineas donde `new DentroDeLaVentana(...)` aparece en un arreglo de reglas SIN `date` ni
+ * `date_format:...`, o fuera de un arreglo.
+ *
+ * La regla sola deja pasar `"0"`, `0` y `true` (no valida el formato: ver su docblock), y esa
+ * condicion solo vivia en una frase. Es tosco A PROPOSITO: se sustituyen por espacios los
+ * corchetes de dentro de los textos, se busca el `[` que ABRE el arreglo que contiene la
+ * llamada y se mira si ese arreglo (y solo ese) trae `'date'` o `'date_format:...'`. Por eso la
+ * regla tiene que ir escrita dentro del arreglo, no en una variable aparte.
+ *
+ * @return list<int> numeros de linea
+ */
+function reglasDeVentanaSinDate(string $codigo): array
+{
+    // Misma longitud que el original, para que las posiciones valgan en los dos.
+    $limpio = preg_replace_callback(
+        '/\'(?:[^\'\\\\]|\\\\.)*\'|"(?:[^"\\\\]|\\\\.)*"/s',
+        fn (array $m) => strtr($m[0], ['[' => '_', ']' => '_']),
+        $codigo,
+    );
+    $sinDate = [];
+
+    preg_match_all('/\bnew\s+[\w\\\\]*DentroDeLaVentana\(/', $codigo, $llamadas, PREG_OFFSET_CAPTURE);
+
+    foreach ($llamadas[0] as [, $posicion]) {
+        $profundidad = 0;
+        $inicio = null;
+
+        for ($i = $posicion - 1; $i >= 0; $i--) {
+            if ($limpio[$i] === ']') {
+                $profundidad++;
+            } elseif ($limpio[$i] === '[') {
+                if ($profundidad === 0) {
+                    $inicio = $i;
+                    break;
+                }
+                $profundidad--;
+            }
+        }
+
+        $arreglo = '';
+        if ($inicio !== null) {
+            $profundidad = 0;
+            for ($i = $inicio + 1, $largo = strlen($limpio); $i < $largo; $i++) {
+                if ($limpio[$i] === '[') {
+                    $profundidad++;
+                } elseif ($limpio[$i] === ']') {
+                    if ($profundidad === 0) {
+                        break;
+                    }
+                    $profundidad--;
+                }
+            }
+            $arreglo = substr($codigo, $inicio + 1, $i - $inicio - 1);
+        }
+
+        if (! preg_match('/[\'"](?:date|date_format:[^\'"]*)[\'"]/', $arreglo)) {
+            $sinDate[] = substr_count(substr($codigo, 0, $posicion), "\n") + 1;
+        }
+    }
+
+    return $sinDate;
+}
+
+test('el escaner de «sin date» distingue lo que debe distinguir', function () {
+    $con = fn (string $reglas) => "<?php\n\$r->validate(['fecha' => {$reglas}, 'hora' => ['required', 'date_format:H:i']]);\n";
+
+    // Pasan: `date`, `date_format` (varios modulos lo usan a proposito) y la regla dentro de un ternario.
+    expect(reglasDeVentanaSinDate($con("['required', 'date', new DentroDeLaVentana('turno.checklist')]")))->toBe([])
+        ->and(reglasDeVentanaSinDate($con("['required', 'date_format:Y-m-d', new App\\Rules\\DentroDeLaVentana('turno.checklist')]")))->toBe([])
+        ->and(reglasDeVentanaSinDate($con("['required', \"date\", \$a ? new DentroDeLaVentana('turno.checklist') : new DentroDeLaVentana('turno.entrega_rampa')]")))->toBe([]);
+
+    // Caen: sin `date`, aunque OTRO campo del mismo validate traiga `date_format`; con
+    // `date_equals` (que no es `date`); y la regla guardada en una variable fuera de un arreglo.
+    expect(reglasDeVentanaSinDate($con("['required', new DentroDeLaVentana('turno.checklist')]")))->toBe([2])
+        ->and(reglasDeVentanaSinDate($con("['required', 'date_equals:2026-10-07', new DentroDeLaVentana('turno.checklist')]")))->toBe([2])
+        ->and(reglasDeVentanaSinDate("<?php\n\$r = new DentroDeLaVentana('turno.checklist');\n"))->toBe([2]);
+});
+
+test('toda regla DentroDeLaVentana de app/ va junto a date o date_format', function () {
+    $sinDate = [];
+
+    foreach (File::allFiles(base_path('app')) as $archivo) {
+        if ($archivo->getExtension() !== 'php') {
+            continue;
+        }
+
+        foreach (reglasDeVentanaSinDate(file_get_contents($archivo->getPathname())) as $linea) {
+            $sinDate[] = str_replace('\\', '/', $archivo->getPathname()).":{$linea}";
+        }
+    }
+
+    expect($sinDate)->toBe([], 'DentroDeLaVentana sin `date` ni `date_format` en el mismo arreglo de reglas (o fuera de un arreglo): '.implode(', ', $sinDate));
+});
+
+test('diaQueGuardaElModelo da el dia de la zona de la aplicacion: un mismo timestamp, dos zonas, dos dias', function () {
+    // 02:00 UTC del dia 4 son las 20:00 del dia 3 en Mexico. Sin endpoint de por medio: si la
+    // conversion dejara de hacerse en la zona de la aplicacion, una de las dos filas cambia.
+    $timestamp = (string) Carbon::parse('2026-10-04 02:00:00', 'UTC')->timestamp;
+    $original = date_default_timezone_get();
+
+    try {
+        foreach (['UTC' => '2026-10-04', 'America/Mexico_City' => '2026-10-03', 'Asia/Tokyo' => '2026-10-04', 'Pacific/Honolulu' => '2026-10-03'] as $zona => $dia) {
+            date_default_timezone_set($zona);
+
+            expect(VentanasDeFecha::diaQueGuardaElModelo($timestamp))->toBe($dia, "zona {$zona}");
+        }
+    } finally {
+        date_default_timezone_set($original);
+    }
+});
+
+test('diaQueGuardaElModelo devuelve null para lo vacio y lo que no es un valor escalar', function () {
+    // El cast devolveria el literal (`"0"`, `0`) o `1970-01-01` (`true`); `required` y `date`,
+    // que van delante, los rechazan, y esta funcion no inventa un dia para ellos.
+    foreach (['0', 0, 0.0, true, false, '', null, [], ['2026-10-07']] as $valor) {
+        expect(VentanasDeFecha::diaQueGuardaElModelo($valor))->toBeNull(json_encode($valor));
+    }
+});

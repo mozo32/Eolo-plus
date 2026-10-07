@@ -21,12 +21,14 @@ class OperacionesDiariasController extends Controller
 {
     public function store(Request $request)
     {
-        $reglaDeVentana = $request->input('movimiento') === 'Salida'
-            ? new DentroDeLaVentana('operaciones.salida')
-            : new DentroDeLaVentana('operaciones.llegada');
-
         $validated = $request->validate([
-            'fecha' => ['required', 'date', $reglaDeVentana],
+            'fecha' => [
+                'required',
+                'date',
+                $request->input('movimiento') === 'Salida'
+                    ? new DentroDeLaVentana('operaciones.salida')
+                    : new DentroDeLaVentana('operaciones.llegada'),
+            ],
             'movimiento' => ['required', 'in:Llegada,Salida'],
             'matricula' => ['required', 'string', 'max:20'],
             'equipo' => ['required', 'string', 'max:50'],
@@ -793,11 +795,15 @@ class OperacionesDiariasController extends Controller
             return;
         }
 
-        $regla = $operacion->tipo === 'salida'
-            ? new DentroDeLaVentana('operaciones.salida')
-            : new DentroDeLaVentana('operaciones.llegada');
-
-        $request->validate(['fecha' => ['required', 'date', $regla]]);
+        $request->validate([
+            'fecha' => [
+                'required',
+                'date',
+                $operacion->tipo === 'salida'
+                    ? new DentroDeLaVentana('operaciones.salida')
+                    : new DentroDeLaVentana('operaciones.llegada'),
+            ],
+        ]);
     }
 
     /**
