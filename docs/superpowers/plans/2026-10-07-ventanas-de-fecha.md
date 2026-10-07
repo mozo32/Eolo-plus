@@ -36,6 +36,24 @@
 - **El invariante que hay que probar no es el código 422, es lo guardado:** si la regla acepta un
   valor, **el día que queda en la columna está dentro de la ventana**. Una prueba que solo mira
   códigos de respuesta no ve este defecto; hay que leer la columna.
+- **Antes de poner la regla, MIRA SI EL MODELO TIENE CAST DE FECHA.** Medido modelo por
+  modelo, y hay de los dos tipos:
+  - **Con cast** (`ChecklistTurno`, `ServicioComisariato`, `ControlMedicamento`,
+    `PrestamoChaleco`, `RelacionPlanta`, `MovimientoCSAE`, `WalkAround`,
+    `OperacionProgramada`, `EstacionamientoSubterraneo`, `OperacionDiaria`): la terna es
+    `['required', 'date', new DentroDeLaVentana('clave')]` y el día se juzga con
+    `VentanasDeFecha::diaQueGuardaElModelo()`, que imita el cast.
+  - **SIN cast** (`PernoctaDia.fecha`, `TurnoAutotanque.fecha` y `fechaCierre`,
+    `Remision.fecha`, y la fecha dentro del JSON `encabezado` de `EntregaTurnoR`): el valor
+    va **crudo a MySQL** y la función describe un modelo que no existe. Ahí la regla pide
+    **`date_format:Y-m-d`** en lugar de `date`: así la cadena que se juzga **es** el día que
+    se guarda, y no hay nada que pueda divergir. Si ese campo lleva hora de verdad —mira qué
+    manda el formulario antes de decidir—, entonces **añade el cast** `datetime` al modelo y
+    dilo en el informe, porque eso cambia cómo se serializa en las respuestas.
+- **La regla NO puede ir sola: necesita `date` o `date_format` en el mismo arreglo.** Como
+  toda regla no implícita, con un valor vacío no corre; y sin `date` delante deja pasar `"0"`,
+  `0` y `true`. Hoy eso solo lo dice un docblock, así que **el escáner de claves lo exige**:
+  si pones `new DentroDeLaVentana(` en un arreglo sin `date` ni `date_format`, la prueba cae.
 - La suite corre **en serie**: `php artisan test`. `--parallel` da fallos falsos en esta máquina.
 - `npx tsc --noEmit`: el único error aceptable es el preexistente `resources/js/actions/App/Http/Controllers/Api/WalkAroundController.ts(905,5)`.
 - `vendor/bin/pint --dirty` antes de cada commit; revertir lo que toque fuera del cambio.
