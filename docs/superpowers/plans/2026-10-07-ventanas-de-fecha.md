@@ -22,7 +22,12 @@
   `Carbon::parse` de un arreglo lanza, el `rescue` se lo traga y la validación pasa.
 - **Los filtros de búsqueda y reportes NO se tocan.** Son 60 de los 81 calendarios. La lista de los 12 verificados uno a uno está en la §6 de la especificación.
 - **No se sustituye ningún input por un componente nuevo.** Solo se añaden `min` y `max`.
-- Zona horaria: se usa la del servidor (`config('app.timezone')`), la misma que ya usan los modelos. No se introduce otra fuente de «hoy».
+- Zona horaria: **«hoy» se calcula con la del servidor** (`config('app.timezone')`), la misma que ya
+  usan los modelos, y no se introduce otra fuente de «hoy». Pero **la regla NO convierte de zona la
+  fecha recibida**: la juzga tal como la interpretará el cast `date` del modelo, para que lo que se
+  comprueba y lo que se escribe sean el mismo día. Se midió lo contrario: convirtiendo, la cadena
+  `\"2026-10-08T00:30:00+14:00\"` se veía como día 7 en México, pasaba, y la base guardaba el 8.
+  **No vuelvas a añadir un `setTimezone` ahí.**
 - La suite corre **en serie**: `php artisan test`. `--parallel` da fallos falsos en esta máquina.
 - `npx tsc --noEmit`: el único error aceptable es el preexistente `resources/js/actions/App/Http/Controllers/Api/WalkAroundController.ts(905,5)`.
 - `vendor/bin/pint --dirty` antes de cada commit; revertir lo que toque fuera del cambio.
