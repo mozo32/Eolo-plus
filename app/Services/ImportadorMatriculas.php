@@ -14,6 +14,7 @@ use App\Models\FactServicio;
 use App\Models\FactTipoMotor;
 use App\Models\TipoAeronave;
 use App\Models\User;
+use App\Support\NombreDeCatalogo;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -92,7 +93,7 @@ class ImportadorMatriculas
 
     public function ejecutar(bool $aplicar): ResultadoImportacion
     {
-        $this->resultado = new ResultadoImportacion();
+        $this->resultado = new ResultadoImportacion;
         $this->nombresCategoria = [];
         $this->nombresMotor = [];
 
@@ -306,7 +307,7 @@ class ImportadorMatriculas
      *
      * @param  array<string,object>  $matriculas
      * @return array{0: array<int,int>, 1: array<int,array{pernocta: float, transito2h: float, transito12h: float}>}
-     *                                     [id_categoria viejo => id local, id_categoria viejo => modas]
+     *                                                                                                               [id_categoria viejo => id local, id_categoria viejo => modas]
      */
     private function importarCategorias(array $matriculas): array
     {
@@ -719,7 +720,7 @@ class ImportadorMatriculas
      * sus servicios no queden huérfanos por un duplicado del origen.
      *
      * @return array{0: array<int,int>, 1: array<int,true>} [id_categorias viejo => id de
-     *                                                       fact_categorias_servicio, ids viejos sin nombre]
+     *                                                      fact_categorias_servicio, ids viejos sin nombre]
      */
     private function importarCategoriasServicio(): array
     {
@@ -1056,9 +1057,7 @@ class ImportadorMatriculas
      */
     private static function normalizarNombre(string $crudo): string
     {
-        $colapsado = preg_replace('/[\s\p{Z}]+/u', ' ', $crudo);
-
-        return trim($colapsado ?? $crudo);
+        return NombreDeCatalogo::normalizar($crudo);
     }
 
     private function hallazgoRepetido(string $etiqueta, string $tabla, int|string $id, string $nombre, string $primero): void
