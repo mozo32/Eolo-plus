@@ -8,6 +8,7 @@ import { CalendarClock, Loader2, ShieldBan, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import { useMatriculaProgramada } from './useMatriculaProgramada';
+import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
 import {
     formularioAPayload,
     formularioDesde,
@@ -35,6 +36,8 @@ const input =
  */
 export default function OperacionProgramadaModal({ fecha, operacion, onCerrar, onGuardado }: Props) {
     const esEdicion = Boolean(operacion);
+    // Sin suelo ni techo (la excepcion): el hook no pone limites, pero deja la pantalla cableada.
+    const { min, max } = useVentanaDeFecha('programadas.operacion');
 
     const [form, setForm] = useState<OperacionProgramadaForm>(() =>
         operacion ? formularioDesde(operacion) : formularioVacio(fecha),
@@ -254,6 +257,8 @@ export default function OperacionProgramadaModal({ fecha, operacion, onCerrar, o
                             <label className={label}>Fecha de la operación</label>
                             <input
                                 type="date"
+                                min={min}
+                                max={max}
                                 value={form.fecha}
                                 onChange={e => actualizar({ fecha: e.target.value })}
                                 className={input}

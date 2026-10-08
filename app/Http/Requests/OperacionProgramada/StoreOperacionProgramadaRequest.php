@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\OperacionProgramada;
 
+use App\Rules\DentroDeLaVentana;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreOperacionProgramadaRequest extends FormRequest
@@ -54,7 +55,13 @@ class StoreOperacionProgramadaRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'fecha' => ['required', 'date'],
+            // La excepcion, NOMBRADA y no omitida: esta ventana no tiene suelo ni techo (se
+            // programa lo que aun no ha ocurrido), asi que hoy la regla no rechaza nada. Se
+            // queda para que la excepcion este escrita donde se ve y para que, si algun dia
+            // se estrecha, ya este cableada. Alta y edicion comparten este arreglo
+            // (`UpdateOperacionProgramadaRequest` extiende este), y no lleva semantica de
+            // edicion: no hay ventana que impedir.
+            'fecha' => ['required', 'date', new DentroDeLaVentana('programadas.operacion')],
             'tipo' => ['required', 'in:llegada,salida'],
             'matricula' => ['required', 'string', 'max:20'],
             'equipo' => ['required', 'string', 'max:50'],

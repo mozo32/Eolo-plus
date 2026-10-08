@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Requests\OperacionProgramada\StoreOperacionProgramadaRequest;
+use App\Http\Requests\OperacionProgramada\UpdateOperacionProgramadaRequest;
 use App\Models\ChecklistTurno;
 use App\Models\ControlMedicamento;
 use App\Models\Departamento;
@@ -7,6 +9,7 @@ use App\Models\EntregaTurnoR;
 use App\Models\EstacionamientoSubterraneo;
 use App\Models\MovimientoCSAE;
 use App\Models\OperacionDiaria;
+use App\Models\OperacionProgramada;
 use App\Models\PernoctaDia;
 use App\Models\PrestamoChaleco;
 use App\Models\RelacionPlanta;
@@ -14,6 +17,8 @@ use App\Models\Remision;
 use App\Models\ServicioComisariato;
 use App\Models\TurnoAutotanque;
 use App\Models\User;
+use App\Models\WalkAround;
+use App\Rules\DentroDeLaVentana;
 use App\Support\VentanasDeFecha;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
@@ -2623,4 +2628,422 @@ it('ESTACIONAMIENTO alerta: el campo `fecha` es una fecha de CORTE de informe y 
     'un corte de hace un anio' => [-365],
     'un corte de hace diez dias' => [-10],
     'un corte futuro' => [10],
+]);
+
+// ===========================================================================
+// DESPACHO. Dos pantallas, y una es LA EXCEPCION:
+//   - despacho.informacion_general: la fecha viaja DENTRO de `metadata` y el endpoint no la
+//     validaba en absoluto. `walk_arounds.fecha` tiene cast `date`, asi que la edicion compara
+//     con `diaQueGuardaElModelo()`.
+//   - programadas.operacion: sin suelo y sin techo (se programa lo que aun no ha pasado).
+//     Su regla va NOMBRADA aunque hoy no rechace nada, y no lleva semantica de edicion.
+// ===========================================================================
+
+/** El mensaje del campo `metadata.fecha` (lleva un punto: no se lee con `json('errors.…')`). */
+function mensajeDeMetadata($respuesta): string
+{
+    return $respuesta->json('errors')['metadata.fecha'][0] ?? '';
+}
+
+/**
+ * Lo que un alta de walk around puede escribir: sus filas y las dos tablas de catalogo de la
+ * remota que el alta rellena antes de guardar.
+ *
+ * @return array{walkArounds: int, tipos: int, matriculas: int}
+ */
+function escrituraDeWalkAround(): array
+{
+    return [
+        'walkArounds' => WalkAround::count(),
+        'tipos' => DB::connection('remota')->table('tb_tipo')->count(),
+        'matriculas' => DB::connection('remota')->table('tb_matricula')->count(),
+    ];
+}
+
+/** @return array<string, mixed> */
+function cargaDeWalkAround(mixed $fecha, bool $enviarFecha = true, string $destino = 'MMTO'): array
+{
+    // En minusculas y sin acento: las columnas `movimiento` y `tipo` son enum, y MySQL los compara
+    // sin distinguir mayusculas ni acentos (el formulario manda `Salida` y `Avión`), pero la sqlite
+    // de las pruebas si.
+    $metadata = [
+        'movimiento' => 'salida',
+        'matricula' => 'XA-WLK',
+        'aeronave' => 'avion',
+        'tipo' => 'C172',
+        'hora' => '10:30',
+        'destino' => $destino,
+        'procedencia' => null,
+    ];
+    if ($enviarFecha) {
+        $metadata['fecha'] = $fecha;
+    }
+
+    return [
+        'metadata' => $metadata,
+        'inspeccionTecnica' => ['numeroEstaticas' => 0, 'checklist' => []],
+        'cierreYFirmas' => ['observaciones' => null, 'nombreResponsable' => 'Resp Uno', 'nombreJefe' => 'Jefe Uno', 'nombreFbo' => 'Fbo Uno'],
+    ];
+}
+
+function walkAroundParaEditar(string $fecha): WalkAround
+{
+    return WalkAround::create([
+        'fecha' => $fecha,
+        'movimiento' => 'salida',
+        'matricula' => 'XA-WLK',
+        'tipo' => 'avion',
+        'tipo_aeronave' => 'C172',
+        'tipo_aeronave_id' => 1,
+        'hora' => '10:30',
+        'destino' => 'MMTO',
+        'status' => 'A',
+    ]);
+}
+
+// --- Walk around: POST /api/walkarounds ---
+
+it('WALKAROUND alta: rechaza con 422 y no escribe nada con una fecha fuera de ventana', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = escrituraDeWalkAround();
+
+    $respuesta = $this->postJson('/api/walkarounds', cargaDeWalkAround(Carbon::today()->addDays($desplazamiento)->toDateString()));
+
+    $respuesta->assertUnprocessable()->assertJsonValidationErrors('metadata.fecha');
+    ['min' => $min, 'max' => $max] = fechasDelMensaje('despacho.informacion_general');
+    expect(mensajeDeMetadata($respuesta))->toContain($min)->toContain($max);
+    expect(escrituraDeWalkAround())->toBe($antes);
+})->with([
+    'en el futuro' => [1],
+    'demasiado antigua' => [-4],
+]);
+
+it('WALKAROUND alta: no deja pasar una fecha vacia, ausente o ilegible (el required es nuevo)', function (mixed $fecha, bool $enviarFecha) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = escrituraDeWalkAround();
+
+    $this->postJson('/api/walkarounds', cargaDeWalkAround($fecha, $enviarFecha))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('metadata.fecha');
+
+    expect(escrituraDeWalkAround())->toBe($antes);
+})->with([
+    'vacia' => ['', true],
+    'ausente' => [null, false],
+    'ilegible' => ['no-es-una-fecha', true],
+    'un arreglo' => [['2026-10-07'], true],
+    'un booleano' => [true, true],
+]);
+
+it('WALKAROUND alta: una fecha dentro de ventana escribe, con su dia exacto (la regla no rechaza todo)', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $dia = Carbon::today()->addDays($desplazamiento)->toDateString();
+    $antes = WalkAround::count();
+
+    $this->postJson('/api/walkarounds', cargaDeWalkAround($dia))->assertCreated();
+
+    expect(WalkAround::count())->toBe($antes + 1);
+    expect(WalkAround::latest('id')->first()->fecha->toDateString())->toBe($dia);
+})->with([
+    'hoy' => [0],
+    'ayer' => [-1],
+    'el borde de atras (hace tres dias)' => [-3],
+]);
+
+it('WALKAROUND alta: la ventana se juzga ANTES que la secuencia y que cualquier escritura', function () {
+    // Con una fecha fuera de ventana y el cuerpo casi vacio, lo primero que ocurre es el 422 de
+    // la fecha: ni la secuencia de movimientos ni el alta de catalogo llegan a ejecutarse.
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+
+    $this->postJson('/api/walkarounds', ['metadata' => ['fecha' => Carbon::today()->addDay()->toDateString()]])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('metadata.fecha');
+});
+
+it('WALKAROUND alta: a las 19:00 de Mexico (ya es manana en UTC) hoy sigue siendo hoy y manana se rechaza', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->travelTo(Carbon::parse('2026-10-07 19:00:00', 'America/Mexico_City'));
+    $antes = escrituraDeWalkAround();
+
+    $this->postJson('/api/walkarounds', cargaDeWalkAround('2026-10-08'))
+        ->assertUnprocessable()->assertJsonValidationErrors('metadata.fecha');
+    expect(escrituraDeWalkAround())->toBe($antes);
+
+    $this->postJson('/api/walkarounds', cargaDeWalkAround('2026-10-07'))->assertCreated();
+    expect(WalkAround::latest('id')->first()->fecha->toDateString())->toBe('2026-10-07');
+});
+
+// --- Walk around: PUT y PATCH /api/walkarounds/{id} (las dos rutas son el MISMO metodo) ---
+
+it('WALKAROUND edicion: rechaza con 422 y no modifica la fecha, por PUT y por PATCH', function (string $verbo, int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $original = Carbon::today()->toDateString();
+    $walkAround = walkAroundParaEditar($original);
+
+    $respuesta = $this->json($verbo, "/api/walkarounds/{$walkAround->id}", cargaDeWalkAround(Carbon::today()->addDays($desplazamiento)->toDateString()));
+
+    $respuesta->assertUnprocessable()->assertJsonValidationErrors('metadata.fecha');
+    ['min' => $min, 'max' => $max] = fechasDelMensaje('despacho.informacion_general');
+    expect(mensajeDeMetadata($respuesta))->toContain($min)->toContain($max);
+    expect($walkAround->fresh()->fecha->toDateString())->toBe($original);
+})->with([
+    'PUT al futuro' => ['PUT', 1],
+    'PUT a una fecha antigua' => ['PUT', -4],
+    'PATCH al futuro' => ['PATCH', 1],
+    'PATCH a una fecha antigua' => ['PATCH', -4],
+]);
+
+it('WALKAROUND edicion: deja corregir otros campos de un registro antiguo si no se toca su fecha', function (string $verbo) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antigua = Carbon::today()->subDays(10)->toDateString();
+    $walkAround = walkAroundParaEditar($antigua);
+
+    $this->json($verbo, "/api/walkarounds/{$walkAround->id}", cargaDeWalkAround($antigua, true, 'MMMX'))->assertOk();
+
+    expect($walkAround->fresh()->destino)->toBe('MMMX');
+    expect($walkAround->fresh()->fecha->toDateString())->toBe($antigua);
+})->with(['PUT', 'PATCH']);
+
+it('WALKAROUND edicion: no deja pasar de una fecha antigua a OTRA antigua distinta, y la guardada no cambia', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antigua = Carbon::today()->subDays(10)->toDateString();
+    $walkAround = walkAroundParaEditar($antigua);
+
+    $this->putJson("/api/walkarounds/{$walkAround->id}", cargaDeWalkAround(Carbon::today()->subDays(20)->toDateString(), true, 'MMMX'))
+        ->assertUnprocessable()->assertJsonValidationErrors('metadata.fecha');
+
+    expect($walkAround->fresh()->fecha->toDateString())->toBe($antigua);
+    expect($walkAround->fresh()->destino)->toBe('MMTO');
+});
+
+it('WALKAROUND edicion: no deja que lleve una fecha ausente o ilegible', function (mixed $fecha, bool $enviarFecha) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $original = Carbon::today()->toDateString();
+    $walkAround = walkAroundParaEditar($original);
+
+    $this->putJson("/api/walkarounds/{$walkAround->id}", cargaDeWalkAround($fecha, $enviarFecha, 'MMMX'))
+        ->assertUnprocessable()->assertJsonValidationErrors('metadata.fecha');
+
+    expect($walkAround->fresh()->fecha->toDateString())->toBe($original);
+    expect($walkAround->fresh()->destino)->toBe('MMTO');
+})->with([
+    'ausente' => [null, false],
+    'vacia' => ['', true],
+    'ilegible' => ['no-es-una-fecha', true],
+]);
+
+it('WALKAROUND edicion: una fecha valida de hoy escribe la fecha (la edicion tiene camino feliz)', function (string $verbo) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $hoy = Carbon::today()->toDateString();
+    $walkAround = walkAroundParaEditar(Carbon::today()->subDays(10)->toDateString());
+
+    $this->json($verbo, "/api/walkarounds/{$walkAround->id}", cargaDeWalkAround($hoy))->assertOk();
+
+    expect($walkAround->fresh()->fecha->toDateString())->toBe($hoy);
+})->with(['PUT', 'PATCH']);
+
+it('WALKAROUND edicion: mover la fecha a un dia DENTRO de ventana escribe (la edicion no rechaza todo cambio)', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $nueva = Carbon::today()->addDays($desplazamiento)->toDateString();
+    $walkAround = walkAroundParaEditar(Carbon::today()->toDateString());
+
+    $this->putJson("/api/walkarounds/{$walkAround->id}", cargaDeWalkAround($nueva))->assertOk();
+
+    expect($walkAround->fresh()->fecha->toDateString())->toBe($nueva);
+})->with([
+    'ayer' => [-1],
+    'el borde de atras (hace tres dias)' => [-3],
+]);
+
+it('WALKAROUND edicion: reenviar la misma fecha en otro formato cuenta como sin cambios', function (string $formato) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antigua = Carbon::today()->subDays(10)->toDateString();
+    $walkAround = walkAroundParaEditar($antigua);
+
+    $this->putJson("/api/walkarounds/{$walkAround->id}", cargaDeWalkAround(str_replace('{dia}', $antigua, $formato), true, 'MMMX'))->assertOk();
+
+    expect($walkAround->fresh()->destino)->toBe('MMMX');
+    expect($walkAround->fresh()->fecha->toDateString())->toBe($antigua);
+})->with([
+    'ISO con Z' => ['{dia}T00:00:00Z'],
+    'con hora' => ['{dia} 00:00:00'],
+    'ISO con desfase' => ['{dia}T00:00:00-06:00'],
+]);
+
+it('WALKAROUND edicion: el mismo dia con un sufijo relativo no cuenta como «sin cambios» (la columna tiene cast)', function (string $partida, string $sufijo) {
+    // Comparar TEXTO aqui seria el agujero: `{hoy} +1 day` es distinto del guardado pero, si se
+    // tomara por el mismo dia, se saltaria la ventana y la base guardaria manana.
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $original = fechaDePartida($partida);
+    $walkAround = walkAroundParaEditar($original);
+
+    $this->putJson("/api/walkarounds/{$walkAround->id}", cargaDeWalkAround($original.$sufijo))
+        ->assertUnprocessable()->assertJsonValidationErrors('metadata.fecha');
+
+    expect($walkAround->fresh()->fecha->toDateString())->toBe($original);
+})->with([
+    'hoy +1 day' => ['hoy', ' +1 day'],
+    'hoy con hora y +1 day' => ['hoy', 'T08:30 +1 day'],
+    'antigua +1 day' => ['antigua', ' +1 day'],
+]);
+
+// --- Walk around: el invariante, leyendo la columna ---
+
+it('WALKAROUND ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = WalkAround::count();
+
+    $this->postJson('/api/walkarounds', cargaDeWalkAround($valor));
+
+    if (WalkAround::count() === $antes) {
+        expect(WalkAround::count())->toBe($antes);
+
+        return;
+    }
+
+    $guardado = WalkAround::latest('id')->first()->fecha->toDateString();
+    expect(enLaVentana($guardado, 'despacho.informacion_general'))
+        ->toBeTrue('se guardo '.$guardado.' con la entrada '.json_encode($valor));
+})->with(fn () => fechasHostiles());
+
+it('WALKAROUND EDICION: lo que la regla deja pasar deja la columna dentro de la ventana, o como estaba, por PUT y por PATCH', function (string $verbo, mixed $valor, string $partida) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $original = fechaDePartida($partida);
+    $walkAround = walkAroundParaEditar($original);
+
+    $this->json($verbo, "/api/walkarounds/{$walkAround->id}", cargaDeWalkAround($valor));
+
+    $guardado = $walkAround->fresh()->fecha->toDateString();
+    expect($guardado === $original || enLaVentana($guardado, 'despacho.informacion_general'))
+        ->toBeTrue('de '.$original.' paso a '.$guardado.' con la entrada '.json_encode($valor));
+})->with(function () {
+    foreach (['PUT', 'PATCH'] as $verbo) {
+        foreach (hostilesPorPartida() as $nombre => [$valor, $partida]) {
+            yield "{$verbo} {$nombre}" => [$verbo, $valor, $partida];
+        }
+    }
+});
+
+// --- Operaciones programadas: LA EXCEPCION. POST y PUT /api/OperacionesProgramadas ---
+
+/** @return array<string, mixed> */
+function cargaDeProgramada(mixed $fecha, bool $enviarFecha = true, string $lugar = 'MMTO'): array
+{
+    $carga = ['tipo' => 'llegada', 'matricula' => 'XA-PRG', 'equipo' => 'C172', 'hora' => '10:30', 'lugar' => $lugar, 'pax' => 2];
+    if ($enviarFecha) {
+        $carga['fecha'] = $fecha;
+    }
+
+    return $carga;
+}
+
+function programadaParaEditar(string $fecha): OperacionProgramada
+{
+    return OperacionProgramada::create([
+        'fecha' => $fecha,
+        'tipo' => 'llegada',
+        'matricula' => 'XA-PRG',
+        'equipo' => 'C172',
+        'hora' => '10:30',
+        'lugar' => 'MMTO',
+        'pax' => 2,
+        'status' => OperacionProgramada::STATUS_ACTIVA,
+    ]);
+}
+
+it('PROGRAMADAS alta: acepta cualquier dia, futuro o pasado (la excepcion: sin suelo y sin techo)', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $dia = Carbon::today()->addDays($desplazamiento)->toDateString();
+    $antes = OperacionProgramada::count();
+
+    $this->postJson('/api/OperacionesProgramadas', cargaDeProgramada($dia))->assertCreated();
+
+    expect(OperacionProgramada::count())->toBe($antes + 1);
+    expect(OperacionProgramada::latest('id')->first()->fecha->toDateString())->toBe($dia);
+})->with([
+    'hoy' => [0],
+    'manana' => [1],
+    'dentro de un mes' => [30],
+    'dentro de un anio' => [365],
+    'hace diez dias' => [-10],
+    'hace un anio' => [-365],
+]);
+
+it('PROGRAMADAS edicion: tambien acepta cualquier dia, futuro o pasado (el Form Request de edicion extiende al de alta)', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $dia = Carbon::today()->addDays($desplazamiento)->toDateString();
+    $programada = programadaParaEditar(Carbon::today()->toDateString());
+
+    $this->putJson("/api/OperacionesProgramadas/{$programada->id}", cargaDeProgramada($dia, true, 'MMMX'))->assertOk();
+
+    expect($programada->fresh()->fecha->toDateString())->toBe($dia);
+    expect($programada->fresh()->lugar)->toBe('MMMX');
+})->with([
+    'manana' => [1],
+    'dentro de un anio' => [365],
+    'hace un anio' => [-365],
+]);
+
+it('PROGRAMADAS: sigue exigiendo una fecha legible, la excepcion no la deja opcional', function (mixed $fecha, bool $enviarFecha) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = OperacionProgramada::count();
+
+    $this->postJson('/api/OperacionesProgramadas', cargaDeProgramada($fecha, $enviarFecha))
+        ->assertUnprocessable()->assertJsonValidationErrors('fecha');
+
+    expect(OperacionProgramada::count())->toBe($antes);
+})->with([
+    'vacia' => ['', true],
+    'ausente' => [null, false],
+    'ilegible' => ['no-es-una-fecha', true],
+    'un arreglo' => [['2026-10-07'], true],
+]);
+
+it('LA EXCEPCION es una excepcion y no un agujero: la MISMA fecha futura se acepta en programadas y se rechaza en las demas', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $futura = Carbon::today()->addDays($desplazamiento)->toDateString();
+    $programadas = OperacionProgramada::count();
+    $walkArounds = WalkAround::count();
+    $operaciones = OperacionDiaria::count();
+
+    // Aceptada donde la ventana tiene `futuro => true`…
+    $this->postJson('/api/OperacionesProgramadas', cargaDeProgramada($futura))->assertCreated();
+    expect(OperacionProgramada::count())->toBe($programadas + 1);
+
+    // …y rechazada, con la misma fecha, en cada formulario que registra un hecho.
+    $this->postJson('/api/walkarounds', cargaDeWalkAround($futura))
+        ->assertUnprocessable()->assertJsonValidationErrors('metadata.fecha');
+    $this->postJson('/api/OperacionesDiarias', cargaDeOperacion('Llegada', $futura))
+        ->assertUnprocessable()->assertJsonValidationErrors('fecha');
+    expect(WalkAround::count())->toBe($walkArounds);
+    expect(OperacionDiaria::count())->toBe($operaciones);
+})->with([
+    'manana' => [1],
+    'dentro de un mes' => [30],
+]);
+
+it('PROGRAMADAS: solo ella tiene `futuro` y solo ella carece de suelo (si otra lo tuviera, la excepcion se habria ensanchado)', function () {
+    $conFuturo = array_keys(array_filter(VentanasDeFecha::CLAVES, fn ($v) => $v['futuro']));
+    $sinSuelo = array_keys(array_filter(VentanasDeFecha::CLAVES, fn ($v) => $v['atras'] === null));
+
+    expect($conFuturo)->toBe(['programadas.operacion'])
+        ->and($sinSuelo)->toBe(['programadas.operacion']);
+});
+
+it('PROGRAMADAS: la regla de la excepcion esta NOMBRADA en el alta y en la edicion, aunque hoy no rechace nada', function (string $request) {
+    // Es un no-op por diseno (sin suelo y sin techo), asi que ninguna peticion puede probar que
+    // sigue ahi: se lee el arreglo de reglas. Si alguien la borra por «inutil», cae esta prueba y
+    // la excepcion deja de estar escrita donde se ve.
+    $reglas = (new $request)->rules()['fecha'];
+    $claves = collect($reglas)
+        ->filter(fn ($regla) => $regla instanceof DentroDeLaVentana)
+        ->map(fn ($regla) => (new ReflectionProperty($regla, 'clave'))->getValue($regla))
+        ->values()
+        ->all();
+
+    expect($claves)->toBe(['programadas.operacion'])
+        ->and($reglas)->toContain('required')->toContain('date');
+})->with([
+    'alta' => [StoreOperacionProgramadaRequest::class],
+    'edicion' => [UpdateOperacionProgramadaRequest::class],
 ]);

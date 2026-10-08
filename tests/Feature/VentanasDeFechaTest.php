@@ -206,7 +206,6 @@ test('la tabla de ventanas esta fijada a mano: cambiar una exige reconocerlo aqu
         'estacionamiento.ronda' => ['atras' => 1, 'futuro' => false],
         'operaciones.llegada' => ['atras' => 3, 'futuro' => false],
         'operaciones.salida' => ['atras' => 3, 'futuro' => false],
-        'despacho.walk_around' => ['atras' => 3, 'futuro' => false],
         'despacho.informacion_general' => ['atras' => 3, 'futuro' => false],
         'autotanque.servicio' => ['atras' => 3, 'futuro' => false],
         'comisariato.entrega' => ['atras' => 3, 'futuro' => false],

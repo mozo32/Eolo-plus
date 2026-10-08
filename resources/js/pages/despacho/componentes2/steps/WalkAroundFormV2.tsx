@@ -133,6 +133,9 @@ const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId, datosProgramados,
     });
     const [inspeccion, setInspeccion] = useState<any>({});
     const [exteriorData, setExteriorData] = useState<ExteriorData>(INITIAL_EXTERIOR);
+    // La fecha con la que el registro esta guardado, solo al editar: el calendario la respeta
+    // aunque quede fuera de la ventana, igual que el servidor.
+    const [fechaOriginal, setFechaOriginal] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLoadingData, setIsLoadingData] = useState(false);
     const [isMapOpen, setIsMapOpen] = useState(false);
@@ -211,6 +214,7 @@ const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId, datosProgramados,
                 try {
                     const detalle: any = await fetchWalkaroundDetalle(id);
                     if (detalle) {
+                        setFechaOriginal(detalle.fecha ? new Date(detalle.fecha).toLocaleDateString('en-CA') : null);
                         setInfoData({
                             matricula: detalle.matricula || '',
                             movimiento: detalle.movimiento ? detalle.movimiento.charAt(0).toUpperCase() + detalle.movimiento.slice(1).toLowerCase() : '',
@@ -373,6 +377,7 @@ const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId, datosProgramados,
                                         onChange={(d: any) => setInfoData((p: any) => ({ ...p, ...d }))}
                                         onMatriculaBlur={buscarProgramada}
                                         avisoProgramada={avisoOtroTipo}
+                                        fechaOriginal={id ? fechaOriginal : null}
                                     />
                                 </div>
                             </div>

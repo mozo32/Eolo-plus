@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Rules\DentroDeLaVentana;
+use App\Support\VentanasDeFecha;
 use Illuminate\Http\Request;
 
 use App\Models\WalkAround;
@@ -293,6 +295,12 @@ class WalkAroundController extends Controller
      */
     public function store(Request $request)
     {
+        // La ventana de fechas se juzga antes que nada, y fuera de la transaccion: asi un 422
+        // no pasa por el `catch (\Throwable)` de abajo, que lo convertiria en un 500.
+        $request->validate([
+            'metadata.fecha' => ['required', 'date', new DentroDeLaVentana('despacho.informacion_general')],
+        ]);
+
         // La regla de secuencia vive en SecuenciaMovimientoService y se vuelve a
         // ejecutar aquí contra los registros reales de WalkAround, venga o no de
         // una operación programada.
@@ -454,11 +462,38 @@ class WalkAroundController extends Controller
     }
 
     /**
+     * La ventana de fechas solo se exige cuando la fecha CAMBIA.
+     *
+     * `fecha` tiene cast `date`, asi que se compara el DIA que guardaria el modelo y no el
+     * texto: `{hoy} +1 day` como texto es distinto del guardado, pero como dia es manana, y
+     * compararlo como texto lo dejaria pasar por «no cambio». Un registro viejo cuya fecha
+     * queda intacta no debe dar 422 al corregir otro campo; lo que la ventana impide es poner
+     * una fecha fuera de ella. Valida si la fecha recibida difiere de la guardada, falta o es
+     * ilegible.
+     *
+     * Va ANTES de abrir la transaccion para que el 422 no lo atrape el `catch (\Throwable)`.
+     */
+    private function validarFechaSiCambia(Request $request, WalkAround $walkAround): void
+    {
+        $recibidaComoDia = VentanasDeFecha::diaQueGuardaElModelo($request->input('metadata.fecha'));
+
+        if ($recibidaComoDia !== null && $recibidaComoDia === $walkAround->fecha?->toDateString()) {
+            return;
+        }
+
+        $request->validate([
+            'metadata.fecha' => ['required', 'date', new DentroDeLaVentana('despacho.informacion_general')],
+        ]);
+    }
+
+    /**
      * ACTUALIZAR
      * PUT/PATCH /api/walkarounds/{walkAround}
      */
     public function update(Request $request, WalkAround $walkAround)
     {
+        $this->validarFechaSiCambia($request, $walkAround);
+
         DB::beginTransaction();
 
         try {

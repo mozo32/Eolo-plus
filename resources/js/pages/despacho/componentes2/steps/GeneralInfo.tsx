@@ -1,6 +1,7 @@
 import React from 'react';
 import MatriculaAutocomplete, { AeronaveApiData } from '@/pages/despacho/components/walkAround/MatriculaAutocomplete';
 import { ClipboardList } from 'lucide-react';
+import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
 
 interface InfoData {
     matricula: string;
@@ -21,9 +22,12 @@ interface Props {
     onMatriculaBlur?: () => void;
     /** Aviso discreto: hay una programada del movimiento contrario. No bloquea. */
     avisoProgramada?: string | null;
+    /** Al editar: la fecha con la que el registro ya esta guardado (ensancha la ventana hasta ella). */
+    fechaOriginal?: string | null;
 }
 
-const GeneralInfo = ({ data, onChange, onMatriculaBlur, avisoProgramada }: Props) => {
+const GeneralInfo = ({ data, onChange, onMatriculaBlur, avisoProgramada, fechaOriginal }: Props) => {
+    const { min, max } = useVentanaDeFecha('despacho.informacion_general', fechaOriginal);
 
     const handleAeronaveData = (aeronave: AeronaveApiData) => {
         let sugerirMovimiento = data.movimiento;
@@ -171,6 +175,8 @@ const GeneralInfo = ({ data, onChange, onMatriculaBlur, avisoProgramada }: Props
                         <label className={subLabelStyle}>Fecha</label>
                         <input
                             type="date"
+                            min={min}
+                            max={max}
                             value={data.fecha}
                             onChange={(e) => onChange({ fecha: e.target.value })}
                             className={inputStyle}
