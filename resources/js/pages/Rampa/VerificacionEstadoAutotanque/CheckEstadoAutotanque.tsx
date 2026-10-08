@@ -7,6 +7,7 @@ import { SeccionVehiculo, type DatosVehiculo } from "./SeccionVehiculo";
 import { SeccionFirmas } from './SeccionFirmas';
 import { guardarInspeccion, fetchInspeccionPorTurno } from '@/stores/apiInspeccionAutoTanque';
 import { reporteEntregaTurno } from '@/routes';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 interface CheckEstadoProps { data?: any; onSuccess?: () => void; }
 
@@ -113,7 +114,7 @@ export const CheckEstadoAutotanque = ({ data: dataProp, onSuccess }: CheckEstado
             const nuevasEvidenciasBase64 = await Promise.all(fotos.map(foto => fileToBase64(foto)));
             const dataLog = {
                 turno_id: turnoId,
-                fecha: new Date().toLocaleDateString('en-CA'),
+                fecha: fechaHoy(),
                 operador: user?.name,
                 checklist: respuestas,
                 km: datosVehiculo.km,

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { usePage } from "@inertiajs/react";
 import { useVentanaDeFecha } from "@/lib/ventanasDeFecha";
-import { fechaHoy } from "@/pages/despacho/operacionesProgramadas/types";
+import { fechaHoy } from "@/lib/fechaHoy";
 import {
     AlertCircle,
     CalendarDays,

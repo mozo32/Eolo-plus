@@ -11,6 +11,7 @@ import type { PrecargaProgramada } from "@/pages/despacho/operacionesProgramadas
 import { useDeteccionProgramada } from "@/pages/despacho/operacionesProgramadas/useDeteccionProgramada";
 import { CalendarClock } from "lucide-react";
 import { useVentanaDeFecha } from "@/lib/ventanasDeFecha";
+import { fechaHoy } from "@/lib/fechaHoy";
 
 export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datosEdicion, soloLectura = false, borradorId, datosProgramados, onVincularProgramada, onDesvincularProgramada }: {
     alCerrar?: () => void;
@@ -35,7 +36,7 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
     const { min, max } = useVentanaDeFecha('operaciones.salida', datosEdicion?.fecha);
     const [cargando, setCargando] = useState(false);
     const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
-    const obtenerFechaHoy = () => new Date().toLocaleDateString('sv-SE');
+    const obtenerFechaHoy = () => fechaHoy();
 
     const getInitialState = (fecha?: string) => ({
         id: datosEdicion?.id || null,
@@ -241,7 +242,7 @@ export const FormSalida = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datos
                         movimiento: 'Salida',
                         fecha: op?.fecha
                             ? new Date(op.fecha).toISOString().split('T')[0]
-                            : new Date().toLocaleDateString('sv-SE'),
+                            : fechaHoy(),
                         observaciones: op.observaciones || '',
                         nombre: op.nombre || '',
                         impulso: op.impulso || '',

@@ -1,5 +1,6 @@
 import { fetchRemisionesDelDia } from "@/stores/apiAutoTanque"
 import { useEffect, useState } from "react";
+import { fechaHoy } from "@/lib/fechaHoy";
 
 // Interfaces
 interface Remision {
@@ -40,11 +41,7 @@ export default function IndexRemisiones() {
         { id: 2, entrega: "Carlos Ruiz", recibe: "Juan Pérez", diferencia: -1.20, fecha: "2026-02-24", remisionesIds: ["EOLO-0001"] },
     ];
 
-    const obtenerFechaMexico = () => {
-        const ahora = new Date();
-        const opciones: Intl.DateTimeFormatOptions = { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' };
-        return new Intl.DateTimeFormat('sv-SE', opciones).format(ahora).split(' ')[0];
-    };
+    const obtenerFechaMexico = () => fechaHoy();
 
     const cargarDatosRemisiones = async (fechaManual?: string) => {
         setLoading(true);

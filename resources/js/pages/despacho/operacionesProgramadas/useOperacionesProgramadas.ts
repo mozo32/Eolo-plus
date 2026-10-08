@@ -6,7 +6,8 @@ import {
 } from '@/stores/apiOperacionesProgramadas';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
-import { fechaHoy, type OperacionProgramada, type TabProgramadas } from './types';
+import { fechaHoy } from '@/lib/fechaHoy';
+import { type OperacionProgramada, type TabProgramadas } from './types';
 import { tocaLaFecha, useCanalProgramadas } from './useCanalProgramadas';
 
 /**

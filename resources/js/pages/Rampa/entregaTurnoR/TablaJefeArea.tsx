@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { pdf } from '@react-pdf/renderer';
 import ReportePDF from './secciones/ReportePDF';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 interface ReportePendiente {
     id: number;
@@ -114,8 +115,8 @@ const TablaJefeArea: React.FC<TablaProps> = ({ onSeleccionar, onNuevoRegistro })
         }
     };
     const [filtros, setFiltros] = useState({
-        fechaInicio: new Date().toLocaleDateString('en-CA'),
-        fechaFin: new Date().toLocaleDateString('en-CA'),
+        fechaInicio: fechaHoy(),
+        fechaFin: fechaHoy(),
         periodo: 'dia',
         nombreEntrega: '',
         nombreRecibe: '',
@@ -194,8 +195,8 @@ const TablaJefeArea: React.FC<TablaProps> = ({ onSeleccionar, onNuevoRegistro })
 
     const limpiarFiltros = () => {
         setFiltros({
-            fechaInicio: new Date().toLocaleDateString('en-CA'),
-            fechaFin: new Date().toLocaleDateString('en-CA'),
+            fechaInicio: fechaHoy(),
+            fechaFin: fechaHoy(),
             periodo: 'dia',
             nombreEntrega: '',
             nombreRecibe: '',

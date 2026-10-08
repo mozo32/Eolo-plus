@@ -9,6 +9,7 @@ import {
 } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
 import { pdfOperacionesDiariasApi } from '@/stores/apiOperacionesDiarias';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 export type FiltrosReporte = {
     buscar?: string;
@@ -400,7 +401,7 @@ export type ReporteRapidoPreparado = {
 };
 
 const obtenerNombreArchivoReporteRapido = (filtros: FiltrosReporte = {}) => {
-    const fechaInicio = filtros.fechaInicio || new Date().toLocaleDateString('en-CA');
+    const fechaInicio = filtros.fechaInicio || fechaHoy();
     const fechaFin = filtros.fechaFin || fechaInicio;
 
     return `Resumen_Semanal_Operaciones_${fechaInicio}_${fechaFin}.pdf`;

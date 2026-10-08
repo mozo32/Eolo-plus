@@ -5,6 +5,7 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { initializeTheme } from './hooks/use-appearance';
+import { iniciarFechaHoy } from './lib/fechaHoy';
 import 'primereact/resources/themes/lara-light-blue/theme.css';
 import 'primereact/resources/primereact.min.css';
 import 'primeicons/primeicons.css';
@@ -21,6 +22,9 @@ configureEcho({
 });
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+
+// Antes de montar la app: así ningún formulario pide «hoy» sin el ancla del servidor.
+iniciarFechaHoy();
 
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),

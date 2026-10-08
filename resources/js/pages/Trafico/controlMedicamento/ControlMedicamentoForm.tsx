@@ -3,6 +3,7 @@ import { useState } from "react";
 import FirmaCanvas from "@/pages/FirmaCanvas";
 import { usePage } from "@inertiajs/react";
 import { guardarControlMedicamentoApi, actualizarControlMedicamentoApi } from "@/stores/apiControlMedicamento";
+import { fechaHoy } from "@/lib/fechaHoy";
 function FirmaBox({
     label,
     value,
@@ -169,7 +170,7 @@ export default function ControlMedicamentoForm({
 
         return {
             responsable: initialData?.responsable ?? user?.name ?? '',
-            fecha: initialData?.fecha ?? new Date().toLocaleDateString('en-CA'),
+            fecha: initialData?.fecha ?? fechaHoy(),
             dia: initialData?.dia ?? getDiaActual(),
             firma: initialData?.firmas[0].url ?? '',
             medicamentos: meds,

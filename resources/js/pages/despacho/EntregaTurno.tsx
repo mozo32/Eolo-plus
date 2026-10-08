@@ -9,6 +9,7 @@ import EntregaTurnoPdfExporterReactPdf from './components/entregaTurno/itemTable
 import EntregarTurnoDetalle from './components/entregaTurno/itemTables/EntregarTurnoDetalle';
 import EntregarTurnoEditar from './components/entregaTurno/itemTables/EntregarTurnoEditar';
 import { Filter, Plus, Search, Eye, Edit2, X, ListCheck, ChevronLeft, ChevronRight, Calendar, ChevronDown } from 'lucide-react';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 type LaravelLink = { url: string | null; label: string; active: boolean; };
 type LaravelMeta = { current_page: number; last_page: number; per_page?: number; total?: number; from?: number; to?: number; };
@@ -41,8 +42,8 @@ export default function EntregaTurno() {
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
 
     const [filtros, setFiltros] = useState({
-        fechaInicio: new Date().toLocaleDateString('en-CA'),
-        fechaFin: new Date().toLocaleDateString('en-CA'),
+        fechaInicio: fechaHoy(),
+        fechaFin: fechaHoy(),
         periodo: 'dia',
         nombreQuienEntrega: '',
         nombreQuienRecibe: '',
@@ -119,8 +120,8 @@ export default function EntregaTurno() {
 
     const limpiarFiltros = () => {
         setFiltros({
-            fechaInicio: new Date().toLocaleDateString('en-CA'),
-            fechaFin: new Date().toLocaleDateString('en-CA'),
+            fechaInicio: fechaHoy(),
+            fechaFin: fechaHoy(),
             periodo: 'dia',
             nombreQuienEntrega: '',
             nombreQuienRecibe: '',

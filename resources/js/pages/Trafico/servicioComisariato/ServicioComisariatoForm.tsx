@@ -4,7 +4,7 @@ import { guardarServicioComisariatoApi, actualizarServicioComisariatoApi } from 
 import Swal from "sweetalert2";
 import { Package } from "lucide-react";
 import { useVentanaDeFecha } from "@/lib/ventanasDeFecha";
-import { fechaHoy } from '@/pages/despacho/operacionesProgramadas/types';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 type Props = {
     isEdit: boolean;

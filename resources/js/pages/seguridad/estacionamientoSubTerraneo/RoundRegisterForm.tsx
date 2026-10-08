@@ -4,7 +4,7 @@ import { guardarEstaSubTerraneo, buscarPlacasExistentes, obtenerDetallePorPlaca 
 import Swal from 'sweetalert2';
 import InputMatricula from '@/pages/InputMatricula';
 import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
-import { fechaHoy } from '@/pages/despacho/operacionesProgramadas/types';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 // --- COMPONENTES AUXILIARES FUERA PARA EVITAR PÉRDIDA DE FOCO ---
 

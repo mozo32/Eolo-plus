@@ -10,6 +10,7 @@ import {
     type MetaPaginacion,
 } from "@/stores/apiRegistroVisitantes";
 import FirmaCanvas from "@/pages/FirmaCanvas";
+import { fechaHoy } from "@/lib/fechaHoy";
 
 interface Visitante {
     id: number;
@@ -23,7 +24,7 @@ interface Visitante {
     tipo_gafete?: "Rojo" | "Verde" | null;
 }
 
-const obtenerFechaActual = () => new Date().toLocaleDateString("en-CA");
+const obtenerFechaActual = () => fechaHoy();
 const REGISTROS_POR_PAGINA = 10;
 
 type ModoPeriodo = "dia" | "rango" | "mes" | "año";
@@ -540,7 +541,7 @@ export default function RegistroVisitantesSalida() {
 
         try {
             const datosSalida = {
-                fechaSalida: currentTime.toLocaleDateString("en-CA"),
+                fechaSalida: fechaHoy(),
                 horaSalida: currentTime.toLocaleTimeString("es-MX", {
                     hour12: false,
                 }),

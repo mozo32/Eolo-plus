@@ -9,7 +9,7 @@ import RampaSignaturesSection from './secciones/RampaSignaturesSection';
 import { actualizarEntregaTurnoRApi, guardarEntregaTurnoRApi, buscarUsuariosRampaApi } from '@/stores/apiEntregaTurnoR';
 import { getStepErrors } from './validacionEntregaTurnoR';
 import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
-import { fechaHoy } from '@/pages/despacho/operacionesProgramadas/types';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 interface RampaFormProps {
     initialData?: any;

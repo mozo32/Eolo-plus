@@ -20,6 +20,7 @@ import {
     Loader2,
     Eye
 } from 'lucide-react';
+import { fechaHoy } from '@/lib/fechaHoy';
 const Inspeccion = lazy(() => import('./Combustible/Inspeccion'));
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Inspección de Combustible' }];
@@ -67,8 +68,8 @@ export default function InspeccionCombustible() {
     const [filtros, setFiltros] = useState({
         buscar: '',
         inspector: '',
-        fechaInicio: new Date().toLocaleDateString('en-CA'),
-        fechaFin: new Date().toLocaleDateString('en-CA'),
+        fechaInicio: fechaHoy(),
+        fechaFin: fechaHoy(),
         periodo: 'dia'
     });
 
@@ -126,8 +127,8 @@ export default function InspeccionCombustible() {
         setFiltros({
             buscar: '',
             inspector: '',
-            fechaInicio: new Date().toLocaleDateString('en-CA'),
-            fechaFin: new Date().toLocaleDateString('en-CA'),
+            fechaInicio: fechaHoy(),
+            fechaFin: fechaHoy(),
             periodo: 'dia'
         });
     };

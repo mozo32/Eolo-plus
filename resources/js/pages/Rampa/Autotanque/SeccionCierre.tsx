@@ -2,7 +2,7 @@ import React from 'react';
 import { TABLA_CALIBRACION } from './tablaCalibracion';
 import { Clock, Calendar } from 'lucide-react';
 import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
-import { fechaHoy } from '@/pages/despacho/operacionesProgramadas/types';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 interface SeccionCierreProps {
     nombreCierre: string;

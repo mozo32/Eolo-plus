@@ -25,7 +25,7 @@ import {
     habilitarMedicamento,
 } from '@/stores/apiControlMedicamento';
 import Swal from 'sweetalert2';
-import { fechaHoy } from '@/pages/despacho/operacionesProgramadas/types';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 interface Props {
     view: ViewType;

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import PdfExporterTurno from './checkListTurno/sections/PdfExporterTurno';
 import Swal from 'sweetalert2';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 interface Role {
     slug: string;
@@ -175,11 +176,8 @@ export default function CheckListTurno() {
     };
 
     const activarPeriodo = (periodo: PeriodoFiltro) => {
-        const hoy = new Date();
-        const yyyy = hoy.getFullYear();
-        const mm = String(hoy.getMonth() + 1).padStart(2, '0');
-        const dd = String(hoy.getDate()).padStart(2, '0');
-        const fechaHoy = `${yyyy}-${mm}-${dd}`;
+        const hoyDia = fechaHoy();
+        const [yyyy, mm] = hoyDia.split('-');
 
         if (periodo === 'todos') {
             setFiltrosEdicion({
@@ -195,8 +193,8 @@ export default function CheckListTurno() {
             setFiltrosEdicion({
                 ...filtrosEdicion,
                 periodo,
-                fechaInicio: filtrosEdicion.fechaInicio || fechaHoy,
-                fechaFin: filtrosEdicion.fechaInicio || fechaHoy,
+                fechaInicio: filtrosEdicion.fechaInicio || hoyDia,
+                fechaFin: filtrosEdicion.fechaInicio || hoyDia,
             });
             return;
         }
@@ -205,14 +203,14 @@ export default function CheckListTurno() {
             setFiltrosEdicion({
                 ...filtrosEdicion,
                 periodo,
-                fechaInicio: filtrosEdicion.fechaInicio || fechaHoy,
-                fechaFin: filtrosEdicion.fechaFin || fechaHoy,
+                fechaInicio: filtrosEdicion.fechaInicio || hoyDia,
+                fechaFin: filtrosEdicion.fechaFin || hoyDia,
             });
             return;
         }
 
         if (periodo === 'mes') {
-            const ultimoDia = new Date(yyyy, Number(mm), 0).getDate();
+            const ultimoDia = new Date(Number(yyyy), Number(mm), 0).getDate();
 
             setFiltrosEdicion({
                 ...filtrosEdicion,

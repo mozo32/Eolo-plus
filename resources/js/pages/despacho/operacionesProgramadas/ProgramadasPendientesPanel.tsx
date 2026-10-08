@@ -2,8 +2,8 @@ import { obtenerProgramadasPendientesApi } from '@/stores/apiOperacionesPrograma
 import { CalendarClock, ChevronRight, Clock, Loader2, Plane, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { confirmarHoraFutura } from './coincidenciasProgramadas';
+import { fechaHoy } from '@/lib/fechaHoy';
 import {
-    fechaHoy,
     precargaDesde,
     type ModuloConsumidor,
     type OperacionProgramada,

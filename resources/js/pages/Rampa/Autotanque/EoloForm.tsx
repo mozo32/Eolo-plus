@@ -6,6 +6,7 @@ import MatriculaAutocomplete from '@/pages/despacho/components/walkAround/Matric
 import { ultimaLectura, obtenerResponsableHistoricosApi, formaPago } from '@/stores/apiRemision';
 import { updateRemision } from '@/stores/apiAutoTanque';
 import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 interface EoloFormData {
     fecha: string;
@@ -111,7 +112,7 @@ const EoloForm = ({ data: externalData, isEdit, onSuccess }: {
     isEdit?: boolean,
     onSuccess?: () => void
 }) => {
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
+    const today = fechaHoy();
     const { min, max } = useVentanaDeFecha('autotanque.servicio', isEdit ? externalData?.fecha : undefined);
     const [opcionesPago, setOpcionesPago] = useState<{id: number, name: string}[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);

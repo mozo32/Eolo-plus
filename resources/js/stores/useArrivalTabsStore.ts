@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 interface TabInstance {
     id: string;
@@ -31,7 +32,7 @@ export const useArrivalTabsStore = create<TabsState>((set) => ({
             tipo_cliente: '',
             departamento: moduloNombre,
             movimiento: 'Llegada',
-            fecha: new Date().toLocaleDateString('sv-SE'),
+            fecha: fechaHoy(),
             observaciones: '',
             nombre: '',
             impulso: ''

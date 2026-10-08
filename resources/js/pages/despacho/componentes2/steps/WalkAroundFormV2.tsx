@@ -9,6 +9,7 @@ import { validateStepOne, validateStepTwo, validateStepThree } from '../formVali
 import { guardarWalkAroundApi, fetchWalkaroundDetalle, updateWalkaroundApi, obtenerInfoMatriculaApi } from '@/stores/apiWalkaround';
 import type { PrecargaProgramada } from '@/pages/despacho/operacionesProgramadas/types';
 import { useDeteccionProgramada } from '@/pages/despacho/operacionesProgramadas/useDeteccionProgramada';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 const STEPS = [
     { id: 1, label: 'Información', icon: User },
@@ -16,12 +17,7 @@ const STEPS = [
     { id: 3, label: 'Cierre', icon: ShieldAlert },
 ];
 
-const obtenerFechaHoyMexico = () => new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Mexico_City',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-}).format(new Date());
+const obtenerFechaHoyMexico = () => fechaHoy();
 
 const INITIAL_INFO = {
     matricula: '', movimiento: '', aeronave: '', tipo: '', hora: '', destino: '', procedencia: '',

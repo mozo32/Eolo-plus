@@ -1,3 +1,5 @@
+import { fechaHoy } from '@/lib/fechaHoy';
+
 export type TipoOperacion = 'llegada' | 'salida';
 
 export type ModuloConsumidor = 'operaciones_diarias' | 'walkaround';
@@ -87,19 +89,6 @@ export interface OperacionProgramadaForm {
     fp: string;
     observaciones: string;
 }
-
-/**
- * Fecha de hoy con la zona horaria del proyecto, en formato YYYY-MM-DD.
- * Se usa Intl y no toISOString para no caer en el día anterior o siguiente
- * por la conversión a UTC.
- */
-export const fechaHoy = (): string =>
-    new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'America/Mexico_City',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-    }).format(new Date());
 
 /** Hora local actual del proyecto en formato HH:mm. */
 export const horaAhora = (): string =>

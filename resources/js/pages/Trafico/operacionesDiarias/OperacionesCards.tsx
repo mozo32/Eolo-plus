@@ -14,6 +14,7 @@ import { useProgramadasPendientes } from '@/pages/despacho/operacionesProgramada
 import type { PrecargaProgramada } from '@/pages/despacho/operacionesProgramadas/types';
 import { avisarProgramadaEnOtraPestana } from '@/pages/despacho/operacionesProgramadas/coincidenciasProgramadas';
 import BitacoraModal from '@/pages/BitacoraModal';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 interface OperacionesCardsProps {
     moduloNombre?: string;
@@ -157,8 +158,8 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
     const [filtros, setFiltros] = useState({
         buscar: '',
         tipo: '',
-        fechaInicio: new Date().toLocaleDateString('en-CA'),
-        fechaFin: new Date().toLocaleDateString('en-CA'),
+        fechaInicio: fechaHoy(),
+        fechaFin: fechaHoy(),
         periodo: 'dia',
         equipo: '',
         lugar: '',
@@ -643,8 +644,8 @@ const OperacionesCards = ({ moduloNombre, nombreRol,idUser }: OperacionesCardsPr
         setFiltros({
             buscar: '',
             tipo: '',
-            fechaInicio: new Date().toLocaleDateString('en-CA'),
-            fechaFin: new Date().toLocaleDateString('en-CA'),
+            fechaInicio: fechaHoy(),
+            fechaFin: fechaHoy(),
             periodo: 'dia',
             equipo: '',
             lugar: '',

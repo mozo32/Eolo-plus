@@ -13,6 +13,7 @@ import ExcelRemisionesModal from './Autotanque/ExcelRemisionesModal';
 import { excelRemisionesApi, consultaAsa } from '@/stores/apiRemision';
 import VistaPreviaRemision from './Autotanque/VistaPreviaRemision';
 import { useEchoPublic } from '@laravel/echo-react';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Remisiones' }];
 interface Role {
@@ -67,8 +68,8 @@ export default function Remision() {
         buscar: '',
         matricula: '',
         cantidad: '',
-        fechaInicio: new Date().toLocaleDateString('en-CA'),
-        fechaFin: new Date().toLocaleDateString('en-CA'),
+        fechaInicio: fechaHoy(),
+        fechaFin: fechaHoy(),
         periodo: 'dia'
     });
 
@@ -179,8 +180,8 @@ export default function Remision() {
             buscar: '',
             matricula: '',
             cantidad: '',
-            fechaInicio: new Date().toLocaleDateString('en-CA'),
-            fechaFin: new Date().toLocaleDateString('en-CA'),
+            fechaInicio: fechaHoy(),
+            fechaFin: fechaHoy(),
             periodo: 'dia'
         };
 

@@ -1,5 +1,5 @@
 import InputMatricula from '@/pages/InputMatricula';
-import { fechaHoy } from '@/pages/despacho/operacionesProgramadas/types';
+import { fechaHoy } from '@/lib/fechaHoy';
 import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
 import { obtenerEmpresasPlantaApi } from '@/stores/apiRelacionPlanta';
 import { BatteryCharging, X } from 'lucide-react';

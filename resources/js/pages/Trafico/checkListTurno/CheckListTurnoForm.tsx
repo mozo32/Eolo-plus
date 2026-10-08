@@ -9,7 +9,7 @@ import { guardarCheckListTurnoApi, actualizarCheckListTurnoApi, buscarUsuariosAp
 import Swal from "sweetalert2";
 import { Package, CheckCircle2 } from "lucide-react";
 import { useVentanaDeFecha } from "@/lib/ventanasDeFecha";
-import { fechaHoy } from '@/pages/despacho/operacionesProgramadas/types';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 function FirmaBox({ label, value, onClick }: { label: string; value?: string; onClick: () => void }) {
     return (

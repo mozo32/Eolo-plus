@@ -33,6 +33,7 @@ import {
     Save,
     X,
 } from "lucide-react";
+import { fechaHoy } from "@/lib/fechaHoy";
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -52,7 +53,7 @@ type FiltrosPernocta = {
 };
 
 const obtenerFechaActual = () => {
-    return new Date().toLocaleDateString("en-CA");
+    return fechaHoy();
 };
 
 const formatearFecha = (fecha: string) => {

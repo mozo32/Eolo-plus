@@ -1,6 +1,6 @@
 import { obtenerPersonalTraficoApi } from '@/stores/apiPrestamoChalecos';
 import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
-import { fechaHoy } from '@/pages/despacho/operacionesProgramadas/types';
+import { fechaHoy } from '@/lib/fechaHoy';
 import { Eraser, Save } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
