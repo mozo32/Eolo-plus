@@ -9,6 +9,7 @@ import { guardarCheckListTurnoApi, actualizarCheckListTurnoApi, buscarUsuariosAp
 import Swal from "sweetalert2";
 import { Package, CheckCircle2 } from "lucide-react";
 import { useVentanaDeFecha } from "@/lib/ventanasDeFecha";
+import { fechaHoy } from '@/pages/despacho/operacionesProgramadas/types';
 
 function FirmaBox({ label, value, onClick }: { label: string; value?: string; onClick: () => void }) {
     return (
@@ -21,7 +22,7 @@ function FirmaBox({ label, value, onClick }: { label: string; value?: string; on
 
 const getInitialForm = (data?: any) => ({
     nombreEmpleado: data?.nombre_empleado ?? "",
-    fecha: data?.fecha ? new Date(data.fecha).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+    fecha: data?.fecha ? new Date(data.fecha).toISOString().split("T")[0] : fechaHoy(),
     recibeTurnoCon: data?.recibe_turno_con ?? {},
     observaciones_recibe: data?.observaciones_recibe ?? "",
     revisionSalas: data?.revision_salas ?? {},

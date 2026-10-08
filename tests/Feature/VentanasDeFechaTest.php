@@ -302,9 +302,29 @@ test('toda clave de la tabla esta puesta en el servidor Y en el navegador', func
     $enElServidor = array_unique(array_column($php['literales'], 1));
     $enElNavegador = array_unique(array_column($js['literales'], 1));
 
+    // `medicamento.movimiento` es la unica clave SIN calendario vivo, y es deliberado: la pantalla
+    // real (`ActionForms`, pestana Corte/Cierre) sella la fecha sola con `fechaHoy()` y no ofrece
+    // ningun `type="date"`, asi que no hay nada que acotar en el navegador. El unico
+    // `useVentanaDeFecha` de esa clave vive en `ControlMedicamentoForm`, que esta importado pero
+    // NUNCA renderizado: contarlo seria dar por cubierto el navegador con codigo muerto.
+    // El servidor si la exige, que es donde se decide.
+    $sinCalendario = ['medicamento.movimiento'];
+
     foreach (array_keys(VentanasDeFecha::CLAVES) as $clave) {
         expect(in_array($clave, $enElServidor, true))->toBeTrue("La clave '{$clave}' no la usa ninguna regla DentroDeLaVentana de app/: ese formulario esta sin proteger en el servidor");
+
+        if (in_array($clave, $sinCalendario, true)) {
+            continue;
+        }
+
         expect(in_array($clave, $enElNavegador, true))->toBeTrue("La clave '{$clave}' no la usa ningun useVentanaDeFecha: ese formulario no tiene calendario con limites");
+    }
+
+    // Y la exencion no se queda sin vigilar: si alguien le pone calendario a esa pantalla, esta
+    // asercion cae y hay que quitarla de la lista. Una exencion que sobrevive a su motivo es peor
+    // que no tener prueba.
+    foreach ($sinCalendario as $clave) {
+        expect(in_array($clave, $enElNavegador, true))->toBeFalse("La clave '{$clave}' ya tiene calendario: quitala de \$sinCalendario");
     }
 });
 

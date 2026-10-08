@@ -25,6 +25,7 @@ import {
     habilitarMedicamento,
 } from '@/stores/apiControlMedicamento';
 import Swal from 'sweetalert2';
+import { fechaHoy } from '@/pages/despacho/operacionesProgramadas/types';
 
 interface Props {
     view: ViewType;
@@ -817,9 +818,7 @@ const ActionForms: React.FC<Props> = ({
         const datosCierre = {
             responsable:
                 auth?.user?.name ?? 'Sin identificar',
-            fecha: fechaActual
-                .toISOString()
-                .slice(0, 10),
+            fecha: fechaHoy(),
             dia: diaSemana,
             aparatos: formValues.aparatos,
             firma: formValues.firma,
