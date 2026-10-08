@@ -3,6 +3,8 @@ import { Plus, Trash2, Car, Hash, User, ArrowLeft, Send, Calendar, Search, Chevr
 import { guardarEstaSubTerraneo, buscarPlacasExistentes, obtenerDetallePorPlaca } from '@/stores/apiEstacionamientoSubterraneo';
 import Swal from 'sweetalert2';
 import InputMatricula from '@/pages/InputMatricula';
+import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
+import { fechaHoy } from '@/pages/despacho/operacionesProgramadas/types';
 
 // --- COMPONENTES AUXILIARES FUERA PARA EVITAR PÉRDIDA DE FOCO ---
 
@@ -74,10 +76,8 @@ const RoundRegisterForm: React.FC<VehicleEntryFormProps> = ({ onClose }) => {
     const [sugerenciasDetalle, setSugerenciasDetalle] = useState<any[]>([]);
     const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
-    const [fechaIngreso, setFechaIngreso] = useState(() => {
-        const d = new Date();
-        return d.toISOString().split('T')[0];
-    });
+    const [fechaIngreso, setFechaIngreso] = useState(() => fechaHoy());
+    const { min, max } = useVentanaDeFecha('estacionamiento.ronda');
 
     const [currentVehicle, setCurrentVehicle] = useState<Vehiculo>({
         id: Date.now(),
@@ -384,6 +384,8 @@ const RoundRegisterForm: React.FC<VehicleEntryFormProps> = ({ onClose }) => {
                                         <span className="text-[9px] font-black text-blue-200">Fecha de Ronda</span>
                                         <input
                                             type="date"
+                                            min={min}
+                                            max={max}
                                             value={fechaIngreso}
                                             onChange={(e) => setFechaIngreso(e.target.value)}
                                             className="bg-transparent border-none text-white font-bold outline-none text-sm cursor-pointer"

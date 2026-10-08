@@ -4,7 +4,10 @@ use App\Models\ChecklistTurno;
 use App\Models\ControlMedicamento;
 use App\Models\Departamento;
 use App\Models\EntregaTurnoR;
+use App\Models\EstacionamientoSubterraneo;
+use App\Models\MovimientoCSAE;
 use App\Models\OperacionDiaria;
+use App\Models\PernoctaDia;
 use App\Models\PrestamoChaleco;
 use App\Models\RelacionPlanta;
 use App\Models\Remision;
@@ -2055,3 +2058,569 @@ it('PLANTA PRESTAMO: lo que la regla deja pasar queda guardado dentro de la vent
     expect(enLaVentana($guardado, 'planta.prestamo'))
         ->toBeTrue('se guardo '.$guardado.' con la entrada '.json_encode($valor));
 })->with(fn () => fechasHostiles());
+
+// ---------------------------------------------------------------------------
+// Seguridad. Cuatro pantallas, cuatro formas distintas:
+//   - Movimientos CSAE: `fecha_hora_*` con la hora dentro y CON cast (`datetime`).
+//   - Pernocta: el cuerpo es un ARREGLO de filas, la columna NO tiene cast y el 422 es propio.
+//   - Estacionamiento: no validaba la fecha en absoluto y una peticion escribe VARIAS filas.
+// ---------------------------------------------------------------------------
+
+/** Un dia y una hora como los manda el formulario de CSAE (`Y-m-d H:i:s`). */
+function fechaHoraCsae(int $desplazamiento, string $hora = '18:30:00'): string
+{
+    return Carbon::today()->addDays($desplazamiento)->toDateString().' '.$hora;
+}
+
+/** @return array<string, mixed> */
+function cargaDeEntradaCsae(mixed $fechaHora, string $matricula = 'XA-CSA'): array
+{
+    return [
+        'fecha_hora_entrada' => $fechaHora,
+        'matricula' => $matricula,
+        'tipo_aeronave' => 'C172',
+        'como_llega' => 'Vuelo',
+        'transportista' => 'Aerolinea Uno',
+    ];
+}
+
+/** Un movimiento ya guardado, con o sin salida (el dia, sin hora; la salida se guarda a las 09:30). */
+function movimientoCsaeParaEditar(?string $diaSalida): MovimientoCSAE
+{
+    return MovimientoCSAE::create([
+        'user_entrada_id' => User::factory()->create()->id,
+        'fecha_hora_entrada' => Carbon::today()->subDays(20)->toDateString().' 08:00:00',
+        'matricula' => 'XA-CSB',
+        'tipo_aeronave' => 'C172',
+        'como_llega' => 'Vuelo',
+        'transportista' => 'Aerolinea Uno',
+        'fecha_hora_salida' => $diaSalida === null ? null : $diaSalida.' 09:30:00',
+        'observaciones_salida' => 'Original',
+    ]);
+}
+
+/**
+ * Las cadenas hostiles de siempre mas las formas con hora que solo existen en los campos
+ * `fecha_hora_*`, en los bordes de la ventana de tres dias.
+ *
+ * @return iterable<string, array{0: mixed}>
+ */
+function hostilesConHoraCsae(): iterable
+{
+    foreach (fechasHostiles() as $nombre => [$valor]) {
+        yield $nombre => [$valor];
+    }
+
+    yield 'hoy a medianoche' => [fechaHoraCsae(0, '00:00:00')];
+    yield 'hoy a las 23:59:59' => [fechaHoraCsae(0, '23:59:59')];
+    yield 'hace tres dias a las 00:00' => [fechaHoraCsae(-3, '00:00:00')];
+    yield 'hace cuatro dias a las 23:59:59' => [fechaHoraCsae(-4, '23:59:59')];
+    yield 'manana a las 00:00' => [fechaHoraCsae(1, '00:00:00')];
+    yield 'hoy con T y sin segundos' => [Carbon::today()->toDateString().'T18:30'];
+    yield 'hoy con hora imposible' => [Carbon::today()->toDateString().' 25:61:61'];
+}
+
+// --- CSAE entrada: POST /api/MovimientosCSAE ---
+
+it('CSAE entrada: rechaza con 422 y no escribe una fecha fuera de ventana', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = MovimientoCSAE::count();
+
+    $respuesta = $this->postJson('/api/MovimientosCSAE', cargaDeEntradaCsae(fechaHoraCsae($desplazamiento)));
+
+    $respuesta->assertUnprocessable()->assertJsonValidationErrors('fecha_hora_entrada');
+    ['min' => $min, 'max' => $max] = fechasDelMensaje('csae.entrada');
+    expect(mensajeDeFecha($respuesta, 'fecha_hora_entrada'))->toContain($min)->toContain($max);
+    expect(MovimientoCSAE::count())->toBe($antes);
+})->with([
+    'en el futuro' => [1],
+    'un dia antes del borde' => [-4],
+    'muy antigua' => [-30],
+]);
+
+it('CSAE entrada: no deja pasar una fecha vacia, ausente o ilegible (y es un 422, no un 500)', function (?string $fecha, bool $enviarFecha) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = MovimientoCSAE::count();
+    $carga = cargaDeEntradaCsae($fecha);
+    if (! $enviarFecha) {
+        unset($carga['fecha_hora_entrada']);
+    }
+
+    $this->postJson('/api/MovimientosCSAE', $carga)->assertUnprocessable()->assertJsonValidationErrors('fecha_hora_entrada');
+
+    expect(MovimientoCSAE::count())->toBe($antes);
+})->with([
+    'vacia' => ['', true],
+    'ausente' => [null, false],
+    'ilegible' => ['no-es-una-fecha', true],
+]);
+
+it('CSAE entrada: una fecha y hora dentro de ventana escriben, y la hora se conserva (la regla no rechaza todo)', function (int $desplazamiento, string $hora) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = MovimientoCSAE::count();
+    $enviada = fechaHoraCsae($desplazamiento, $hora);
+
+    $this->postJson('/api/MovimientosCSAE', cargaDeEntradaCsae($enviada))->assertCreated();
+
+    expect(MovimientoCSAE::count())->toBe($antes + 1);
+    expect(MovimientoCSAE::latest('id')->first()->fecha_hora_entrada->format('Y-m-d H:i:s'))->toBe($enviada);
+})->with([
+    'hoy a medianoche' => [0, '00:00:00'],
+    'hoy a las 23:59:59' => [0, '23:59:59'],
+    'el borde de atras (hace tres dias)' => [-3, '00:00:00'],
+    'ayer por la tarde' => [-1, '18:30:00'],
+]);
+
+it('CSAE ENTRADA ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = MovimientoCSAE::count();
+
+    $this->postJson('/api/MovimientosCSAE', cargaDeEntradaCsae($valor));
+
+    if (MovimientoCSAE::count() === $antes) {
+        expect(MovimientoCSAE::count())->toBe($antes);
+
+        return;
+    }
+
+    $guardado = MovimientoCSAE::latest('id')->first()->fecha_hora_entrada->toDateString();
+    expect(enLaVentana($guardado, 'csae.entrada'))
+        ->toBeTrue('se guardo '.$guardado.' con la entrada '.json_encode($valor));
+})->with(fn () => hostilesConHoraCsae());
+
+// --- CSAE salida: PUT /api/MovimientosCSAE/{id} ---
+
+it('CSAE salida: rechaza con 422 y no escribe una salida fuera de ventana', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $movimiento = movimientoCsaeParaEditar(null);
+
+    $respuesta = $this->putJson("/api/MovimientosCSAE/{$movimiento->id}", [
+        'fecha_hora_salida' => fechaHoraCsae($desplazamiento),
+        'observaciones_salida' => 'Nueva',
+    ]);
+
+    $respuesta->assertUnprocessable()->assertJsonValidationErrors('fecha_hora_salida');
+    ['min' => $min, 'max' => $max] = fechasDelMensaje('csae.salida');
+    expect(mensajeDeFecha($respuesta, 'fecha_hora_salida'))->toContain($min)->toContain($max);
+    $movimiento = $movimiento->fresh();
+    expect($movimiento->fecha_hora_salida)->toBeNull()
+        ->and($movimiento->observaciones_salida)->toBe('Original');
+})->with([
+    'en el futuro' => [1],
+    'un dia antes del borde' => [-4],
+    'muy antigua' => [-30],
+]);
+
+it('CSAE salida: una fecha ilegible es un 422 y no escribe', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $movimiento = movimientoCsaeParaEditar(null);
+
+    $this->putJson("/api/MovimientosCSAE/{$movimiento->id}", ['fecha_hora_salida' => 'no-es-una-fecha', 'observaciones_salida' => 'Nueva'])
+        ->assertUnprocessable()->assertJsonValidationErrors('fecha_hora_salida');
+
+    expect($movimiento->fresh()->observaciones_salida)->toBe('Original');
+});
+
+it('CSAE salida: la fecha sigue siendo opcional (nullable): sin ella el movimiento queda sin salida', function (bool $enviarFecha) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $movimiento = movimientoCsaeParaEditar(null);
+    $carga = ['fecha_hora_salida' => null, 'observaciones_salida' => 'Nueva'];
+    if (! $enviarFecha) {
+        unset($carga['fecha_hora_salida']);
+    }
+
+    $this->putJson("/api/MovimientosCSAE/{$movimiento->id}", $carga)->assertOk();
+
+    $movimiento = $movimiento->fresh();
+    expect($movimiento->fecha_hora_salida)->toBeNull()
+        ->and($movimiento->observaciones_salida)->toBe('Nueva');
+})->with([
+    'null' => [true],
+    'ausente' => [false],
+]);
+
+it('CSAE salida: una fecha y hora dentro de ventana escriben, y la hora se conserva (la regla no rechaza todo)', function (int $desplazamiento, string $hora) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $movimiento = movimientoCsaeParaEditar(null);
+    $enviada = fechaHoraCsae($desplazamiento, $hora);
+
+    $this->putJson("/api/MovimientosCSAE/{$movimiento->id}", ['fecha_hora_salida' => $enviada])->assertOk();
+
+    expect($movimiento->fresh()->fecha_hora_salida->format('Y-m-d H:i:s'))->toBe($enviada);
+})->with([
+    'hoy a medianoche' => [0, '00:00:00'],
+    'hoy a las 23:59:59' => [0, '23:59:59'],
+    'el borde de atras (hace tres dias)' => [-3, '00:00:00'],
+    'ayer por la tarde' => [-1, '18:30:00'],
+]);
+
+it('CSAE salida edicion: corregir otro campo de un movimiento antiguo reenviando su salida no se bloquea', function (string $reenvio) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antigua = Carbon::today()->subDays(10)->toDateString();
+    $movimiento = movimientoCsaeParaEditar($antigua);
+    $fecha = str_replace('{dia}', $antigua, $reenvio);
+
+    $this->putJson("/api/MovimientosCSAE/{$movimiento->id}", ['fecha_hora_salida' => $fecha, 'observaciones_salida' => 'Corregida'])->assertOk();
+
+    $movimiento = $movimiento->fresh();
+    expect($movimiento->observaciones_salida)->toBe('Corregida')
+        ->and($movimiento->fecha_hora_salida->toDateString())->toBe($antigua);
+})->with([
+    'tal como la devuelve la base' => ['{dia} 09:30:00'],
+    'con otra hora' => ['{dia} 21:15:00'],
+    'con T y sin segundos' => ['{dia}T09:30'],
+    'solo el dia' => ['{dia}'],
+]);
+
+it('CSAE salida edicion: no deja mover una salida guardada a un dia fuera de ventana, y no escribe', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antigua = Carbon::today()->subDays(10)->toDateString();
+    $movimiento = movimientoCsaeParaEditar($antigua);
+
+    $this->putJson("/api/MovimientosCSAE/{$movimiento->id}", ['fecha_hora_salida' => fechaHoraCsae($desplazamiento), 'observaciones_salida' => 'Corregida'])
+        ->assertUnprocessable()->assertJsonValidationErrors('fecha_hora_salida');
+
+    $movimiento = $movimiento->fresh();
+    expect($movimiento->fecha_hora_salida->format('Y-m-d H:i:s'))->toBe($antigua.' 09:30:00')
+        ->and($movimiento->observaciones_salida)->toBe('Original');
+})->with([
+    'manana' => [1],
+    'un dia antes del borde' => [-4],
+    'otra antigua distinta' => [-11],
+]);
+
+it('CSAE salida edicion: mover una salida antigua a un dia DENTRO de ventana escribe (la edicion no rechaza todo cambio)', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $movimiento = movimientoCsaeParaEditar(Carbon::today()->subDays(10)->toDateString());
+    $enviada = fechaHoraCsae($desplazamiento, '20:00:00');
+
+    $this->putJson("/api/MovimientosCSAE/{$movimiento->id}", ['fecha_hora_salida' => $enviada])->assertOk();
+
+    expect($movimiento->fresh()->fecha_hora_salida->format('Y-m-d H:i:s'))->toBe($enviada);
+})->with([
+    'hoy' => [0],
+    'el borde de atras' => [-3],
+]);
+
+it('CSAE salida edicion: el mismo dia con un sufijo relativo no cuenta como «sin cambios» (la columna tiene cast)', function (string $partida, string $sufijo) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $dia = fechaDePartida($partida);
+    $movimiento = movimientoCsaeParaEditar($dia);
+
+    $this->putJson("/api/MovimientosCSAE/{$movimiento->id}", ['fecha_hora_salida' => "{$dia} 09:30:00 {$sufijo}", 'observaciones_salida' => 'Corregida'])
+        ->assertUnprocessable()->assertJsonValidationErrors('fecha_hora_salida');
+
+    $movimiento = $movimiento->fresh();
+    expect($movimiento->fecha_hora_salida->toDateString())->toBe($dia)
+        ->and($movimiento->observaciones_salida)->toBe('Original');
+})->with([
+    'hoy +1 day' => ['hoy', '+1 day'],
+    'hoy +2 days' => ['hoy', '+2 days'],
+    'antigua +1 day' => ['antigua', '+1 day'],
+    'antigua +14 days' => ['antigua', '+14 days'],
+]);
+
+it('CSAE salida edicion: una fecha ilegible no se toma por «sin cambios»', function (string $partida) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $dia = fechaDePartida($partida);
+    $movimiento = movimientoCsaeParaEditar($dia);
+
+    $this->putJson("/api/MovimientosCSAE/{$movimiento->id}", ['fecha_hora_salida' => 'no-es-una-fecha', 'observaciones_salida' => 'Corregida'])
+        ->assertUnprocessable()->assertJsonValidationErrors('fecha_hora_salida');
+
+    expect($movimiento->fresh()->observaciones_salida)->toBe('Original');
+})->with(['hoy', 'antigua']);
+
+it('CSAE SALIDA ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $movimiento = movimientoCsaeParaEditar(null);
+
+    $this->putJson("/api/MovimientosCSAE/{$movimiento->id}", ['fecha_hora_salida' => $valor]);
+
+    $guardado = $movimiento->fresh()->fecha_hora_salida?->toDateString();
+    expect($guardado === null || enLaVentana($guardado, 'csae.salida'))
+        ->toBeTrue('se guardo '.$guardado.' con la entrada '.json_encode($valor));
+})->with(fn () => hostilesConHoraCsae());
+
+it('CSAE SALIDA EDICION: lo que la regla deja pasar deja la columna dentro de la ventana, o como estaba', function (mixed $valor, string $partida) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $original = fechaDePartida($partida);
+    $movimiento = movimientoCsaeParaEditar($original);
+
+    $this->putJson("/api/MovimientosCSAE/{$movimiento->id}", ['fecha_hora_salida' => $valor]);
+
+    $guardado = $movimiento->fresh()->fecha_hora_salida?->toDateString();
+    expect($guardado === null || $guardado === $original || enLaVentana($guardado, 'csae.salida'))
+        ->toBeTrue('de '.$original.' paso a '.$guardado.' con la entrada '.json_encode($valor));
+})->with(function () {
+    foreach (['hoy', 'antigua'] as $partida) {
+        foreach (hostilesConHoraCsae() as $nombre => [$valor]) {
+            yield "{$partida}: {$nombre}" => [$valor, $partida];
+        }
+        // El dia de la propia partida con un sufijo: es lo que una comparacion de texto daba por «igual».
+        yield "{$partida}: la propia partida +1 day" => [fechaDePartida($partida).' 09:30:00 +1 day', $partida];
+        yield "{$partida}: la propia partida +3 days" => [fechaDePartida($partida).' +3 days', $partida];
+    }
+});
+
+// --- Pernocta: POST /api/PernoctaDia (el cuerpo es un ARREGLO de filas; el 422 es propio) ---
+
+/** Una aeronave que esta dentro del hangar, para que las pernoctas no se rechacen por otra causa. */
+function aeronaveDentroDelHangar(string $matricula = 'XA-PER'): void
+{
+    OperacionDiaria::create([
+        'user_id' => User::factory()->create()->id,
+        'fecha' => Carbon::today()->subDays(30)->toDateString(),
+        'tipo' => 'llegada',
+        'matricula' => $matricula,
+        'equipo' => 'C172',
+        'hora' => '10:30',
+        'lugar' => 'MMTO',
+        'pax' => 2,
+        'departamento' => 'Trafico',
+    ]);
+}
+
+/** @return array<string, mixed> */
+function filaDePernocta(mixed $fecha, string $matricula = 'XA-PER'): array
+{
+    return [
+        'fecha' => $fecha,
+        'hora' => '10:00',
+        'matricula' => $matricula,
+        'nombre' => 'Vigilante Uno',
+        'observaciones' => null,
+        'ubicacion' => 'Hangar 1',
+    ];
+}
+
+/** El error de la fila `$fila`: las claves del 422 propio de pernocta son `0.fecha`, `1.fecha`... */
+function errorDeFilaPernocta($respuesta, int $fila): ?string
+{
+    return ($respuesta->json('errors') ?? [])["{$fila}.fecha"][0] ?? null;
+}
+
+it('PERNOCTA: rechaza con el 422 propio y no escribe ninguna fila si UNA fecha esta fuera de ventana', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    aeronaveDentroDelHangar();
+    $antes = PernoctaDia::count();
+    $hoy = Carbon::today()->toDateString();
+
+    $respuesta = $this->postJson('/api/PernoctaDia', [
+        filaDePernocta($hoy),
+        filaDePernocta(Carbon::today()->addDays($desplazamiento)->toDateString()),
+        filaDePernocta($hoy),
+    ]);
+
+    $respuesta->assertUnprocessable()->assertJsonPath('message', 'La información enviada no es válida.');
+    ['min' => $min, 'max' => $max] = fechasDelMensaje('pernocta.dia');
+    expect(errorDeFilaPernocta($respuesta, 1))->toContain($min)->toContain($max)
+        ->and(errorDeFilaPernocta($respuesta, 0))->toBeNull()
+        ->and(errorDeFilaPernocta($respuesta, 2))->toBeNull();
+    expect(PernoctaDia::count())->toBe($antes);
+})->with([
+    'en el futuro' => [1],
+    'un dia antes del borde' => [-4],
+    'muy antigua' => [-30],
+]);
+
+it('PERNOCTA: no deja pasar una fecha vacia, ausente o ilegible en ninguna fila', function (mixed $fecha, bool $enviarFecha) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    aeronaveDentroDelHangar();
+    $antes = PernoctaDia::count();
+    $fila = filaDePernocta($fecha);
+    if (! $enviarFecha) {
+        unset($fila['fecha']);
+    }
+
+    $respuesta = $this->postJson('/api/PernoctaDia', [filaDePernocta(Carbon::today()->toDateString()), $fila]);
+
+    $respuesta->assertUnprocessable()->assertJsonPath('message', 'La información enviada no es válida.');
+    expect(errorDeFilaPernocta($respuesta, 1))->not->toBeNull();
+    expect(PernoctaDia::count())->toBe($antes);
+})->with([
+    'vacia' => ['', true],
+    'ausente' => [null, false],
+    'ilegible' => ['no-es-una-fecha', true],
+    'un arreglo' => [['2026-10-07'], true],
+]);
+
+it('PERNOCTA: exige date_format:Y-m-d, no date (la columna no tiene cast y la cadena se guarda LITERAL)', function (string $formato) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    // Un dia de un solo digito en mes y dia: `Y-n-j` solo se distingue de `Y-m-d` en esas fechas.
+    $this->travelTo(Carbon::parse('2026-03-05 12:00:00', 'America/Mexico_City'));
+    aeronaveDentroDelHangar();
+    $antes = PernoctaDia::count();
+
+    $respuesta = $this->postJson('/api/PernoctaDia', [filaDePernocta(Carbon::today()->format($formato))]);
+
+    $respuesta->assertUnprocessable()->assertJsonPath('message', 'La información enviada no es válida.');
+    expect(errorDeFilaPernocta($respuesta, 0))->not->toBeNull();
+    expect(PernoctaDia::count())->toBe($antes);
+})->with(formatosQueNoSonSoloElDia());
+
+it('PERNOCTA: varias filas dentro de ventana escriben todas, con su dia exacto (la regla no rechaza todo)', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    aeronaveDentroDelHangar();
+    aeronaveDentroDelHangar('XA-PE2');
+    $antes = PernoctaDia::count();
+    $dia = Carbon::today()->addDays($desplazamiento)->toDateString();
+
+    $this->postJson('/api/PernoctaDia', [filaDePernocta($dia), filaDePernocta($dia, 'XA-PE2')])->assertCreated();
+
+    expect(PernoctaDia::count())->toBe($antes + 2);
+    expect(PernoctaDia::latest('id')->take(2)->pluck('fecha')->map(fn ($f) => substr((string) $f, 0, 10))->all())->toBe([$dia, $dia]);
+})->with([
+    'hoy' => [0],
+    'el borde de atras (hace tres dias)' => [-3],
+    'ayer' => [-1],
+]);
+
+it('PERNOCTA: a las 19:00 de Mexico (ya es manana en UTC) hoy sigue siendo hoy y manana se rechaza', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->travelTo(Carbon::parse('2026-10-07 19:00:00', 'America/Mexico_City'));
+    aeronaveDentroDelHangar();
+    $antes = PernoctaDia::count();
+
+    $this->postJson('/api/PernoctaDia', [filaDePernocta('2026-10-08')])->assertUnprocessable();
+    expect(PernoctaDia::count())->toBe($antes);
+
+    $this->postJson('/api/PernoctaDia', [filaDePernocta('2026-10-07')])->assertCreated();
+    expect(PernoctaDia::count())->toBe($antes + 1);
+});
+
+it('PERNOCTA: lo que la regla deja pasar queda guardado dentro de la ventana, fila por fila, se lea como se lea', function (mixed $valor) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    aeronaveDentroDelHangar();
+    aeronaveDentroDelHangar('XA-PE2');
+    $antes = PernoctaDia::count();
+    $hoy = Carbon::today()->toDateString();
+
+    $this->postJson('/api/PernoctaDia', [filaDePernocta($hoy), filaDePernocta($valor, 'XA-PE2'), filaDePernocta($hoy)]);
+
+    $escritas = PernoctaDia::count() - $antes;
+    // Todo o nada: una fila rechazada no deja pasar a las demas.
+    expect($escritas)->toBeIn([0, 3]);
+    foreach (PernoctaDia::latest('id')->take($escritas)->get() as $fila) {
+        $guardado = diaDeColumna($fila->fecha);
+        expect($guardado)->toMatch('/^\d{4}-\d{2}-\d{2}$/')
+            ->and(enLaVentana($guardado, 'pernocta.dia'))
+            ->toBeTrue('se guardo '.json_encode($fila->fecha).' con la entrada '.json_encode($valor));
+    }
+})->with(function () {
+    foreach (fechasHostiles() as $nombre => [$valor]) {
+        yield $nombre => [$valor];
+    }
+    yield 'hoy con hora (un campo de solo dia)' => [Carbon::today()->toDateString().' 10:00:00'];
+    yield 'ayer con T y zona' => [Carbon::today()->subDay()->toDateString().'T10:00:00-06:00'];
+    yield 'el borde de atras' => [Carbon::today()->subDays(3)->toDateString()];
+    yield 'un dia antes del borde' => [Carbon::today()->subDays(4)->toDateString()];
+});
+
+// --- Estacionamiento subterraneo: POST /api/EstacionamientoSubTerraneo (una peticion, VARIAS filas) ---
+
+/** @return array<string, mixed> */
+function cargaDeRonda(mixed $fecha, int $vehiculos = 3): array
+{
+    $lista = [];
+    foreach (['AAA-111', 'BBB-222', 'CCC-333', 'DDD-444'] as $i => $placas) {
+        if ($i >= $vehiculos) {
+            break;
+        }
+        $lista[] = ['placas' => $placas, 'vehiculo' => 'Auto', 'color' => 'Rojo', 'responsable' => 'Resp', 'matricula' => 'N/A', 'llaves' => 'SI'];
+    }
+
+    return ['oficial' => 'Oficial Uno', 'fecha_ingreso' => $fecha, 'vehiculos' => $lista];
+}
+
+it('ESTACIONAMIENTO ronda: rechaza con 422 y no escribe NINGUNA de las filas con una fecha fuera de ventana', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = EstacionamientoSubterraneo::count();
+
+    $respuesta = $this->postJson('/api/EstacionamientoSubTerraneo', cargaDeRonda(Carbon::today()->addDays($desplazamiento)->toDateString()));
+
+    $respuesta->assertUnprocessable()->assertJsonValidationErrors('fecha_ingreso');
+    ['min' => $min, 'max' => $max] = fechasDelMensaje('estacionamiento.ronda');
+    expect(mensajeDeFecha($respuesta, 'fecha_ingreso'))->toContain($min)->toContain($max);
+    expect(EstacionamientoSubterraneo::count())->toBe($antes);
+})->with([
+    'en el futuro' => [1],
+    'un dia antes del borde' => [-2],
+    'muy antigua' => [-30],
+]);
+
+it('ESTACIONAMIENTO ronda: la fecha ahora es obligatoria (antes no se validaba): vacia, ausente o ilegible dan 422', function (?string $fecha, bool $enviarFecha) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = EstacionamientoSubterraneo::count();
+    $carga = cargaDeRonda($fecha);
+    if (! $enviarFecha) {
+        unset($carga['fecha_ingreso']);
+    }
+
+    $this->postJson('/api/EstacionamientoSubTerraneo', $carga)->assertUnprocessable()->assertJsonValidationErrors('fecha_ingreso');
+
+    expect(EstacionamientoSubterraneo::count())->toBe($antes);
+})->with([
+    'vacia' => ['', true],
+    'ausente' => [null, false],
+    'ilegible' => ['no-es-una-fecha', true],
+]);
+
+it('ESTACIONAMIENTO ronda: una fecha dentro de ventana escribe TODAS las filas, todas con ese dia (la regla no rechaza todo)', function (int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = EstacionamientoSubterraneo::count();
+    $dia = Carbon::today()->addDays($desplazamiento)->toDateString();
+
+    $this->postJson('/api/EstacionamientoSubTerraneo', cargaDeRonda($dia))->assertOk();
+
+    expect(EstacionamientoSubterraneo::count())->toBe($antes + 3);
+    expect(EstacionamientoSubterraneo::latest('id')->take(3)->get()->map(fn ($f) => $f->fecha_ingreso->toDateString())->all())->toBe([$dia, $dia, $dia]);
+})->with([
+    'hoy' => [0],
+    'el borde de atras (ayer)' => [-1],
+]);
+
+it('ESTACIONAMIENTO ronda: a las 19:00 de Mexico (ya es manana en UTC) hoy sigue siendo hoy y manana se rechaza', function () {
+    // Cubre el servidor. El calculo del dia por omision en el navegador (`fechaHoy()` en lugar
+    // de `toISOString`) NO tiene prueba: no hay corredor de pruebas JS en este proyecto.
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->travelTo(Carbon::parse('2026-10-07 19:00:00', 'America/Mexico_City'));
+    $antes = EstacionamientoSubterraneo::count();
+
+    $this->postJson('/api/EstacionamientoSubTerraneo', cargaDeRonda('2026-10-08'))
+        ->assertUnprocessable()->assertJsonValidationErrors('fecha_ingreso');
+    expect(EstacionamientoSubterraneo::count())->toBe($antes);
+
+    $this->postJson('/api/EstacionamientoSubTerraneo', cargaDeRonda('2026-10-07'))->assertOk();
+    expect(EstacionamientoSubterraneo::count())->toBe($antes + 3);
+});
+
+it('ESTACIONAMIENTO RONDA: lo que la regla deja pasar queda guardado dentro de la ventana en CADA fila, se lea como se lea', function (mixed $valor) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antes = EstacionamientoSubterraneo::count();
+
+    $this->postJson('/api/EstacionamientoSubTerraneo', cargaDeRonda($valor, 4));
+
+    $escritas = EstacionamientoSubterraneo::count() - $antes;
+    // Todo o nada, y las cuatro filas de la peticion: contar de verdad, no suponer una.
+    expect($escritas)->toBeIn([0, 4]);
+    foreach (EstacionamientoSubterraneo::latest('id')->take($escritas)->get() as $fila) {
+        $guardado = $fila->fecha_ingreso->toDateString();
+        expect(enLaVentana($guardado, 'estacionamiento.ronda'))
+            ->toBeTrue('se guardo '.$guardado.' con la entrada '.json_encode($valor));
+    }
+})->with(fn () => hostilesConHoraCsae());
+
+it('ESTACIONAMIENTO alerta: el campo `fecha` es una fecha de CORTE de informe y NO lleva ventana', function (int $dias) {
+    // El campo se llama `fecha` como el de los formularios, pero consultar un corte antiguo es
+    // legitimo. La consulta usa DATEDIFF (MySQL) y no corre en sqlite, asi que aqui solo se
+    // exige lo que importa: que la validacion no lo rechace con un 422.
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $corte = Carbon::today()->addDays($dias)->toDateString();
+
+    expect($this->getJson('/api/EstacionamientoSubTerraneo/alerta?fecha='.$corte)->status())->not->toBe(422);
+})->with([
+    'un corte de hace un anio' => [-365],
+    'un corte de hace diez dias' => [-10],
+    'un corte futuro' => [10],
+]);

@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { usePage } from "@inertiajs/react";
+import { useVentanaDeFecha } from "@/lib/ventanasDeFecha";
+import { fechaHoy } from "@/pages/despacho/operacionesProgramadas/types";
 import {
     AlertCircle,
     CalendarDays,
@@ -26,7 +28,8 @@ interface Props {
 }
 
 const PernoctaDiaForm: React.FC<Props> = ({ onAdd }) => {
-    const today = new Date().toLocaleDateString("en-CA");
+    const today = fechaHoy();
+    const { min, max } = useVentanaDeFecha("pernocta.dia");
     const { auth } = usePage<{ auth: { user: any } }>().props;
 
     const [form, setForm] = useState<PernoctaDiaItem>({
@@ -308,6 +311,8 @@ const PernoctaDiaForm: React.FC<Props> = ({ onAdd }) => {
                             <input
                                 type="date"
                                 name="fecha"
+                                min={min}
+                                max={max}
                                 value={form.fecha}
                                 onChange={handleChange}
                                 className="bg-transparent text-[10px] font-black text-indigo-700 outline-none"

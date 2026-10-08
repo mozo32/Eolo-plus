@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\PernoctaDia;
+use App\Rules\DentroDeLaVentana;
 use Carbon\Carbon;
 use App\Models\OperacionDiaria;
 use Illuminate\Support\Facades\Validator;
@@ -276,7 +277,7 @@ class PernoctaDiaController extends Controller
         $validator = Validator::make(
             $request->all(),
             [
-                '*.fecha' => 'required|date',
+                '*.fecha' => ['required', 'date_format:Y-m-d', new DentroDeLaVentana('pernocta.dia')],
                 '*.hora' => 'nullable|string',
                 '*.matricula' => 'required|string|max:20',
                 '*.nombre' => 'required|string|max:255',

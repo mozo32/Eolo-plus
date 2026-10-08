@@ -324,6 +324,14 @@ export default function MovimientoCSAEForm({
         }
     };
 
+    const fechaOriginalEntrada = separarFechaHora(
+        isEdit ? data?.fecha_hora_entrada : undefined,
+    ).fecha;
+
+    const fechaOriginalSalida = separarFechaHora(
+        isEdit ? data?.fecha_hora_salida : undefined,
+    ).fecha;
+
     const buttonText = modoCompleto
         ? 'Actualizar registro completo'
         : modoSalida
@@ -341,12 +349,15 @@ export default function MovimientoCSAEForm({
                         data={formData}
                         onChange={handleChange}
                         updateField={updateField}
+                        fechaOriginalEntrada={fechaOriginalEntrada}
+                        fechaOriginalSalida={fechaOriginalSalida}
                     />
                 ) : modoSalida ? (
                     <MovimientoCSAESalida
                         data={formData}
                         onChange={handleChange}
                         updateField={updateField}
+                        fechaOriginal={fechaOriginalSalida}
                     />
                 ) : (
                     <MovimientoCSAEEntrada

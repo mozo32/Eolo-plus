@@ -4,11 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MovimientoCSAE;
+use App\Rules\DentroDeLaVentana;
+use App\Support\VentanasDeFecha;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use App\Models\Firma;
 
 class MovimientoCSAEController extends Controller
@@ -22,7 +25,7 @@ class MovimientoCSAEController extends Controller
 
         try {
             $validated = $request->validate([
-                'fecha_hora_entrada'    => 'required|date',
+                'fecha_hora_entrada'    => ['required', 'date'],
                 'matricula'             => 'required|string|max:20',
                 'tipo_aeronave'         => 'required|string|max:50',
                 'como_llega'            => 'required|string|max:50',
@@ -100,6 +103,9 @@ class MovimientoCSAEController extends Controller
                 'data' => $movimiento,
             ], 201);
 
+        } catch (ValidationException $e) {
+            DB::rollBack();
+            throw $e;
         } catch (\Throwable $e) {
             DB::rollBack();
             return response()->json([
@@ -241,7 +247,9 @@ class MovimientoCSAEController extends Controller
 
         try {
             $validated = $request->validate([
-                'fecha_hora_salida'    => 'nullable|date',
+                'fecha_hora_salida'    => $this->cambiaElDiaDeSalida($request, $movimientoCSAE)
+                    ? ['nullable', 'date', new DentroDeLaVentana('csae.salida')]
+                    : ['nullable', 'date'],
                 'firma_salida'         => 'sometimes|nullable|string',
                 'observaciones_salida' => 'nullable|string',
             ]);
@@ -272,6 +280,9 @@ class MovimientoCSAEController extends Controller
                 'data' => $movimientoCSAE,
             ]);
 
+        } catch (ValidationException $e) {
+            DB::rollBack();
+            throw $e;
         } catch (\Throwable $e) {
             DB::rollBack();
 
@@ -281,6 +292,25 @@ class MovimientoCSAEController extends Controller
             ], 500);
         }
     }
+    /**
+     * Este PUT lo usan dos pantallas: registrar la salida (el movimiento todavia no tiene) y la
+     * edicion completa (ya la tiene, y se corrigen otros campos reenviandola). Exigirle la
+     * ventana a la fecha de una salida ya guardada bloquearia cualquier correccion de un
+     * movimiento antiguo, asi que solo se juzga cuando el dia CAMBIA; al registrar la salida por
+     * primera vez siempre cambia, y la regla corre igual que en un alta.
+     *
+     * `fecha_hora_salida` tiene cast, asi que se compara el dia que el cast guardaria, no el
+     * texto: `{dia} +1 day` no es «el mismo dia». Una fecha vacia o ilegible no tiene dia (null) y
+     * nunca es igual al guardado, salvo que no haya ninguno: ahi la rechaza `date`, que va en las
+     * dos ramas.
+     */
+    private function cambiaElDiaDeSalida(Request $request, MovimientoCSAE $movimiento): bool
+    {
+        $recibido = VentanasDeFecha::diaQueGuardaElModelo($request->input('fecha_hora_salida'));
+
+        return $recibido !== $movimiento->fecha_hora_salida?->toDateString();
+    }
+
     private function guardarFirmaBase64(string $value, string $rol, MovimientoCSAE $movimiento): void
     {
         if (trim($value) === '') return;

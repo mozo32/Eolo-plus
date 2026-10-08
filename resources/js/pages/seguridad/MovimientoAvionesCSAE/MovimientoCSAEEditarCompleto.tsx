@@ -20,12 +20,18 @@ interface Props {
     ) => void;
 
     updateField: (key: string, value: any) => void;
+
+    /** Días con los que el movimiento ya estaba guardado. */
+    fechaOriginalEntrada?: string;
+    fechaOriginalSalida?: string;
 }
 
 export default function MovimientoCSAEEditarCompleto({
     data,
     onChange,
     updateField,
+    fechaOriginalEntrada,
+    fechaOriginalSalida,
 }: Props) {
     return (
         <div className="mx-auto max-w-6xl space-y-8">
@@ -55,6 +61,7 @@ export default function MovimientoCSAEEditarCompleto({
                 data={data}
                 onChange={onChange}
                 updateField={updateField}
+                fechaOriginal={fechaOriginalEntrada}
             />
 
             <div className="flex items-center gap-4">
@@ -72,6 +79,7 @@ export default function MovimientoCSAEEditarCompleto({
                 data={data}
                 onChange={onChange}
                 updateField={updateField}
+                fechaOriginal={fechaOriginalSalida}
             />
         </div>
     );
