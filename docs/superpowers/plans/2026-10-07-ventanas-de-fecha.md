@@ -50,6 +50,18 @@
     se guarda, y no hay nada que pueda divergir. Si ese campo lleva hora de verdad —mira qué
     manda el formulario antes de decidir—, entonces **añade el cast** `datetime` al modelo y
     dilo en el informe, porque eso cambia cómo se serializa en las respuestas.
+- **Y la semántica de la EDICIÓN también depende del cast. Esto corrige la instrucción
+  anterior de «no inventes otra variante»**, que estaba mal: medido con peticiones reales,
+  cada variante solo es segura sobre un tipo de columna.
+  - **Con cast:** compara con `diaQueGuardaElModelo()` (como `validarFechaSiCambia()` en
+    `OperacionesDiariasController`). Comparar texto aquí es un agujero: `{hoy} +1 day`
+    cuenta como «no cambió», se salta la ventana y la base guarda **mañana**.
+  - **Sin cast:** compara **el texto**, con `date_format` en el mismo arreglo (como
+    `cambiaElDia()` en `TurnoAutotanqueController`). Comparar con
+    `diaQueGuardaElModelo()` aquí es el agujero simétrico: reenviar la misma fecha con
+    desfase da 200 y deja la cadena literal guardada.
+  - Lo que se unifica es **el contrato por tipo de columna**, no el código. Si tu módulo
+    mezcla los dos tipos, usa la que corresponda a cada campo y **dilo en el informe**.
 - **La regla NO puede ir sola: necesita `date` o `date_format` en el mismo arreglo.** Como
   toda regla no implícita, con un valor vacío no corre; y sin `date` delante deja pasar `"0"`,
   `0` y `true`. Hoy eso solo lo dice un docblock, así que **el escáner de claves lo exige**:

@@ -129,6 +129,33 @@ que editar un registro viejo no queda bloqueado por el navegador. Se eligió as�
 la validación nativa del formulario con `noValidate`, porque esos formularios tienen más de ocho
 campos `required` que se perderían.
 
+## 5 quater. El contrato depende del TIPO DE COLUMNA, no del código
+
+**Corrige una decisión anterior.** El plan decía «no inventes otra variante» de la
+semántica de edición, para que cinco módulos no tuvieran cinco respuestas. Medido con
+peticiones reales, eso era un error: **no hay una variante correcta, hay una por tipo de
+columna**, y usar la misma en los dos sitios abre un agujero en uno de ellos.
+
+| La columna | Lo que valida | Cómo se compara al editar | Por qué |
+|---|---|---|---|
+| **Tiene cast** `date`/`datetime` | `date` | con `diaQueGuardaElModelo()` | El cast normaliza, así que lo que importa es **el día que el cast guardará**, no el texto |
+| **No tiene cast** (va cruda a MySQL, o vive dentro de un JSON) | `date_format:Y-m-d…` | comparando **el texto** | No hay normalización: lo que se guarda es la cadena, así que la cadena tiene que ser ya el día |
+
+Las dos direcciones del error están medidas, no razonadas:
+
+- **Comparar texto sobre una columna con cast** es un agujero: `{hoy} +1 day` cuenta como
+  «no cambió», se salta la ventana entera y la base guarda **mañana**. Ocurría en 4 de 38
+  entradas probadas.
+- **Comparar con `diaQueGuardaElModelo()` sobre una columna sin cast** es otro agujero:
+  reenviar la misma fecha como `D T00:00:00-06:00`, `+14:00`, `Z` o `D 08:30:00` da **200** y
+  deja esa cadena **literal** dentro del JSON. Ocurría en 4 de 5 entradas. Es justo la
+  cadena que los informes no saben leer.
+
+**Lo que se unifica es el contrato, no el código.** Y la variante sin cast **depende de que
+el `date_format` siga en el mismo arreglo de reglas**: si alguien lo afloja, la comparación
+de texto se queda sola y vuelve el agujero. Por eso hay una prueba que manda la misma fecha
+con un sufijo relativo (`…T08:30 +1 day`): si el `date_format` se afloja, esa prueba cae.
+
 ## 5 ter. La regla juzga el MISMO día que se guarda
 
 **Corregido tras un defecto introducido durante la implementación.** La regla llegó a convertir la
