@@ -4,11 +4,7 @@ import WalkAroundResumen from "./WalkAroundResumen";
 import WalkAroundFirma from "./WalkAroundFirma";
 import { WalkAroundDetalle, fetchWalkaroundDetalle } from "@/stores/apiWalkaround";
 import type { FotoItem } from "../EvidenciFotografica";
-import {
-    TipoDanio,
-    ChecklistAvionEstado,
-    ChecklistHelicopteroEstado,
-} from "@/types/typesChecklist";
+import { normalizarChecklistGuardado } from "@/lib/checklistWalkAround";
 
 type Props = {
     id: number | null;
@@ -16,62 +12,6 @@ type Props = {
     onClose: () => void;
     onSaved?: () => void;
 };
-
-const DANIOS_VALIDOS = [
-    "sin_danio",
-    "golpe",
-    "rayon",
-    "fisurado",
-    "quebrado",
-    "pintura_cuarteada",
-    "otro",
-] as const;
-
-function toChecklistHelicopteroEstado(input: unknown): ChecklistHelicopteroEstado {
-    const out: ChecklistHelicopteroEstado = {};
-    if (!input || typeof input !== "object") return out;
-
-    for (const [k, v] of Object.entries(input as Record<string, any>)) {
-        const rawDanios = Array.isArray(v?.danios)
-            ? v.danios.filter(isTipoDanio)
-            : normalizeToArray(v);
-
-        out[k] = {
-            izq: Boolean(v?.izq),
-            der: Boolean(v?.der),
-            danios: rawDanios,
-        };
-    }
-
-    return out;
-}
-function toChecklistAvionEstado(input: unknown): ChecklistAvionEstado {
-    const out: ChecklistAvionEstado = {};
-    if (!input || typeof input !== "object") return out;
-    for (const [k, v] of Object.entries(input as Record<string, any>)) {
-        const rawDanios = Array.isArray(v?.damages)
-            ? v.damages.filter(isTipoDanio)
-            : normalizeToArray(v);
-
-        out[k] = {
-            izq: Boolean(v?.izq),
-            der: Boolean(v?.der),
-            danios: rawDanios,
-        };
-    }
-
-    return out;
-}
-function isTipoDanio(x: unknown): x is TipoDanio {
-    return typeof x === "string" && (DANIOS_VALIDOS as readonly string[]).includes(x);
-}
-
-function normalizeToArray(v: unknown): TipoDanio[] {
-    if (Array.isArray(v)) return v.filter(isTipoDanio);
-    if (v === "sin_danio") return ["sin_danio"];
-    if (v === "con_danio") return ["otro"];
-    return [];
-}
 
 function toSameOrigin(url: string) {
     try {
@@ -148,11 +88,11 @@ export default function WalkAroundFirmaModal({ id, open, onClose, onSaved }: Pro
     const initialData = useMemo(() => {
         if (!detalle) return undefined;
 
-        const checklistAvion = toChecklistAvionEstado(
+        const checklistAvion = normalizarChecklistGuardado(
             detalle.checklists?.checklist_avion
         );
 
-        const checklistHelicoptero = toChecklistHelicopteroEstado(
+        const checklistHelicoptero = normalizarChecklistGuardado(
             detalle.checklists?.checklist_helicoptero
         );
 
