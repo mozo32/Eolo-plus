@@ -281,6 +281,33 @@ test('cada clave escrita en el codigo existe en la tabla de ventanas', function 
     expect($php['llamadas'])->toBe(count($php['literales']), 'DentroDeLaVentana se instancia con algo que no es un literal');
 });
 
+test('toda clave de la tabla esta puesta en el servidor Y en el navegador', function () {
+    // La inversa de la anterior. Una clave que nadie usa deja a su formulario sin proteger en el
+    // servidor (solo tendria el calendario, que es decoracion) o sin calendario en el navegador.
+    // No se cuenta un numero exacto de apariciones: un controlador que valida en `store` y en
+    // `update` repite la clave. Solo se exige que CADA clave aparezca al menos una vez en cada lado.
+    $php = usosDeVentana(
+        ['app'],
+        ['php'],
+        '/\bnew\s+[\w\\\\]*DentroDeLaVentana\(/',
+        '/\bnew\s+[\w\\\\]*DentroDeLaVentana\(\s*[\'"]([^\'"]*)[\'"]\s*\)/',
+    );
+    $js = usosDeVentana(
+        ['resources/js'],
+        ['ts', 'tsx'],
+        '/\buseVentanaDeFecha\(/',
+        '/\buseVentanaDeFecha\(\s*[\'"]([^\'"]*)[\'"]\s*[,)]/',
+        ['ventanasDeFecha.ts'],
+    );
+    $enElServidor = array_unique(array_column($php['literales'], 1));
+    $enElNavegador = array_unique(array_column($js['literales'], 1));
+
+    foreach (array_keys(VentanasDeFecha::CLAVES) as $clave) {
+        expect(in_array($clave, $enElServidor, true))->toBeTrue("La clave '{$clave}' no la usa ninguna regla DentroDeLaVentana de app/: ese formulario esta sin proteger en el servidor");
+        expect(in_array($clave, $enElNavegador, true))->toBeTrue("La clave '{$clave}' no la usa ningun useVentanaDeFecha: ese formulario no tiene calendario con limites");
+    }
+});
+
 test('un valor que date acepta y Eloquent guarda con un anio absurdo tambien se rechaza', function () {
     // `"20261007120000"` lo lee `date` como fecha y Eloquent lo guarda como un timestamp enorme
     // (anio 644015). `diaQueGuardaElModelo` devuelve ese texto tal cual y nunca cae en la ventana.

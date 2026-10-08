@@ -3047,3 +3047,319 @@ it('PROGRAMADAS: la regla de la excepcion esta NOMBRADA en el alta y en la edici
     'alta' => [StoreOperacionProgramadaRequest::class],
     'edicion' => [UpdateOperacionProgramadaRequest::class],
 ]);
+
+// ===========================================================================
+// LOS FILTROS NO SE TOCAN. Es la red de lo unico que esta funcion podria romper sin ruido:
+// que alguien ponga la regla en una BUSQUEDA o un INFORME y ya no se pueda consultar el mes
+// pasado. De los 81 calendarios, 12 son filtros (ver §6 de la especificacion) y NO llevan
+// ventana; sus endpoints de consulta tienen que aceptar cualquier rango, incluidos los de
+// hace un anio. Cada prueba SIEMBRA un registro en ese dia antiguo y exige encontrarlo: un 200
+// vacio no demuestra que el filtro funcione, y un 422 si demuestra que se rompio.
+// ===========================================================================
+
+/**
+ * Los endpoints de consulta usan funciones de MySQL que sqlite no tiene. Se registran aqui, solo
+ * para estas pruebas, para que la consulta CORRA de verdad y se pueda leer su resultado.
+ */
+function funcionesDeMysqlEnSqlite(): void
+{
+    $pdo = DB::connection()->getPdo();
+
+    $pdo->sqliteCreateFunction('DATEDIFF', fn ($a, $b) => (int) round((strtotime((string) $a) - strtotime((string) $b)) / 86400), 2);
+    $pdo->sqliteCreateFunction('DATE_FORMAT', function ($fecha, $formato) {
+        $marca = strtotime((string) $fecha);
+
+        return $marca === false ? null : strtr((string) $formato, [
+            '%Y' => date('Y', $marca), '%m' => date('m', $marca), '%d' => date('d', $marca),
+            '%H' => date('H', $marca), '%i' => date('i', $marca), '%s' => date('s', $marca),
+        ]);
+    }, 2);
+    // El Excel de operaciones arma `fecha_hora` con CONCAT y STR_TO_DATE.
+    $pdo->sqliteCreateFunction('CONCAT', fn (...$partes) => implode('', $partes), -1);
+    $pdo->sqliteCreateFunction('STR_TO_DATE', fn ($texto, $formato) => $texto, 2);
+}
+
+/**
+ * Rangos muy fuera de cualquier ventana de registro: el mes pasado, hace un anio, otro anio y
+ * uno futuro. Cada uno es `[inicio, fin]` en `Y-m-d`, y el registro sembrado cae en el INICIO.
+ *
+ * @return array<string, array{0: string, 1: string}>
+ */
+function rangosDeConsulta(): array
+{
+    $hoy = Carbon::today();
+    $mesPasado = $hoy->copy()->subMonthNoOverflow();
+
+    return [
+        'el mes pasado' => [$mesPasado->copy()->startOfMonth()->toDateString(), $mesPasado->copy()->endOfMonth()->toDateString()],
+        'hace un anio' => [$hoy->copy()->subDays(365)->toDateString(), $hoy->copy()->subDays(358)->toDateString()],
+        'todo el ultimo anio' => [$hoy->copy()->subDays(365)->toDateString(), $hoy->toDateString()],
+        'un rango de dos anios atras' => [$hoy->copy()->subYears(2)->startOfMonth()->toDateString(), $hoy->copy()->subYears(2)->endOfMonth()->toDateString()],
+        'un rango futuro' => [$hoy->copy()->addDays(30)->toDateString(), $hoy->copy()->addDays(60)->toDateString()],
+    ];
+}
+
+function operacionDiariaEnElDia(string $dia, string $matricula = 'XA-FIL'): OperacionDiaria
+{
+    return OperacionDiaria::create([
+        'user_id' => User::factory()->create()->id,
+        'fecha' => $dia,
+        'tipo' => 'llegada',
+        'matricula' => $matricula,
+        'equipo' => 'C172',
+        'hora' => '10:30',
+        'lugar' => 'MMTO',
+        'pax' => 2,
+        'departamento' => 'Trafico',
+    ]);
+}
+
+function chalecoEnElDia(string $dia): PrestamoChaleco
+{
+    return PrestamoChaleco::create([
+        'fecha' => $dia,
+        'nombre_recibe' => 'Chaleco Fil',
+        'usuario_entrega_id' => ($usuario = User::factory()->create())->id,
+        'user_id' => $usuario->id,
+    ]);
+}
+
+function plantaEnElDia(string $dia): RelacionPlanta
+{
+    return RelacionPlanta::create(['fecha' => $dia, 'empresa' => 'Empresa Fil', 'matricula' => 'XA-PLA', 'horometro_inicio' => 10]);
+}
+
+/** @param  array<string, mixed>  $parametros */
+function consulta(string $ruta, array $parametros = []): Illuminate\Testing\TestResponse
+{
+    return test()->getJson($ruta.'?'.http_build_query($parametros));
+}
+
+/** Que la respuesta sea un exito Y mencione la marca sembrada: ni 422, ni un 200 vacio. */
+function exitoQueIncluye(Illuminate\Testing\TestResponse $respuesta, string $marca): void
+{
+    $respuesta->assertSuccessful();
+    expect($respuesta->getContent())->toContain($marca);
+}
+
+// --- Operaciones diarias: el listado, el Excel, el PDF y la verificacion de duplicados ---
+
+it('FILTRO operaciones diarias: el listado acepta cualquier rango y encuentra lo sembrado ese dia', function (string $inicio, string $fin) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    operacionDiariaEnElDia($inicio);
+
+    exitoQueIncluye(consulta('/api/OperacionesDiarias', ['fechaInicio' => $inicio, 'fechaFin' => $fin]), 'XA-FIL');
+})->with(rangosDeConsulta());
+
+it('FILTRO operaciones diarias: el selector de UN dia (solo fechaInicio) acepta cualquier dia', function (string $inicio, string $fin) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    operacionDiariaEnElDia($inicio);
+
+    exitoQueIncluye(consulta('/api/OperacionesDiarias', ['fechaInicio' => $inicio]), 'XA-FIL');
+})->with(rangosDeConsulta());
+
+it('FILTRO operaciones diarias: el Excel y el PDF aceptan cualquier rango', function (string $ruta, string $inicio, string $fin) {
+    funcionesDeMysqlEnSqlite();
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    operacionDiariaEnElDia($inicio);
+
+    consulta($ruta, ['fechaInicio' => $inicio, 'fechaFin' => $fin])->assertSuccessful();
+})->with(function () {
+    foreach (rangosDeConsulta() as $nombre => [$inicio, $fin]) {
+        yield "Excel, {$nombre}" => ['/api/OperacionesDiarias/Excel/', $inicio, $fin];
+        yield "PDF, {$nombre}" => ['/api/OperacionesDiarias/Pdf/', $inicio, $fin];
+    }
+});
+
+it('FILTRO operaciones diarias: verificar duplicados con `fecha` antigua no es un 422 y encuentra la operacion', function (string $inicio, string $fin) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $operacion = operacionDiariaEnElDia($inicio);
+    // Sin la hora que sqlite le pega al guardar un `date`: la comparacion es por texto exacto.
+    DB::table('operaciones_diarias')->where('id', $operacion->id)->update(['fecha' => $inicio]);
+
+    $respuesta = consulta('/api/OperacionesDiarias/verificar', ['matricula' => 'XA-FIL', 'fecha' => $inicio, 'tipo' => 'llegada', 'modulo' => 'trafico']);
+
+    $respuesta->assertSuccessful()->assertJsonPath('existe', true);
+})->with(rangosDeConsulta());
+
+// --- Operaciones programadas: el selector del dia y las pendientes ---
+
+it('FILTRO programadas: el listado de un dia acepta cualquier dia, pasado o futuro', function (string $inicio, string $fin) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    programadaParaEditar($inicio);
+
+    $respuesta = consulta('/api/OperacionesProgramadas', ['fecha' => $inicio]);
+
+    exitoQueIncluye($respuesta, 'XA-PRG');
+    expect($respuesta->json('fecha'))->toBe($inicio);
+})->with(rangosDeConsulta());
+
+it('FILTRO programadas: las pendientes filtradas por un dia antiguo siguen respondiendo', function (string $inicio, string $fin) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    programadaParaEditar($inicio);
+
+    exitoQueIncluye(consulta('/api/OperacionesProgramadas/pendientes', ['modulo' => OperacionProgramada::MODULO_OPERACIONES_DIARIAS, 'fecha' => $inicio]), 'XA-PRG');
+})->with(rangosDeConsulta());
+
+// --- Control de medicamentos: buscar cierres, filtrar movimientos, exportar ---
+
+it('FILTRO medicamentos: buscar cierres por un dia, o por un rango, acepta cualquier fecha', function (array $parametros, string $inicio) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    controlMedicamentoParaEditar($inicio);
+
+    exitoQueIncluye(consulta('/api/ControlMedicamento/index', $parametros), 'Original');
+})->with(function () {
+    foreach (rangosDeConsulta() as $nombre => [$inicio, $fin]) {
+        yield "un dia, {$nombre}" => [['fecha' => $inicio], $inicio];
+        yield "un rango, {$nombre}" => [['fecha_inicio' => $inicio, 'fecha_fin' => $fin], $inicio];
+    }
+});
+
+it('FILTRO medicamentos: los filtros de movimientos (dia y rango) aceptan cualquier fecha', function (string $ruta, array $parametros) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    controlMedicamentoParaEditar($parametros['fecha'] ?? $parametros['fecha_inicio']);
+
+    consulta($ruta, $parametros)->assertSuccessful();
+})->with(function () {
+    foreach (rangosDeConsulta() as $nombre => [$inicio, $fin]) {
+        yield "movimientos de un dia, {$nombre}" => ['/api/ControlMedicamento/ultimosMovimientos', ['periodo' => 'dia', 'fecha' => $inicio]];
+        yield "movimientos de un rango, {$nombre}" => ['/api/ControlMedicamento/ultimosMovimientos', ['periodo' => 'rango', 'fecha_inicio' => $inicio, 'fecha_fin' => $fin]];
+    }
+});
+
+it('FILTRO medicamentos: el PDF de cierres acepta un rango de hace un anio', function () {
+    // UNA sola peticion a proposito: la vista `pdf.control-medicamento-cierres` declara una funcion
+    // global dentro del Blade, y renderizarla dos veces en el mismo proceso muere con «Cannot
+    // redeclare formatoFechaPdf()». En produccion cada peticion es un proceso, pero en la suite no.
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    [$inicio, $fin] = rangosDeConsulta()['hace un anio'];
+    controlMedicamentoParaEditar($inicio);
+
+    consulta('/api/ControlMedicamento/exportar-pdf', ['fecha_inicio' => $inicio, 'fecha_fin' => $fin])->assertSuccessful();
+});
+
+// --- Pernocta: el periodo de edicion, por dia o por rango ---
+
+it('FILTRO pernocta: el listado por dia o por rango acepta cualquier fecha y encuentra lo sembrado', function (string $periodo, string $inicio, string $fin) {
+    funcionesDeMysqlEnSqlite();
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    PernoctaDia::create(['fecha' => $inicio, 'matricula' => 'XA-FIL', 'nombre' => 'Vigilante Uno', 'ubicacion' => 'Hangar 1']);
+
+    $parametros = $periodo === 'dia'
+        ? ['periodo' => 'dia', 'fechaInicio' => $inicio, 'fechaFin' => $inicio]
+        : ['periodo' => 'rango', 'fechaInicio' => $inicio, 'fechaFin' => $fin];
+
+    exitoQueIncluye(consulta('/api/PernoctaDia', $parametros), 'XA-FIL');
+})->with(function () {
+    foreach (rangosDeConsulta() as $nombre => [$inicio, $fin]) {
+        yield "un dia, {$nombre}" => ['dia', $inicio, $fin];
+        yield "un rango, {$nombre}" => ['rango', $inicio, $fin];
+    }
+});
+
+// --- CSAE: el periodo y el rango de entrada y de salida ---
+
+it('FILTRO CSAE: el rango de SALIDA acepta cualquier fecha y encuentra lo sembrado ese dia', function (string $inicio, string $fin) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    movimientoCsaeParaEditar($inicio);
+
+    exitoQueIncluye(consulta('/api/MovimientosCSAE', ['salida_inicio' => $inicio, 'salida_fin' => $fin]), 'XA-CSB');
+})->with(rangosDeConsulta());
+
+it('FILTRO CSAE: el rango de ENTRADA acepta cualquier fecha y encuentra lo sembrado ese dia', function (string $inicio, string $fin) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    MovimientoCSAE::create([
+        'user_entrada_id' => User::factory()->create()->id,
+        'fecha_hora_entrada' => $inicio.' 08:00:00',
+        'matricula' => 'XA-CSB',
+        'tipo_aeronave' => 'C172',
+        'como_llega' => 'Vuelo',
+        'transportista' => 'Aerolinea Uno',
+    ]);
+
+    exitoQueIncluye(consulta('/api/MovimientosCSAE', ['entrada_inicio' => $inicio, 'entrada_fin' => $fin]), 'XA-CSB');
+})->with(rangosDeConsulta());
+
+// --- Estacionamiento: `fecha` es una fecha de CORTE de informe, no de registro ---
+
+it('FILTRO estacionamiento: la `fecha` de vehiculosMasDeCincoDias es un CORTE de informe y NO lleva ventana (encuentra la racha de ese corte)', function (int $diasAtras) {
+    funcionesDeMysqlEnSqlite();
+    $this->actingAs($usuario = usuarioAdmin(), 'sanctum');
+    $corte = Carbon::today()->subDays($diasAtras);
+    // Seis dias seguidos que TERMINAN en el corte: mas de cinco, asi que el informe lo lista.
+    foreach (range(5, 0) as $atras) {
+        EstacionamientoSubterraneo::create([
+            'user_id' => $usuario->id, 'vehiculo' => 'Auto', 'color' => 'Rojo', 'placas' => 'RACHA-1', 'matricula' => 'N/A',
+            'llaves' => 'SI', 'responsable' => 'Resp', 'oficial' => 'Oficial Uno',
+            'fecha_ingreso' => $corte->copy()->subDays($atras)->toDateString(),
+        ]);
+    }
+
+    $respuesta = consulta('/api/EstacionamientoSubTerraneo/alerta', ['fecha' => $corte->toDateString()]);
+
+    $respuesta->assertSuccessful()
+        ->assertJsonPath('fecha_corte', $corte->toDateString())
+        ->assertJsonPath('total', 1)
+        ->assertJsonPath('vehiculos.0.placas', 'RACHA-1');
+})->with([
+    'un corte de hace un anio' => [365],
+    'un corte de hace un mes' => [30],
+    'un corte de hace diez dias' => [10],
+    'un corte de hace dos anios' => [730],
+]);
+
+it('FILTRO estacionamiento: un corte FUTURO tampoco se rechaza', function (int $dias) {
+    funcionesDeMysqlEnSqlite();
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $corte = Carbon::today()->addDays($dias)->toDateString();
+
+    consulta('/api/EstacionamientoSubTerraneo/alerta', ['fecha' => $corte])->assertSuccessful()->assertJsonPath('fecha_corte', $corte);
+})->with(['manana' => [1], 'dentro de un mes' => [30]]);
+
+it('FILTRO estacionamiento: una `fecha` que no es fecha SI es un 422 (la validacion de siempre, no la ventana)', function () {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+
+    consulta('/api/EstacionamientoSubTerraneo/alerta', ['fecha' => 'no-es-una-fecha'])->assertUnprocessable()->assertJsonValidationErrors('fecha');
+});
+
+// --- El resto de los modulos tocados: al menos UNA consulta de cada uno ---
+
+it('FILTRO del resto de modulos: sus listados e informes aceptan cualquier rango y encuentran lo sembrado', function (string $ruta, array $parametros, string $marca, string $sembrar, string $inicio) {
+    funcionesDeMysqlEnSqlite();
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+
+    match ($sembrar) {
+        'checklist' => checklistParaEditar($inicio),
+        'comisariato' => comisariatoParaEditar($inicio),
+        'rampa' => entregaRampaParaEditar($inicio),
+        'turno' => turnoParaEditar($inicio),
+        'remision' => remisionParaEditar($inicio),
+        'walkaround' => walkAroundParaEditar($inicio),
+        'chaleco' => chalecoEnElDia($inicio),
+        'planta' => plantaEnElDia($inicio),
+    };
+
+    exitoQueIncluye(consulta($ruta, $parametros), $marca);
+})->with(function () {
+    foreach (rangosDeConsulta() as $nombre => [$inicio, $fin]) {
+        yield "checklist de turno, {$nombre}" => ['/api/CheckListTurno', ['fechaInicio' => $inicio, 'fechaFin' => $fin], 'Original', 'checklist', $inicio];
+        yield "comisariato, {$nombre}" => ['/api/ServicioComisariato', ['fechaInicio' => $inicio, 'fechaFin' => $fin], 'Original', 'comisariato', $inicio];
+        yield "entrega de turno de rampa, {$nombre}" => ['/api/EntregaTurnoR/entrega-turno-rampa', ['periodo' => 'rango', 'fechaInicio' => $inicio, 'fechaFin' => $fin], 'Original', 'rampa', $inicio];
+        yield "turno de autotanque, {$nombre}" => ['/api/TurnoAutoTanque', ['start' => $inicio, 'end' => $fin], 'Original', 'turno', $inicio];
+        yield "servicio de autotanque, {$nombre}" => ['/api/Remision', ['type' => 'range', 'start' => $inicio, 'end' => $fin, 'vinculado' => 1], 'XA-REM', 'remision', $inicio];
+        yield "walk around, {$nombre}" => ['/api/walkarounds', ['fecha_inicio' => $inicio, 'fecha_fin' => $fin], 'XA-WLK', 'walkaround', $inicio];
+        yield "prestamo de chalecos, {$nombre}" => ['/api/PrestamoChalecos', ['fecha_inicio' => $inicio, 'fecha_fin' => $fin], 'Chaleco Fil', 'chaleco', $inicio];
+        yield "planta GPU, {$nombre}" => ['/api/RelacionPlanta/historico', ['fecha_inicio' => $inicio, 'fecha_fin' => $fin], 'XA-PLA', 'planta', $inicio];
+    }
+});
+
+it('FILTRO de las bitacoras: desde/hasta acepta cualquier rango (no son fechas de registro)', function (string $ruta, string $inicio, string $fin) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+
+    consulta($ruta, ['desde' => $inicio, 'hasta' => $fin])->assertSuccessful();
+})->with(function () {
+    foreach (rangosDeConsulta() as $nombre => [$inicio, $fin]) {
+        yield "bitacoras, {$nombre}" => ['/api/bitacoras', $inicio, $fin];
+        yield "bitacora de walk around, {$nombre}" => ['/api/walkarounds/bitacora', $inicio, $fin];
+    }
+});
