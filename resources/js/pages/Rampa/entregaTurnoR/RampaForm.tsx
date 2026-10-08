@@ -9,6 +9,7 @@ import RampaSignaturesSection from './secciones/RampaSignaturesSection';
 import { actualizarEntregaTurnoRApi, guardarEntregaTurnoRApi, buscarUsuariosRampaApi } from '@/stores/apiEntregaTurnoR';
 import { getStepErrors } from './validacionEntregaTurnoR';
 import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
+import { fechaHoy } from '@/pages/despacho/operacionesProgramadas/types';
 
 interface RampaFormProps {
     initialData?: any;
@@ -65,7 +66,7 @@ const RampaForm: React.FC<RampaFormProps> = ({ initialData, onCancel }) => {
     const dropdownJefeRef = useRef<HTMLDivElement>(null);
 
     const [formData, setFormData] = useState({
-        encabezado: { fecha: new Date().toLocaleDateString('en-CA'), jefeTurno: "" },
+        encabezado: { fecha: fechaHoy(), jefeTurno: "" },
         comunicaciones: {
             radiosVHF: "0",
             vhfOperativos: "0",

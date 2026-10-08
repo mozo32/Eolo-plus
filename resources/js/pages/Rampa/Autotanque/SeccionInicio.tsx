@@ -2,6 +2,7 @@ import React from 'react';
 import { TABLA_CALIBRACION } from './tablaCalibracion';
 import { Calendar, Clock } from 'lucide-react';
 import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
+import { fechaHoy } from '@/pages/despacho/operacionesProgramadas/types';
 
 interface SeccionInicioProps {
     nombre: string;
@@ -57,7 +58,7 @@ export const SeccionInicio = ({
         if (minutes && parseInt(minutes) > 59) minutes = '59';
 
         const finalValue = minutes !== undefined ? `${hours}:${minutes}` : hours;
-        const date = fecha.split('T')[0] || new Date().toLocaleDateString('en-CA');
+        const date = fecha.split('T')[0] || fechaHoy();
         onUpdate('fecha', `${date}T${finalValue.slice(0, 5)}`);
     };
 

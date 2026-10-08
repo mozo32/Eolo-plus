@@ -1631,6 +1631,28 @@ it('AUTOTANQUE turno edicion: no deja mover el inicio ni el cierre a un dia fuer
     'cierre antiguo' => ['fechaCierre', -2],
 ]);
 
+it('AUTOTANQUE turno edicion: mover el inicio o el cierre a un dia DENTRO de ventana escribe (la edicion no rechaza todo cambio)', function (string $campo, int $desplazamiento) {
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $antigua = Carbon::today()->subDays(10)->toDateString();
+    $turno = turnoParaEditar($antigua);
+    $carga = cargaDeTurno($antigua.'T08:30:00', ['id' => $turno->id, 'nombre' => 'Corregido', 'fechaCierre' => $antigua.'T08:30:00']);
+    $carga[$campo] = diaYHora($desplazamiento);
+
+    $this->postJson('/api/TurnoAutoTanque', $carga)->assertCreated();
+
+    $turno = $turno->fresh();
+    $nuevo = Carbon::today()->addDays($desplazamiento)->toDateString();
+    $otro = $campo === 'fecha' ? 'fechaCierre' : 'fecha';
+    expect($turno->nombre)->toBe('Corregido');
+    expect(diaDeColumna($turno->{$campo}))->toBe($nuevo);
+    expect(diaDeColumna($turno->{$otro}))->toBe($antigua);
+})->with([
+    'inicio a hoy' => ['fecha', 0],
+    'inicio al borde de atras (ayer)' => ['fecha', -1],
+    'cierre a hoy' => ['fechaCierre', 0],
+    'cierre al borde de atras (ayer)' => ['fechaCierre', -1],
+]);
+
 it('AUTOTANQUE turno edicion: no deja pasar de un inicio antiguo a OTRO antiguo distinto', function () {
     $this->actingAs(usuarioAdmin(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
@@ -1665,6 +1687,29 @@ it('AUTOTANQUE turno edicion: un desfase en una fecha antigua no se cuela como "
         ->assertJsonValidationErrors('fecha');
 
     expect($turno->fresh()->fecha)->toBe($antigua.' 08:30:00');
+});
+
+it('AUTOTANQUE turno edicion: el mismo dia con un sufijo relativo no se cuela como "sin cambios"', function (string $partida, string $reenvio) {
+    // `cambiaElDia` compara los diez primeros caracteres como texto. Eso solo es seguro porque
+    // `date_format` va SIEMPRE en el mismo arreglo: con `date`, "2026-10-07 +1 day" empieza por el
+    // dia guardado, contaria como "sin cambios", se saltaria la ventana y MySQL guardaria otro dia.
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $original = fechaDePartida($partida);
+    $turno = turnoParaEditar($original);
+
+    $this->postJson('/api/TurnoAutoTanque', cargaDeTurno(str_replace('{dia}', $original, $reenvio), ['id' => $turno->id, 'nombre' => 'Cambiado']))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('fecha');
+
+    $turno = $turno->fresh();
+    expect($turno->nombre)->toBe('Original');
+    expect($turno->fecha)->toBe($original.' 08:30:00');
+})->with(function () {
+    foreach (['hoy', 'antigua'] as $partida) {
+        yield "{$partida}: dia y hora + un dia" => [$partida, '{dia}T08:30 +1 day'];
+        yield "{$partida}: dia y segundos + un dia" => [$partida, '{dia}T08:30:00 +1 day'];
+        yield "{$partida}: dia + un dia, sin hora" => [$partida, '{dia} +1 day'];
+    }
 });
 
 it('AUTOTANQUE turno: a las 19:00 de Mexico (ya es manana en UTC) hoy sigue siendo hoy y manana se rechaza', function () {

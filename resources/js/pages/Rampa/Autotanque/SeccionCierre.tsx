@@ -2,6 +2,7 @@ import React from 'react';
 import { TABLA_CALIBRACION } from './tablaCalibracion';
 import { Clock, Calendar } from 'lucide-react';
 import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
+import { fechaHoy } from '@/pages/despacho/operacionesProgramadas/types';
 
 interface SeccionCierreProps {
     nombreCierre: string;
@@ -43,7 +44,7 @@ export const SeccionCierre = ({
         if (minutes && parseInt(minutes) > 59) minutes = '59';
 
         const finalTime = minutes !== undefined ? `${hours}:${minutes}` : hours;
-        const datePart = fechaCierre.split('T')[0] || new Date().toLocaleDateString('en-CA');
+        const datePart = fechaCierre.split('T')[0] || fechaHoy();
 
         onUpdate('fechaCierre', `${datePart}T${finalTime.slice(0, 5)}`);
     };
