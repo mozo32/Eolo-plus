@@ -256,3 +256,24 @@ test('cada excepcion sigue haciendo falta: una que ya no, hay que quitarla', fun
             ->toBeTrue("{$ruta} ya no nombra las columnas guardadas: quitalo de la lista ({$motivo})");
     }
 });
+
+/**
+ * El normalizador lee la clave que el servidor sirve.
+ *
+ * Es una prueba de TEXTO, no de ejecución, y se sabe: el proyecto no tiene corredor de pruebas
+ * JS y no se añade uno aquí. Su lógica queda sin cubrir, así que esta es la única red que caza
+ * el error exacto que costó este arreglo —leer `danios` de la forma guardada—. Su pareja es la
+ * prueba de contrato de arriba: si cambia la clave del servidor, falla esa; si cambia la del
+ * normalizador, falla esta.
+ */
+test('el normalizador lee la clave que el servidor sirve, no la otra', function () {
+    $fuente = sinComentarios(file_get_contents(base_path('resources/js/lib/checklistWalkAround.ts')));
+
+    // `toContain` admite VARIAS agujas, asi que un mensaje como segundo argumento se buscaria
+    // como texto. Por eso el motivo va en un `expect` sobre un booleano.
+    expect(str_contains($fuente, 'crudo?.damages'))
+        ->toBeTrue('El normalizador tiene que leer `damages`, la clave que guarda y sirve el servidor.');
+
+    expect(str_contains($fuente, 'crudo?.danios'))
+        ->toBeFalse('Leer `danios` de la forma GUARDADA es el defecto: ahi esa clave no existe y todo sale «sin dano».');
+});
