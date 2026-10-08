@@ -23,13 +23,13 @@ class RegistroVisitantesController extends Controller
             'tipo_gafete' => 'required|string|in:Rojo,Verde',
             'empresa' => 'required|string',
             'autoriza' => 'required|string',
-            'fechaRegistro' => 'required|string',
+            'fechaRegistro' => ['required', 'date_format:Y-m-d'],
             'horaEntrada' => 'required|string',
             'firma_entrada' => [
                 'required',
                 'string',
                 function ($attribute, $value, $fail) {
-                    if (!str_contains($value, 'base64,')) {
+                    if (! str_contains($value, 'base64,')) {
                         $fail('La firma del visitante no tiene un formato válido.');
                     }
                 },
@@ -39,7 +39,7 @@ class RegistroVisitantesController extends Controller
         DB::beginTransaction();
 
         try {
-            $registro = new RegistroVisitante();
+            $registro = new RegistroVisitante;
             $registro->forceFill([
                 'nombre' => $validated['nombre'],
                 'procedencia' => $validated['procedencia'],
@@ -81,13 +81,13 @@ class RegistroVisitantesController extends Controller
         RegistroVisitante $registroVisitante,
     ) {
         $validated = $request->validate([
-            'fechaSalida' => 'required|string',
+            'fechaSalida' => ['required', 'date_format:Y-m-d'],
             'horaSalida' => 'required|string',
             'firma_salida' => [
                 'required',
                 'string',
                 function ($attribute, $value, $fail) {
-                    if (!str_contains($value, 'base64,')) {
+                    if (! str_contains($value, 'base64,')) {
                         $fail('La firma de salida no tiene un formato válido.');
                     }
                 },
@@ -188,21 +188,19 @@ class RegistroVisitantesController extends Controller
             )
             ->when(
                 $fechaInicio,
-                fn ($query, $fechaInicio) =>
-                    $query->whereDate(
-                        'fecha_entrada',
-                        '>=',
-                        $fechaInicio
-                    )
+                fn ($query, $fechaInicio) => $query->whereDate(
+                    'fecha_entrada',
+                    '>=',
+                    $fechaInicio
+                )
             )
             ->when(
                 $fechaFin,
-                fn ($query, $fechaFin) =>
-                    $query->whereDate(
-                        'fecha_entrada',
-                        '<=',
-                        $fechaFin
-                    )
+                fn ($query, $fechaFin) => $query->whereDate(
+                    'fecha_entrada',
+                    '<=',
+                    $fechaFin
+                )
             )
             ->orderByDesc('fecha_entrada')
             ->orderByDesc('hora_entrada')
@@ -249,7 +247,7 @@ class RegistroVisitantesController extends Controller
         string $rol,
         RegistroVisitante $registro,
     ): void {
-        if (trim($value) === '' || !str_contains($value, 'base64,')) {
+        if (trim($value) === '' || ! str_contains($value, 'base64,')) {
             return;
         }
 
@@ -263,7 +261,7 @@ class RegistroVisitantesController extends Controller
 
         $firma = $this->guardarFirmaArchivoBase64(
             $value,
-            'firmas/RegistroVisitante/' . now()->format('Y/m'),
+            'firmas/RegistroVisitante/'.now()->format('Y/m'),
         );
 
         $registro->firmas()->attach($firma->id, [
@@ -283,8 +281,8 @@ class RegistroVisitantesController extends Controller
 
         $mime = $matches[1] ?? 'image/png';
         $extension = explode('/', $mime)[1] ?? 'png';
-        $fileName = Str::uuid() . '.' . $extension;
-        $path = $folder . '/' . $fileName;
+        $fileName = Str::uuid().'.'.$extension;
+        $path = $folder.'/'.$fileName;
 
         Storage::disk('public')->put($path, base64_decode($content));
 
