@@ -25,7 +25,7 @@ class MovimientoCSAEController extends Controller
 
         try {
             $validated = $request->validate([
-                'fecha_hora_entrada'    => ['required', 'date'],
+                'fecha_hora_entrada'    => ['required', 'date', new DentroDeLaVentana('csae.entrada')],
                 'matricula'             => 'required|string|max:20',
                 'tipo_aeronave'         => 'required|string|max:50',
                 'como_llega'            => 'required|string|max:50',
