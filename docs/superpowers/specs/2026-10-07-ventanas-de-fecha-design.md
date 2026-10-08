@@ -305,8 +305,11 @@ pantalla inusable:
 - **Recalcular la ventana en el navegador** para la pestaña abierta de un día para otro. Ver §5.
 - **Un componente de fecha unificado.** Ver §5.
 - **Pruebas en el navegador.** El proyecto no tiene corredor de pruebas JS, y no se añade uno
-  para esto. Consecuencia medida y aceptada: la unión de la ventana con la fecha original
-  (§5 bis) **no está cubierta por nada**; romperla deja la suite en verde. Se acepta porque el
+  para esto. Consecuencia medida y aceptada, y es **mayor de lo que decía la primera versión
+  de esta sección**: no es solo que la unión con la fecha original (§5 bis) no esté cubierta.
+  **El lado del navegador se puede borrar entero sin que nada se ponga rojo** — mutar el hook
+  para que nunca lea la ventana, dejando todos los calendarios sin `min` ni `max`, deja la
+  suite en verde. Lo midió la revisión final de rama. Se acepta porque el
   servidor valida igual, así que un cableado roto estropea la guía del calendario —no deja
   reeditar un registro viejo— y no los datos. Si algún día entra un corredor de pruebas JS, esa
   función es la primera que lo necesita.
