@@ -378,7 +378,11 @@ class ChecklistTurnoController extends Controller
                 'revision_salas' => $validated['revisionSalas'] ?? [],
                 'observaciones_salas' => $validated['observaciones_salas'] ?? null,
                 'hot_tras_comi_coor' => $validated['HotTrasComiCoor'] ?? [],
-                'revision_base_operaciones' => $validated['revision_base_operaciones'] ?? false,
+                // Se CONSERVA lo guardado cuando la peticion no lo manda. La casilla se retiro del
+                // formulario y su dato historico se sigue mostrando en el detalle y en el PDF: con
+                // `?? false` una simple edicion de otro campo lo habria puesto en falso.
+                'revision_base_operaciones' => $validated['revision_base_operaciones']
+                    ?? $checklistTurno->revision_base_operaciones,
                 'envia_informe_diario' => $validated['envia_informe_diario'] ?? false,
                 'envia_resumen_semanal' => $validated['envia_resumen_semanal'] ?? false,
                 'entrega_turno_con' => $validated['entregaTurnoCon'] ?? [],
@@ -641,7 +645,11 @@ class ChecklistTurnoController extends Controller
                 'revision_salas'            => $validated['revisionSalas'],
                 'observaciones_salas'       => $validated['observaciones_salas'] ?? null,
                 'hot_tras_comi_coor'        => $validated['HotTrasComiCoor'] ?? [],
-                'revision_base_operaciones' => $validated['revision_base_operaciones'] ?? false,
+                // Se CONSERVA lo guardado cuando la peticion no lo manda. La casilla se retiro del
+                // formulario y su dato historico se sigue mostrando en el detalle y en el PDF: con
+                // `?? false` una simple edicion de otro campo lo habria puesto en falso.
+                'revision_base_operaciones' => $validated['revision_base_operaciones']
+                    ?? $checklistTurno->revision_base_operaciones,
                 'envia_informe_diario'      => $validated['envia_informe_diario'] ?? false,
                 'envia_resumen_semanal'     => $validated['envia_resumen_semanal'] ?? false,
                 'entrega_turno_con'         => $validated['entregaTurnoCon'],

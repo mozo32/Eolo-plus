@@ -384,7 +384,7 @@ function ChecklistPdfDoc({ data }: { data: any }) {
                     </View>
 
                     <View style={styles.col3}>
-                        <Text style={styles.label}>Informe Diario</Text>
+                        <Text style={styles.label}>Validar Operaciones y Revisión de Walks Completos</Text>
                         <Text style={[styles.value, { color: boolColor(data?.envia_informe_diario) }]}>
                             {boolText(data?.envia_informe_diario)}
                         </Text>

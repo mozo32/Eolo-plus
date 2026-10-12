@@ -1,15 +1,13 @@
 import { useState } from "react";
 
+// `revision_base_operaciones` se retiro de la captura: el departamento ya no lo usa. NO se
+// borra su columna ni deja de mostrarse en el detalle y en el PDF, para que un turno ya
+// firmado se vea igual que cuando se firmo. Y el `update` del controlador conserva su valor
+// cuando la peticion no lo manda, que es justo lo que pasa ahora al no dibujar la casilla.
 const EQUIPOS = [
     {
-        id: "revision_base_operaciones",
-        label: "Revisión de Base de Operaciones",
-        sublabel: "Completar operaciones y revisar errores",
-    },
-    {
         id: "envia_informe_diario",
-        label: "Informe Diario",
-        sublabel: "Enviar antes de la 1:00 am",
+        label: "Validar Operaciones y Revisión de Walks Completos",
     },
     {
         id: "envia_resumen_semanal",
