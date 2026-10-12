@@ -778,6 +778,12 @@ it('CHALECOS alta: no deja pasar una fecha vacia, ausente o ilegible', function 
 ]);
 
 it('CHALECOS alta: sigue exigiendo date_format:Y-m-d, no se sustituyo por date', function (string $formato) {
+    // El reloj se fija a un dia de UN digito a proposito. El formato `Y-n-j` del conjunto solo
+    // se distingue de `Y-m-d` si el mes o el dia no llevan cero delante: con la fecha real, los
+    // dias 10+ de octubre, noviembre y diciembre generaban la MISMA cadena que la valida, el
+    // servidor la aceptaba con razon y la prueba se ponia roja sola. Es el mismo remedio que ya
+    // usaba la de PERNOCTA.
+    $this->travelTo(Carbon::parse('2026-03-05 12:00:00', 'America/Mexico_City'));
     // Cualquiera de estas se lee como el dia de hoy con `date`, pero no es `Y-m-d`.
     Storage::fake('local');
     $this->actingAs(usuarioAdmin(), 'sanctum');
@@ -1309,6 +1315,12 @@ it('RAMPA entrega alta: no deja pasar una fecha vacia, ausente o ilegible (el re
 ]);
 
 it('RAMPA entrega alta: exige date_format:Y-m-d, no date (la cadena se guarda LITERAL en el JSON)', function (string $formato) {
+    // El reloj se fija a un dia de UN digito a proposito. El formato `Y-n-j` del conjunto solo
+    // se distingue de `Y-m-d` si el mes o el dia no llevan cero delante: con la fecha real, los
+    // dias 10+ de octubre, noviembre y diciembre generaban la MISMA cadena que la valida, el
+    // servidor la aceptaba con razon y la prueba se ponia roja sola. Es el mismo remedio que ya
+    // usaba la de PERNOCTA.
+    $this->travelTo(Carbon::parse('2026-03-05 12:00:00', 'America/Mexico_City'));
     $this->actingAs(usuarioAdmin(), 'sanctum');
     $antes = EntregaTurnoR::count();
 
@@ -1544,6 +1556,12 @@ it('AUTOTANQUE turno alta: la fecha de cierre sigue siendo opcional (un turno si
 });
 
 it('AUTOTANQUE turno alta: exige fecha y hora exactas, no cualquier cosa que date lea (se guarda LITERAL)', function (string $formato) {
+    // El reloj se fija a un dia de UN digito a proposito. El formato `Y-n-j` del conjunto solo
+    // se distingue de `Y-m-d` si el mes o el dia no llevan cero delante: con la fecha real, los
+    // dias 10+ de octubre, noviembre y diciembre generaban la MISMA cadena que la valida, el
+    // servidor la aceptaba con razon y la prueba se ponia roja sola. Es el mismo remedio que ya
+    // usaba la de PERNOCTA.
+    $this->travelTo(Carbon::parse('2026-03-05 12:00:00', 'America/Mexico_City'));
     // Todas se leen como hoy con `date`, pero ninguna es `Y-m-d\TH:i` ni `Y-m-d\TH:i:s`.
     $this->actingAs(usuarioAdmin(), 'sanctum');
     $antes = TurnoAutotanque::count();
@@ -1861,6 +1879,12 @@ it('AUTOTANQUE servicio alta: no deja pasar una fecha vacia, ausente o ilegible'
 ]);
 
 it('AUTOTANQUE servicio alta: exige date_format:Y-m-d, no date (la columna no tiene cast)', function (string $formato) {
+    // El reloj se fija a un dia de UN digito a proposito. El formato `Y-n-j` del conjunto solo
+    // se distingue de `Y-m-d` si el mes o el dia no llevan cero delante: con la fecha real, los
+    // dias 10+ de octubre, noviembre y diciembre generaban la MISMA cadena que la valida, el
+    // servidor la aceptaba con razon y la prueba se ponia roja sola. Es el mismo remedio que ya
+    // usaba la de PERNOCTA.
+    $this->travelTo(Carbon::parse('2026-03-05 12:00:00', 'America/Mexico_City'));
     $this->actingAs(usuarioAdmin(), 'sanctum');
     $antes = Remision::count();
 
@@ -2023,6 +2047,12 @@ it('PLANTA prestamo: no deja pasar una fecha vacia, ausente o ilegible', functio
 ]);
 
 it('PLANTA prestamo: sigue exigiendo date_format:Y-m-d, no se sustituyo por date', function (string $formato) {
+    // El reloj se fija a un dia de UN digito a proposito. El formato `Y-n-j` del conjunto solo
+    // se distingue de `Y-m-d` si el mes o el dia no llevan cero delante: con la fecha real, los
+    // dias 10+ de octubre, noviembre y diciembre generaban la MISMA cadena que la valida, el
+    // servidor la aceptaba con razon y la prueba se ponia roja sola. Es el mismo remedio que ya
+    // usaba la de PERNOCTA.
+    $this->travelTo(Carbon::parse('2026-03-05 12:00:00', 'America/Mexico_City'));
     $this->actingAs(usuarioAdmin(), 'sanctum');
     $antes = RelacionPlanta::count();
 
