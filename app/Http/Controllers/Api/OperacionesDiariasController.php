@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\OperacionDiaria;
 use App\Models\OperacionProgramada;
 use App\Events\OperacionProgramadaCambio;
+use App\Events\PrefacturaPendienteCambio;
 use App\Models\MovimientoCSAE;
 use App\Services\CatalogoAeronaves;
 use App\Services\SecuenciaMovimientoService;
@@ -63,7 +64,11 @@ class OperacionesDiariasController extends Controller
         // solo después de que el registro quedó confirmado.
         $programadaUsada = null;
 
-        $respuesta = DB::transaction(function () use ($validated, &$programadaUsada) {
+        // La llegada que acaba de nacer, para avisar a Prefacturas. Solo las llegadas:
+        // una salida no abre prefactura.
+        $llegadaRegistrada = null;
+
+        $respuesta = DB::transaction(function () use ($validated, &$programadaUsada, &$llegadaRegistrada) {
             $matricula = strtoupper(trim($validated['matricula']));
             $movimiento = SecuenciaMovimientoService::normalizar($validated['movimiento']);
 
@@ -139,6 +144,10 @@ class OperacionesDiariasController extends Controller
                 'tipo_operacion' => $operacion->tipo_operacion,
             ];
 
+            if ($operacion->tipo === SecuenciaMovimientoService::LLEGADA) {
+                $llegadaRegistrada = $operacion;
+            }
+
             Bitacora::log(
                 modulo: 'OPERACIONES_DIARIAS',
                 accion: Bitacora::ACCION_CREAR,
@@ -164,6 +173,14 @@ class OperacionesDiariasController extends Controller
                 $programadaUsada,
                 OperacionProgramadaCambio::ACCION_UTILIZADA,
                 modulo: OperacionProgramada::MODULO_OPERACIONES_DIARIAS,
+            );
+        }
+
+        if ($llegadaRegistrada) {
+            PrefacturaPendienteCambio::emitir(
+                PrefacturaPendienteCambio::ACCION_CREADA,
+                $llegadaRegistrada->id,
+                $llegadaRegistrada->matricula,
             );
         }
 
@@ -465,7 +482,11 @@ class OperacionesDiariasController extends Controller
 
     public function update(Request $request, $id)
     {
-        return DB::transaction(function () use ($request, $id) {
+        // Fuera de la transacción, igual que en `store`: a los demás se les avisa solo
+        // cuando el cambio ya quedó confirmado.
+        $llegadaTocada = null;
+
+        $respuesta = DB::transaction(function () use ($request, $id, &$llegadaTocada) {
             $operacion = OperacionDiaria::findOrFail($id);
 
             $this->validarFechaSiCambia($request, $operacion);
@@ -582,6 +603,13 @@ class OperacionesDiariasController extends Controller
                 );
             }
 
+            // La matrícula o la fecha pueden haber cambiado, así que la llegada puede
+            // entrar o salir de la ventana del corte. Avisar de más cuesta una consulta;
+            // avisar de menos deja el contador mintiendo.
+            if ($operacion->tipo === SecuenciaMovimientoService::LLEGADA) {
+                $llegadaTocada = $operacion->fresh();
+            }
+
             return response()->json([
                 'message' => 'Operación actualizada correctamente',
                 'operacion' => $operacion->fresh(),
@@ -589,6 +617,16 @@ class OperacionesDiariasController extends Controller
                 'campos_modificados' => array_keys($datosNuevos),
             ]);
         });
+
+        if ($llegadaTocada) {
+            PrefacturaPendienteCambio::emitir(
+                PrefacturaPendienteCambio::ACCION_ACTUALIZADA,
+                $llegadaTocada->id,
+                $llegadaTocada->matricula,
+            );
+        }
+
+        return $respuesta;
     }
 
     /**
@@ -663,6 +701,14 @@ class OperacionesDiariasController extends Controller
             datosAnteriores: ['status' => true],
             datosNuevos: ['status' => false],
         );
+
+        if ($operacion->tipo === SecuenciaMovimientoService::LLEGADA) {
+            PrefacturaPendienteCambio::emitir(
+                PrefacturaPendienteCambio::ACCION_ELIMINADA,
+                $operacion->id,
+                $operacion->matricula,
+            );
+        }
 
         return response()->json([
             'message' => 'La operación fue cancelada correctamente.',

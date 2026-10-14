@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Facturacion;
 
 use App\Http\Controllers\Api\Facturacion\Concerns\RechazaPrefacturaCerrada;
+use App\Events\PrefacturaPendienteCambio;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Facturacion\ReabrirPrefacturaRequest;
 use App\Http\Requests\Facturacion\StorePrefacturaRequest;
@@ -215,6 +216,15 @@ class PrefacturaController extends Controller
 
             return $prefactura;
         });
+
+        // Esa llegada deja de estar pendiente: la alerta de Prefacturas baja en todas las
+        // pantallas abiertas, no solo en la de quien acaba de abrir el borrador.
+        if ($prefactura->operacion_llegada_id) {
+            PrefacturaPendienteCambio::emitir(
+                PrefacturaPendienteCambio::ACCION_TOMADA,
+                (int) $prefactura->operacion_llegada_id,
+            );
+        }
 
         return response()->json([
             'message' => 'Borrador de prefactura creado.',
@@ -451,6 +461,10 @@ class PrefacturaController extends Controller
      */
     public function descartar(Request $request, int $id): JsonResponse
     {
+        // La llegada que esta prefactura tenía reservada vuelve a quedar pendiente. Se lee
+        // antes de la baja porque después el registro ya no se consulta.
+        $llegadaLiberada = FactPrefactura::query()->where('id', $id)->value('operacion_llegada_id');
+
         $rechazo = DB::transaction(function () use ($request, $id) {
             $filas = FactPrefactura::query()
                 ->where('id', $id)
@@ -493,6 +507,10 @@ class PrefacturaController extends Controller
 
             return null;
         });
+
+        if ($rechazo === null && $llegadaLiberada) {
+            PrefacturaPendienteCambio::emitir(PrefacturaPendienteCambio::ACCION_LIBERADA, (int) $llegadaLiberada);
+        }
 
         return $rechazo ?? response()->json(['message' => 'Borrador descartado.']);
     }
