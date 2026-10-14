@@ -1003,3 +1003,66 @@ test('sin filas en ninguna tabla --aplicar corre sin --forzar', function () {
 
     expect(Aeronave::where('matricula', 'XA-AAA')->exists())->toBeTrue();
 });
+
+/**
+ * Un tipo COLGANTE no es «un tipo que ya tenia»: es un puntero roto.
+ *
+ * Paso de verdad en la base de desarrollo: `tipo_aeronaves` se vacio despues de una
+ * importacion y 822 de 845 matriculas quedaron apuntando a ids 1223-1375 que ya no
+ * existian. Ninguna resolvia su tipo, asi que el modal de nueva prefactura y el detalle
+ * de WalkAround mostraban la matricula sin modelo. Reimportar no lo curaba, porque la
+ * condicion del importador solo completaba un tipo NULO.
+ *
+ * Son 822 filas que violan una clave ajena declarada: `aeronaves.aeronave_id` apunta a
+ * `tipo_aeronaves` tanto en MySQL como en sqlite. Por eso el estado se reproduce como
+ * nacio —el tipo existio, se asigno, y la fila del tipo desaparecio con las
+ * comprobaciones apagadas— y no insertando un id inventado, que la base rechazaria.
+ */
+function aeronaveConTipoColgante(string $matricula): Aeronave
+{
+    $tipo = TipoAeronave::create(['nombre' => 'Tipo Que Se Borro']);
+    $aeronave = Aeronave::create(['matricula' => $matricula, 'aeronave_id' => $tipo->id]);
+
+    // Se repunta la aeronave en vez de borrar el tipo, y hay una razon: la clave ajena
+    // lleva `onDelete('cascade')`, asi que borrar el padre se llevaria por delante la
+    // propia aeronave. Repuntar solo exige saltarse una COMPROBACION, y eso si se puede
+    // aplazar: `PRAGMA foreign_keys` es inocuo dentro de una transaccion —y RefreshDatabase
+    // abre una—, pero `defer_foreign_keys` aplaza la revision al commit, que nunca llega
+    // porque la prueba revierte. El estado que queda es el mismo que hay en produccion:
+    // una fila que apunta a un tipo inexistente.
+    DB::statement('PRAGMA defer_foreign_keys = ON');
+    DB::table('aeronaves')->where('id', $aeronave->id)->update(['aeronave_id' => 999999]);
+
+    return $aeronave->refresh();
+}
+
+test('una matricula cuyo tipo ya no existe se repara con el del sistema viejo', function () {
+    $aeronave = aeronaveConTipoColgante('XA-COLGANTE');
+    sembrarLegacy([matriculaLegacy('XA-COLGANTE')]);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    // Se lee la relacion, no la columna: es lo unico que prueba que el id YA RESUELVE.
+    expect($aeronave->fresh()->tipoAeronave?->nombre)->toBe('Learjet 45');
+});
+
+test('el informe dice cuantos tipos colgantes reparo, y no cuenta los que solo completo', function () {
+    aeronaveConTipoColgante('XA-COLGANTE');
+    Aeronave::create(['matricula' => 'XA-SIN-TIPO']);
+    sembrarLegacy([matriculaLegacy('XA-COLGANTE'), matriculaLegacy('XA-SIN-TIPO')]);
+
+    $resultado = app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    // Completar un tipo nulo es otra cosa y ya se contaba aparte: aqui solo la reparada.
+    expect($resultado->conteos['aeronaves_con_tipo_reparado'] ?? 0)->toBe(1);
+});
+
+test('un tipo colgante NO se repara en la simulacion', function () {
+    $aeronave = aeronaveConTipoColgante('XA-COLGANTE');
+    $idRoto = $aeronave->aeronave_id;
+    sembrarLegacy([matriculaLegacy('XA-COLGANTE')]);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: false);
+
+    expect($aeronave->fresh()->aeronave_id)->toBe($idRoto);
+});

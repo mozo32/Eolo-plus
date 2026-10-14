@@ -459,6 +459,10 @@ class ImportadorMatriculas
      */
     private function importarMatriculas(array $matriculas, array $tipos, array $categorias, array $modasCategoria, array $motores, array $modasMotor): void
     {
+        // Los tipos que de verdad existen, para distinguir «un tipo que ya tenía» de un
+        // puntero roto. Se lee una vez: los de este corrido ya están creados.
+        $tiposQueExisten = TipoAeronave::query()->pluck('id')->flip();
+
         foreach ($matriculas as $matricula => $fila) {
             $tipoId = $tipos[$fila->id_tipo] ?? null;
 
@@ -467,8 +471,19 @@ class ImportadorMatriculas
                 ['aeronave_id' => $tipoId],
             );
 
+            // Un tipo COLGANTE —un id que ya no está en tipo_aeronaves— no es un tipo que la
+            // matrícula tenga: es una referencia rota, y la clave ajena que la declara está
+            // incumplida. Pasó: la tabla de tipos se vació después de una importación y 822
+            // matrículas se quedaron sin resolver su modelo. Reparar aquí deja al importador
+            // curándose solo; lo que se sigue respetando es un tipo VÁLIDO puesto a mano, que
+            // nunca se pisa con el del origen.
+            $colgante = $aeronave->aeronave_id !== null && ! $tiposQueExisten->has($aeronave->aeronave_id);
+
             if ($aeronave->wasRecentlyCreated) {
                 $this->resultado->contar('aeronaves_creadas');
+            } elseif ($colgante && $tipoId !== null) {
+                $aeronave->update(['aeronave_id' => $tipoId]);
+                $this->resultado->contar('aeronaves_con_tipo_reparado');
             } elseif ($aeronave->aeronave_id === null && $tipoId !== null) {
                 // Dada de alta por captura sin tipo: se completa, pero nunca se pisa un tipo que ya tenía.
                 $aeronave->update(['aeronave_id' => $tipoId]);
