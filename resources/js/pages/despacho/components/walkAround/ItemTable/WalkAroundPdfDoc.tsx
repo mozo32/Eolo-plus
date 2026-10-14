@@ -9,6 +9,7 @@ import {
 import avionImg from "@/assets/avion (2).png";
 import helipImg from "@/assets/helicoptero.png";
 import { WalkAroundDetalle } from "@/stores/apiWalkaround";
+import { normalizarChecklistGuardado } from "@/lib/checklistWalkAround";
 
 /* =======================
    Helpers
@@ -333,9 +334,10 @@ export default function WalkAroundPdfDoc({
     mapa3d: string;
 }) {
     const isAvion = detalle.tipo === "avion";
-    const checklist = isAvion
-        ? detalle.checklists?.checklist_avion ?? {}
-        : detalle.checklists?.checklist_helicoptero ?? {};
+    // Normalizado en un solo sitio: lo guardado usa `damages` y aqui se consume `danios`.
+    const checklist = normalizarChecklistGuardado(
+        isAvion ? detalle.checklists?.checklist_avion : detalle.checklists?.checklist_helicoptero
+    );
     const ORDER_HELI = [
         "Fuselaje",
         "Parabrisas",

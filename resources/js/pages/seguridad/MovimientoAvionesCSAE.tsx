@@ -32,6 +32,7 @@ import PdfCsae from './MovimientoAvionesCSAE/PdfCsae';
 import Swal from 'sweetalert2';
 import AeronavesPendientesCSAE from './MovimientoAvionesCSAE/AeronavesPendientesCSAE';
 import VistaPreviaCsae from './MovimientoAvionesCSAE/VistaPreviaCsae';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 type Role = { slug: string; nombre: string; };
 export type AuthUser = { id: number; name: string; email: string; isAdmin: boolean; roles: Role[]; };
@@ -57,7 +58,7 @@ const crearPeriodoVacio = (): ValorPeriodoCSAE => ({
 });
 
 const obtenerFechaHoy = () =>
-    new Date().toLocaleDateString('en-CA');
+    fechaHoy();
 
 const formatearFechaFiltro = (fecha: string) => {
     const [anio, mes, dia] = fecha.split('-');

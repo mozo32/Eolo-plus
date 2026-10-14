@@ -1,6 +1,7 @@
 import { useConnectionStatus, useEchoPublic } from '@laravel/echo-react';
 import { useCallback, useEffect, useRef } from 'react';
-import { fechaHoy, type ModuloConsumidor, type TipoOperacion } from './types';
+import { fechaHoy } from '@/lib/fechaHoy';
+import { type ModuloConsumidor, type TipoOperacion } from './types';
 
 export const CANAL_PROGRAMADAS = 'operaciones-programadas';
 /** Canal público de la televisión: solo lleva cambios de operaciones, nunca restricciones. */

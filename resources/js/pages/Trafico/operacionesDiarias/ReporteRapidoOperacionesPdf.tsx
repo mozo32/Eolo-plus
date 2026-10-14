@@ -9,6 +9,7 @@ import {
 } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
 import { pdfOperacionesDiariasApi } from '@/stores/apiOperacionesDiarias';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 export type FiltrosReporte = {
     buscar?: string;
@@ -41,8 +42,22 @@ export type TotalesResumen = {
     aerotaxi: number;
     handling: number;
     mantenimiento: number;
+    total_operaciones: number;
     total_pax_dia: number;
 };
+
+/**
+ * Las operaciones de una fila son la suma de sus cinco tipos. Se calcula aqui, a partir de las
+ * mismas columnas que el documento enseña, para que no pueda darse el caso de que los numeros de
+ * la fila digan una cosa y su total diga otra. `FilaResumen` NO lleva este campo a proposito: es
+ * un derivado, no un dato que venga del servidor.
+ */
+export const operacionesDeLaFila = (fila: FilaResumen): number =>
+    Number(fila.transito || 0) +
+    Number(fila.guarda || 0) +
+    Number(fila.aerotaxi || 0) +
+    Number(fila.handling || 0) +
+    Number(fila.mantenimiento || 0);
 
 const styles = StyleSheet.create({
     page: {
@@ -172,23 +187,28 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         textTransform: 'uppercase',
     },
+    // Los anchos suman 100 exacto. Al entrar la octava columna se reparte de nuevo: la fecha
+    // cede la mayor parte porque tenia holgura, y el resto cede un punto cada una.
     colFecha: {
-        width: '22%',
+        width: '18%',
     },
     colTransito: {
-        width: '13%',
-    },
-    colGuarda: {
         width: '11%',
     },
+    colGuarda: {
+        width: '10%',
+    },
     colAerotaxi: {
-        width: '14%',
+        width: '12%',
     },
     colHandling: {
-        width: '13%',
+        width: '11%',
     },
     colMantenimiento: {
-        width: '16%',
+        width: '13%',
+    },
+    colTotalOperaciones: {
+        width: '14%',
     },
     colTotal: {
         width: '11%',
@@ -265,6 +285,7 @@ const calcularTotales = (filas: FilaResumen[]): TotalesResumen => {
             acc.aerotaxi += Number(fila.aerotaxi || 0);
             acc.handling += Number(fila.handling || 0);
             acc.mantenimiento += Number(fila.mantenimiento || 0);
+            acc.total_operaciones += operacionesDeLaFila(fila);
             acc.total_pax_dia += Number(fila.total_pax_dia || 0);
             return acc;
         },
@@ -274,6 +295,7 @@ const calcularTotales = (filas: FilaResumen[]): TotalesResumen => {
             aerotaxi: 0,
             handling: 0,
             mantenimiento: 0,
+            total_operaciones: 0,
             total_pax_dia: 0,
         }
     );
@@ -321,6 +343,10 @@ const ReporteRapidoOperacionesDocument = ({
                             <Text style={styles.headerText}>Mantenimiento</Text>
                         </View>
 
+                        <View style={[styles.headerCell, styles.colTotalOperaciones]}>
+                            <Text style={styles.headerText}>Total de{'\n'}Operaciones</Text>
+                        </View>
+
                         <View style={[styles.headerCellLast, styles.colTotal]}>
                             <Text style={styles.headerText}>Total{'\n'}Pax por{'\n'}Dia</Text>
                         </View>
@@ -350,6 +376,10 @@ const ReporteRapidoOperacionesDocument = ({
 
                             <View style={[styles.bodyCell, styles.colMantenimiento]}>
                                 <Text style={styles.bodyText}>{fila.mantenimiento}</Text>
+                            </View>
+
+                            <View style={[styles.bodyCell, styles.colTotalOperaciones]}>
+                                <Text style={styles.bodyText}>{operacionesDeLaFila(fila)}</Text>
                             </View>
 
                             <View style={[styles.bodyCellLast, styles.colTotal]}>
@@ -383,6 +413,10 @@ const ReporteRapidoOperacionesDocument = ({
                             <Text style={styles.totalText}>{totales.mantenimiento}</Text>
                         </View>
 
+                        <View style={[styles.totalCell, styles.colTotalOperaciones]}>
+                            <Text style={styles.totalText}>{totales.total_operaciones}</Text>
+                        </View>
+
                         <View style={[styles.totalCellLast, styles.colTotal]}>
                             <Text style={styles.totalText}>{totales.total_pax_dia}</Text>
                         </View>
@@ -400,7 +434,7 @@ export type ReporteRapidoPreparado = {
 };
 
 const obtenerNombreArchivoReporteRapido = (filtros: FiltrosReporte = {}) => {
-    const fechaInicio = filtros.fechaInicio || new Date().toLocaleDateString('en-CA');
+    const fechaInicio = filtros.fechaInicio || fechaHoy();
     const fechaFin = filtros.fechaFin || fechaInicio;
 
     return `Resumen_Semanal_Operaciones_${fechaInicio}_${fechaFin}.pdf`;
@@ -419,9 +453,16 @@ export const prepararReporteRapidoOperacionesPdf = async (
         throw new Error('No hay registros para generar el reporte rápido.');
     }
 
-    const totales: TotalesResumen = Array.isArray(respuesta)
-        ? calcularTotales(filas)
-        : respuesta?.totales || calcularTotales(filas);
+    const totales: TotalesResumen = {
+        ...(Array.isArray(respuesta)
+            ? calcularTotales(filas)
+            : respuesta?.totales || calcularTotales(filas)),
+        // El total de operaciones se recalcula SIEMPRE aqui, incluso cuando los demas totales
+        // vienen del servidor: ese campo no existe en su respuesta, y sin esto la celda del pie
+        // saldria vacia. Ademas se suma de las mismas filas que el documento enseña, igual que el
+        // total de cada renglon, asi que el pie no puede discrepar de la tabla.
+        total_operaciones: filas.reduce((suma, fila) => suma + operacionesDeLaFila(fila), 0),
+    };
 
     const blob = await pdf(
         <ReporteRapidoOperacionesDocument

@@ -21,6 +21,7 @@ import {
     ArrowDownLeft, Plus, X, Filter, Edit2,
     Calendar, CalendarClock, MapPin, Trash2, ChevronDown, Bell, History
 } from 'lucide-react';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Walkaround' }];
 
@@ -144,8 +145,8 @@ const TablaWalkAround = () => {
 
     const [filtros, setFiltros] = useState({
         q: '',
-        fechaInicio: new Date().toLocaleDateString('en-CA'),
-        fechaFin: new Date().toLocaleDateString('en-CA'),
+        fechaInicio: fechaHoy(),
+        fechaFin: fechaHoy(),
         periodo: 'dia',
         movimiento: '',
         ubicacion: ''
@@ -340,8 +341,8 @@ const TablaWalkAround = () => {
     const limpiarFiltros = () => {
         setFiltros({
             q: '',
-            fechaInicio: new Date().toLocaleDateString('en-CA'),
-            fechaFin: new Date().toLocaleDateString('en-CA'),
+            fechaInicio: fechaHoy(),
+            fechaFin: fechaHoy(),
             periodo: 'dia',
             movimiento: '',
             ubicacion: ''

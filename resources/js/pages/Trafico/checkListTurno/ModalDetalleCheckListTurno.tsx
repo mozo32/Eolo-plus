@@ -299,7 +299,7 @@ export default function ModalDetalleCheckListTurno({
 
                                         <div className="border-r border-t border-black p-2">
                                             <p className="mb-1 text-[8px] uppercase text-slate-600">
-                                                Informe Diario
+                                                Validar Operaciones y Revisión de Walks Completos
                                             </p>
                                             <p className={`text-[11px] font-black ${boolColor(data?.envia_informe_diario)}`}>
                                                 {formatBool(data?.envia_informe_diario)}

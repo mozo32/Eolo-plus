@@ -9,6 +9,7 @@ import { validateStepOne, validateStepTwo, validateStepThree } from '../formVali
 import { guardarWalkAroundApi, fetchWalkaroundDetalle, updateWalkaroundApi, obtenerInfoMatriculaApi } from '@/stores/apiWalkaround';
 import type { PrecargaProgramada } from '@/pages/despacho/operacionesProgramadas/types';
 import { useDeteccionProgramada } from '@/pages/despacho/operacionesProgramadas/useDeteccionProgramada';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 const STEPS = [
     { id: 1, label: 'Información', icon: User },
@@ -16,12 +17,7 @@ const STEPS = [
     { id: 3, label: 'Cierre', icon: ShieldAlert },
 ];
 
-const obtenerFechaHoyMexico = () => new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Mexico_City',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-}).format(new Date());
+const obtenerFechaHoyMexico = () => fechaHoy();
 
 const INITIAL_INFO = {
     matricula: '', movimiento: '', aeronave: '', tipo: '', hora: '', destino: '', procedencia: '',
@@ -133,6 +129,9 @@ const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId, datosProgramados,
     });
     const [inspeccion, setInspeccion] = useState<any>({});
     const [exteriorData, setExteriorData] = useState<ExteriorData>(INITIAL_EXTERIOR);
+    // La fecha con la que el registro esta guardado, solo al editar: el calendario la respeta
+    // aunque quede fuera de la ventana, igual que el servidor.
+    const [fechaOriginal, setFechaOriginal] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLoadingData, setIsLoadingData] = useState(false);
     const [isMapOpen, setIsMapOpen] = useState(false);
@@ -211,6 +210,7 @@ const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId, datosProgramados,
                 try {
                     const detalle: any = await fetchWalkaroundDetalle(id);
                     if (detalle) {
+                        setFechaOriginal(detalle.fecha ? new Date(detalle.fecha).toLocaleDateString('en-CA') : null);
                         setInfoData({
                             matricula: detalle.matricula || '',
                             movimiento: detalle.movimiento ? detalle.movimiento.charAt(0).toUpperCase() + detalle.movimiento.slice(1).toLowerCase() : '',
@@ -373,6 +373,7 @@ const WalkAroundFormV2 = ({ id, onCancel, onSaved, borradorId, datosProgramados,
                                         onChange={(d: any) => setInfoData((p: any) => ({ ...p, ...d }))}
                                         onMatriculaBlur={buscarProgramada}
                                         avisoProgramada={avisoOtroTipo}
+                                        fechaOriginal={id ? fechaOriginal : null}
                                     />
                                 </div>
                             </div>

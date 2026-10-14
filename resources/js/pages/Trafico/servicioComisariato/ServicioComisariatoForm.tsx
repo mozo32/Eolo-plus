@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import { guardarServicioComisariatoApi, actualizarServicioComisariatoApi } from "@/stores/apiServicioComisariato";
 import Swal from "sweetalert2";
 import { Package } from "lucide-react";
+import { useVentanaDeFecha } from "@/lib/ventanasDeFecha";
+import { fechaHoy } from '@/lib/fechaHoy';
 
 type Props = {
     isEdit: boolean;
@@ -72,7 +74,7 @@ const getInitialForm = (data?: any) => ({
     formaPago: data?.forma_pago ?? "",
     fechaEntrega: data?.fecha_entrega
         ? data.fecha_entrega.split("T")[0]
-        : new Date().toISOString().split("T")[0],
+        : fechaHoy(),
     horaEntrega: data?.hora_entrega ? String(data.hora_entrega).slice(0, 5) : "",
     matricula: data?.matricula ?? "",
     detalle: data?.detalle ?? "",
@@ -83,6 +85,7 @@ const getInitialForm = (data?: any) => ({
 });
 
 export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Props) {
+    const { min, max } = useVentanaDeFecha("comisariato.entrega", isEdit ? data?.fecha_entrega : undefined);
     const [form, setForm] = useState(() => getInitialForm(data));
 
     useEffect(() => {
@@ -219,6 +222,8 @@ export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Pro
                             <label className={labelStyle}>Fecha de entrega</label>
                             <input
                                 type="date"
+                                min={min}
+                                max={max}
                                 className={inputStyle}
                                 value={form.fechaEntrega}
                                 onChange={(e) => updateField("fechaEntrega", e.target.value)}

@@ -16,6 +16,10 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
 use App\Models\Bitacora;
+use App\Rules\DentroDeLaVentana;
+use App\Support\RelacionOperacionCSAE;
+use App\Support\VentanasDeFecha;
+use Illuminate\Support\Collection;
 
 class OperacionesDiariasController extends Controller
 {
@@ -24,7 +28,13 @@ class OperacionesDiariasController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'fecha' => ['required', 'date'],
+            'fecha' => [
+                'required',
+                'date',
+                $request->input('movimiento') === 'Salida'
+                    ? new DentroDeLaVentana('operaciones.salida')
+                    : new DentroDeLaVentana('operaciones.llegada'),
+            ],
             'movimiento' => ['required', 'in:Llegada,Salida'],
             'matricula' => ['required', 'string', 'max:20'],
             'equipo' => ['required', 'string', 'max:50'],
@@ -325,16 +335,12 @@ class OperacionesDiariasController extends Controller
             ->orderBy('hora', 'asc')
             ->get();
 
-        $crearFechaHoraOperacion = static function (
-            $operacion
-        ): Carbon {
-            return Carbon::parse($operacion->fecha)
-                ->setTimeFromTimeString(
-                    (string) (
-                        $operacion->hora ?: '00:00:00'
-                    )
-                );
-        };
+        $columnasMovimiento = [
+            'id',
+            'matricula',
+            'fecha_hora_entrada',
+            'fecha_hora_salida',
+        ];
 
         $matriculas = $registros
             ->pluck('matricula')
@@ -342,281 +348,127 @@ class OperacionesDiariasController extends Controller
             ->unique()
             ->values();
 
-        $movimientosCSAE = MovimientoCSAE::query()
+        $movimientosDeLasMatriculas = MovimientoCSAE::query()
             ->whereIn('matricula', $matriculas)
             ->where('status', 'A')
             ->whereNotNull('fecha_hora_entrada')
-            ->orderBy('fecha_hora_entrada', 'asc')
-            ->get([
-                'id',
+            ->get($columnasMovimiento);
+
+        $movimientosEnAlcance = $this->movimientosCsaeEnAlcanceDelExcel(
+            $request,
+            $columnasMovimiento
+        );
+
+        $movimientosCSAE = $movimientosDeLasMatriculas
+            ->concat($movimientosEnAlcance)
+            ->unique('id')
+            ->values();
+
+        $historial = OperacionDiaria::query()
+            ->whereIn(
                 'matricula',
-                'fecha_hora_entrada',
-                'fecha_hora_salida',
-            ]);
+                $registros
+                    ->pluck('matricula')
+                    ->merge($movimientosCSAE->pluck('matricula'))
+                    ->filter()
+                    ->unique()
+                    ->values()
+            )
+            ->get(['id', 'tipo', 'matricula', 'fecha', 'hora']);
 
-        $operacionesPorMatricula = $registros->groupBy(
-            function ($operacion) {
-                return mb_strtoupper(
-                    trim((string) $operacion->matricula)
-                );
-            }
+        $relacion = RelacionOperacionCSAE::relacionar(
+            $registros,
+            $movimientosCSAE,
+            $historial
         );
 
-        $movimientosPorMatricula =
-            $movimientosCSAE->groupBy(
-                function ($movimiento) {
-                    return mb_strtoupper(
-                        trim(
-                            (string) $movimiento->matricula
-                        )
-                    );
-                }
-            );
+        $idsEnAlcance = $movimientosEnAlcance->pluck('id')->all();
 
-        $registros = $registros->map( function ($operacion) use (
-            $operacionesPorMatricula,
-            $movimientosPorMatricula,
-            $crearFechaHoraOperacion
-        ) {
-            $operacion->mantenimiento_csae = false;
-            $operacion->fecha_hora_csae = null;
-            $operacion->fecha_hora_salida_csae = null;
-            $operacion->movimientos_csae = [];
-            $operacion->cantidad_visitas_csae = 0;
-            $operacion->minutos_estancia_csae_total = 0;
-            $operacion->salidas_csae_pendientes = 0;
+        return response()->json([
+            'data' => $relacion['operaciones'],
+            'huerfanos_csae' => $relacion['huerfanos']
+                ->whereIn('id', $idsEnAlcance)
+                ->values(),
+        ]);
+    }
 
-            $tipoOperacion = mb_strtoupper(
-                trim((string) $operacion->tipo)
-            );
+    /**
+     * Las corridas de CSAE que el Excel puede mostrar como huérfanas: las que caen en lo que el
+     * usuario pidió ver.
+     *
+     * Un huérfano no es una operación diaria, así que solo le aplican los filtros que lo describen:
+     * la búsqueda por matrícula y el rango de fechas (la corrida cuenta si su intervalo cruza el
+     * rango). Si la petición filtra por algo que solo tiene una operación (tipo, lugar, tipo de
+     * operación, pax, equipaje, cliente), ningún huérfano puede cumplirlo y no se pide ninguno.
+     *
+     * @param  array<int, string>  $columnas
+     * @return Collection<int, MovimientoCSAE>
+     */
+    private function movimientosCsaeEnAlcanceDelExcel(Request $request, array $columnas): Collection
+    {
+        $filtrosSoloDeOperacion = [
+            'tipo',
+            'lugar',
+            'tipo_operacion',
+            'pax',
+            'eqp',
+            'cliente',
+        ];
 
-            if (
-                !in_array(
-                    $tipoOperacion,
-                    ['LLEGADA', 'ENTRADA'],
-                    true
-                )
-            ) {
-                return $operacion;
-            }
-
-            $matricula = mb_strtoupper(
-                trim((string) $operacion->matricula)
-            );
-
-            $fechaLlegada =
-                $crearFechaHoraOperacion($operacion);
-
-            $operacionesMismaMatricula =
-                $operacionesPorMatricula->get(
-                    $matricula,
-                    collect()
-                );
-
-            $salidaOperacion =
-                $operacionesMismaMatricula->first(
-                    function ($posibleSalida) use (
-                        $fechaLlegada,
-                        $crearFechaHoraOperacion
-                    ) {
-                        $tipo = mb_strtoupper(
-                            trim(
-                                (string) $posibleSalida->tipo
-                            )
-                        );
-
-                        if ($tipo !== 'SALIDA') {
-                            return false;
-                        }
-
-                        $fechaSalida =
-                            $crearFechaHoraOperacion(
-                                $posibleSalida
-                            );
-
-                        return $fechaSalida->greaterThan(
-                            $fechaLlegada
-                        );
-                    }
-                );
-
-            $fechaSalidaOperacion =
-                $salidaOperacion
-                    ? $crearFechaHoraOperacion(
-                        $salidaOperacion
-                    )
-                    : null;
-
-            $movimientosMismaMatricula =
-                $movimientosPorMatricula->get(
-                    $matricula,
-                    collect()
-                );
-
-            $movimientosEncontrados =
-                $movimientosMismaMatricula
-                    ->filter(
-                        function ($movimiento) use (
-                            $fechaLlegada,
-                            $fechaSalidaOperacion
-                        ) {
-                            $entradaCSAE =
-                                $movimiento
-                                    ->fecha_hora_entrada
-                                    ->copy();
-
-                            if (
-                                $entradaCSAE->lessThan(
-                                    $fechaLlegada
-                                )
-                            ) {
-                                return false;
-                            }
-
-                            if (
-                                $fechaSalidaOperacion &&
-                                $entradaCSAE->greaterThan(
-                                    $fechaSalidaOperacion
-                                )
-                            ) {
-                                return false;
-                            }
-
-                            if (
-                                $fechaSalidaOperacion &&
-                                $movimiento
-                                    ->fecha_hora_salida
-                            ) {
-                                $salidaCSAE =
-                                    $movimiento
-                                        ->fecha_hora_salida
-                                        ->copy();
-
-                                if (
-                                    $salidaCSAE->greaterThan(
-                                        $fechaSalidaOperacion
-                                    )
-                                ) {
-                                    return false;
-                                }
-                            }
-
-                            return true;
-                        }
-                    )
-                    ->values();
-
-            if ($movimientosEncontrados->isEmpty()) {
-                return $operacion;
-            }
-
-            $visitasCSAE = $movimientosEncontrados
-                ->map(function ($movimiento) {
-                    $entrada =
-                        $movimiento
-                            ->fecha_hora_entrada
-                            ->copy();
-
-                    $salida =
-                        $movimiento->fecha_hora_salida
-                            ? $movimiento
-                                ->fecha_hora_salida
-                                ->copy()
-                            : null;
-
-                    $minutosEstancia = null;
-
-                    if (
-                        $salida &&
-                        $salida->greaterThanOrEqualTo(
-                            $entrada
-                        )
-                    ) {
-                        $minutosEstancia = (int) floor(
-                            $entrada->diffInSeconds(
-                                $salida
-                            ) / 60
-                        );
-                    }
-
-                    return [
-                        'id' => $movimiento->id,
-
-                        'fecha_hora_entrada' =>
-                            $entrada->format(
-                                'd/m/Y H:i:s'
-                            ),
-
-                        'fecha_hora_salida' =>
-                            $salida
-                                ? $salida->format(
-                                    'd/m/Y H:i:s'
-                                )
-                                : null,
-
-                        'minutos_estancia' =>
-                            $minutosEstancia,
-
-                        'pendiente' =>
-                            $salida === null,
-                    ];
-                })
-                ->values();
-
-            $primerMovimiento =
-                $visitasCSAE->first();
-
-            $totalMinutos = $visitasCSAE->sum(
-                function ($visita) {
-                    return $visita['minutos_estancia']
-                        ?? 0;
-                }
-            );
-
-            $salidasPendientes =
-                $visitasCSAE->filter(
-                    function ($visita) {
-                        return $visita['pendiente'];
-                    }
-                )->count();
-
-            $operacion->mantenimiento_csae = true;
-
-            $operacion->fecha_hora_csae =
-                $primerMovimiento[
-                    'fecha_hora_entrada'
-                ];
-
-            $operacion->fecha_hora_salida_csae =
-                $primerMovimiento[
-                    'fecha_hora_salida'
-                ];
-
-            $operacion->movimientos_csae =
-                $visitasCSAE->all();
-
-            $operacion->cantidad_visitas_csae =
-                $visitasCSAE->count();
-
-            $operacion->minutos_estancia_csae_total =
-                $totalMinutos;
-
-            $operacion->salidas_csae_pendientes =
-                $salidasPendientes;
-
-            return $operacion;
+        if ($request->anyFilled($filtrosSoloDeOperacion)) {
+            return collect();
         }
-    );
 
-        return response()->json(
-            $registros->values()
-        );
+        $query = MovimientoCSAE::query()
+            ->where('status', 'A')
+            ->whereNotNull('fecha_hora_entrada');
+
+        if ($request->filled('buscar')) {
+            $query->where(
+                'matricula',
+                'LIKE',
+                '%'.$request->buscar.'%'
+            );
+        }
+
+        if ($request->filled('fechaInicio')) {
+            try {
+                $inicio = Carbon::parse($request->fechaInicio)->startOfDay();
+                $fin = Carbon::parse(
+                    $request->filled('fechaFin')
+                        ? $request->fechaFin
+                        : $request->fechaInicio
+                )->endOfDay();
+            } catch (\Throwable) {
+                return collect();
+            }
+
+            $query->where(
+                'fecha_hora_entrada',
+                '<=',
+                $fin->format('Y-m-d H:i:s')
+            )->where(function ($q) use ($inicio) {
+                $q->where(
+                    'fecha_hora_salida',
+                    '>=',
+                    $inicio->format('Y-m-d H:i:s')
+                );
+
+                if (Carbon::now()->greaterThanOrEqualTo($inicio)) {
+                    $q->orWhereNull('fecha_hora_salida');
+                }
+            });
+        }
+
+        return $query->get($columnas);
     }
 
     public function update(Request $request, $id)
     {
         return DB::transaction(function () use ($request, $id) {
             $operacion = OperacionDiaria::findOrFail($id);
+
+            $this->validarFechaSiCambia($request, $operacion);
 
             $validacionesAnteriores = is_array(
                 $operacion->validaciones
@@ -738,6 +590,33 @@ class OperacionesDiariasController extends Controller
             ]);
         });
     }
+
+    /**
+     * Aplica la ventana de fecha al editar, pero solo si la fecha CAMBIA.
+     *
+     * Corregir los pasajeros de una operación de hace una semana reenvía su fecha
+     * intacta; exigirle la ventana a esa fecha bloquearía cualquier corrección de
+     * registros viejos. Lo que la ventana impide es poner una fecha fuera de ella.
+     */
+    private function validarFechaSiCambia(Request $request, OperacionDiaria $operacion): void
+    {
+        $recibidaComoDia = VentanasDeFecha::diaQueGuardaElModelo($request->input('fecha'));
+
+        if ($recibidaComoDia !== null && $recibidaComoDia === $operacion->fecha?->toDateString()) {
+            return;
+        }
+
+        $request->validate([
+            'fecha' => [
+                'required',
+                'date',
+                $operacion->tipo === 'salida'
+                    ? new DentroDeLaVentana('operaciones.salida')
+                    : new DentroDeLaVentana('operaciones.llegada'),
+            ],
+        ]);
+    }
+
     /**
      * Cancela una operación diaria: solo cambia status a false.
      *

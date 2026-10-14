@@ -15,6 +15,7 @@ import avionImg from "@/assets/avion (2).png";
 import helipImg from "@/assets/helicoptero.png";
 
 import { fetchWalkaroundDetalle, WalkAroundDetalle } from "@/stores/apiWalkaround";
+import { normalizarChecklistGuardado } from "@/lib/checklistWalkAround";
 function normalizeArray(v: unknown): string[] {
     if (Array.isArray(v)) return v.map(String);
     if (typeof v === "string" && v) return [v];
@@ -493,9 +494,10 @@ function WalkAroundPdfDoc({
     fotos3D: string[];
 }) {
     const isAvion = detalle.tipo === "avion";
-    const checklist = isAvion
-        ? detalle.checklists?.checklist_avion ?? {}
-        : detalle.checklists?.checklist_helicoptero ?? {};
+    // Normalizado en un solo sitio: la clave guardada es `damages` y aqui se consume `danios`.
+    const checklist = normalizarChecklistGuardado(
+        isAvion ? detalle.checklists?.checklist_avion : detalle.checklists?.checklist_helicoptero
+    );
 
     const imageSrc = isAvion ? avionImg : helipImg;
     const watermarkUrl = `${window.location.origin}/1c463caa-e3a1-4093-a00b-1c0da40795f6.jpg`;
@@ -642,13 +644,13 @@ function WalkAroundPdfDoc({
                                             <Text style={[styles.td, styles.tdParte, { width: "46%" }]}>{k}</Text>
                                             <Text style={[styles.td, { width: "6%" }]}>{v.der ? "X" : ""}</Text>
                                             <Text style={[styles.td, { width: "6%" }]}>{v.izq ? "X" : ""}</Text>
-                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.damages, "sin_danio")}</Text>
-                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.damages, "golpe")}</Text>
-                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.damages, "rayon")}</Text>
-                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.damages, "fisurado")}</Text>
-                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.damages, "quebrado")}</Text>
-                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.damages, "pintura_cuarteada")}</Text>
-                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.damages, "otro")}</Text>
+                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.danios, "sin_danio")}</Text>
+                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.danios, "golpe")}</Text>
+                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.danios, "rayon")}</Text>
+                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.danios, "fisurado")}</Text>
+                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.danios, "quebrado")}</Text>
+                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.danios, "pintura_cuarteada")}</Text>
+                                            <Text style={[styles.td, { width: "6%" }]}>{markX(v.danios, "otro")}</Text>
                                         </View>
                                     );
                                 })}

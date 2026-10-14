@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\RelacionPlanta;
 
+use App\Rules\DentroDeLaVentana;
 use Illuminate\Foundation\Http\FormRequest;
 
 class PrestarRelacionPlantaRequest extends FormRequest
@@ -23,7 +24,7 @@ class PrestarRelacionPlantaRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'fecha' => ['required', 'date_format:Y-m-d'],
+            'fecha' => ['required', 'date_format:Y-m-d', new DentroDeLaVentana('planta.prestamo')],
             'empresa' => ['required', 'string', 'max:120'],
             'matricula' => ['required', 'string', 'max:20'],
             'horometro_inicio' => ['required', 'numeric', 'min:0', 'max:99999999.99'],

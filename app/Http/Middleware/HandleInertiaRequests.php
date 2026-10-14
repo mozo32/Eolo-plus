@@ -2,8 +2,10 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\VentanasDeFecha;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Inertia\Middleware;
 use Illuminate\Support\Str;
 
@@ -37,6 +39,13 @@ class HandleInertiaRequests extends Middleware
                     ? $this->mapUser($user)
                     : null,
             ],
+
+            'ventanasDeFecha' => VentanasDeFecha::todas(),
+
+            // El día que el SERVIDOR considera hoy (zona de `config('app.timezone')`, México). Es el
+            // mismo reloj con el que `DentroDeLaVentana` valida: así el formulario no ofrece un día
+            // que el servidor rechaza. Lo lee `resources/js/lib/fechaHoy.ts`.
+            'hoy' => Carbon::today()->toDateString(),
 
             'sidebarOpen' =>
                 ! $request->hasCookie('sidebar_state')

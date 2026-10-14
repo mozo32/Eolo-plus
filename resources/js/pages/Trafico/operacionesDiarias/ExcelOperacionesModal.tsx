@@ -21,6 +21,7 @@ import {
 import type {
     FilaReporteOperaciones,
     GrupoColumnaReporteOperaciones,
+    MovimientoCsaeHuerfano,
     Operacion,
 } from './excelService';
 import type { FiltrosReporte } from './ReporteRapidoOperacionesPdf';
@@ -69,6 +70,22 @@ const extraerRegistros = (respuesta: unknown): RegistroExcel[] => {
         .filter((registro): registro is RegistroExcel => registro !== null);
 };
 
+const extraerHuerfanosCsae = (respuesta: unknown): MovimientoCsaeHuerfano[] => {
+    if (
+        typeof respuesta !== 'object' ||
+        respuesta === null ||
+        !('huerfanos_csae' in respuesta)
+    ) {
+        return [];
+    }
+
+    const contenido = (respuesta as { huerfanos_csae?: unknown }).huerfanos_csae;
+
+    return Array.isArray(contenido)
+        ? (contenido as MovimientoCsaeHuerfano[])
+        : [];
+};
+
 const obtenerEstiloGrupo = (grupo: GrupoColumnaReporteOperaciones) => {
     return ESTILOS_REPORTE_OPERACIONES[grupo];
 };
@@ -95,6 +112,9 @@ const ExcelOperacionesModal = ({
     const [descargando, setDescargando] = useState(false);
     const [error, setError] = useState('');
     const [datos, setDatos] = useState<RegistroExcel[]>([]);
+    const [huerfanosCsae, setHuerfanosCsae] = useState<
+        MovimientoCsaeHuerfano[]
+    >([]);
     const [filasVistaPrevia, setFilasVistaPrevia] = useState<
         FilaReporteOperaciones[]
     >([]);
@@ -104,12 +124,14 @@ const ExcelOperacionesModal = ({
         setCargando(true);
         setError('');
         setDatos([]);
+        setHuerfanosCsae([]);
         setFilasVistaPrevia([]);
         setFechaReporte(null);
 
         try {
             const respuesta = await excelOperacionesDiariasApi({ ...filtros });
             const registros = extraerRegistros(respuesta);
+            const huerfanos = extraerHuerfanosCsae(respuesta);
             const filasReporte = prepararFilasReporteOperaciones(registros);
 
             if (registros.length === 0 || filasReporte.length === 0) {
@@ -122,6 +144,7 @@ const ExcelOperacionesModal = ({
             const nuevaFechaReporte = new Date();
 
             setDatos(registros);
+            setHuerfanosCsae(huerfanos);
             setFilasVistaPrevia(filasReporte);
             setFechaReporte(nuevaFechaReporte);
         } catch (error: any) {
@@ -137,6 +160,7 @@ const ExcelOperacionesModal = ({
     useEffect(() => {
         if (!open) {
             setDatos([]);
+            setHuerfanosCsae([]);
             setFilasVistaPrevia([]);
             setFechaReporte(null);
             setError('');
@@ -172,7 +196,12 @@ const ExcelOperacionesModal = ({
         setDescargando(true);
 
         try {
-            await exportarOperacionesAExcel(datos, filtros, fechaReporte);
+            await exportarOperacionesAExcel(
+                datos,
+                filtros,
+                fechaReporte,
+                huerfanosCsae
+            );
 
             await Swal.fire({
                 icon: 'success',
@@ -288,6 +317,8 @@ const ExcelOperacionesModal = ({
                                 </p>
                                 <p className="text-[11px] font-semibold text-slate-400">
                                     La vista previa y la descarga utilizan exactamente las mismas filas.
+                                    {huerfanosCsae.length > 0 &&
+                                        ` El libro lleva además una hoja con ${huerfanosCsae.length.toLocaleString()} movimientos de CSAE sin operación diaria.`}
                                 </p>
                             </div>
 

@@ -91,7 +91,7 @@ test('prestar guarda solo el horómetro inicial, normaliza y registra bitácora'
     $this->actingAs(usuarioPlanta());
 
     $this->postJson('/api/RelacionPlanta/prestar', [
-        'fecha' => '2026-09-14',
+        'fecha' => now()->toDateString(),
         'empresa' => '  Aerolínea Demo  ',
         'matricula' => 'xa-gpu',
         'horometro_inicio' => '125.30',
@@ -119,7 +119,7 @@ test('el admin puede prestar aunque no tenga el subdepartamento', function () {
     $this->actingAs(usuarioAdmin());
 
     $this->postJson('/api/RelacionPlanta/prestar', [
-        'fecha' => '2026-09-14', 'empresa' => 'DEMO', 'matricula' => 'XA-ADM', 'horometro_inicio' => 1,
+        'fecha' => now()->toDateString(), 'empresa' => 'DEMO', 'matricula' => 'XA-ADM', 'horometro_inicio' => 1,
     ])->assertCreated();
 });
 
@@ -129,7 +129,7 @@ test('no se puede prestar mientras exista un préstamo abierto', function () {
     $this->actingAs(usuarioPlanta());
 
     $this->postJson('/api/RelacionPlanta/prestar', [
-        'fecha' => '2026-09-14', 'empresa' => 'OTRA', 'matricula' => 'XA-NUE', 'horometro_inicio' => 200,
+        'fecha' => now()->toDateString(), 'empresa' => 'OTRA', 'matricula' => 'XA-NUE', 'horometro_inicio' => 200,
     ])
         ->assertStatus(409)
         ->assertJsonPath('codigo', 'gpu_en_uso')

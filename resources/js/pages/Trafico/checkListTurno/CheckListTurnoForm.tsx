@@ -8,6 +8,8 @@ import FirmaCanvas from "@/pages/FirmaCanvas";
 import { guardarCheckListTurnoApi, actualizarCheckListTurnoApi, buscarUsuariosApi, validarCheckListTurnoApi, operaciones } from "@/stores/apiCheckListTurno";
 import Swal from "sweetalert2";
 import { Package, CheckCircle2 } from "lucide-react";
+import { useVentanaDeFecha } from "@/lib/ventanasDeFecha";
+import { fechaHoy } from '@/lib/fechaHoy';
 
 function FirmaBox({ label, value, onClick }: { label: string; value?: string; onClick: () => void }) {
     return (
@@ -20,7 +22,7 @@ function FirmaBox({ label, value, onClick }: { label: string; value?: string; on
 
 const getInitialForm = (data?: any) => ({
     nombreEmpleado: data?.nombre_empleado ?? "",
-    fecha: data?.fecha ? new Date(data.fecha).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+    fecha: data?.fecha ? new Date(data.fecha).toISOString().split("T")[0] : fechaHoy(),
     recibeTurnoCon: data?.recibe_turno_con ?? {},
     observaciones_recibe: data?.observaciones_recibe ?? "",
     revisionSalas: data?.revision_salas ?? {},
@@ -45,6 +47,7 @@ const getInitialForm = (data?: any) => ({
 });
 
 export default function CheckListTurnoForm({ isEdit, isValidationMode = false, data, onSuccess }: { isEdit: boolean; isValidationMode?: boolean; data?: any; open: boolean; onSuccess?: () => void }) {
+    const { min, max } = useVentanaDeFecha("turno.checklist", isEdit || isValidationMode ? data?.fecha : undefined);
     const [step, setStep] = useState(1);
     const totalSteps = 5;
     const [buscando, setBuscando] = useState(false);
@@ -194,7 +197,7 @@ export default function CheckListTurnoForm({ isEdit, isValidationMode = false, d
                                 </div>
                                 <div>
                                     <label className="mb-1 block text-xs font-extrabold uppercase tracking-widest text-slate-600">Fecha de Turno</label>
-                                    <input type="date" className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold focus:border-[#00677F] focus:outline-none" value={form.fecha} onChange={(e) => updateField("fecha", e.target.value)} />
+                                    <input type="date" min={min} max={max} className="w-full rounded-md border-2 border-slate-400 bg-white px-4 py-3 text-sm font-bold focus:border-[#00677F] focus:outline-none" value={form.fecha} onChange={(e) => updateField("fecha", e.target.value)} />
                                 </div>
                             </div>
                             <ResibeTurnoCon form={form} updateField={updateField} />

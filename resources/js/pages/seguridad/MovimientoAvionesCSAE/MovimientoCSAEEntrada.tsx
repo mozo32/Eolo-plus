@@ -4,6 +4,7 @@ import {
     type ChangeEvent,
 } from 'react';
 import { useMatriculaAutocompleteStore } from '@/stores/useMatriculaAutocompleteStore';
+import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
 import DateTimeModalSliderInput from '@/pages/DateTimeInput';
 import InputMatricula from '@/pages/InputMatricula';
 import FirmaCanvas from '@/pages/FirmaCanvas';
@@ -29,6 +30,9 @@ interface Props {
     ) => void;
 
     updateField: (key: string, value: any) => void;
+
+    /** Día con el que el movimiento ya estaba guardado, si se edita. */
+    fechaOriginal?: string;
 }
 
 function FirmaBox({
@@ -84,9 +88,15 @@ export default function MovimientoCSAEEntrada({
     data,
     onChange,
     updateField,
+    fechaOriginal,
 }: Props) {
     const { tipoAeronave } =
         useMatriculaAutocompleteStore();
+
+    const { min, max } = useVentanaDeFecha(
+        'csae.entrada',
+        fechaOriginal,
+    );
 
     const [openFirma, setOpenFirma] = useState<
         null | 'firma_entrada'
@@ -172,6 +182,8 @@ export default function MovimientoCSAEEntrada({
                                         <input
                                             type="date"
                                             name="fecha_entrada"
+                                            min={min}
+                                            max={max}
                                             value={data.fecha_entrada}
                                             onChange={onChange}
                                             required

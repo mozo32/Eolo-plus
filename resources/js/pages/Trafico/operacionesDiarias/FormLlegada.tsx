@@ -10,6 +10,8 @@ import { useMatriculaAutocompleteStore } from "./useMatriculaAutocompleteStore";
 import type { PrecargaProgramada } from "@/pages/despacho/operacionesProgramadas/types";
 import { useDeteccionProgramada } from "@/pages/despacho/operacionesProgramadas/useDeteccionProgramada";
 import { CalendarClock } from "lucide-react";
+import { useVentanaDeFecha } from "@/lib/ventanasDeFecha";
+import { fechaHoy } from "@/lib/fechaHoy";
 
 export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, datosEdicion, soloLectura = false, borradorId, datosProgramados, onVincularProgramada, onDesvincularProgramada }: {
     alCerrar?: () => void,
@@ -31,10 +33,11 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
     onDesvincularProgramada?: () => void;
 }) => {
     const { obtenerTipo } = useMatriculaAutocompleteStore();
+    const { min, max } = useVentanaDeFecha('operaciones.llegada', datosEdicion?.fecha);
     const [cargando, setCargando] = useState(false);
     const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
     const tienePermisoSeguridadFBO = moduloNombre === 'Seguridad' || nombreRol === 'FBO';
-    const obtenerFechaHoy = () => new Date().toLocaleDateString('sv-SE');
+    const obtenerFechaHoy = () => fechaHoy();
     const getInitialState = (fecha?: string) => ({
         id: datosEdicion?.id || null,
         matricula: datosEdicion?.matricula || datosProgramados?.matricula || '',
@@ -234,7 +237,7 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
                         movimiento: 'Llegada',
                         fecha: op?.fecha
                             ? new Date(op.fecha).toISOString().split('T')[0]
-                            : new Date().toLocaleDateString('sv-SE'),
+                            : fechaHoy(),
                         observaciones: op.observaciones || '',
                         nombre: op.nombre || '',
                         impulso: op.impulso || '',
@@ -339,6 +342,8 @@ export const FormLlegada = ({ alCerrar, alGuardar, nombreRol, moduloNombre, dato
                             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none mb-1">Fecha de Operación</label>
                             <input
                                 type="date"
+                                min={min}
+                                max={max}
                                 value={formData.fecha}
                                 onChange={(e) => cambiarFecha(e.target.value)}
                                 className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer block"

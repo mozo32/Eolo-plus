@@ -7,6 +7,7 @@ import {
     deleteWalkaround,
 } from "@/stores/apiWalkaround";
 import MapaDanios3D from "../MapaDanios3D";
+import { normalizarChecklistGuardado } from "@/lib/checklistWalkAround";
 
 type Role = {
     slug: string;
@@ -56,7 +57,7 @@ function DaniosBadges({ v }: { v: unknown }) {
         danios = v;
     } else if (typeof v === "object" && v !== null) {
         const obj = v as any;
-        danios = Array.isArray(obj.danios) ? obj.danios : [];
+        danios = obj.danios ?? [];
         izq = !!obj.izq;
         der = !!obj.der;
     }
@@ -112,10 +113,10 @@ function clasificarChecklist(data: Record<string, unknown>) {
         }
 
         if (typeof v === "object" && v !== null) {
-            const d = (v as any).danios;
-            if (Array.isArray(d) && d.includes("sin_danio")) {
+            const d: string[] = (v as { danios?: string[] }).danios ?? [];
+            if (d.includes("sin_danio")) {
                 ok.push([k, v]);
-            } else if (Array.isArray(d) && d.length) {
+            } else if (d.length) {
                 conDanio.push([k, v]);
             } else {
                 pendiente.push([k, v]);
@@ -181,9 +182,12 @@ export default function WalkAroundDetalleModal({
     const checklistActual = useMemo(() => {
         const cl = detalle?.checklists;
         if (!cl) return null;
-        if (cl.checklist_avion) return cl.checklist_avion;
-        if (cl.checklist_helicoptero) return cl.checklist_helicoptero;
-        return null;
+        // Se normaliza aqui, en la entrada: el resto del fichero consume la forma con `danios`.
+        // Las columnas van DENTRO de la llamada a proposito: una prueba exige que la forma
+        // guardada no se lea suelta, y asi se ve de un vistazo que entra por la puerta buena.
+        const normalizado = normalizarChecklistGuardado(cl.checklist_avion ?? cl.checklist_helicoptero);
+
+        return Object.keys(normalizado).length ? normalizado : null;
     }, [detalle]);
 
     const grupos = useMemo(

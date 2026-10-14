@@ -10,6 +10,7 @@ import PdfExporterAutotanque from './Autotanque/PdfExporterAutotanque';
 import ExcelAutotanqueModal from './Autotanque/ExcelAutotanqueModal';
 import { CheckEstadoAutotanque } from './VerificacionEstadoAutotanque/CheckEstadoAutotanque';
 import { DetalleTurnoAutotanque } from './Autotanque/DetalleTurnoAutotanque';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Reporte de Entrega de Turno' }];
 interface Role {
@@ -53,8 +54,8 @@ export default function ReporteEntregaTurno() {
         estado: '',
         inspeccion: '',
         diferencia: '',
-        fechaInicio: new Date().toLocaleDateString('en-CA'),
-        fechaFin: new Date().toLocaleDateString('en-CA'),
+        fechaInicio: fechaHoy(),
+        fechaFin: fechaHoy(),
         periodo: 'dia'
     });
 
@@ -103,8 +104,8 @@ export default function ReporteEntregaTurno() {
     const limpiarFiltros = () => {
         setFiltros({
             id: '', responsable: '', estado: '', inspeccion: '', diferencia: '',
-            fechaInicio: new Date().toLocaleDateString('en-CA'),
-            fechaFin: new Date().toLocaleDateString('en-CA'),
+            fechaInicio: fechaHoy(),
+            fechaFin: fechaHoy(),
             periodo: 'dia'
         });
     };

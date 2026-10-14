@@ -3,18 +3,18 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Firma;
+use App\Models\Imagen;
 use App\Models\inspeccionAutotanque;
+use App\Models\InspeccionCombustibles;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Log;
-use App\Models\Imagen;
-use Illuminate\Support\Facades\Cache;
-use App\Models\InspeccionCombustibles;
 
 class InspeccioAutotanqueController extends Controller
 {
@@ -22,7 +22,7 @@ class InspeccioAutotanqueController extends Controller
     {
         $request->validate([
             'turno_id' => 'required',
-            'fecha' => 'required',
+            'fecha' => ['required', 'date_format:Y-m-d'],
         ]);
 
         try {
@@ -30,38 +30,38 @@ class InspeccioAutotanqueController extends Controller
                 $inspeccion = InspeccionAutotanque::updateOrCreate(
                     ['turno_autotanque_id' => $request->turno_id],
                     [
-                        'fecha_inspeccion'       => Carbon::parse($request->fecha),
-                        'operador'               => $request->operador,
-                        'kilometraje'            => $request->km,
+                        'fecha_inspeccion' => Carbon::parse($request->fecha),
+                        'operador' => $request->operador,
+                        'kilometraje' => $request->km,
                         'porcentaje_combustible' => $request->combustible,
                         'suministro_combustible' => $request->input('suministro_combustible'),
-                        'checklist_respuestas'   => $request->checklist,
-                        'danos_grafico'          => $request->danos,
+                        'checklist_respuestas' => $request->checklist,
+                        'danos_grafico' => $request->danos,
                     ]
                 );
 
-                if (!empty($request->firmas['entrega']['imagen'])) {
+                if (! empty($request->firmas['entrega']['imagen'])) {
                     $this->guardarFirmaBase64($request->firmas['entrega']['imagen'], 'quien_entrega', $inspeccion);
                 }
-                if (!empty($request->firmas['operaciones']['imagen'])) {
+                if (! empty($request->firmas['operaciones']['imagen'])) {
                     $this->guardarFirmaBase64($request->firmas['operaciones']['imagen'], 'fbo', $inspeccion);
                 }
-                if (!empty($request->firmas['receptor']['imagen'])) {
+                if (! empty($request->firmas['receptor']['imagen'])) {
                     $this->guardarFirmaBase64($request->firmas['receptor']['imagen'], 'quien_recibe', $inspeccion);
                 }
 
                 if ($request->has('evidencias') && is_array($request->evidencias)) {
-                    $folder = 'evidencias/autotanques/' . now()->format('Y/m');
+                    $folder = 'evidencias/autotanques/'.now()->format('Y/m');
 
                     foreach ($request->evidencias as $index => $base64Data) {
-                        if (!empty($base64Data)) {
+                        if (! empty($base64Data)) {
                             $imagen = $this->guardarImagenBase64($base64Data, $folder);
 
                             $inspeccion->imagenes()->attach($imagen->id, [
-                                'tag'         => 'EVIDENCIA_GENERAL',
-                                'observacion' => 'Evidencia #' . ($index + 1),
-                                'alerta'      => false,
-                                'status'      => 'A'
+                                'tag' => 'EVIDENCIA_GENERAL',
+                                'observacion' => 'Evidencia #'.($index + 1),
+                                'alerta' => false,
+                                'status' => 'A',
                             ]);
                         }
                     }
@@ -69,70 +69,74 @@ class InspeccioAutotanqueController extends Controller
 
                 return response()->json([
                     'message' => 'Inspección y evidencias guardadas correctamente',
-                    'data' => $inspeccion->load('imagenes')
+                    'data' => $inspeccion->load('imagenes'),
                 ], 200);
             });
 
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Error al procesar la inspección',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
+
     public function showTurno($id)
     {
         try {
-            $inspeccion = InspeccionAutotanque::with(['firmas', 'imagenes' => function($query) {
-                    $query->where('imageables.status', 'A'); // Solo imágenes activas
-                }])
+            $inspeccion = InspeccionAutotanque::with(['firmas', 'imagenes' => function ($query) {
+                $query->where('imageables.status', 'A'); // Solo imágenes activas
+            }])
                 ->where('turno_autotanque_id', $id)
                 ->first();
 
-            if (!$inspeccion) {
+            if (! $inspeccion) {
                 return response()->json([
                     'message' => 'No se encontró una inspección para este turno',
-                    'data' => null
+                    'data' => null,
                 ], 200);
             }
 
             $firmasMapeadas = $inspeccion->firmas->mapWithKeys(function ($firma) {
                 return [
-                    $firma->pivot->tag => \Illuminate\Support\Facades\Storage::url($firma->path)
+                    $firma->pivot->tag => \Illuminate\Support\Facades\Storage::url($firma->path),
                 ];
             });
 
             $fotosMapeadas = $inspeccion->imagenes->map(function ($img) {
                 return [
-                    'id'          => $img->id,
-                    'url'         => \Illuminate\Support\Facades\Storage::url($img->path),
-                    'tag'         => $img->pivot->tag,
+                    'id' => $img->id,
+                    'url' => \Illuminate\Support\Facades\Storage::url($img->path),
+                    'tag' => $img->pivot->tag,
                     'observacion' => $img->pivot->observacion,
                 ];
             });
 
             return response()->json([
-                'checklist'    => $inspeccion->checklist_respuestas,
-                'km'           => $inspeccion->kilometraje,
-                'combustible'  => $inspeccion->porcentaje_combustible,
+                'checklist' => $inspeccion->checklist_respuestas,
+                'km' => $inspeccion->kilometraje,
+                'combustible' => $inspeccion->porcentaje_combustible,
                 'suministro_combustible' => $inspeccion->suministro_combustible,
-                'danos'        => $inspeccion->danos_grafico,
-                'operador'     => $inspeccion->operador,
-                'firmas_db'    => $firmasMapeadas,
-                'evidencias'   => $fotosMapeadas, // <-- Nueva clave con las fotos
+                'danos' => $inspeccion->danos_grafico,
+                'operador' => $inspeccion->operador,
+                'firmas_db' => $firmasMapeadas,
+                'evidencias' => $fotosMapeadas, // <-- Nueva clave con las fotos
             ], 200);
 
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Error al obtener los datos de la inspección',
-                'error'   => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
+
     private function guardarFirmaBase64(string $value, string $rol, inspeccionAutotanque $entrega): void
     {
-        if (trim($value) === '') return;
-        if (!str_contains($value, 'base64,')) {
+        if (trim($value) === '') {
+            return;
+        }
+        if (! str_contains($value, 'base64,')) {
             return;
         }
         $entrega->firmas()
@@ -145,20 +149,20 @@ class InspeccioAutotanqueController extends Controller
 
         $firma = $this->guardarFirmaArchivoBase64(
             $value,
-            'firmas/EntregaTurnoAutotanque/' . now()->format('Y/m')
+            'firmas/EntregaTurnoAutotanque/'.now()->format('Y/m')
         );
 
         $entrega->firmas()->attach($firma->id, [
-            'rol'    => $rol,
-            'tag'    => $this->humanizeRol($rol),
-            'orden'  => 0,
+            'rol' => $rol,
+            'tag' => $this->humanizeRol($rol),
+            'orden' => 0,
             'status' => 'A',
         ]);
     }
 
     private function guardarFirmaArchivoBase64(string $base64, string $folder): Firma
     {
-        if (!str_contains($base64, ',')) {
+        if (! str_contains($base64, ',')) {
             throw new \Exception('Formato base64 inválido');
         }
 
@@ -168,18 +172,18 @@ class InspeccioAutotanqueController extends Controller
         $mime = $matches[1] ?? 'image/png';
         $extension = explode('/', $mime)[1] ?? 'png';
 
-        $fileName = Str::uuid() . '.' . $extension;
-        $path = $folder . '/' . $fileName;
+        $fileName = Str::uuid().'.'.$extension;
+        $path = $folder.'/'.$fileName;
 
         Storage::disk('public')->put($path, base64_decode($content));
 
         return Firma::create([
-            'disk'          => 'public',
-            'path'          => $path,
+            'disk' => 'public',
+            'path' => $path,
             'original_name' => $fileName,
-            'mime'          => $mime,
-            'size'          => Storage::disk('public')->size($path),
-            'sha1'          => sha1_file(Storage::disk('public')->path($path)),
+            'mime' => $mime,
+            'size' => Storage::disk('public')->size($path),
+            'sha1' => sha1_file(Storage::disk('public')->path($path)),
         ]);
     }
 
@@ -187,9 +191,9 @@ class InspeccioAutotanqueController extends Controller
     {
         return match ($rol) {
             'quien_entrega' => 'Firma quien entrega',
-            'fbo'           => 'Firma fbo',
-            'quien_recibe'  => 'Firma quien recibe',
-            default         => ucfirst(str_replace('_', ' ', $rol)),
+            'fbo' => 'Firma fbo',
+            'quien_recibe' => 'Firma quien recibe',
+            default => ucfirst(str_replace('_', ' ', $rol)),
         };
     }
 
@@ -197,7 +201,7 @@ class InspeccioAutotanqueController extends Controller
     {
         $request->validate([
             'image' => 'required|string',
-            'tipo'  => 'required|string'
+            'tipo' => 'required|string',
         ]);
 
         try {
@@ -206,14 +210,14 @@ class InspeccioAutotanqueController extends Controller
             $imageData = base64_decode(preg_replace('#^data:image/\w+;base64,#i', '', $base64Image));
 
             $img = imagecreatefromstring($imageData);
-            if (!$img) {
+            if (! $img) {
                 return response()->json(['alerta' => false, 'mensaje' => 'Error al procesar imagen'], 400);
             }
 
             $width = imagesx($img);
             $height = imagesy($img);
-            $centerX = (int)($width / 2);
-            $centerY = (int)($height / 2);
+            $centerX = (int) ($width / 2);
+            $centerY = (int) ($height / 2);
             $rgb = imagecolorat($img, $centerX, $centerY);
 
             $r = ($rgb >> 16) & 0xFF;
@@ -229,33 +233,34 @@ class InspeccioAutotanqueController extends Controller
             foreach ($coloresAprendidos as $ca) {
                 if (abs($h - $ca) <= 7) {
                     imagedestroy($img);
+
                     return response()->json([
                         'alerta' => true,
-                        'mensaje' => "ALERTA: DETECTADO POR APRENDIZAJE PREVIO",
+                        'mensaje' => 'ALERTA: DETECTADO POR APRENDIZAJE PREVIO',
                         'debug' => [
                             'h' => $h,
                             's' => round($s, 2),
                             'rgb' => "R:$r G:$g B:$b",
-                            'aprendizaje' => true
-                        ]
+                            'aprendizaje' => true,
+                        ],
                     ]);
                 }
             }
 
             $alerta = false;
-            $mensaje = "PRODUCTO CONFORME (CLARA)";
+            $mensaje = 'PRODUCTO CONFORME (CLARA)';
 
             if ($tipo === 'SHELL') {
                 if ($h >= 75 && $h <= 250 && $s > 0.15) {
                     $alerta = true;
-                    $mensaje = ($h > 160) ? "PRODUCTO NO CONFORME (AZUL)" : "PRODUCTO NO CONFORME (VERDE)";
+                    $mensaje = ($h > 160) ? 'PRODUCTO NO CONFORME (AZUL)' : 'PRODUCTO NO CONFORME (VERDE)';
                 } else {
-                    $mensaje = "PRODUCTO CONFORME (AMARILLO)";
+                    $mensaje = 'PRODUCTO CONFORME (AMARILLO)';
                 }
             } else {
                 if ($h >= 280 && $h <= 360 && $s > 0.15 && $v > 0.2) {
                     $alerta = true;
-                    $mensaje = "ALERTA: TONO ROSA DETECTADO (AGUA PRESENTE)";
+                    $mensaje = 'ALERTA: TONO ROSA DETECTADO (AGUA PRESENTE)';
                 }
             }
 
@@ -267,30 +272,35 @@ class InspeccioAutotanqueController extends Controller
                 'debug' => [
                     'h' => $h,
                     's' => round($s, 2),
-                    'rgb' => "R:$r G:$g B:$b"
-                ]
+                    'rgb' => "R:$r G:$g B:$b",
+                ],
             ]);
 
         } catch (\Exception $e) {
-            Log::error("Error en validación de color: " . $e->getMessage());
+            Log::error('Error en validación de color: '.$e->getMessage());
+
             return response()->json(['alerta' => false, 'mensaje' => 'Error interno del servidor'], 500);
         }
     }
 
-
-    private function rgbToHsl($r, $g, $b) {
-        $r /= 255; $g /= 255; $b /= 255;
+    private function rgbToHsl($r, $g, $b)
+    {
+        $r /= 255;
+        $g /= 255;
+        $b /= 255;
         $max = \max($r, $g, $b);
         $min = \min($r, $g, $b);
 
-        $h = 0; $s = 0; $v = $max;
+        $h = 0;
+        $s = 0;
+        $v = $max;
         $delta = $max - $min;
 
         if ($delta != 0) {
             $s = $delta / $max;
             if ($max == $r) {
                 $h = \fmod(($g - $b) / $delta, 6);
-            } else if ($max == $g) {
+            } elseif ($max == $g) {
                 $h = (($b - $r) / $delta) + 2;
             } else {
                 $h = (($r - $g) / $delta) + 4;
@@ -319,7 +329,7 @@ class InspeccioAutotanqueController extends Controller
                     'fecha' => now(),
                 ]);
 
-                $folder = 'inspecciones/combustibles/' . now()->format('Y/m');
+                $folder = 'inspecciones/combustibles/'.now()->format('Y/m');
 
                 if ($request->has('shell')) {
                     foreach ($request->shell as $item) {
@@ -335,42 +345,48 @@ class InspeccioAutotanqueController extends Controller
                 return response()->json([
                     'success' => true,
                     'message' => 'Inspección guardada correctamente',
-                    'id' => $inspeccion->id
+                    'id' => $inspeccion->id,
                 ]);
             });
         } catch (\Throwable $e) {
             // Esto te dirá el archivo, la línea y el mensaje real del error
             return response()->json([
                 'success' => false,
-                'message' => 'Error en el servidor: ' . $e->getMessage(),
+                'message' => 'Error en el servidor: '.$e->getMessage(),
                 'file' => $e->getFile(),
-                'line' => $e->getLine()
+                'line' => $e->getLine(),
             ], 500);
         }
     }
+
     private function procesarEvidencia(array $data, string $modulo, InspeccionCombustibles $inspeccion, string $folder): void
     {
-        if (empty($data['file'])) return;
+        if (empty($data['file'])) {
+            return;
+        }
 
         $imagen = $this->guardarImagenBase64($data['file'], $folder);
 
         $inspeccion->imagenes()->attach($imagen->id, [
-            'tag'         => $modulo,          // 'SHELL' o 'HYDROKIT'
+            'tag' => $modulo,          // 'SHELL' o 'HYDROKIT'
             'observacion' => $data['observacion'],
-            'alerta'      => $data['alertaRosa'],
-            'status'      => 'A'
+            'alerta' => $data['alertaRosa'],
+            'status' => 'A',
         ]);
     }
+
     private function guardarImagenBase64(string $base64, string $folder): Imagen
     {
-        if (!str_contains($base64, ',')) {
+        if (! str_contains($base64, ',')) {
             throw new \Exception('Formato base64 inválido');
         }
 
         [$meta, $content] = explode(',', $base64);
         $binaryData = base64_decode($content);
         $src = imagecreatefromstring($binaryData);
-        if (!$src) throw new \Exception('No se pudo procesar la imagen');
+        if (! $src) {
+            throw new \Exception('No se pudo procesar la imagen');
+        }
 
         $width = imagesx($src);
         $height = imagesy($src);
@@ -386,11 +402,11 @@ class InspeccioAutotanqueController extends Controller
         imagecopyresampled($tmp, $src, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
 
         // 2. Cambiamos extensión a .jpg
-        $fileName = Str::uuid() . '.jpg';
-        $path = $folder . '/' . $fileName;
+        $fileName = Str::uuid().'.jpg';
+        $path = $folder.'/'.$fileName;
         $fullPath = Storage::disk('public')->path($path);
 
-        if (!file_exists(dirname($fullPath))) {
+        if (! file_exists(dirname($fullPath))) {
             mkdir(dirname($fullPath), 0755, true);
         }
 
@@ -402,13 +418,14 @@ class InspeccioAutotanqueController extends Controller
         imagedestroy($tmp);
 
         return Imagen::create([
-            'disk'          => 'public',
-            'path'          => $path,
+            'disk' => 'public',
+            'path' => $path,
             'original_name' => $fileName,
-            'mime'          => 'image/jpeg', // Cambiado de image/webp
-            'size'          => Storage::disk('public')->size($path),
+            'mime' => 'image/jpeg', // Cambiado de image/webp
+            'size' => Storage::disk('public')->size($path),
         ]);
     }
+
     public function indexCombustibles(Request $request)
     {
         $inspecciones = InspeccionCombustibles::with('user:id,name')
@@ -421,12 +438,12 @@ class InspeccioAutotanqueController extends Controller
 
             ->when($request->inspector, function ($query, $inspector) {
                 $query->whereHas('user', function ($q) use ($inspector) {
-                    $q->where('name', 'like', '%' . $inspector . '%');
+                    $q->where('name', 'like', '%'.$inspector.'%');
                 });
             })
 
             ->when($request->start && $request->end, function ($query) use ($request) {
-                $query->whereBetween('fecha', [$request->start . ' 00:00:00', $request->end . ' 23:59:59']);
+                $query->whereBetween('fecha', [$request->start.' 00:00:00', $request->end.' 23:59:59']);
             })
 
             ->orderBy('fecha', 'desc')
@@ -435,14 +452,15 @@ class InspeccioAutotanqueController extends Controller
 
         return response()->json($inspecciones);
     }
+
     public function showCombustibles($id)
     {
         try {
-            $inspeccion = InspeccionCombustibles::with(['imagenes' => function($query) {
+            $inspeccion = InspeccionCombustibles::with(['imagenes' => function ($query) {
                 $query->orderBy('imageables.tag', 'asc');
             }])->find($id);
 
-            if (!$inspeccion) {
+            if (! $inspeccion) {
                 return response()->json(['mensaje' => 'Inspección no encontrada'], 404);
             }
 
@@ -456,24 +474,26 @@ class InspeccioAutotanqueController extends Controller
                         'url' => $img->url,
                         'modulo' => $img->pivot->tag,
                         'observacion' => $img->pivot->observacion,
-                        'alerta' => (bool)$img->pivot->alerta,
+                        'alerta' => (bool) $img->pivot->alerta,
                         'status' => $img->pivot->status,
                     ];
-                })
+                }),
             ];
 
             return response()->json($resultado);
 
         } catch (\Exception $e) {
-            Log::error("Error al obtener inspección: " . $e->getMessage());
+            Log::error('Error al obtener inspección: '.$e->getMessage());
+
             return response()->json(['mensaje' => 'Error al recuperar los datos'], 500);
         }
     }
+
     public function aprenderColorManual(Request $request)
     {
         $request->validate([
             'h' => 'required|numeric',
-            'tipo' => 'required|string'
+            'tipo' => 'required|string',
         ]);
 
         $tipo = $request->tipo;
@@ -482,24 +502,25 @@ class InspeccioAutotanqueController extends Controller
         $key = "colores_manuales_{$tipo}";
         $colores = Cache::get($key, []);
 
-        if (!in_array($nuevoH, $colores)) {
+        if (! in_array($nuevoH, $colores)) {
             $colores[] = $nuevoH;
             Cache::forever($key, $colores);
         }
 
         return response()->json(['success' => true]);
     }
+
     public function eliminar($id)
     {
         try {
             $registro = InspeccionCombustibles::find($id);
-            if (!$registro) {
+            if (! $registro) {
                 return response()->json([
-                    'message' => 'El registro no existe.'
+                    'message' => 'El registro no existe.',
                 ], 404);
             }
             $registro->update([
-                'status' => 'N'
+                'status' => 'N',
             ]);
             $registro->imagenesAll()->get()->each(function ($imagen) {
                 $imagen->update(['status' => 'N']);
@@ -508,14 +529,15 @@ class InspeccioAutotanqueController extends Controller
             $registro->firmasAll()->get()->each(function ($firma) {
                 $firma->update(['status' => 'N']);
             });
+
             return response()->json([
                 'message' => 'Inspección eliminado correctamente (lógicamente)',
-                'data' => $registro
+                'data' => $registro,
             ]);
         } catch (\Throwable $e) {
             return response()->json([
                 'message' => 'Error al intentar eliminar el registro',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -543,6 +565,7 @@ class InspeccioAutotanqueController extends Controller
 
             if (is_string($valor)) {
                 $json = json_decode($valor, true);
+
                 return is_array($json) ? $json : [];
             }
 
@@ -560,23 +583,23 @@ class InspeccioAutotanqueController extends Controller
         };
 
         $inspeccionesCombustibles = InspeccionCombustibles::with([
-                'user:id,name',
-                'imagenes' => function ($q) {
-                    $q->select('imagens.id', 'imagens.path', 'imagens.original_name', 'imagens.mime')
-                        ->withPivot(['tag', 'orden', 'status', 'observacion', 'alerta']);
-                }
-            ])
+            'user:id,name',
+            'imagenes' => function ($q) {
+                $q->select('imagens.id', 'imagens.path', 'imagens.original_name', 'imagens.mime')
+                    ->withPivot(['tag', 'orden', 'status', 'observacion', 'alerta']);
+            },
+        ])
             ->where('status', 'A')
             ->when($id, function ($query, $id) {
                 $query->where('id', $id);
             })
             ->when($inspector, function ($query, $inspector) {
                 $query->whereHas('user', function ($q) use ($inspector) {
-                    $q->where('name', 'like', '%' . $inspector . '%');
+                    $q->where('name', 'like', '%'.$inspector.'%');
                 });
             })
             ->when($start && $end, function ($query) use ($start, $end) {
-                $query->whereBetween('fecha', [$start . ' 00:00:00', $end . ' 23:59:59']);
+                $query->whereBetween('fecha', [$start.' 00:00:00', $end.' 23:59:59']);
             })
             ->orderBy('fecha', 'asc')
             ->get()
@@ -586,14 +609,14 @@ class InspeccioAutotanqueController extends Controller
                     'tipo' => 'COMBUSTIBLE',
                     'fecha' => $item->fecha,
                     'usuario' => $item->user->name ?? null,
-                    'imagenes' => $item->imagenes
+                    'imagenes' => $item->imagenes,
                 ];
             });
 
         $inspeccionesAutotanque = InspeccionAutotanque::with(['imagenes'])
             ->where('status', 'A')
             ->when($start && $end, function ($query) use ($start, $end) {
-                $query->whereBetween('fecha_inspeccion', [$start . ' 00:00:00', $end . ' 23:59:59']);
+                $query->whereBetween('fecha_inspeccion', [$start.' 00:00:00', $end.' 23:59:59']);
             })
             ->orderBy('fecha_inspeccion', 'asc')
             ->get()
@@ -606,7 +629,7 @@ class InspeccioAutotanqueController extends Controller
                 $soloFecha = explode(' ', $fechaInspeccion)[0] ?? null;
                 $soloHora = explode(' ', $createdAt)[1] ?? '00:00:00';
 
-                $fechaConHoraReal = $soloFecha ? $soloFecha . ' ' . $soloHora : $createdAt;
+                $fechaConHoraReal = $soloFecha ? $soloFecha.' '.$soloHora : $createdAt;
 
                 $resultado = [
                     'id' => $item->id,

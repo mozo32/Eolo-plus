@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\EstacionamientoSubterraneo;
+use App\Rules\DentroDeLaVentana;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
@@ -45,6 +46,7 @@ class EstacionamientoSubterraneoController extends Controller
     public function store(Request $request)
     {
         $request->validate([
+            'fecha_ingreso' => ['required', 'date', new DentroDeLaVentana('estacionamiento.ronda')],
             'vehiculos' => 'required|array',
             'vehiculos.*.placas' => 'required|string',
             'oficial' => 'required|string'

@@ -9,6 +9,19 @@ export type MovimientoCsaeOperacion = {
     pendiente?: boolean;
 };
 
+/**
+ * Una corrida de CSAE que no casa con ninguna llegada de operaciones diarias. No es una operacion:
+ * va en su propia hoja para no mezclarse con los totales de la tabla principal.
+ */
+export type MovimientoCsaeHuerfano = {
+    id: number;
+    matricula: string;
+    fecha_hora_entrada: string;
+    fecha_hora_salida?: string | null;
+    minutos_estancia?: number | null;
+    pendiente?: boolean;
+};
+
 export type Operacion = {
     id: number;
     tipo?: string | null;
@@ -81,6 +94,19 @@ export const GRUPOS_REPORTE_OPERACIONES = [
     { titulo: 'SALIDAS', columnas: 6, grupo: 'salida' as const },
     { titulo: '', columnas: 2, grupo: 'base' as const },
     { titulo: 'CSAE', columnas: 4, grupo: 'csae' as const },
+];
+
+export const NOMBRE_HOJA_HUERFANOS_CSAE = 'CSAE sin operación diaria';
+
+export const COLUMNAS_HUERFANOS_CSAE: readonly {
+    titulo: string;
+    ancho: number;
+}[] = [
+    { titulo: 'MATRÍCULA', ancho: 15 },
+    { titulo: 'FECHA-HORA ENTRADA CSAE', ancho: 25 },
+    { titulo: 'FECHA-HORA SALIDA CSAE', ancho: 25 },
+    { titulo: 'ESTANCIA CSAE', ancho: 24 },
+    { titulo: 'ID MOVIMIENTO', ancho: 15 },
 ];
 
 export const ESTILOS_REPORTE_OPERACIONES = {
@@ -556,12 +582,38 @@ export const prepararFilasReporteOperaciones = (
     });
 };
 
+export const prepararFilasHuerfanosCsae = (
+    huerfanos: MovimientoCsaeHuerfano[]
+): Array<Array<string | number>> => {
+    return huerfanos.map((huerfano) => {
+        const pendiente =
+            huerfano.pendiente ?? !huerfano.fecha_hora_salida;
+        const minutos = Number(huerfano.minutos_estancia);
+
+        return [
+            String(huerfano.matricula ?? ''),
+            formatearFechaHoraTextoCsae(huerfano.fecha_hora_entrada),
+            pendiente
+                ? 'Salida pendiente'
+                : formatearFechaHoraTextoCsae(huerfano.fecha_hora_salida),
+            !pendiente &&
+            huerfano.minutos_estancia !== null &&
+            huerfano.minutos_estancia !== undefined &&
+            Number.isFinite(minutos)
+                ? formatearDuracionMinutos(minutos)
+                : '',
+            huerfano.id,
+        ];
+    });
+};
+
 const aArgb = (color: string): string => `FF${color.replace('#', '')}`;
 
 export const exportarOperacionesAExcel = async (
     registros: Operacion[],
     _filtros: any = {},
-    fechaReporte: Date = new Date()
+    fechaReporte: Date = new Date(),
+    huerfanosCsae: MovimientoCsaeHuerfano[] = []
 ) => {
     const workbook = new ExcelJS.Workbook();
 
@@ -874,6 +926,55 @@ export const exportarOperacionesAExcel = async (
     };
 
     worksheet.pageSetup.printArea = `A1:U${Math.max(6, filas.length + 5)}`;
+
+    if (huerfanosCsae.length > 0) {
+        const hojaHuerfanos = workbook.addWorksheet(
+            NOMBRE_HOJA_HUERFANOS_CSAE,
+            { views: [{ state: 'frozen', ySplit: 1 }] }
+        );
+        const filasHuerfanos = prepararFilasHuerfanosCsae(huerfanosCsae);
+
+        COLUMNAS_HUERFANOS_CSAE.forEach((columna, index) => {
+            hojaHuerfanos.getColumn(index + 1).width = columna.ancho;
+        });
+
+        const encabezado = hojaHuerfanos.getRow(1);
+        encabezado.height = 25;
+
+        COLUMNAS_HUERFANOS_CSAE.forEach((columna, index) => {
+            const cell = encabezado.getCell(index + 1);
+            cell.value = columna.titulo;
+            cell.fill = csaeHeaderFill;
+            cell.border = border;
+            cell.alignment = alignment;
+            cell.font = {
+                bold: true,
+                size: 9,
+                color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.csae.texto) },
+            };
+        });
+
+        filasHuerfanos.forEach((valores, indiceFila) => {
+            const row = hojaHuerfanos.getRow(indiceFila + 2);
+
+            valores.forEach((valor, indice) => {
+                const cell = row.getCell(indice + 1);
+                cell.value = valor;
+                cell.fill = csaeBodyFill;
+                cell.border = border;
+                cell.alignment = alignment;
+                cell.font = {
+                    size: 9,
+                    color: { argb: aArgb(ESTILOS_REPORTE_OPERACIONES.texto) },
+                };
+            });
+        });
+
+        hojaHuerfanos.autoFilter = {
+            from: { row: 1, column: 1 },
+            to: { row: 1, column: COLUMNAS_HUERFANOS_CSAE.length },
+        };
+    }
 
     const buffer = await workbook.xlsx.writeBuffer();
 

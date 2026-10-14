@@ -166,6 +166,14 @@ const EntregarTurnoAutotanque = ({
     const [idTurno, setIdTurno] =
         useState<number | null>(null);
 
+    // Las fechas con las que el turno YA esta guardado: el calendario las deja elegibles aunque
+    // ya queden fuera de la ventana, igual que el servidor (solo juzga un dia NUEVO).
+    const [fechasGuardadas, setFechasGuardadas] =
+        useState<{
+            fecha: string | null;
+            fechaCierre: string | null;
+        }>({ fecha: null, fechaCierre: null });
+
     const [
         remisiones,
         setRemisiones,
@@ -284,6 +292,11 @@ const EntregarTurnoAutotanque = ({
                     const t = source.turno;
 
                     setIdTurno(t.id);
+                    setFechasGuardadas({
+                        fecha: t.fecha ?? null,
+                        fechaCierre:
+                            t.fechaCierre ?? null,
+                    });
 
                     setDatos({
                         nombre:
@@ -371,6 +384,12 @@ const EntregarTurnoAutotanque = ({
                         setIdTurno(
                             active.id,
                         );
+                        setFechasGuardadas({
+                            fecha: active.fecha ?? null,
+                            fechaCierre:
+                                active.fechaCierre ??
+                                null,
+                        });
 
                         setDatos(
                             (prev) => ({
@@ -859,6 +878,9 @@ const EntregarTurnoAutotanque = ({
             >
                 <SeccionInicio
                     {...datos}
+                    fechaOriginal={
+                        fechasGuardadas.fecha
+                    }
                     onUpdate={
                         handleUpdate
                     }
@@ -907,6 +929,9 @@ const EntregarTurnoAutotanque = ({
                 <section className="grid grid-cols-1 gap-8 md:grid-cols-2">
                     <SeccionCierre
                         {...datos}
+                        fechaOriginal={
+                            fechasGuardadas.fechaCierre
+                        }
                         onUpdate={
                             handleUpdate
                         }

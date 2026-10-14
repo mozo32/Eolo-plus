@@ -1,6 +1,7 @@
 import { obtenerProgramadasPendientesApi } from '@/stores/apiOperacionesProgramadas';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fechaHoy, type ModuloConsumidor, type OperacionProgramada } from './types';
+import { fechaHoy } from '@/lib/fechaHoy';
+import { type ModuloConsumidor, type OperacionProgramada } from './types';
 import { tocaLaFecha, useCanalProgramadas, type EventoProgramada } from './useCanalProgramadas';
 
 /**

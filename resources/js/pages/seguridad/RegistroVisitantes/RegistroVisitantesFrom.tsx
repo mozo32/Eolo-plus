@@ -13,6 +13,7 @@ import {
 import Swal from "sweetalert2";
 import { guardarRegistroVisitantes } from "@/stores/apiRegistroVisitantes";
 import FirmaCanvas from "@/pages/FirmaCanvas";
+import { fechaHoy } from "@/lib/fechaHoy";
 
 interface Props {
   onSuccess?: () => void;
@@ -40,7 +41,7 @@ export type AuthUser = {
   }[];
 };
 
-const obtenerFechaActual = () => new Date().toLocaleDateString("en-CA");
+const obtenerFechaActual = () => fechaHoy();
 
 function FirmaBox({
   label,

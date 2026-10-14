@@ -16,6 +16,7 @@ import {
 
 import Swal from 'sweetalert2';
 import { LoaderCircle, Save, Send } from 'lucide-react';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 type Props = {
     isEdit: boolean;
@@ -26,23 +27,7 @@ type Props = {
     onSuccess?: () => void | Promise<void>;
 };
 
-const obtenerFechaMexico = (): string => {
-    const partes = new Intl.DateTimeFormat('es-MX', {
-        timeZone: 'America/Mexico_City',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-    }).formatToParts(new Date());
-
-    const obtenerParte = (type: string) =>
-        partes.find((parte) => parte.type === type)?.value ?? '';
-
-    const anio = obtenerParte('year');
-    const mes = obtenerParte('month');
-    const dia = obtenerParte('day');
-
-    return `${anio}-${mes}-${dia}`;
-};
+const obtenerFechaMexico = (): string => fechaHoy();
 
 const separarFechaHora = (
     valor?: string | null,
@@ -324,6 +309,14 @@ export default function MovimientoCSAEForm({
         }
     };
 
+    const fechaOriginalEntrada = separarFechaHora(
+        isEdit ? data?.fecha_hora_entrada : undefined,
+    ).fecha;
+
+    const fechaOriginalSalida = separarFechaHora(
+        isEdit ? data?.fecha_hora_salida : undefined,
+    ).fecha;
+
     const buttonText = modoCompleto
         ? 'Actualizar registro completo'
         : modoSalida
@@ -341,12 +334,15 @@ export default function MovimientoCSAEForm({
                         data={formData}
                         onChange={handleChange}
                         updateField={updateField}
+                        fechaOriginalEntrada={fechaOriginalEntrada}
+                        fechaOriginalSalida={fechaOriginalSalida}
                     />
                 ) : modoSalida ? (
                     <MovimientoCSAESalida
                         data={formData}
                         onChange={handleChange}
                         updateField={updateField}
+                        fechaOriginal={fechaOriginalSalida}
                     />
                 ) : (
                     <MovimientoCSAEEntrada

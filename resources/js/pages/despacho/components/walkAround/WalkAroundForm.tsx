@@ -18,6 +18,7 @@ import MapaDanios3D, { PuntoDanio } from "./MapaDanios3D";
 import SignaturePadModal from "./SignaturePadModal";
 import { ChecklistHelicopteroEstado, ChecklistAvionEstado, TipoDanio } from "@/types/typesChecklist";
 import { usePage } from '@inertiajs/react';
+import { fechaHoy } from "@/lib/fechaHoy";
 
 
 interface SalidaFormData {
@@ -88,7 +89,7 @@ export default function WalkAroundForm({
     walkaroundId,
     initialData,
 }: GestionWalkAroundFormProps) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = fechaHoy();
     const [departamentos, setDepartamentos] = useState<{ id: number; nombre: string }[]>([]);
     const [personal, setPersonal] = useState<{ id: number; nombre: string }[]>([]);
     const [step, setStep] = useState<Step>(1);

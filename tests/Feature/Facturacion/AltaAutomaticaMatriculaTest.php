@@ -11,6 +11,15 @@ use App\Models\WalkAround;
 use App\Services\CatalogoAeronaves;
 
 /*
+ * Estas pruebas fijan el dia 2026-09-28 porque lo que miden no es la fecha, sino el alta de la
+ * matricula y el precio. Al traer `main`, esos endpoints pasaron a exigir que la fecha caiga en
+ * la ventana <<ayer u hoy>>, asi que un dia fijo caducaria al dia siguiente de escribirlo. Se
+ * ancla el reloj al 29 para que el 28 sea siempre ayer: la prueba mide lo suyo y la ventana se
+ * cumple.
+ */
+beforeEach(fn () => test()->travelTo('2026-09-29'));
+
+/*
  * Cinco controladores daban de alta matrículas en la base de Prefacturas
  * cuando no existían. Ahora lo hacen en el catálogo local por un solo camino.
  */

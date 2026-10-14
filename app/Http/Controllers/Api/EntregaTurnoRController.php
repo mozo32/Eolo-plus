@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\EntregaTurnoR;
 use App\Models\Firma;
 use App\Models\Bitacora;
+use App\Rules\DentroDeLaVentana;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -14,8 +15,23 @@ use Illuminate\Support\Str;
 
 class EntregaTurnoRController extends Controller
 {
+    /**
+     * Solo se juzga la fecha del encabezado: el resto del cuerpo sigue siendo de forma libre.
+     *
+     * `encabezado` es una columna JSON sin cast de fecha, así que la cadena se guarda LITERAL
+     * dentro del JSON. Por eso va `date_format:Y-m-d` y no `date`: con `date` colaría
+     * `2026-10-07T00:30:00+14:00`, que está en ventana pero dejaría en la base una cadena que los
+     * informes no saben leer. Así lo que se juzga y lo que se guarda son la misma cadena.
+     *
+     * La validación va ANTES de abrir la transacción: un 422 no necesita pasar por el
+     * `catch (\Throwable)` que lo convertiría en 500.
+     */
     public function store(Request $request)
     {
+        $request->validate([
+            'formData.encabezado.fecha' => ['required', 'date_format:Y-m-d', new DentroDeLaVentana('turno.entrega_rampa')],
+        ]);
+
         DB::beginTransaction();
 
         try {
@@ -200,6 +216,8 @@ class EntregaTurnoRController extends Controller
     }
     public function update(Request $request, EntregaTurnoR $entregaTurnoR)
     {
+        $this->validarFechaSiCambia($request, $entregaTurnoR);
+
         DB::beginTransaction();
 
         try {
@@ -237,6 +255,30 @@ class EntregaTurnoRController extends Controller
             ], 500);
         }
     }
+    /**
+     * Una edición solo juzga la fecha del encabezado cuando CAMBIA.
+     *
+     * Un reporte guardado con una fecha que ya quedó fuera de la ventana conserva esa fecha
+     * intacta; exigirle la ventana bloquearía cualquier corrección del resto del reporte. Lo que
+     * la ventana impide es poner una fecha fuera de ella.
+     *
+     * Aquí no hay cast de fecha: se compara la CADENA recibida con la guardada dentro del JSON
+     * (`diaQueGuardaElModelo` describe columnas con cast y no aplica). Si son idénticas no se
+     * escribe nada nuevo en esa clave; si difieren, rige la terna completa.
+     */
+    private function validarFechaSiCambia(Request $request, EntregaTurnoR $entrega): void
+    {
+        $recibida = $request->input('formData.encabezado.fecha');
+
+        if (is_string($recibida) && $recibida === data_get($entrega->encabezado, 'fecha')) {
+            return;
+        }
+
+        $request->validate([
+            'formData.encabezado.fecha' => ['required', 'date_format:Y-m-d', new DentroDeLaVentana('turno.entrega_rampa')],
+        ]);
+    }
+
     public function updateFirmas(Request $request, EntregaTurnoR $entregaTurnoR)
     {
         DB::beginTransaction();

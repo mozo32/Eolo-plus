@@ -7,6 +7,7 @@ use App\Models\Bitacora;
 use App\Models\Imagen;
 use App\Models\PrestamoChaleco;
 use App\Models\User;
+use App\Rules\DentroDeLaVentana;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -76,7 +77,7 @@ class PrestamoChalecoController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'fecha' => ['required', 'date_format:Y-m-d'],
+            'fecha' => ['required', 'date_format:Y-m-d', new DentroDeLaVentana('chalecos.prestamo')],
             'nombre_recibe' => ['required', 'string', 'max:120'],
             'usuario_entrega_id' => [
                 'required',

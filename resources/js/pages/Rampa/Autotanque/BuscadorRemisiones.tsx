@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Calendar, CheckCircle, X, Check } from 'lucide-react';
 import { fetchRemisionesDelDia } from '@/stores/apiAutoTanque';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 interface BuscadorProps {
     onSelect: (remision: any) => void;
@@ -9,7 +10,7 @@ interface BuscadorProps {
 }
 
 export const BuscadorRemisiones = ({ onSelect, onClose, foliosExistentes }: BuscadorProps) => {
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = fechaHoy();
 
     const [filterType, setFilterType] = useState<'day' | 'range' | 'month' | 'year'>('day');
     const [fechaBusqueda, setFechaBusqueda] = useState(hoy);

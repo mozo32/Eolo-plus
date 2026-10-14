@@ -9,6 +9,7 @@ import { Plus, Edit2, Filter, ChevronDown, Calendar, X, AlertCircle, Eye } from 
 import PdfExporter from './checkListEquipo/components/PdfExporter';
 import PendientesDrawer from './checkListEquipo/PendientesDrawer';
 import PreviewModal from './checkListEquipo/components/PreviewModal';
+import { fechaHoy } from '@/lib/fechaHoy';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'CheckList Equipo' }];
 interface Role {
@@ -50,8 +51,8 @@ export default function CheckListEquipo() {
     const user = auth?.user?.roles[0]?.slug;
     const [filtros, setFiltros] = useState({
         buscar: '',
-        fechaInicio: new Date().toLocaleDateString('en-CA'),
-        fechaFin: new Date().toLocaleDateString('en-CA'),
+        fechaInicio: fechaHoy(),
+        fechaFin: fechaHoy(),
         periodo: 'dia'
     });
 
@@ -126,8 +127,8 @@ export default function CheckListEquipo() {
     const limpiarFiltros = () => {
         setFiltros({
             buscar: '',
-            fechaInicio: new Date().toLocaleDateString('en-CA'),
-            fechaFin: new Date().toLocaleDateString('en-CA'),
+            fechaInicio: fechaHoy(),
+            fechaFin: fechaHoy(),
             periodo: 'dia'
         });
     };

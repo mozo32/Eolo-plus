@@ -2,29 +2,28 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\OperacionProgramadaCambio;
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-
+use App\Models\Aeronave;
+use App\Models\Bitacora;
+use App\Models\Departamento;
+use App\Models\Firma;
+use App\Models\Imagen;
+use App\Models\OperacionProgramada;
+use App\Models\Personal;
 use App\Models\WalkAround;
 use App\Models\WalkaroundChecklist;
 use App\Models\WalkaroundMarcaDanio;
-use App\Models\Imagen;
-use App\Models\Firma;
-use App\Models\Aeronave;
-use App\Models\Departamento;
-use App\Models\Personal;
-use App\Models\Bitacora;
-use App\Models\OperacionProgramada;
-use App\Events\OperacionProgramadaCambio;
+use App\Rules\DentroDeLaVentana;
 use App\Services\CatalogoAeronaves;
 use App\Services\SecuenciaMovimientoService;
-use Symfony\Component\HttpKernel\Exception\HttpException;
-use Illuminate\Support\Facades\Auth;
+use App\Support\VentanasDeFecha;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Http\JsonResponse;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class WalkAroundController extends Controller
 {
@@ -43,7 +42,7 @@ class WalkAroundController extends Controller
             ->select([
                 'id', 'fecha', 'movimiento', 'matricula',
                 'tipo', 'tipo_aeronave', 'hora',
-                'destino', 'procedensia', 'created_at'
+                'destino', 'procedensia', 'created_at',
             ]);
 
         if ($q !== '') {
@@ -51,7 +50,7 @@ class WalkAroundController extends Controller
         }
 
         if ($ubicacion !== '') {
-            $query->where(function($sub) use ($ubicacion) {
+            $query->where(function ($sub) use ($ubicacion) {
                 $sub->where('procedensia', 'like', "%{$ubicacion}%")
                     ->orWhere('destino', 'like', "%{$ubicacion}%");
             });
@@ -66,7 +65,7 @@ class WalkAroundController extends Controller
         }
 
         $query->orderByDesc('fecha')
-          ->orderByDesc('hora');
+            ->orderByDesc('hora');
 
         return response()->json($query->paginate($request->get('per_page', 20)));
     }
@@ -83,53 +82,53 @@ class WalkAroundController extends Controller
             'marcasDanio:id,walk_around_id,x,y,z,descripcion,severidad',
             'imagenes' => fn ($q) => $q->withPivot(['tag', 'orden', 'status']),
 
-            'firmas'   => fn ($q) => $q->withPivot(['rol', 'tag', 'orden', 'status']),
+            'firmas' => fn ($q) => $q->withPivot(['rol', 'tag', 'orden', 'status']),
         ]);
         $imagenes = $walkAround->imagenes->map(function (Imagen $img) {
             $disk = $img->disk ?? 'public';
             $path = $img->path;
 
-            if (!$path || !Storage::disk($disk)->exists($path)) {
+            if (! $path || ! Storage::disk($disk)->exists($path)) {
                 return [
-                    'id'     => $img->id,
-                    'url'    => null,
-                    'tag'    => $img->pivot->tag ?? null,
+                    'id' => $img->id,
+                    'url' => null,
+                    'tag' => $img->pivot->tag ?? null,
                     'status' => $img->pivot->status ?? null,
-                    'orden'  => $img->pivot->orden ?? 0,
-                    'error'  => 'archivo_no_encontrado',
+                    'orden' => $img->pivot->orden ?? 0,
+                    'error' => 'archivo_no_encontrado',
                 ];
             }
 
             return [
-                'id'     => $img->id,
-                'url'    => Storage::disk($disk)->url($path),
-                'tag'    => $img->pivot->tag ?? null,
+                'id' => $img->id,
+                'url' => Storage::disk($disk)->url($path),
+                'tag' => $img->pivot->tag ?? null,
                 'status' => $img->pivot->status ?? null,
-                'orden'  => $img->pivot->orden ?? 0,
+                'orden' => $img->pivot->orden ?? 0,
             ];
         })->values();
 
         $firmas = $walkAround->firmas->map(function (Firma $firma) {
             $disk = $firma->disk ?? 'public';
             $path = $firma->path;
-            if (!$path || !Storage::disk($disk)->exists($path)) {
+            if (! $path || ! Storage::disk($disk)->exists($path)) {
                 return [
-                    'id'     => $firma->id,
-                    'url'    => null,
-                    'rol'    => $firma->pivot->rol ?? null,
-                    'tag'    => $firma->pivot->tag ?? null,
-                    'orden'  => $firma->pivot->orden ?? 0,
+                    'id' => $firma->id,
+                    'url' => null,
+                    'rol' => $firma->pivot->rol ?? null,
+                    'tag' => $firma->pivot->tag ?? null,
+                    'orden' => $firma->pivot->orden ?? 0,
                     'status' => $firma->pivot->status ?? 'A',
-                    'error'  => 'firma_no_encontrada',
+                    'error' => 'firma_no_encontrada',
                 ];
             }
 
             return [
-                'id'     => $firma->id,
-                'url'    => Storage::disk($disk)->url($path),
-                'rol'    => $firma->pivot->rol ?? null,
-                'tag'    => $firma->pivot->tag ?? null,
-                'orden'  => $firma->pivot->orden ?? 0,
+                'id' => $firma->id,
+                'url' => Storage::disk($disk)->url($path),
+                'rol' => $firma->pivot->rol ?? null,
+                'tag' => $firma->pivot->tag ?? null,
+                'orden' => $firma->pivot->orden ?? 0,
                 'status' => $firma->pivot->status ?? 'A',
             ];
         })->values();
@@ -146,30 +145,30 @@ class WalkAroundController extends Controller
             'destino'                   => $walkAround->destino,
             'procedensia'               => $walkAround->procedensia,
 
-            'observaciones'             => $walkAround->observaciones,
-            'elabora_departamento_id'   => $walkAround->elabora_departamento_id,
-            'elabora_personal_id'       => $walkAround->elabora_personal_id,
-            'elabora'                   => $walkAround->elabora,
-            'responsable'               => $walkAround->responsable,
-            'jefe_area'                 => $walkAround->jefe_area,
-            'fbo'                       => $walkAround->fbo,
+            'observaciones' => $walkAround->observaciones,
+            'elabora_departamento_id' => $walkAround->elabora_departamento_id,
+            'elabora_personal_id' => $walkAround->elabora_personal_id,
+            'elabora' => $walkAround->elabora,
+            'responsable' => $walkAround->responsable,
+            'jefe_area' => $walkAround->jefe_area,
+            'fbo' => $walkAround->fbo,
 
             'checklists' => [
-                'checklist_avion'       => optional($walkAround->checklist)->checklist_avion,
+                'checklist_avion' => optional($walkAround->checklist)->checklist_avion,
                 'checklist_helicoptero' => optional($walkAround->checklist)->checklist_helicoptero,
             ],
 
             'marcas_danio' => $walkAround->marcasDanio->map(fn ($m) => [
-                'x'           => (float) $m->x,
-                'y'           => (float) $m->y,
-                'z'           => (float) $m->z,
+                'x' => (float) $m->x,
+                'y' => (float) $m->y,
+                'z' => (float) $m->z,
                 'descripcion' => $m->descripcion,
-                'severidad'   => $m->severidad,
+                'severidad' => $m->severidad,
             ])->values(),
 
             'numero_estaticas' => $walkAround->numero_estaticas,
-            'imagenes'         => $imagenes,
-            'firmas'           => $firmas,
+            'imagenes' => $imagenes,
+            'firmas' => $firmas,
         ]);
     }
 
@@ -211,7 +210,7 @@ class WalkAroundController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'WalkAround eliminado lógicamente'
+                'message' => 'WalkAround eliminado lógicamente',
             ]);
 
         } catch (\Throwable $e) {
@@ -256,11 +255,10 @@ class WalkAroundController extends Controller
                 $firma->update(['status' => 'A']);
             });
 
-
             DB::commit();
 
             return response()->json([
-                'message' => 'WalkAround activado correctamente'
+                'message' => 'WalkAround activado correctamente',
             ], 200);
 
         } catch (\Throwable $e) {
@@ -289,6 +287,12 @@ class WalkAroundController extends Controller
      */
     public function store(Request $request)
     {
+        // La ventana de fechas se juzga antes que nada, y fuera de la transaccion: asi un 422
+        // no pasa por el `catch (\Throwable)` de abajo, que lo convertiria en un 500.
+        $request->validate([
+            'metadata.fecha' => ['required', 'date', new DentroDeLaVentana('despacho.informacion_general')],
+        ]);
+
         // La regla de secuencia vive en SecuenciaMovimientoService y se vuelve a
         // ejecutar aquí contra los registros reales de WalkAround, venga o no de
         // una operación programada.
@@ -320,23 +324,23 @@ class WalkAroundController extends Controller
             $idTipo = $aeronave->aeronave_id ?? 0;
 
             $walkAround = WalkAround::create([
-                'fecha'                    => $request->metadata['fecha'],
-                'movimiento'               => $request->metadata['movimiento'],
-                'matricula'                => $request->metadata['matricula'],
-                'tipo'                     => $request->metadata['aeronave'],
-                'tipo_aeronave'            => $request->metadata['tipo'],
-                'hora'                     => $request->metadata['hora'],
-                'destino'                  => $request->metadata['destino'],
-                'procedensia'              => $request->metadata['procedencia'],
-                'observaciones'            => $request->cierreYFirmas['observaciones'] ?? null,
-                'elabora'                  => auth()->user()->name,
-                'responsable'              => $request->cierreYFirmas['nombreResponsable'],
-                'jefe_area'                => $request->cierreYFirmas['nombreJefe'],
-                'fbo'                      => $request->cierreYFirmas['nombreFbo'],
-                'numero_estaticas'         => $request->inspeccionTecnica['numeroEstaticas'] ?? 0,
-                'elabora_departamento_id'  => auth()->id(),
-                'elabora_personal_id'      => auth()->id(),
-                'tipo_aeronave_id'         => $idTipo,
+                'fecha' => $request->metadata['fecha'],
+                'movimiento' => $request->metadata['movimiento'],
+                'matricula' => $request->metadata['matricula'],
+                'tipo' => $request->metadata['aeronave'],
+                'tipo_aeronave' => $request->metadata['tipo'],
+                'hora' => $request->metadata['hora'],
+                'destino' => $request->metadata['destino'],
+                'procedensia' => $request->metadata['procedencia'],
+                'observaciones' => $request->cierreYFirmas['observaciones'] ?? null,
+                'elabora' => auth()->user()->name,
+                'responsable' => $request->cierreYFirmas['nombreResponsable'],
+                'jefe_area' => $request->cierreYFirmas['nombreJefe'],
+                'fbo' => $request->cierreYFirmas['nombreFbo'],
+                'numero_estaticas' => $request->inspeccionTecnica['numeroEstaticas'] ?? 0,
+                'elabora_departamento_id' => auth()->id(),
+                'elabora_personal_id' => auth()->id(),
+                'tipo_aeronave_id' => $idTipo,
             ]);
 
             // Trazabilidad con la operación programada que originó el registro.
@@ -351,24 +355,24 @@ class WalkAroundController extends Controller
                 auth()->id()
             );
 
-            $esAvion = ($request->metadata['aeronave'] === 'Avión');
+            $esAvion = self::esAvion($request->metadata['aeronave'] ?? null);
             $checklistPuro = $request->inspeccionTecnica['checklist'] ?? [];
 
             WalkaroundChecklist::create([
-                'walk_around_id'        => $walkAround->id,
-                'checklist_avion'       => $esAvion ? $checklistPuro : null,
-                'checklist_helicoptero' => !$esAvion ? $checklistPuro : null,
+                'walk_around_id' => $walkAround->id,
+                'checklist_avion' => $esAvion ? $checklistPuro : null,
+                'checklist_helicoptero' => ! $esAvion ? $checklistPuro : null,
             ]);
 
             if (isset($request->inspeccionTecnica['puntos3D']) && is_array($request->inspeccionTecnica['puntos3D'])) {
                 foreach ($request->inspeccionTecnica['puntos3D'] as $punto) {
                     WalkaroundMarcaDanio::create([
                         'walk_around_id' => $walkAround->id,
-                        'x'              => $punto['x'],
-                        'y'              => $punto['y'],
-                        'z'              => $punto['z'] ?? 0,
-                        'descripcion'    => $punto['descripcion'] ?? null,
-                        'severidad'      => $punto['severidad'] ?? null,
+                        'x' => $punto['x'],
+                        'y' => $punto['y'],
+                        'z' => $punto['z'] ?? 0,
+                        'descripcion' => $punto['descripcion'] ?? null,
+                        'severidad' => $punto['severidad'] ?? null,
                     ]);
                 }
             }
@@ -377,15 +381,15 @@ class WalkAroundController extends Controller
                 foreach ($request->inspeccionTecnica['fotos'] as $index => $fotoData) {
                     $base64String = is_array($fotoData) ? ($fotoData['dataUrl'] ?? null) : $fotoData;
 
-                    if (!empty($base64String)) {
+                    if (! empty($base64String)) {
                         $imagen = $this->guardarImagenBase64(
                             $base64String,
-                            'walkaround/' . now()->format('Y/m')
+                            'walkaround/'.now()->format('Y/m')
                         );
 
                         $walkAround->imagenes()->attach($imagen->id, [
-                            'tag'    => 'evidencia',
-                            'orden'  => $index,
+                            'tag' => 'evidencia',
+                            'orden' => $index,
                             'status' => 'A',
                         ]);
                     }
@@ -418,18 +422,45 @@ class WalkAroundController extends Controller
             // Reglas de negocio que abortan con un código propio (por ejemplo una
             // operación programada ya utilizada) no deben convertirse en un 500.
             DB::rollBack();
+
             return response()->json([
                 'message' => $e->getMessage(),
             ], $e->getStatusCode());
 
         } catch (\Throwable $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Error al guardar WalkAround',
-                'error'   => $e->getMessage(),
-                'line'    => $e->getLine()
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
             ], 500);
         }
+    }
+
+    /**
+     * La ventana de fechas solo se exige cuando la fecha CAMBIA.
+     *
+     * `fecha` tiene cast `date`, asi que se compara el DIA que guardaria el modelo y no el
+     * texto: `{hoy} +1 day` como texto es distinto del guardado, pero como dia es manana, y
+     * compararlo como texto lo dejaria pasar por «no cambio». Un registro viejo cuya fecha
+     * queda intacta no debe dar 422 al corregir otro campo; lo que la ventana impide es poner
+     * una fecha fuera de ella. Valida si la fecha recibida difiere de la guardada, falta o es
+     * ilegible.
+     *
+     * Va ANTES de abrir la transaccion para que el 422 no lo atrape el `catch (\Throwable)`.
+     */
+    private function validarFechaSiCambia(Request $request, WalkAround $walkAround): void
+    {
+        $recibidaComoDia = VentanasDeFecha::diaQueGuardaElModelo($request->input('metadata.fecha'));
+
+        if ($recibidaComoDia !== null && $recibidaComoDia === $walkAround->fecha?->toDateString()) {
+            return;
+        }
+
+        $request->validate([
+            'metadata.fecha' => ['required', 'date', new DentroDeLaVentana('despacho.informacion_general')],
+        ]);
     }
 
     /**
@@ -438,6 +469,8 @@ class WalkAroundController extends Controller
      */
     public function update(Request $request, WalkAround $walkAround)
     {
+        $this->validarFechaSiCambia($request, $walkAround);
+
         DB::beginTransaction();
 
         try {
@@ -498,7 +531,7 @@ class WalkAroundController extends Controller
 
             $walkAround->save();
 
-            $esAvion = ($metadata['aeronave'] === 'Avión');
+            $esAvion = self::esAvion($metadata['aeronave'] ?? null);
             $checklistPuro = $inspeccionTecnica['checklist'] ?? [];
 
             $nuevoChecklist = [
@@ -506,7 +539,7 @@ class WalkAroundController extends Controller
                     ? $checklistPuro
                     : null,
 
-                'checklist_helicoptero' => !$esAvion
+                'checklist_helicoptero' => ! $esAvion
                     ? $checklistPuro
                     : null,
             ];
@@ -629,7 +662,7 @@ class WalkAroundController extends Controller
 
                     $imagen = $this->guardarImagenBase64(
                         $base64String,
-                        'walkaround/' . now()->format('Y/m')
+                        'walkaround/'.now()->format('Y/m')
                     );
 
                     $walkAround->imagenes()->attach($imagen->id, [
@@ -648,7 +681,7 @@ class WalkAroundController extends Controller
                 }
             }
 
-            if (!empty($imagenesAgregadas)) {
+            if (! empty($imagenesAgregadas)) {
                 $cambiosAnteriores['imagenes'] = [
                     'cantidad' => $cantidadImagenesAntes,
                     'agregadas' => [],
@@ -684,7 +717,7 @@ class WalkAroundController extends Controller
                 );
             }
 
-            if (!empty($firmasActualizadas)) {
+            if (! empty($firmasActualizadas)) {
                 $cambiosAnteriores['firmas'] = [
                     'actualizadas' => [],
                 ];
@@ -694,7 +727,7 @@ class WalkAroundController extends Controller
                 ];
             }
 
-            if (!empty($cambiosNuevos)) {
+            if (! empty($cambiosNuevos)) {
                 $etiquetasSecciones = [
                     'datos_principales' => 'datos principales',
                     'checklist' => 'checklist',
@@ -711,20 +744,20 @@ class WalkAroundController extends Controller
                 );
 
                 $descripcion =
-                    "Se actualizó el WalkAround #{$walkAround->id} " .
-                    "de la matrícula {$walkAround->matricula}. " .
-                    "Secciones modificadas: " .
-                    implode(', ', $seccionesModificadas) .
+                    "Se actualizó el WalkAround #{$walkAround->id} ".
+                    "de la matrícula {$walkAround->matricula}. ".
+                    'Secciones modificadas: '.
+                    implode(', ', $seccionesModificadas).
                     '.';
 
-                if (!empty($cambiosNuevos['datos_principales'])) {
+                if (! empty($cambiosNuevos['datos_principales'])) {
                     $camposPrincipales = array_keys(
                         $cambiosNuevos['datos_principales']
                     );
 
                     $descripcion .=
-                        ' Campos modificados: ' .
-                        implode(', ', $camposPrincipales) .
+                        ' Campos modificados: '.
+                        implode(', ', $camposPrincipales).
                         '.';
                 }
 
@@ -743,7 +776,7 @@ class WalkAroundController extends Controller
             return response()->json([
                 'message' => 'WalkAround actualizado correctamente',
                 'id' => $walkAround->id,
-                'cambios_registrados' => !empty($cambiosNuevos),
+                'cambios_registrados' => ! empty($cambiosNuevos),
                 'secciones_modificadas' => array_keys($cambiosNuevos),
                 'imagenes_agregadas' => count($imagenesAgregadas),
             ], 200);
@@ -759,6 +792,7 @@ class WalkAroundController extends Controller
             ], 500);
         }
     }
+
     private function obtenerBase64Imagen($fotoData): ?string
     {
         if (is_string($fotoData)) {
@@ -767,7 +801,7 @@ class WalkAroundController extends Controller
                 : null;
         }
 
-        if (!is_array($fotoData)) {
+        if (! is_array($fotoData)) {
             return null;
         }
 
@@ -779,14 +813,15 @@ class WalkAroundController extends Controller
             ?? null;
 
         if (
-            !is_string($base64) ||
-            !str_starts_with($base64, 'data:image/')
+            ! is_string($base64) ||
+            ! str_starts_with($base64, 'data:image/')
         ) {
             return null;
         }
 
         return $base64;
     }
+
     private function procesarFirmaUpdate(
         $firmaData,
         string $rol,
@@ -815,8 +850,8 @@ class WalkAroundController extends Controller
             // ===== 1. ACTUALIZAR NOMBRES EN LA TABLA WALKAROUNDS =====
             $walkAround->update([
                 'responsable' => $request->responsable,
-                'jefe_area'   => $request->jefeArea,
-                'fbo'         => $request->fbo,
+                'jefe_area' => $request->jefeArea,
+                'fbo' => $request->fbo,
             ]);
 
             // ===== 2. PROCESAR Y GUARDAR LAS FIRMAS (BLOB/ARCHIVOS) =====
@@ -824,13 +859,11 @@ class WalkAroundController extends Controller
             $this->guardarFirmaBase64($request->firmaFboBase64 ?? '', 'fbo', $walkAround);
             $this->guardarFirmaBase64($request->firmaResponsableBase64 ?? '', 'responsable', $walkAround);
 
-
-
             DB::commit();
 
             return response()->json([
                 'message' => 'WalkAround actualizado correctamente',
-                'id'      => $walkAround->id,
+                'id' => $walkAround->id,
             ], 200);
 
         } catch (\Throwable $e) {
@@ -838,7 +871,7 @@ class WalkAroundController extends Controller
 
             return response()->json([
                 'message' => 'Error al actualizar WalkAround',
-                'error'   => $e->getMessage(),
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -846,7 +879,7 @@ class WalkAroundController extends Controller
     private function guardarImagenBase64(string $base64, string $folder): Imagen
     {
         if (
-            !preg_match(
+            ! preg_match(
                 '/^data:image\/([a-zA-Z0-9.+-]+);base64,/',
                 $base64,
                 $coincidencias
@@ -888,15 +921,15 @@ class WalkAroundController extends Controller
             );
         }
 
-        $fileName = Str::uuid()->toString() . '.' . $extension;
-        $path = trim($folder, '/') . '/' . $fileName;
+        $fileName = Str::uuid()->toString().'.'.$extension;
+        $path = trim($folder, '/').'/'.$fileName;
 
         $guardada = Storage::disk('public')->put(
             $path,
             $contenido
         );
 
-        if (!$guardada) {
+        if (! $guardada) {
             throw new \Exception(
                 'No fue posible guardar la imagen.'
             );
@@ -906,7 +939,7 @@ class WalkAroundController extends Controller
             'disk' => 'public',
             'path' => $path,
             'original_name' => $fileName,
-            'mime' => 'image/' . $tipo,
+            'mime' => 'image/'.$tipo,
             'size' => strlen($contenido),
         ]);
     }
@@ -914,7 +947,9 @@ class WalkAroundController extends Controller
     private function guardarFirmaBase64(string $base64, string $rol, WalkAround $walkAround): void
     {
         $base64 = (string) $base64;
-        if (trim($base64) === '') return;
+        if (trim($base64) === '') {
+            return;
+        }
         $walkAround->firmas()
             ->newPivotStatement()
             ->where('firmable_type', WalkAround::class)
@@ -923,19 +958,19 @@ class WalkAroundController extends Controller
             ->where('status', 'A')
             ->update(['status' => 'N']);
 
-        $firma = $this->guardarFirmaArchivoBase64($base64, 'firmas/WalkAround/' . now()->format('Y/m'));
+        $firma = $this->guardarFirmaArchivoBase64($base64, 'firmas/WalkAround/'.now()->format('Y/m'));
 
         $walkAround->firmas()->attach($firma->id, [
-            'rol'    => $rol,
-            'tag'    => $this->humanizeRol($rol),
-            'orden'  => 0,
+            'rol' => $rol,
+            'tag' => $this->humanizeRol($rol),
+            'orden' => 0,
             'status' => 'A',
         ]);
     }
 
     private function guardarFirmaArchivoBase64(string $base64, string $folder): Firma
     {
-        if (!str_contains($base64, ',')) {
+        if (! str_contains($base64, ',')) {
             throw new \Exception('Formato base64 inválido');
         }
 
@@ -945,28 +980,28 @@ class WalkAroundController extends Controller
         $mime = $matches[1] ?? 'image/png';
         $extension = explode('/', $mime)[1] ?? 'png';
 
-        $fileName = Str::uuid() . '.' . $extension;
-        $path = $folder . '/' . $fileName;
+        $fileName = Str::uuid().'.'.$extension;
+        $path = $folder.'/'.$fileName;
 
         Storage::disk('public')->put($path, base64_decode($content));
 
         return Firma::create([
-            'disk'          => 'public',
-            'path'          => $path,
+            'disk' => 'public',
+            'path' => $path,
             'original_name' => $fileName,
-            'mime'          => $mime,
-            'size'          => Storage::disk('public')->size($path),
-            'sha1'          => sha1_file(Storage::disk('public')->path($path)),
+            'mime' => $mime,
+            'size' => Storage::disk('public')->size($path),
+            'sha1' => sha1_file(Storage::disk('public')->path($path)),
         ]);
     }
 
     private function humanizeRol(string $rol): string
     {
         return match ($rol) {
-            'jefe_area'   => 'Firma Jefe de área',
-            'fbo'         => 'Firma VoBo FBO',
+            'jefe_area' => 'Firma Jefe de área',
+            'fbo' => 'Firma VoBo FBO',
             'responsable' => 'Firma Responsable',
-            default       => ucfirst(str_replace('_', ' ', $rol)),
+            default => ucfirst(str_replace('_', ' ', $rol)),
         };
     }
 
@@ -978,6 +1013,7 @@ class WalkAroundController extends Controller
                 ->get()
         );
     }
+
     public function personal(Request $request)
     {
         $request->validate([
@@ -988,19 +1024,20 @@ class WalkAroundController extends Controller
             Personal::whereHas('puesto.departamento', function ($q) use ($request) {
                 $q->where('id', $request->departamento_id);
             })
-            ->select('id', 'nombre')
-            ->orderBy('nombre')
-            ->get()
+                ->select('id', 'nombre')
+                ->orderBy('nombre')
+                ->get()
         );
     }
+
     public function bitacora(Request $request)
     {
         $request->validate([
-            'q'        => ['nullable', 'string', 'max:150'],
-            'accion'   => ['nullable', 'string', 'max:50'],
-            'desde'    => ['nullable', 'date'],
-            'hasta'    => ['nullable', 'date', 'after_or_equal:desde'],
-            'page'     => ['nullable', 'integer', 'min:1'],
+            'q' => ['nullable', 'string', 'max:150'],
+            'accion' => ['nullable', 'string', 'max:50'],
+            'desde' => ['nullable', 'date'],
+            'hasta' => ['nullable', 'date', 'after_or_equal:desde'],
+            'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
         ]);
 
@@ -1008,7 +1045,7 @@ class WalkAroundController extends Controller
 
         $query = Bitacora::query()
             ->with([
-                'usuario:id,name,email'
+                'usuario:id,name,email',
             ])
             ->orderByDesc('created_at');
 
@@ -1065,6 +1102,7 @@ class WalkAroundController extends Controller
 
         return response()->json($bitacoras);
     }
+
     public function buscarPorMatricula(string $matricula): JsonResponse
     {
         try {
@@ -1074,7 +1112,8 @@ class WalkAroundController extends Controller
             return response()->json($datos ? ['tipo' => $datos->tipo] : null);
 
         } catch (\Throwable $e) {
-            \Log::error('Error al buscar aeronave: ' . $e->getMessage());
+            \Log::error('Error al buscar aeronave: '.$e->getMessage());
+
             return response()->json(['error' => 'Error interno del servidor'], 500);
         }
     }
@@ -1087,27 +1126,27 @@ class WalkAroundController extends Controller
         switch ($rol) {
             case 'admin':
             case 'fbo':
-                $query->where(function($q) {
-                    $q->whereDoesntHave('firmas', function($f) {
+                $query->where(function ($q) {
+                    $q->whereDoesntHave('firmas', function ($f) {
                         $f->where('rol', 'jefe_area');
                     })
-                    ->orWhereDoesntHave('firmas', function($f) {
-                        $f->where('rol', 'fbo');
-                    })
-                    ->orWhereDoesntHave('firmas', function($f) {
-                        $f->where('rol', 'responsable');
-                    });
+                        ->orWhereDoesntHave('firmas', function ($f) {
+                            $f->where('rol', 'fbo');
+                        })
+                        ->orWhereDoesntHave('firmas', function ($f) {
+                            $f->where('rol', 'responsable');
+                        });
                 });
                 break;
 
             case 'empleado':
-                $query->whereDoesntHave('firmas', function($f) {
+                $query->whereDoesntHave('firmas', function ($f) {
                     $f->where('rol', 'responsable');
                 });
                 break;
 
             case 'jefe_area':
-                $query->whereDoesntHave('firmas', function($f) {
+                $query->whereDoesntHave('firmas', function ($f) {
                     $f->where('rol', 'jefe_area');
                 });
                 break;
@@ -1119,5 +1158,27 @@ class WalkAroundController extends Controller
         $pendientes = $query->get();
 
         return response()->json($pendientes);
+    }
+
+    /**
+     * Si la aeronave es un avión, para elegir entre `checklist_avion` y `checklist_helicoptero`.
+     *
+     * Compara sin acentos ni mayúsculas a propósito. Antes era `=== 'Avión'`, exacto: el
+     * formulario manda `Avión` y MySQL lo acepta en el enum `('avion','helicoptero')` por
+     * colación, así que funcionaba — pero cualquier cliente que mandara `avion` habría guardado
+     * TODOS los checklists de avión en la columna de helicóptero, en silencio. Y hacía imposible
+     * probar el camino de avión, porque la sqlite de las pruebas sí distingue acentos en el CHECK
+     * del enum y rechaza `Avión`.
+     */
+    private static function esAvion(mixed $aeronave): bool
+    {
+        if (! is_string($aeronave)) {
+            return false;
+        }
+
+        $normalizada = mb_strtolower(trim($aeronave));
+        $normalizada = str_replace(['á', 'é', 'í', 'ó', 'ú'], ['a', 'e', 'i', 'o', 'u'], $normalizada);
+
+        return $normalizada === 'avion';
     }
 }

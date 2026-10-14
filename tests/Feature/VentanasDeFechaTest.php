@@ -1,0 +1,461 @@
+<?php
+
+use App\Support\VentanasDeFecha;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Validator;
+use Inertia\Testing\AssertableInertia as Assert;
+
+test('una ventana de un dia atras da hoy y ayer', function () {
+    Carbon::setTestNow('2026-10-07 15:00:00');
+
+    expect(VentanasDeFecha::para('turno.checklist'))
+        ->toBe(['min' => '2026-10-06', 'max' => '2026-10-07']);
+});
+
+test('una ventana de tres dias atras da cuatro dias, contando hoy', function () {
+    Carbon::setTestNow('2026-10-07 15:00:00');
+
+    expect(VentanasDeFecha::para('operaciones.llegada'))
+        ->toBe(['min' => '2026-10-04', 'max' => '2026-10-07']);
+});
+
+test('la excepcion de Operaciones Programadas no pone techo ni suelo', function () {
+    Carbon::setTestNow('2026-10-07 15:00:00');
+
+    expect(VentanasDeFecha::para('programadas.operacion'))
+        ->toBe(['min' => null, 'max' => null]);
+});
+
+test('UNA CLAVE DESCONOCIDA LANZA, no devuelve un valor por omision', function () {
+    // Es la red de todo lo demas: con un valor por omision silencioso, un formulario
+    // quedaria sin restriccion —o restringido de mas— y nadie se enteraria.
+    expect(fn () => VentanasDeFecha::para('turno.checklis'))
+        ->toThrow(InvalidArgumentException::class);
+});
+
+test('SOLO Operaciones Programadas admite futuro; se recorre la tabla entera', function () {
+    // Asi, un formulario nuevo mal declarado sale en rojo en vez de colarse.
+    Carbon::setTestNow('2026-10-07 15:00:00');
+
+    foreach (array_keys(VentanasDeFecha::CLAVES) as $clave) {
+        $max = VentanasDeFecha::para($clave)['max'];
+
+        if ($clave === 'programadas.operacion') {
+            expect($max)->toBeNull("la excepcion {$clave} deberia admitir futuro");
+
+            continue;
+        }
+
+        expect($max)->toBe('2026-10-07', "la clave {$clave} NO deberia admitir futuro");
+    }
+});
+
+test('todas() devuelve una entrada por clave', function () {
+    expect(array_keys(VentanasDeFecha::todas()))
+        ->toBe(array_keys(VentanasDeFecha::CLAVES));
+});
+
+test('todo formulario salvo la excepcion tiene suelo, y el suelo no pasa del techo', function () {
+    // Una clave con `atras => null` por descuido dejaria el calendario abierto hacia el pasado.
+    Carbon::setTestNow('2026-10-07 15:00:00');
+
+    foreach (array_keys(VentanasDeFecha::CLAVES) as $clave) {
+        if ($clave === 'programadas.operacion') {
+            continue;
+        }
+
+        $ventana = VentanasDeFecha::para($clave);
+
+        expect($ventana['min'])->not->toBeNull("la clave {$clave} no deberia quedar sin suelo");
+        expect($ventana['min'] <= $ventana['max'])->toBeTrue("la clave {$clave} tiene el suelo por encima del techo");
+    }
+});
+
+test('la regla acepta hoy y el borde, y rechaza un dia mas alla', function (string $fecha, bool $valida) {
+    Carbon::setTestNow('2026-10-07 15:00:00');
+
+    $validador = Validator::make(['fecha' => $fecha], [
+        'fecha' => [new App\Rules\DentroDeLaVentana('operaciones.llegada')],
+    ]);
+
+    expect($validador->passes())->toBe($valida);
+})->with([
+    'hoy' => ['2026-10-07', true],
+    'el borde de atras' => ['2026-10-04', true],
+    'un dia ANTES del borde' => ['2026-10-03', false],
+    'manana' => ['2026-10-08', false],
+]);
+
+test('el mensaje dice LAS DOS FECHAS, no «fecha invalida»', function () {
+    Carbon::setTestNow('2026-10-07 15:00:00');
+
+    $validador = Validator::make(['fecha' => '2026-10-01'], [
+        'fecha' => [new App\Rules\DentroDeLaVentana('operaciones.llegada')],
+    ]);
+
+    expect($validador->errors()->first('fecha'))
+        ->toContain('04/10/2026')
+        ->toContain('07/10/2026');
+});
+
+test('la excepcion acepta una fecha futura', function () {
+    Carbon::setTestNow('2026-10-07 15:00:00');
+
+    $validador = Validator::make(['fecha' => '2026-12-25'], [
+        'fecha' => [new App\Rules\DentroDeLaVentana('programadas.operacion')],
+    ]);
+
+    expect($validador->passes())->toBeTrue();
+});
+
+test('una fecha ilegible no es asunto de la regla: solo `date` da el mensaje', function () {
+    // Si la regla tambien validara el formato, un mismo error saldria con dos mensajes.
+    Carbon::setTestNow('2026-10-07 15:00:00');
+
+    $validador = Validator::make(['fecha' => 'no-es-una-fecha'], [
+        'fecha' => ['date', new App\Rules\DentroDeLaVentana('operaciones.llegada')],
+    ]);
+
+    expect($validador->passes())->toBeFalse()
+        ->and($validador->errors()->get('fecha'))->toHaveCount(1);
+
+    $sola = Validator::make(['fecha' => 'no-es-una-fecha'], [
+        'fecha' => [new App\Rules\DentroDeLaVentana('operaciones.llegada')],
+    ]);
+
+    expect($sola->passes())->toBeTrue();
+});
+
+// DEUDA: esta prueba usa Reflection porque hoy NINGUNA clave produce una ventana de un solo
+// lado. Cuando aparezca la primera, hay que sustituirla por una prueba con esa clave real y
+// borrar la Reflection.
+test('una ventana sin suelo solo avisa del techo, y una sin techo solo del suelo', function () {
+    // Las claves reales no producen estas formas (la excepcion no tiene ni suelo ni techo),
+    // asi que se ejercita el mensaje directamente.
+    Carbon::setTestNow('2026-10-07 15:00:00');
+
+    $mensaje = new ReflectionMethod(App\Rules\DentroDeLaVentana::class, 'mensaje');
+    $regla = new App\Rules\DentroDeLaVentana('operaciones.llegada');
+
+    expect($mensaje->invoke($regla, null, '2026-10-07'))->toBe('La fecha no puede ser posterior al 07/10/2026.')
+        ->and($mensaje->invoke($regla, '2026-10-04', null))->toBe('La fecha no puede ser anterior al 04/10/2026.');
+});
+
+test('una clave desconocida lanza tambien desde la regla', function () {
+    $validador = Validator::make(['fecha' => '2026-10-07'], [
+        'fecha' => [new App\Rules\DentroDeLaVentana('operaciones.llegda')],
+    ]);
+
+    expect(fn () => $validador->passes())->toThrow(InvalidArgumentException::class);
+});
+
+test('la regla compara solo el dia: la hora de una fecha con hora no la saca de la ventana', function () {
+    Carbon::setTestNow('2026-10-07 15:00:00');
+
+    $validador = Validator::make(['fecha' => '2026-10-07 23:59:59'], [
+        'fecha' => [new App\Rules\DentroDeLaVentana('operaciones.llegada')],
+    ]);
+
+    expect($validador->passes())->toBeTrue();
+});
+
+test('una fecha con zona se juzga por el dia que escribe la cadena, el mismo que guarda el modelo', function () {
+    // 02:00 UTC del dia 8 serian las 20:00 del dia 7 en Mexico, pero el modelo (cast `date`)
+    // guarda el dia 8 tal como viene escrito. La regla tiene que juzgar lo que se guarda, no
+    // el instante: se rechaza porque se guardaria como manana.
+    Carbon::setTestNow('2026-10-07 15:00:00');
+
+    $validador = Validator::make(['fecha' => '2026-10-08T02:00:00Z'], [
+        'fecha' => [new App\Rules\DentroDeLaVentana('operaciones.llegada')],
+    ]);
+
+    expect($validador->passes())->toBeFalse();
+});
+
+test('las ventanas viajan en las props de Inertia', function () {
+    // Las claves de la tabla llevan punto ('operaciones.llegada') y viajan como claves
+    // literales, así que `where('ventanasDeFecha.operaciones.llegada.min')` las
+    // interpretaría como anidadas y no las encontraría: se lee el arreglo de props.
+    Carbon::setTestNow('2026-10-07 15:00:00');
+    $this->actingAs(App\Models\User::factory()->create());
+
+    $this->get('/dashboard')->assertInertia(function (Assert $page) {
+        $ventanas = $page->toArray()['props']['ventanasDeFecha'];
+
+        expect($ventanas['operaciones.llegada'])
+            ->toBe(['min' => '2026-10-04', 'max' => '2026-10-07'])
+            ->and($ventanas['turno.checklist'])
+            ->toBe(['min' => '2026-10-06', 'max' => '2026-10-07'])
+            ->and($ventanas['programadas.operacion'])
+            ->toBe(['min' => null, 'max' => null]);
+    });
+});
+
+test('la tabla de ventanas esta fijada a mano: cambiar una exige reconocerlo aqui', function () {
+    // Duplica la tabla A PROPOSITO. Las demas pruebas leen `CLAVES` por ambos lados y se
+    // mueven con ella; esta no, y por eso cambiar una ventana (o quitar, renombrar o
+    // anadir una clave) obliga a tocar dos sitios. Es una regla de integridad de datos.
+    expect(VentanasDeFecha::CLAVES)->toBe([
+        'turno.checklist' => ['atras' => 1, 'futuro' => false],
+        'turno.entrega_rampa' => ['atras' => 1, 'futuro' => false],
+        'autotanque.turno_inicio' => ['atras' => 1, 'futuro' => false],
+        'autotanque.turno_cierre' => ['atras' => 1, 'futuro' => false],
+        'chalecos.prestamo' => ['atras' => 1, 'futuro' => false],
+        'planta.prestamo' => ['atras' => 1, 'futuro' => false],
+        'estacionamiento.ronda' => ['atras' => 1, 'futuro' => false],
+        'operaciones.llegada' => ['atras' => 3, 'futuro' => false],
+        'operaciones.salida' => ['atras' => 3, 'futuro' => false],
+        'despacho.informacion_general' => ['atras' => 3, 'futuro' => false],
+        'autotanque.servicio' => ['atras' => 3, 'futuro' => false],
+        'comisariato.entrega' => ['atras' => 3, 'futuro' => false],
+        'csae.entrada' => ['atras' => 3, 'futuro' => false],
+        'csae.salida' => ['atras' => 3, 'futuro' => false],
+        'pernocta.dia' => ['atras' => 3, 'futuro' => false],
+        'medicamento.movimiento' => ['atras' => 3, 'futuro' => false],
+        'programadas.operacion' => ['atras' => null, 'futuro' => true],
+    ]);
+});
+
+/**
+ * Los usos de una clave en el codigo fuente: [archivo, literal] por cada llamada.
+ *
+ * @param  list<string>  $carpetas
+ * @param  list<string>  $extensiones
+ * @return array{literales: list<array{0: string, 1: string}>, llamadas: int}
+ */
+function usosDeVentana(array $carpetas, array $extensiones, string $patronLlamada, string $patronLiteral, array $excluir = []): array
+{
+    $literales = [];
+    $llamadas = 0;
+
+    foreach ($carpetas as $carpeta) {
+        foreach (File::allFiles(base_path($carpeta)) as $archivo) {
+            $ruta = str_replace('\\', '/', $archivo->getPathname());
+
+            if (! in_array($archivo->getExtension(), $extensiones, true) || in_array(basename($ruta), $excluir, true)) {
+                continue;
+            }
+
+            $codigo = file_get_contents($ruta);
+            $llamadas += preg_match_all($patronLlamada, $codigo);
+
+            if (preg_match_all($patronLiteral, $codigo, $coincidencias)) {
+                foreach ($coincidencias[1] as $literal) {
+                    $literales[] = [$ruta, $literal];
+                }
+            }
+        }
+    }
+
+    return ['literales' => $literales, 'llamadas' => $llamadas];
+}
+
+test('cada clave escrita en el codigo existe en la tabla de ventanas', function () {
+    // El hook admite un segundo argumento (la fecha original, al editar): lo que se exige es
+    // que el PRIMERO sea un literal, por eso el patron acepta `,` o `)` tras la clave.
+    // `useVentanaDeFecha('csae.entrda')` compila y deja el calendario SIN limites en
+    // silencio, mientras que `para()` si lanza. Esta prueba cierra esa asimetria: lee el
+    // codigo fuente y exige que cada literal exista en `CLAVES`.
+    $js = usosDeVentana(
+        ['resources/js'],
+        ['ts', 'tsx'],
+        '/\buseVentanaDeFecha\(/',
+        '/\buseVentanaDeFecha\(\s*[\'"]([^\'"]*)[\'"]\s*[,)]/',
+        ['ventanasDeFecha.ts'],
+    );
+    $php = usosDeVentana(
+        ['app'],
+        ['php'],
+        '/\bnew\s+[\w\\\\]*DentroDeLaVentana\(/',
+        '/\bnew\s+[\w\\\\]*DentroDeLaVentana\(\s*[\'"]([^\'"]*)[\'"]\s*\)/',
+    );
+
+    foreach (array_merge($js['literales'], $php['literales']) as [$ruta, $literal]) {
+        $this->assertArrayHasKey($literal, VentanasDeFecha::CLAVES, "Clave de ventana desconocida '{$literal}' en {$ruta}");
+    }
+
+    // Una llamada con una variable o una expresion escapa a la lectura de literales: se
+    // exige que todas las llamadas sean con un literal, para que nada quede sin comprobar.
+    expect($js['llamadas'])->toBe(count($js['literales']), 'useVentanaDeFecha se llama con algo que no es un literal');
+    expect($php['llamadas'])->toBe(count($php['literales']), 'DentroDeLaVentana se instancia con algo que no es un literal');
+});
+
+test('toda clave de la tabla esta puesta en el servidor Y en el navegador', function () {
+    // La inversa de la anterior. Una clave que nadie usa deja a su formulario sin proteger en el
+    // servidor (solo tendria el calendario, que es decoracion) o sin calendario en el navegador.
+    // No se cuenta un numero exacto de apariciones: un controlador que valida en `store` y en
+    // `update` repite la clave. Solo se exige que CADA clave aparezca al menos una vez en cada lado.
+    $php = usosDeVentana(
+        ['app'],
+        ['php'],
+        '/\bnew\s+[\w\\\\]*DentroDeLaVentana\(/',
+        '/\bnew\s+[\w\\\\]*DentroDeLaVentana\(\s*[\'"]([^\'"]*)[\'"]\s*\)/',
+    );
+    $js = usosDeVentana(
+        ['resources/js'],
+        ['ts', 'tsx'],
+        '/\buseVentanaDeFecha\(/',
+        '/\buseVentanaDeFecha\(\s*[\'"]([^\'"]*)[\'"]\s*[,)]/',
+        ['ventanasDeFecha.ts'],
+    );
+    $enElServidor = array_unique(array_column($php['literales'], 1));
+    $enElNavegador = array_unique(array_column($js['literales'], 1));
+
+    // `medicamento.movimiento` es la unica clave SIN calendario vivo, y es deliberado: la pantalla
+    // real (`ActionForms`, pestana Corte/Cierre) sella la fecha sola con `fechaHoy()` y no ofrece
+    // ningun `type="date"`, asi que no hay nada que acotar en el navegador. El unico
+    // `useVentanaDeFecha` de esa clave vive en `ControlMedicamentoForm`, que esta importado pero
+    // NUNCA renderizado: contarlo seria dar por cubierto el navegador con codigo muerto.
+    // El servidor si la exige, que es donde se decide.
+    $sinCalendario = ['medicamento.movimiento'];
+
+    foreach (array_keys(VentanasDeFecha::CLAVES) as $clave) {
+        expect(in_array($clave, $enElServidor, true))->toBeTrue("La clave '{$clave}' no la usa ninguna regla DentroDeLaVentana de app/: ese formulario esta sin proteger en el servidor");
+
+        if (in_array($clave, $sinCalendario, true)) {
+            continue;
+        }
+
+        expect(in_array($clave, $enElNavegador, true))->toBeTrue("La clave '{$clave}' no la usa ningun useVentanaDeFecha: ese formulario no tiene calendario con limites");
+    }
+
+    // Y la exencion no se queda sin vigilar: si alguien le pone calendario a esa pantalla, esta
+    // asercion cae y hay que quitarla de la lista. Una exencion que sobrevive a su motivo es peor
+    // que no tener prueba.
+    foreach ($sinCalendario as $clave) {
+        expect(in_array($clave, $enElNavegador, true))->toBeFalse("La clave '{$clave}' ya tiene calendario: quitala de \$sinCalendario");
+    }
+});
+
+test('un valor que date acepta y Eloquent guarda con un anio absurdo tambien se rechaza', function () {
+    // `"20261007120000"` lo lee `date` como fecha y Eloquent lo guarda como un timestamp enorme
+    // (anio 644015). `diaQueGuardaElModelo` devuelve ese texto tal cual y nunca cae en la ventana.
+    Carbon::setTestNow('2026-10-07 15:00:00');
+
+    $validador = Validator::make(['fecha' => '20261007120000'], [
+        'fecha' => ['date', new App\Rules\DentroDeLaVentana('operaciones.llegada')],
+    ]);
+
+    expect($validador->passes())->toBeFalse();
+});
+
+/**
+ * Las lineas donde `new DentroDeLaVentana(...)` aparece en un arreglo de reglas SIN `date` ni
+ * `date_format:...`, o fuera de un arreglo.
+ *
+ * La regla sola deja pasar `"0"`, `0` y `true` (no valida el formato: ver su docblock), y esa
+ * condicion solo vivia en una frase. Es tosco A PROPOSITO: se sustituyen por espacios los
+ * corchetes de dentro de los textos, se busca el `[` que ABRE el arreglo que contiene la
+ * llamada y se mira si ese arreglo (y solo ese) trae `'date'` o `'date_format:...'`. Por eso la
+ * regla tiene que ir escrita dentro del arreglo, no en una variable aparte.
+ *
+ * @return list<int> numeros de linea
+ */
+function reglasDeVentanaSinDate(string $codigo): array
+{
+    // Misma longitud que el original, para que las posiciones valgan en los dos.
+    $limpio = preg_replace_callback(
+        '/\'(?:[^\'\\\\]|\\\\.)*\'|"(?:[^"\\\\]|\\\\.)*"/s',
+        fn (array $m) => strtr($m[0], ['[' => '_', ']' => '_']),
+        $codigo,
+    );
+    $sinDate = [];
+
+    preg_match_all('/\bnew\s+[\w\\\\]*DentroDeLaVentana\(/', $codigo, $llamadas, PREG_OFFSET_CAPTURE);
+
+    foreach ($llamadas[0] as [, $posicion]) {
+        $profundidad = 0;
+        $inicio = null;
+
+        for ($i = $posicion - 1; $i >= 0; $i--) {
+            if ($limpio[$i] === ']') {
+                $profundidad++;
+            } elseif ($limpio[$i] === '[') {
+                if ($profundidad === 0) {
+                    $inicio = $i;
+                    break;
+                }
+                $profundidad--;
+            }
+        }
+
+        $arreglo = '';
+        if ($inicio !== null) {
+            $profundidad = 0;
+            for ($i = $inicio + 1, $largo = strlen($limpio); $i < $largo; $i++) {
+                if ($limpio[$i] === '[') {
+                    $profundidad++;
+                } elseif ($limpio[$i] === ']') {
+                    if ($profundidad === 0) {
+                        break;
+                    }
+                    $profundidad--;
+                }
+            }
+            $arreglo = substr($codigo, $inicio + 1, $i - $inicio - 1);
+        }
+
+        if (! preg_match('/[\'"](?:date|date_format:[^\'"]*)[\'"]/', $arreglo)) {
+            $sinDate[] = substr_count(substr($codigo, 0, $posicion), "\n") + 1;
+        }
+    }
+
+    return $sinDate;
+}
+
+test('el escaner de «sin date» distingue lo que debe distinguir', function () {
+    $con = fn (string $reglas) => "<?php\n\$r->validate(['fecha' => {$reglas}, 'hora' => ['required', 'date_format:H:i']]);\n";
+
+    // Pasan: `date`, `date_format` (varios modulos lo usan a proposito) y la regla dentro de un ternario.
+    expect(reglasDeVentanaSinDate($con("['required', 'date', new DentroDeLaVentana('turno.checklist')]")))->toBe([])
+        ->and(reglasDeVentanaSinDate($con("['required', 'date_format:Y-m-d', new App\\Rules\\DentroDeLaVentana('turno.checklist')]")))->toBe([])
+        ->and(reglasDeVentanaSinDate($con("['required', \"date\", \$a ? new DentroDeLaVentana('turno.checklist') : new DentroDeLaVentana('turno.entrega_rampa')]")))->toBe([]);
+
+    // Caen: sin `date`, aunque OTRO campo del mismo validate traiga `date_format`; con
+    // `date_equals` (que no es `date`); y la regla guardada en una variable fuera de un arreglo.
+    expect(reglasDeVentanaSinDate($con("['required', new DentroDeLaVentana('turno.checklist')]")))->toBe([2])
+        ->and(reglasDeVentanaSinDate($con("['required', 'date_equals:2026-10-07', new DentroDeLaVentana('turno.checklist')]")))->toBe([2])
+        ->and(reglasDeVentanaSinDate("<?php\n\$r = new DentroDeLaVentana('turno.checklist');\n"))->toBe([2]);
+});
+
+test('toda regla DentroDeLaVentana de app/ va junto a date o date_format', function () {
+    $sinDate = [];
+
+    foreach (File::allFiles(base_path('app')) as $archivo) {
+        if ($archivo->getExtension() !== 'php') {
+            continue;
+        }
+
+        foreach (reglasDeVentanaSinDate(file_get_contents($archivo->getPathname())) as $linea) {
+            $sinDate[] = str_replace('\\', '/', $archivo->getPathname()).":{$linea}";
+        }
+    }
+
+    expect($sinDate)->toBe([], 'DentroDeLaVentana sin `date` ni `date_format` en el mismo arreglo de reglas (o fuera de un arreglo): '.implode(', ', $sinDate));
+});
+
+test('diaQueGuardaElModelo da el dia de la zona de la aplicacion: un mismo timestamp, dos zonas, dos dias', function () {
+    // 02:00 UTC del dia 4 son las 20:00 del dia 3 en Mexico. Sin endpoint de por medio: si la
+    // conversion dejara de hacerse en la zona de la aplicacion, una de las dos filas cambia.
+    $timestamp = (string) Carbon::parse('2026-10-04 02:00:00', 'UTC')->timestamp;
+    $original = date_default_timezone_get();
+
+    try {
+        foreach (['UTC' => '2026-10-04', 'America/Mexico_City' => '2026-10-03', 'Asia/Tokyo' => '2026-10-04', 'Pacific/Honolulu' => '2026-10-03'] as $zona => $dia) {
+            date_default_timezone_set($zona);
+
+            expect(VentanasDeFecha::diaQueGuardaElModelo($timestamp))->toBe($dia, "zona {$zona}");
+        }
+    } finally {
+        date_default_timezone_set($original);
+    }
+});
+
+test('diaQueGuardaElModelo devuelve null para lo vacio y lo que no es un valor escalar', function () {
+    // El cast devolveria el literal (`"0"`, `0`) o `1970-01-01` (`true`); `required` y `date`,
+    // que van delante, los rechazan, y esta funcion no inventa un dia para ellos.
+    foreach (['0', 0, 0.0, true, false, '', null, [], ['2026-10-07']] as $valor) {
+        expect(VentanasDeFecha::diaQueGuardaElModelo($valor))->toBeNull(json_encode($valor));
+    }
+});

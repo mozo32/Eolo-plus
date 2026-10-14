@@ -1,6 +1,7 @@
 import { obtenerPantallaProgramadasApi } from '@/stores/apiOperacionesProgramadas';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fechaHoy, type OperacionPantalla } from './types';
+import { fechaHoy } from '@/lib/fechaHoy';
+import { type OperacionPantalla } from './types';
 import { CANAL_PANTALLA, tocaLaFecha, useCanalProgramadas } from './useCanalProgramadas';
 
 /** Cada cuánto se resincroniza con el servidor, por si Reverb se reinició. */

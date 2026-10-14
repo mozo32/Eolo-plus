@@ -3,6 +3,7 @@ import {
     type ChangeEvent,
 } from 'react';
 import DateTimeModalSliderInput from '@/pages/DateTimeInput';
+import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
 import FirmaCanvas from '@/pages/FirmaCanvas';
 import {
     CalendarDays,
@@ -26,6 +27,9 @@ interface Props {
     ) => void;
 
     updateField: (key: string, value: any) => void;
+
+    /** Día con el que la salida ya estaba guardada, si se edita. */
+    fechaOriginal?: string;
 }
 
 const formatFechaHora = (
@@ -55,7 +59,13 @@ export default function MovimientoCSAESalida({
     data,
     onChange,
     updateField,
+    fechaOriginal,
 }: Props) {
+    const { min, max } = useVentanaDeFecha(
+        'csae.salida',
+        fechaOriginal,
+    );
+
     const [openFirma, setOpenFirma] = useState<
         null | 'firma_salida'
     >(null);
@@ -271,6 +281,8 @@ export default function MovimientoCSAESalida({
                                                 <input
                                                     type="date"
                                                     name="fecha_salida"
+                                                    min={min}
+                                                    max={max}
                                                     value={data.fecha_salida}
                                                     onChange={onChange}
                                                     required

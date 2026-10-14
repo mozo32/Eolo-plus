@@ -6,6 +6,15 @@ use App\Models\Remision;
 use App\Models\SumaAutotanque;
 use App\Models\User;
 
+/*
+ * Estas pruebas fijan el dia 2026-09-28 porque lo que miden no es la fecha, sino el alta de la
+ * matricula y el precio. Al traer `main`, esos endpoints pasaron a exigir que la fecha caiga en
+ * la ventana <<ayer u hoy>>, asi que un dia fijo caducaria al dia siguiente de escribirlo. Se
+ * ancla el reloj al 29 para que el 28 sea siempre ayer: la prueba mide lo suyo y la ventana se
+ * cumple.
+ */
+beforeEach(fn () => test()->travelTo('2026-09-29'));
+
 test('ningun controlador usa ya la conexion remota a Prefacturas', function () {
     $culpables = [];
     $revisados = 0;
@@ -94,7 +103,8 @@ test('la entrada ASA del turno de autotanque se guarda con el precio ASA', funct
 
     $this->actingAs($usuario)->postJson('/api/TurnoAutoTanque', [
         'nombre' => 'Operador Uno',
-        'fecha' => '2026-09-28',
+        // El turno es un instante, no un dia: el endpoint exige `Y-m-d\TH:i`.
+        'fecha' => '2026-09-28T08:00',
         'cmIni' => 50,
         'litrosIni' => 1000,
         'totalizadorIni' => 5000,
@@ -117,7 +127,8 @@ test('la entrada ASA sin precio capturado se guarda con costo cero', function ()
 
     $this->actingAs($usuario)->postJson('/api/TurnoAutoTanque', [
         'nombre' => 'Operador Uno',
-        'fecha' => '2026-09-28',
+        // El turno es un instante, no un dia: el endpoint exige `Y-m-d\TH:i`.
+        'fecha' => '2026-09-28T08:00',
         'cmIni' => 50,
         'litrosIni' => 1000,
         'totalizadorIni' => 5000,
