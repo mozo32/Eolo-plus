@@ -79,4 +79,23 @@ class OperacionDiaria extends Model
     {
         return $query->where('tipo', 'salida');
     }
+
+    /**
+     * Scope: las que ninguna prefactura VIGENTE ha tomado.
+     *
+     * Una prefactura descartada no reserva su operación, así que la llegada vuelve a
+     * quedar libre. El `whereNotNull` dentro de la subconsulta es obligatorio: un
+     * `NOT IN` con un NULL en la lista no devuelve ni una fila.
+     *
+     * Vive aquí, y no dentro de un controlador, porque dos pantallas hacen la misma
+     * pregunta —el modal de alta y la alerta de pendientes— y escrita dos veces se
+     * desincroniza en cuanto la regla cambie.
+     */
+    public function scopeSinPrefacturaActiva($query)
+    {
+        return $query->whereNotIn('id', FactPrefactura::query()
+            ->where('status', FactPrefactura::STATUS_ACTIVO)
+            ->whereNotNull('operacion_llegada_id')
+            ->select('operacion_llegada_id'));
+    }
 }

@@ -375,6 +375,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(functio
     Route::get('/proveedores', [ProveedorController::class, 'index']);
     Route::get('/prefacturas', [PrefacturaController::class, 'index']);
     Route::get('/prefacturas/llegadas-sin-facturar', [PrefacturaController::class, 'llegadasSinFacturar']);
+    Route::get('/prefacturas/llegadas-pendientes', [PrefacturaController::class, 'llegadasPendientes']);
     Route::get('/prefacturas/{id}', [PrefacturaController::class, 'show'])->whereNumber('id');
 
     // Imprimir no escribe nada, así que vive fuera del grupo de escritura; pero exige el

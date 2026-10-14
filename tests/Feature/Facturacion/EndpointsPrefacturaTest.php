@@ -795,21 +795,6 @@ test('con un filtro de fechas activo, un borrador sin llegada capturada queda fu
         ->and($ids('?hasta=2100-01-01'))->toBe([$conLlegada->id]);
 });
 
-function operacionDeLlegada(string $matricula, array $extra = []): App\Models\OperacionDiaria
-{
-    return App\Models\OperacionDiaria::create(array_merge([
-        'user_id' => App\Models\User::factory()->create()->id,
-        'fecha' => '2026-10-01',
-        'tipo' => 'llegada',
-        'matricula' => $matricula,
-        'equipo' => 'C525',
-        'hora' => '10:00:00',
-        'lugar' => 'MMTO',
-        'pax' => 2,
-        'departamento' => 'Despacho',
-    ], $extra));
-}
-
 test('las llegadas sin facturar son de lectura: sin sesion 401, y cualquier autenticado las ve', function () {
     $this->getJson('/api/facturacion/prefacturas/llegadas-sin-facturar?matricula=XA-AAA')->assertUnauthorized();
 

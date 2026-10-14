@@ -9,6 +9,7 @@ use App\Http\Requests\Facturacion\StorePrefacturaRequest;
 use App\Http\Requests\Facturacion\UpdateNotasRequest;
 use App\Http\Requests\Facturacion\UpdatePrefacturaRequest;
 use App\Models\Bitacora;
+use App\Models\FactConfiguracion;
 use App\Models\FactPrefactura;
 use App\Models\FactPrefacturaRenglon;
 use App\Models\FactPrefacturaVersion;
@@ -46,6 +47,12 @@ class PrefacturaController extends Controller
     use RechazaPrefacturaCerrada;
 
     private const PER_PAGE_PERMITIDOS = [10, 20, 50, 100];
+
+    /** Desde qué día cuentan las llegadas como pendientes de prefactura. Vive en `fact_configuracion`. */
+    public const CLAVE_CORTE_LLEGADAS = 'prefactura_llegadas_desde';
+
+    /** Tarjetas que devuelve el panel de pendientes. El total que acompaña a la lista no se recorta. */
+    private const MAXIMO_PENDIENTES = 50;
 
     /** Los campos de la cabecera que `update()` puede cambiar y que se registran en bitácora. */
     private const CAMPOS_REGISTRADOS = [
@@ -133,17 +140,11 @@ class PrefacturaController extends Controller
             'max.max' => 'El máximo no puede pasar de 20.',
         ]);
 
-        // `whereNotNull` dentro de la subconsulta: un `NOT IN` con un NULL en la lista no devuelve nada.
-        $tomadas = FactPrefactura::query()
-            ->where('status', FactPrefactura::STATUS_ACTIVO)
-            ->whereNotNull('operacion_llegada_id')
-            ->select('operacion_llegada_id');
-
         $llegadas = OperacionDiaria::query()
             ->activas()
             ->llegadas()
             ->where('matricula', strtoupper(trim($datos['matricula'])))
-            ->whereNotIn('id', $tomadas)
+            ->sinPrefacturaActiva()
             ->orderByDesc('fecha')
             ->orderByDesc('hora')
             ->orderByDesc('id')
@@ -151,6 +152,40 @@ class PrefacturaController extends Controller
             ->get(['id', 'matricula', 'fecha', 'hora', 'lugar']);
 
         return response()->json(['data' => $llegadas]);
+    }
+
+    /**
+     * Las llegadas a las que todavía nadie abrió prefactura, para la alerta de la
+     * pantalla de Prefacturas. Es la misma pregunta que `llegadasSinFacturar`, pero
+     * sin matrícula y acotada por la fecha de corte.
+     */
+    public function llegadasPendientes(): JsonResponse
+    {
+        $corte = FactConfiguracion::valor(self::CLAVE_CORTE_LLEGADAS);
+
+        // Sin corte la alerta calla. Contar el rezago entero —mil quinientas llegadas desde
+        // mayo de 2025— dejaría un contador que nunca baja a cero, y eso es peor que no avisar.
+        if (! $corte) {
+            return response()->json(['total' => 0, 'data' => []]);
+        }
+
+        $pendientes = OperacionDiaria::query()
+            ->activas()
+            ->llegadas()
+            ->sinPrefacturaActiva()
+            ->where('fecha', '>=', $corte);
+
+        // El total se cuenta sobre todas; la lista se recorta. El número del botón tiene que
+        // ser el de verdad aunque el panel solo dibuje las primeras.
+        return response()->json([
+            'total' => (clone $pendientes)->count(),
+            'data' => $pendientes
+                ->orderByDesc('fecha')
+                ->orderByDesc('hora')
+                ->orderByDesc('id')
+                ->limit(self::MAXIMO_PENDIENTES)
+                ->get(['id', 'matricula', 'fecha', 'hora', 'lugar']),
+        ]);
     }
 
     public function show(int $id): JsonResponse

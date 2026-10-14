@@ -146,6 +146,25 @@ function matriculaDePrueba(): string
 }
 
 /**
+ * Una llegada de Operaciones Diarias. Vive aqui porque la usan tanto las pruebas de los
+ * endpoints de prefactura como las de la alerta de llegadas pendientes.
+ */
+function operacionDeLlegada(string $matricula, array $extra = []): App\Models\OperacionDiaria
+{
+    return App\Models\OperacionDiaria::create(array_merge([
+        'user_id' => App\Models\User::factory()->create()->id,
+        'fecha' => '2026-10-01',
+        'tipo' => 'llegada',
+        'matricula' => $matricula,
+        'equipo' => 'C525',
+        'hora' => '10:00:00',
+        'lugar' => 'MMTO',
+        'pax' => 2,
+        'departamento' => 'Despacho',
+    ], $extra));
+}
+
+/**
  * Una prefactura en borrador con su matrícula en Tránsito.
  */
 function prefacturaBorrador(): App\Models\FactPrefactura
