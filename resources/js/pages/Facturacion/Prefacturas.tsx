@@ -1,16 +1,18 @@
 import AppLayout from '@/layouts/app-layout';
 import { facturacionEditorPrefactura } from '@/routes';
-import { FILTROS_PREFACTURA_VACIOS, obtenerPrefacturasApi, type FiltrosPrefactura, type Prefactura } from '@/stores/apiFacturacionCatalogos';
+import { FILTROS_PREFACTURA_VACIOS, obtenerPrefacturasApi, type FiltrosPrefactura, type LlegadaOperacion, type Prefactura } from '@/stores/apiFacturacionCatalogos';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { LockOpen, Plus, X } from 'lucide-react';
+import { AlertCircle, LockOpen, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import CabeceraPantalla from './components/CabeceraPantalla';
 import { BOTON_PRIMARIO, FILTRO, TD, TH } from './components/estilos';
 import { fechaHoraSinZona, formatearMonto } from './components/formato';
+import LlegadasPendientesPanel from './components/LlegadasPendientesPanel';
 import ModalNuevaPrefactura from './components/ModalNuevaPrefactura';
 import PiePaginacion from './components/PiePaginacion';
 import { useListaPaginada } from './components/useListaPaginada';
+import { useLlegadasPendientes } from './useLlegadasPendientes';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Prefacturas' }];
 
@@ -71,6 +73,18 @@ export default function Prefacturas() {
 
     const [creando, setCreando] = useState(false);
 
+    // Una prefactura nace cuando una aeronave registra su llegada en Operaciones Diarias.
+    // `desdeLlegada` es la tarjeta con la que se abrio el alta: null cuando se pulsa
+    // NUEVA PREFACTURA a secas.
+    const pendientes = useLlegadasPendientes();
+    const [verPendientes, setVerPendientes] = useState(false);
+    const [desdeLlegada, setDesdeLlegada] = useState<LlegadaOperacion | null>(null);
+
+    const cerrarAlta = () => {
+        setCreando(false);
+        setDesdeLlegada(null);
+    };
+
     const abrir = (prefactura: Prefactura) => router.visit(facturacionEditorPrefactura(prefactura.id).url);
 
     return (
@@ -80,6 +94,17 @@ export default function Prefacturas() {
             <div className="p-6 bg-[#f3f4f6] min-h-screen">
                 <div className="space-y-4 animate-in fade-in duration-500">
                     <CabeceraPantalla titulo="Prefacturas" descripcion="Borradores por cerrar y prefacturas con folio">
+                        {pendientes.total > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => setVerPendientes(true)}
+                                className="relative flex animate-pulse items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-white shadow-md transition-all hover:bg-red-700"
+                                title="Aeronaves que llegaron y todavia no tienen prefactura"
+                            >
+                                <AlertCircle size={14} />
+                                <span className="text-sm font-bold">PENDIENTES ({pendientes.total})</span>
+                            </button>
+                        )}
                         <button type="button" onClick={() => setCreando(true)} className={BOTON_PRIMARIO}>
                             <Plus size={14} />
                             NUEVA PREFACTURA
@@ -222,7 +247,30 @@ export default function Prefacturas() {
                 </div>
             </div>
 
-            {creando && <ModalNuevaPrefactura onCerrar={() => setCreando(false)} onCreada={id => router.visit(facturacionEditorPrefactura(id).url)} />}
+            {verPendientes && (
+                <LlegadasPendientesPanel
+                    llegadas={pendientes.llegadas}
+                    total={pendientes.total}
+                    cargando={pendientes.cargando}
+                    error={pendientes.error}
+                    onCerrar={() => setVerPendientes(false)}
+                    onReintentar={pendientes.recargar}
+                    onElegir={llegada => {
+                        setDesdeLlegada(llegada);
+                        setVerPendientes(false);
+                        setCreando(true);
+                    }}
+                />
+            )}
+
+            {creando && (
+                <ModalNuevaPrefactura
+                    onCerrar={cerrarAlta}
+                    onCreada={id => router.visit(facturacionEditorPrefactura(id).url)}
+                    matriculaInicial={desdeLlegada?.matricula ?? ''}
+                    llegadaInicial={desdeLlegada?.id ?? null}
+                />
+            )}
         </AppLayout>
     );
 }

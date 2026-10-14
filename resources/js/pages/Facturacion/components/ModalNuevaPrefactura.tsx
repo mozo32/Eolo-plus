@@ -8,11 +8,17 @@ import ModalBase from './ModalBase';
 
 const ESPERA_MS = 350;
 const MAXIMO_CANDIDATAS = 5;
+/** Tope del servidor. Se usa cuando se llega con una llegada ya elegida, para no perderla. */
+const MAXIMO_PRESELECCION = 20;
 
 interface Props {
     onCerrar: () => void;
     /** Recibe el id del borrador recién creado: la lista lleva al editor. */
     onCreada: (id: number) => void;
+    /** Matrícula ya escrita, al abrir desde una llegada del panel de pendientes. */
+    matriculaInicial?: string;
+    /** Llegada ya elegida. Se confirma igual: el modal es quien avisa si la matrícula no está en el catálogo. */
+    llegadaInicial?: number | null;
 }
 
 type TipoDestino = 'nacional' | 'internacional';
@@ -40,13 +46,13 @@ function llegadaComoTexto(llegada: LlegadaOperacion): string | null {
  * si se usa una. La falta de operaciones NO bloquea: sin ellas, o si no se pueden
  * consultar, el borrador se crea igual.
  */
-export default function ModalNuevaPrefactura({ onCerrar, onCreada }: Props) {
-    const [matricula, setMatricula] = useState('');
+export default function ModalNuevaPrefactura({ onCerrar, onCreada, matriculaInicial = '', llegadaInicial = null }: Props) {
+    const [matricula, setMatricula] = useState(matriculaInicial);
     const [respuestaBusqueda, setRespuestaBusqueda] = useState<ResultadoBusqueda | null>(null);
     const [tipoDestino, setTipoDestino] = useState<TipoDestino>('nacional');
 
     const [respuestaLlegadas, setRespuestaLlegadas] = useState<ResultadoLlegadas | null>(null);
-    const [llegadaElegida, setLlegadaElegida] = useState<number | null>(null);
+    const [llegadaElegida, setLlegadaElegida] = useState<number | null>(llegadaInicial);
 
     const [errorMatricula, setErrorMatricula] = useState<string | null>(null);
     const [mensajeGeneral, setMensajeGeneral] = useState<string | null>(null);
@@ -94,7 +100,10 @@ export default function ModalNuevaPrefactura({ onCerrar, onCreada }: Props) {
 
         let vigente = true;
 
-        obtenerLlegadasDeMatriculaApi(matriculaEncontrada)
+        // Al venir de una tarjeta del panel se piden más candidatas: la llegada elegida
+        // podría no estar entre las cinco más recientes de su matrícula, y entonces la
+        // preselección se perdería sin decir nada.
+        obtenerLlegadasDeMatriculaApi(matriculaEncontrada, llegadaInicial === null ? MAXIMO_CANDIDATAS : MAXIMO_PRESELECCION)
             .then(lista => {
                 if (vigente) setRespuestaLlegadas({ clave: matriculaEncontrada, llegadas: lista.filter(l => llegadaComoTexto(l) !== null), error: null });
             })
@@ -106,7 +115,7 @@ export default function ModalNuevaPrefactura({ onCerrar, onCreada }: Props) {
         return () => {
             vigente = false;
         };
-    }, [matriculaEncontrada]);
+    }, [matriculaEncontrada, llegadaInicial]);
 
     const vigentesLlegadas = matriculaEncontrada !== null && respuestaLlegadas?.clave === matriculaEncontrada ? respuestaLlegadas : null;
     const llegadas = vigentesLlegadas?.llegadas ?? [];

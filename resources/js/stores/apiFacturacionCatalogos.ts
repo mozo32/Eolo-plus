@@ -637,3 +637,21 @@ export async function obtenerLlegadasDeMatriculaApi(matricula: string, maximo = 
 
     return (await pedir<{ data: LlegadaOperacion[] }>(`${BASE}/prefacturas/llegadas-sin-facturar?${params.toString()}`)).data;
 }
+
+/** Lo que responde el panel de pendientes: el total real y, como mucho, las primeras 50 tarjetas. */
+export interface LlegadasPendientes {
+    /** Todas las pendientes, aunque `data` venga recortada. Es el número del botón. */
+    total: number;
+    data: LlegadaOperacion[];
+}
+
+/**
+ * Las llegadas a las que todavía nadie abrió prefactura, de la más reciente a la más antigua.
+ *
+ * Solo cuentan a partir de la fecha de corte que vive en `fact_configuracion`: el rezago
+ * anterior —mil quinientas llegadas desde mayo de 2025— es otra decisión y queda fuera.
+ * Si la clave de corte falta, el servidor devuelve la lista vacía, no la lista entera.
+ */
+export async function obtenerLlegadasPendientesApi(): Promise<LlegadasPendientes> {
+    return await pedir<LlegadasPendientes>(`${BASE}/prefacturas/llegadas-pendientes`);
+}
