@@ -97,7 +97,7 @@ test('el paquete internacional agrega las cuatro con el precio del catalogo', fu
         FactServicio::create(['nombre' => $nombre, 'precio_unitario' => $precio, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
     }
 
-    $agregados = app(CargosEstancia::class)->agregarPaqueteInternacional($p);
+    $agregados = app(CargosEstancia::class)->agregarPaqueteInternacional($p, FactServicio::PAQUETE_SALIDA);
 
     expect($agregados['renglones'])->toBe(4)
         ->and($agregados['activos'])->toBe(4)
@@ -111,8 +111,8 @@ test('el paquete internacional no se duplica si ya esta', function () {
     $p = conEstancia();
     FactServicio::create(['nombre' => 'DSMES - salida', 'precio_unitario' => 4060.50, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
 
-    app(CargosEstancia::class)->agregarPaqueteInternacional($p);
-    app(CargosEstancia::class)->agregarPaqueteInternacional($p->fresh());
+    app(CargosEstancia::class)->agregarPaqueteInternacional($p, FactServicio::PAQUETE_SALIDA);
+    app(CargosEstancia::class)->agregarPaqueteInternacional($p->fresh(), FactServicio::PAQUETE_SALIDA);
 
     expect($p->fresh()->renglones()->count())->toBe(1);
 });
@@ -180,7 +180,7 @@ test('el paquete internacional no agrega nada a una prefactura cerrada', functio
     FactServicio::create(['nombre' => 'DSMES - salida', 'precio_unitario' => 4060.50, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
     cerrarConSello(FactPrefactura::find($p->id), '0.00', '0.00', '0.00');
 
-    expect(fn () => app(CargosEstancia::class)->agregarPaqueteInternacional($p))
+    expect(fn () => app(CargosEstancia::class)->agregarPaqueteInternacional($p, FactServicio::PAQUETE_SALIDA))
         ->toThrow(RenglonDePrefacturaCerradaException::class)
         ->and(FactPrefacturaRenglon::count())->toBe(0);
 });
@@ -191,7 +191,7 @@ test('el paquete internacional rechaza una cerrada aunque no haya nada que agreg
     $p = conEstancia();
     cerrarConSello(FactPrefactura::find($p->id), '0.00', '0.00', '0.00');
 
-    expect(fn () => app(CargosEstancia::class)->agregarPaqueteInternacional($p))
+    expect(fn () => app(CargosEstancia::class)->agregarPaqueteInternacional($p, FactServicio::PAQUETE_SALIDA))
         ->toThrow(RenglonDePrefacturaCerradaException::class);
 });
 
@@ -402,7 +402,7 @@ test('el paquete internacional con parte del paquete ya puesto agrega solo lo qu
         'cantidad' => 3, 'es_de_tercero' => false, 'margen' => 0, 'ajuste_precio' => 'ninguno', 'orden' => 1,
     ]);
 
-    $agregados = app(CargosEstancia::class)->agregarPaqueteInternacional($p);
+    $agregados = app(CargosEstancia::class)->agregarPaqueteInternacional($p, FactServicio::PAQUETE_SALIDA);
 
     $p = $p->fresh();
 
@@ -430,7 +430,7 @@ test('un paquete internacional incompleto dice cual servicio faltó y que se cob
     $servicios = paqueteInternacionalDelCatalogo();
     $servicios[0]->update(['status' => FactServicio::STATUS_INACTIVO]);
 
-    $resultado = app(CargosEstancia::class)->agregarPaqueteInternacional($p);
+    $resultado = app(CargosEstancia::class)->agregarPaqueteInternacional($p, FactServicio::PAQUETE_SALIDA);
 
     expect($resultado['renglones'])->toBe(3)
         ->and($resultado['activos'])->toBe(3)
@@ -446,7 +446,7 @@ test('un paquete internacional sin ningun servicio activo no agrega nada y lo di
         $servicio->update(['status' => FactServicio::STATUS_INACTIVO]);
     }
 
-    $resultado = app(CargosEstancia::class)->agregarPaqueteInternacional($p);
+    $resultado = app(CargosEstancia::class)->agregarPaqueteInternacional($p, FactServicio::PAQUETE_SALIDA);
 
     expect($resultado['renglones'])->toBe(0)
         ->and($resultado['activos'])->toBe(0)
@@ -460,7 +460,7 @@ test('un catalogo sin servicios marcados como paquete no agrega nada y manda a r
     $p = conEstancia();
     FactServicio::create(['nombre' => 'Otro servicio', 'precio_unitario' => 10.0]);
 
-    $resultado = app(CargosEstancia::class)->agregarPaqueteInternacional($p);
+    $resultado = app(CargosEstancia::class)->agregarPaqueteInternacional($p, FactServicio::PAQUETE_SALIDA);
 
     expect($resultado['renglones'])->toBe(0)
         ->and($resultado['activos'])->toBe(0)
@@ -478,7 +478,7 @@ test('un servicio del paquete dado de baja que ya estaba en los renglones no cue
     ]);
     $servicios[0]->update(['status' => FactServicio::STATUS_INACTIVO]);
 
-    $resultado = app(CargosEstancia::class)->agregarPaqueteInternacional($p);
+    $resultado = app(CargosEstancia::class)->agregarPaqueteInternacional($p, FactServicio::PAQUETE_SALIDA);
 
     expect($resultado['renglones'])->toBe(3)
         ->and($resultado['en_paquete'])->toBe(4)
@@ -489,9 +489,9 @@ test('un servicio del paquete dado de baja que ya estaba en los renglones no cue
 test('repetir el paquete cuando ya esta completo no agrega ni avisa', function () {
     $p = conEstancia();
     paqueteInternacionalDelCatalogo();
-    app(CargosEstancia::class)->agregarPaqueteInternacional($p);
+    app(CargosEstancia::class)->agregarPaqueteInternacional($p, FactServicio::PAQUETE_SALIDA);
 
-    $resultado = app(CargosEstancia::class)->agregarPaqueteInternacional($p->fresh());
+    $resultado = app(CargosEstancia::class)->agregarPaqueteInternacional($p->fresh(), FactServicio::PAQUETE_SALIDA);
 
     expect($resultado['renglones'])->toBe(0)
         ->and($resultado['en_paquete'])->toBe(4)
@@ -504,4 +504,70 @@ test('si falta el servicio de estancia la excepcion es la propia, que el endpoin
 
     expect(fn () => app(CargosEstancia::class)->recalcular($p, pernoctas: 1, transitos2h: 0, transitos12h: 0))
         ->toThrow(ServicioDeEstanciaNoDisponibleException::class, 'Corre el importador de catálogos o reactívalo');
+});
+
+/*
+ * Entrada contra salida. Los demas fixtures de este archivo son todos de SALIDA, asi
+ * que sin estas pruebas un metodo que devolviera los dos paquetes (o el equivocado)
+ * pasaria en verde y cobraria de mas.
+ */
+
+test('el paquete de ENTRADA agrega solo sus servicios, y no los de salida', function () {
+    $prefactura = prefacturaBorrador();
+    $entrada = FactServicio::create(['nombre' => 'DSMEE - entrada', 'precio_unitario' => 4060.50, 'paquete_internacional' => FactServicio::PAQUETE_ENTRADA]);
+    FactServicio::create(['nombre' => 'DSMES - salida', 'precio_unitario' => 4060.50, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
+
+    $resultado = app(CargosEstancia::class)
+        ->agregarPaqueteInternacional($prefactura, FactServicio::PAQUETE_ENTRADA);
+
+    expect($resultado['renglones'])->toBe(1)
+        ->and($prefactura->fresh()->renglones()->pluck('servicio_id')->all())->toBe([$entrada->id]);
+});
+
+test('el paquete de SALIDA agrega solo sus servicios, y no los de entrada', function () {
+    $prefactura = prefacturaBorrador();
+    FactServicio::create(['nombre' => 'DSMEE - entrada', 'precio_unitario' => 4060.50, 'paquete_internacional' => FactServicio::PAQUETE_ENTRADA]);
+    $salida = FactServicio::create(['nombre' => 'DSMES - salida', 'precio_unitario' => 4060.50, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
+
+    $resultado = app(CargosEstancia::class)
+        ->agregarPaqueteInternacional($prefactura, FactServicio::PAQUETE_SALIDA);
+
+    expect($resultado['renglones'])->toBe(1)
+        ->and($prefactura->fresh()->renglones()->pluck('servicio_id')->all())->toBe([$salida->id]);
+});
+
+test('agregar los dos paquetes deja los dos, sin duplicar', function () {
+    $prefactura = prefacturaBorrador();
+    FactServicio::create(['nombre' => 'DSMEE - entrada', 'precio_unitario' => 4060.50, 'paquete_internacional' => FactServicio::PAQUETE_ENTRADA]);
+    FactServicio::create(['nombre' => 'DSMES - salida', 'precio_unitario' => 4060.50, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
+
+    $servicio = app(CargosEstancia::class);
+    $servicio->agregarPaqueteInternacional($prefactura, FactServicio::PAQUETE_ENTRADA);
+    $servicio->agregarPaqueteInternacional($prefactura, FactServicio::PAQUETE_SALIDA);
+    // Repetido a propósito: no debe duplicar.
+    $tercero = $servicio->agregarPaqueteInternacional($prefactura, FactServicio::PAQUETE_ENTRADA);
+
+    expect($tercero['renglones'])->toBe(0)
+        ->and($prefactura->fresh()->renglones()->count())->toBe(2);
+});
+
+test('un paquete que no existe se rechaza en vez de agregar nada', function () {
+    $prefactura = prefacturaBorrador();
+
+    expect(fn () => app(CargosEstancia::class)->agregarPaqueteInternacional($prefactura, 'tranvia'))
+        ->toThrow(InvalidArgumentException::class);
+});
+
+test('los servicios dados de baja del otro paquete no cuentan como faltantes de este', function () {
+    $prefactura = prefacturaBorrador();
+    FactServicio::create(['nombre' => 'DSMEE - entrada', 'precio_unitario' => 4060.50, 'paquete_internacional' => FactServicio::PAQUETE_ENTRADA]);
+    FactServicio::create(['nombre' => 'DSMES - salida', 'precio_unitario' => 4060.50, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA, 'status' => FactServicio::STATUS_INACTIVO]);
+
+    $resultado = app(CargosEstancia::class)
+        ->agregarPaqueteInternacional($prefactura, FactServicio::PAQUETE_ENTRADA);
+
+    expect($resultado['renglones'])->toBe(1)
+        ->and($resultado['activos'])->toBe(1)
+        ->and($resultado['faltantes'])->toBe([])
+        ->and($resultado['motivo'])->toBeNull();
 });

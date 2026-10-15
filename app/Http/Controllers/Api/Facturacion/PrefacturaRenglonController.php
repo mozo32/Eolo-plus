@@ -345,7 +345,7 @@ class PrefacturaRenglonController extends Controller
             // El servicio toma el candado y rechaza una cerrada ANTES de que se escriba
             // nada: por eso el cambio de destino va después, ya con la fila bloqueada y
             // comprobada como borrador.
-            $resultado = $cargos->agregarPaqueteInternacional($prefactura);
+            $resultado = $cargos->agregarPaqueteInternacional($prefactura, FactServicio::PAQUETE_SALIDA);
 
             // Solo se marca internacional si la prefactura TIENE algo del paquete (lo que
             // se agregó ahora o lo que ya estaba). Marcarla sin ninguno la deja en un

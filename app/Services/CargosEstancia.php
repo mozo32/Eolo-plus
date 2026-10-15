@@ -207,7 +207,8 @@ class CargosEstancia
     }
 
     /**
-     * Agrega los servicios del paquete internacional que falten, con el precio del
+     * Agrega los servicios del paquete internacional (`entrada` o `salida`, ver
+     * `FactServicio::PAQUETE_*`) que falten, con el precio del
      * catálogo. Solo se agregan los ACTIVOS: uno dado de baja no se cobra, y eso es
      * correcto, pero NO puede pasar en silencio. Un paquete que agrega 3 de 4 cobra
      * de menos y el toast diría «agregado», así que el resultado dice qué faltó.
@@ -223,21 +224,25 @@ class CargosEstancia
      *
      * @throws RenglonDePrefacturaCerradaException si la prefactura ya está cerrada.
      */
-    public function agregarPaqueteInternacional(FactPrefactura $prefactura): array
+    public function agregarPaqueteInternacional(FactPrefactura $prefactura, string $paquete): array
     {
-        return DB::transaction(function () use ($prefactura) {
+        if (! in_array($paquete, [FactServicio::PAQUETE_ENTRADA, FactServicio::PAQUETE_SALIDA], true)) {
+            throw new InvalidArgumentException("No existe el paquete internacional '{$paquete}'.");
+        }
+
+        return DB::transaction(function () use ($prefactura, $paquete) {
             $actual = $this->bloquearBorrador($prefactura);
 
             // `array_filter`: un `NOT IN` con un NULL en la lista no devuelve nada.
             $yaPuestos = array_values(array_filter($actual->renglones()->pluck('servicio_id')->all()));
 
             // El paquete COMPLETO, activo o no: hace falta saber qué quedó fuera y por qué.
-            $paquete = FactServicio::query()
-                ->whereNotNull('paquete_internacional')
+            $paqueteCompleto = FactServicio::query()
+                ->where('paquete_internacional', $paquete)
                 ->orderBy('id')
                 ->get();
 
-            $servicios = $paquete
+            $servicios = $paqueteCompleto
                 ->where('status', FactServicio::STATUS_ACTIVO)
                 ->whereNotIn('id', $yaPuestos);
 
@@ -261,20 +266,20 @@ class CargosEstancia
             }
 
             // Un servicio dado de baja que ya está en los renglones no «falta»: ya se cobra.
-            $dadosDeBaja = $paquete
+            $dadosDeBaja = $paqueteCompleto
                 ->where('status', '!=', FactServicio::STATUS_ACTIVO)
                 ->whereNotIn('id', $yaPuestos)
                 ->pluck('nombre')
                 ->all();
 
-            $enPaquete = $paquete->whereIn('id', $yaPuestos)->count() + $creados;
+            $enPaquete = $paqueteCompleto->whereIn('id', $yaPuestos)->count() + $creados;
 
             return [
                 'renglones' => $creados,
                 'en_paquete' => $enPaquete,
-                'activos' => $paquete->where('status', FactServicio::STATUS_ACTIVO)->count(),
+                'activos' => $paqueteCompleto->where('status', FactServicio::STATUS_ACTIVO)->count(),
                 'faltantes' => $dadosDeBaja,
-                'motivo' => $this->motivoDelPaquete($paquete->count(), $creados, $dadosDeBaja),
+                'motivo' => $this->motivoDelPaquete($paqueteCompleto->count(), $creados, $dadosDeBaja),
             ];
         });
     }
