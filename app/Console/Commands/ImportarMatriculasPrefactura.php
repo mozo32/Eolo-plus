@@ -26,7 +26,7 @@ class ImportarMatriculasPrefactura extends Command
      * alguien haya editado desde la aplicación se perdería. Varias guardan
      * tarifas que se cobran y tienen pantalla de edición.
      *
-     * `concepto` y `en_paquete_internacional` de los servicios no figuran: no se
+     * `concepto` y `paquete_internacional` de los servicios no figuran: no se
      * editan desde la aplicación (solo un SQL a mano los alteraría), y el importador
      * solo asigna el concepto a una fila que lo tiene en NULL, nunca lo cambia.
      *

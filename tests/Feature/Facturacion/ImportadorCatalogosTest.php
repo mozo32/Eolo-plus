@@ -657,9 +657,9 @@ test('el importador asigna el concepto por el id viejo', function () {
 
     expect(FactServicio::porConcepto(FactServicio::CONCEPTO_COMBUSTIBLE)->sole()->nombre)->toBe('Combustible JET A-1')
         ->and(FactServicio::porConcepto(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H)->sole()->nombre)->toBe('Transito 02 hrs')
-        ->and(FactServicio::where('nombre', 'DSMES - salida')->sole()->en_paquete_internacional)->toBeTrue()
+        ->and(FactServicio::where('nombre', 'DSMES - salida')->sole()->paquete_internacional)->toBe(FactServicio::PAQUETE_SALIDA)
         ->and(FactServicio::where('nombre', 'Comisariato')->sole()->concepto)->toBeNull()
-        ->and(FactServicio::where('nombre', 'Comisariato')->sole()->en_paquete_internacional)->toBeFalse();
+        ->and(FactServicio::where('nombre', 'Comisariato')->sole()->paquete_internacional)->toBeNull();
 });
 
 test('el importador asigna los siete conceptos y una segunda corrida no los duplica', function () {
@@ -684,7 +684,7 @@ test('el importador asigna los siete conceptos y una segunda corrida no los dupl
         FactServicio::CONCEPTO_ESTANCIA_PERNOCTA => 'Transito 24 hrs - pernocta',
         FactServicio::CONCEPTO_COMBUSTIBLE => 'Combustible JET A-1',
     ])
-        ->and(FactServicio::where('en_paquete_internacional', true)->count())->toBe(4)
+        ->and(FactServicio::whereNotNull('paquete_internacional')->count())->toBe(4)
         ->and(FactServicio::count())->toBe(9);
 });
 
@@ -788,13 +788,13 @@ test('una reimportacion restablece la marca del paquete internacional', function
     app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
     // Alguien desmarca el de paquete y marca el que no lo es.
-    FactServicio::where('nombre', 'DSMES - salida')->update(['en_paquete_internacional' => false]);
-    FactServicio::where('nombre', 'Comisariato')->update(['en_paquete_internacional' => true]);
+    FactServicio::where('nombre', 'DSMES - salida')->update(['paquete_internacional' => null]);
+    FactServicio::where('nombre', 'Comisariato')->update(['paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
 
     app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
-    expect(FactServicio::where('nombre', 'DSMES - salida')->sole()->en_paquete_internacional)->toBeTrue()
-        ->and(FactServicio::where('nombre', 'Comisariato')->sole()->en_paquete_internacional)->toBeFalse();
+    expect(FactServicio::where('nombre', 'DSMES - salida')->sole()->paquete_internacional)->toBe(FactServicio::PAQUETE_SALIDA)
+        ->and(FactServicio::where('nombre', 'Comisariato')->sole()->paquete_internacional)->toBeNull();
 });
 
 test('si la fila con concepto renombrada y otra sin concepto comparten el nombre del origen, sale un hallazgo con las dos', function () {
@@ -987,4 +987,22 @@ test('si la migracion de los conceptos de ajuste ya los asigno, reimportar los r
     app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
 
     expect(FactServicio::count())->toBe(2);
+});
+
+test('el importador marca el paquete de entrada y el de salida por el id viejo, y deja Despacho de Vuelos fuera', function () {
+    DB::connection('remota')->table('tb_servicio')->insert([
+        ['id_servicio' => 8, 'servicio' => 'DSMEE - entrada', 'precio_u' => '1', 'id_categorias' => 1],
+        ['id_servicio' => 24, 'servicio' => 'Despacho de Vuelos', 'precio_u' => '1', 'id_categorias' => 1],
+        ['id_servicio' => 92, 'servicio' => 'Servicios Internacionales - entrada', 'precio_u' => '1', 'id_categorias' => 1],
+        ['id_servicio' => 93, 'servicio' => 'Servicios Internacionales - salida', 'precio_u' => '1', 'id_categorias' => 1],
+    ]);
+
+    app(ImportadorMatriculas::class)->ejecutar(aplicar: true);
+
+    expect(FactServicio::pluck('paquete_internacional', 'nombre')->all())->toBe([
+        'DSMEE - entrada' => FactServicio::PAQUETE_ENTRADA,
+        'Despacho de Vuelos' => null,
+        'Servicios Internacionales - entrada' => FactServicio::PAQUETE_ENTRADA,
+        'Servicios Internacionales - salida' => FactServicio::PAQUETE_SALIDA,
+    ]);
 });

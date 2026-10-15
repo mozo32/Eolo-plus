@@ -94,7 +94,7 @@ test('el renglon de estancia congela la tarifa aunque la matricula cambie despue
 test('el paquete internacional agrega las cuatro con el precio del catalogo', function () {
     $p = conEstancia();
     foreach ([['DSMES - salida', 4060.50], ['DSM - salida', 348.0], ['Mex-eAPI - salida', 900.0], ['Servicios Internacionales - salida', 750.0]] as [$nombre, $precio]) {
-        FactServicio::create(['nombre' => $nombre, 'precio_unitario' => $precio, 'en_paquete_internacional' => true]);
+        FactServicio::create(['nombre' => $nombre, 'precio_unitario' => $precio, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
     }
 
     $agregados = app(CargosEstancia::class)->agregarPaqueteInternacional($p);
@@ -109,7 +109,7 @@ test('el paquete internacional agrega las cuatro con el precio del catalogo', fu
 
 test('el paquete internacional no se duplica si ya esta', function () {
     $p = conEstancia();
-    FactServicio::create(['nombre' => 'DSMES - salida', 'precio_unitario' => 4060.50, 'en_paquete_internacional' => true]);
+    FactServicio::create(['nombre' => 'DSMES - salida', 'precio_unitario' => 4060.50, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
 
     app(CargosEstancia::class)->agregarPaqueteInternacional($p);
     app(CargosEstancia::class)->agregarPaqueteInternacional($p->fresh());
@@ -177,7 +177,7 @@ test('una cerrada sin ficha de facturacion se rechaza y no pierde su estancia', 
 
 test('el paquete internacional no agrega nada a una prefactura cerrada', function () {
     $p = conEstancia();
-    FactServicio::create(['nombre' => 'DSMES - salida', 'precio_unitario' => 4060.50, 'en_paquete_internacional' => true]);
+    FactServicio::create(['nombre' => 'DSMES - salida', 'precio_unitario' => 4060.50, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
     cerrarConSello(FactPrefactura::find($p->id), '0.00', '0.00', '0.00');
 
     expect(fn () => app(CargosEstancia::class)->agregarPaqueteInternacional($p))
@@ -394,7 +394,7 @@ test('un servicio de estancia dado de baja no se cobra', function () {
 test('el paquete internacional con parte del paquete ya puesto agrega solo lo que falta', function () {
     $p = conEstancia();
     $servicios = collect([['DSMES - salida', 4060.50], ['DSM - salida', 348.0], ['Mex-eAPI - salida', 900.0]])
-        ->map(fn ($f) => FactServicio::create(['nombre' => $f[0], 'precio_unitario' => $f[1], 'en_paquete_internacional' => true]));
+        ->map(fn ($f) => FactServicio::create(['nombre' => $f[0], 'precio_unitario' => $f[1], 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]));
 
     // La persona ya puso el segundo, con otra cantidad.
     $p->renglones()->create([
@@ -421,7 +421,7 @@ test('el paquete internacional con parte del paquete ya puesto agrega solo lo qu
 function paqueteInternacionalDelCatalogo(): array
 {
     return collect([['DSMES - salida', 4060.50], ['DSM - salida', 348.0], ['Mex-eAPI - salida', 900.0], ['Servicios Internacionales - salida', 750.0]])
-        ->map(fn ($f) => FactServicio::create(['nombre' => $f[0], 'precio_unitario' => $f[1], 'en_paquete_internacional' => true]))
+        ->map(fn ($f) => FactServicio::create(['nombre' => $f[0], 'precio_unitario' => $f[1], 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]))
         ->all();
 }
 

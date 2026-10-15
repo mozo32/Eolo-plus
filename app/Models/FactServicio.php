@@ -53,13 +53,19 @@ class FactServicio extends Model
         self::CONCEPTO_ESTANCIA_AJUSTE_12H_PERNOCTA,
     ];
 
+    /** Servicios que carga una LLEGADA internacional. */
+    public const PAQUETE_ENTRADA = 'entrada';
+
+    /** Servicios que carga una SALIDA internacional. */
+    public const PAQUETE_SALIDA = 'salida';
+
     protected $table = 'fact_servicios';
 
     protected $fillable = [
         'categoria_servicio_id',
         'nombre',
         'concepto',
-        'en_paquete_internacional',
+        'paquete_internacional',
         'precio_unitario',
         'es_de_tercero',
         'margen',
@@ -71,7 +77,6 @@ class FactServicio extends Model
         'precio_unitario' => 'decimal:4',
         'margen' => 'decimal:2',
         'es_de_tercero' => 'boolean',
-        'en_paquete_internacional' => 'boolean',
     ];
 
     public function scopeActivos(Builder $query): Builder

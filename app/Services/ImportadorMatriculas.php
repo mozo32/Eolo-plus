@@ -80,8 +80,15 @@ class ImportadorMatriculas
         5 => FactFormaPago::CONCEPTO_AVCARD,
     ];
 
-    /** Los cuatro que `insert22.php` agrega juntos cuando el destino es internacional. */
-    private const SERVICIOS_PAQUETE_INTERNACIONAL = [9, 10, 14, 93];
+    /** Los cuatro que `insert22.php` agrega cuando el DESTINO es internacional. */
+    private const SERVICIOS_PAQUETE_SALIDA = [9, 10, 14, 93];
+
+    /**
+     * Los seis que el sistema viejo agrega cuando el ORIGEN es internacional. Sin
+     * «Despacho de Vuelos» (id 24): medido, está en el 53% de los folios puramente
+     * nacionales, así que no es un servicio del paquete.
+     */
+    private const SERVICIOS_PAQUETE_ENTRADA = [8, 11, 12, 13, 15, 92];
 
     private ResultadoImportacion $resultado;
 
@@ -835,7 +842,11 @@ class ImportadorMatriculas
                 // 0 en silencio: solo evita un null en la columna si el
                 // origen cambiara.
                 'precio_unitario' => $fila->precio_u ?? 0,
-                'en_paquete_internacional' => in_array($idViejo, self::SERVICIOS_PAQUETE_INTERNACIONAL, true),
+                'paquete_internacional' => match (true) {
+                    in_array($idViejo, self::SERVICIOS_PAQUETE_ENTRADA, true) => FactServicio::PAQUETE_ENTRADA,
+                    in_array($idViejo, self::SERVICIOS_PAQUETE_SALIDA, true) => FactServicio::PAQUETE_SALIDA,
+                    default => null,
+                },
                 'es_de_tercero' => $esDeTercero,
                 'margen' => $esDeTercero ? self::MARGEN_TERCERO : 0,
                 'ajuste_precio' => match ($idViejo) {

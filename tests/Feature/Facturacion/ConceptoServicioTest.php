@@ -56,8 +56,8 @@ test('un servicio sin el concepto no lo toca la sincronia aunque se llame igual'
 });
 
 test('el paquete internacional son las cuatro marcadas', function () {
-    FactServicio::create(['nombre' => 'DSMES - salida', 'precio_unitario' => 4060.5, 'en_paquete_internacional' => true]);
+    FactServicio::create(['nombre' => 'DSMES - salida', 'precio_unitario' => 4060.5, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
     FactServicio::create(['nombre' => 'Comisariato', 'precio_unitario' => 100]);
 
-    expect(FactServicio::where('en_paquete_internacional', true)->count())->toBe(1);
+    expect(FactServicio::whereNotNull('paquete_internacional')->count())->toBe(1);
 });

@@ -233,7 +233,7 @@ class CargosEstancia
 
             // El paquete COMPLETO, activo o no: hace falta saber qué quedó fuera y por qué.
             $paquete = FactServicio::query()
-                ->where('en_paquete_internacional', true)
+                ->whereNotNull('paquete_internacional')
                 ->orderBy('id')
                 ->get();
 

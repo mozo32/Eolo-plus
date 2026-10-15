@@ -300,7 +300,7 @@ test('si se cierra entre el chequeo y el candado, recalcular estancia responde 4
 test('si se cierra entre el chequeo y el candado, el paquete internacional responde 409 y no cambia el destino', function () {
     $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
     $this->actingAs($usuario);
-    FactServicio::create(['nombre' => 'Migracion', 'precio_unitario' => 300.0, 'en_paquete_internacional' => true]);
+    FactServicio::create(['nombre' => 'Migracion', 'precio_unitario' => 300.0, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
     $p = completarParaCerrar(prefacturaBorrador());
     $antes = $p->renglones()->count();
     cierraTrasLaComprobacion($p, $usuario->id);
@@ -437,7 +437,7 @@ test('una cerrada sin tasa sellada y con tasa ilegible en configuracion no revie
 test('cada escritura queda en bitacora con su registro', function () {
     $usuario = usuarioConSubdepartamento('factPrefacturas', 'Facturacion');
     $this->actingAs($usuario);
-    FactServicio::create(['nombre' => 'Migracion', 'precio_unitario' => 300.0, 'en_paquete_internacional' => true]);
+    FactServicio::create(['nombre' => 'Migracion', 'precio_unitario' => 300.0, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
 
     $id = $this->postJson('/api/facturacion/prefacturas', cuerpoPrefactura())->assertCreated()->json('prefactura.id');
     $this->putJson("/api/facturacion/prefacturas/{$id}", cuerpoPrefactura(['origen' => 'MMMX']))->assertOk();
@@ -568,7 +568,7 @@ test('un renglon de otra prefactura no se puede quitar por esta', function () {
 
 test('el paquete internacional marca el destino y agrega los servicios del paquete', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
-    FactServicio::create(['nombre' => 'Migracion', 'precio_unitario' => 300.0, 'en_paquete_internacional' => true]);
+    FactServicio::create(['nombre' => 'Migracion', 'precio_unitario' => 300.0, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
     $p = prefacturaBorrador();
 
     $this->patchJson("/api/facturacion/prefacturas/{$p->id}/internacional")
@@ -698,7 +698,7 @@ test('un borrador descartado no recibe ninguna escritura de renglones', function
 
 test('si se descarta entre el chequeo y el candado, la escritura de renglones responde 409 ya_descartada', function (string $endpoint) {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
-    FactServicio::create(['nombre' => 'Migracion', 'precio_unitario' => 300.0, 'en_paquete_internacional' => true]);
+    FactServicio::create(['nombre' => 'Migracion', 'precio_unitario' => 300.0, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
     $p = conEstancia();
     $renglon = renglonDe($p, 100.0, 1);
 
@@ -722,7 +722,7 @@ test('si se descarta entre el chequeo y el candado, la escritura de renglones re
 
 test('la bitacora va en la misma transaccion tambien al quitar un renglon, recalcular estancia y marcar internacional', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
-    FactServicio::create(['nombre' => 'Migracion', 'precio_unitario' => 300.0, 'en_paquete_internacional' => true]);
+    FactServicio::create(['nombre' => 'Migracion', 'precio_unitario' => 300.0, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
     $p = conEstancia();
     $renglon = renglonDe($p, 100.0, 1);
 
@@ -880,7 +880,7 @@ test('una prefactura con la operacion de llegada nula no esconde ninguna llegada
 function paqueteInternacionalCompleto(): void
 {
     foreach (['DSMES - salida' => 4060.50, 'DSM - salida' => 348.0, 'Mex-eAPI - salida' => 900.0, 'Servicios Internacionales - salida' => 750.0] as $nombre => $precio) {
-        FactServicio::create(['nombre' => $nombre, 'precio_unitario' => $precio, 'en_paquete_internacional' => true]);
+        FactServicio::create(['nombre' => $nombre, 'precio_unitario' => $precio, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
     }
 }
 
@@ -933,7 +933,7 @@ test('un paquete internacional con cero servicios marcados responde 200 con el m
 
 test('un paquete internacional con todos de baja tampoco marca el destino', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
-    FactServicio::create(['nombre' => 'DSMES - salida', 'precio_unitario' => 4060.50, 'en_paquete_internacional' => true, 'status' => FactServicio::STATUS_INACTIVO]);
+    FactServicio::create(['nombre' => 'DSMES - salida', 'precio_unitario' => 4060.50, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA, 'status' => FactServicio::STATUS_INACTIVO]);
     $p = prefacturaBorrador();
 
     $respuesta = $this->patchJson("/api/facturacion/prefacturas/{$p->id}/internacional")->assertOk()->assertJsonPath('renglones', 0);
@@ -944,7 +944,7 @@ test('un paquete internacional con todos de baja tampoco marca el destino', func
 
 test('si el paquete ya estaba en los renglones, se marca internacional aunque no se agregue nada', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
-    $servicio = FactServicio::create(['nombre' => 'Migracion', 'precio_unitario' => 300.0, 'en_paquete_internacional' => true]);
+    $servicio = FactServicio::create(['nombre' => 'Migracion', 'precio_unitario' => 300.0, 'paquete_internacional' => FactServicio::PAQUETE_SALIDA]);
     $p = prefacturaBorrador();
     $p->renglones()->create([
         'servicio_id' => $servicio->id, 'nombre_servicio' => 'Migracion', 'precio_unitario' => 300.0,
