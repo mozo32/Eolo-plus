@@ -14,6 +14,15 @@ use Illuminate\Support\Facades\DB;
  * completo debe reportar 86,1% de acierto en 2803 folios. Si da otra cifra, el
  * código no implementa la regla que se midió al diseñar esto.
  *
+ * "Folios comparados" cuenta FILAS de `tb_llegadas`, no folios distintos: hay 39
+ * folios con más de una llegada (2761 folios distintos frente a 2832 filas con
+ * renglones de estancia). Cada fila se contrasta contra las cantidades vendidas
+ * de su folio, así que un folio repetido cuenta una vez por llegada. Los 2803 del
+ * criterio de aceptación son filas; la cifra no se normaliza por folio a propósito.
+ *
+ * Una fecha cero del origen (`0000-00-00 ...`) se trata como nula: el folio cuenta
+ * como inservible, no como un fallo con millones de pernoctas.
+ *
  * Solo lectura, como `comparar-prefacturas` y `comparar-pagos`.
  */
 class CompararEstancia extends Command
@@ -113,7 +122,7 @@ class CompararEstancia extends Command
 
     private function momento(mixed $valor): ?Carbon
     {
-        if (! $valor) {
+        if (! $valor || str_starts_with((string) $valor, '0000-00-00')) {
             return null;
         }
 
