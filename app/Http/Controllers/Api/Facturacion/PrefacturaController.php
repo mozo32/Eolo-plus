@@ -15,6 +15,8 @@ use App\Models\FactPrefactura;
 use App\Models\FactPrefacturaRenglon;
 use App\Models\FactPrefacturaVersion;
 use App\Models\OperacionDiaria;
+use App\Services\CalculadoraEstancia;
+use App\Services\CargosEstancia;
 use App\Services\CierrePrefactura;
 use App\Services\PrefacturaDescartadaException;
 use App\Services\PrefacturaIncompletaException;
@@ -23,6 +25,7 @@ use App\Services\PrefacturaYaCerradaException;
 use App\Services\ReaperturaPrefactura;
 use App\Services\RenglonDePrefacturaCerradaException;
 use App\Services\SelloInconsistenteException;
+use App\Services\ServicioDeEstanciaNoDisponibleException;
 use App\Services\TotalesNoCalculablesException;
 use DateTimeInterface;
 use Illuminate\Http\JsonResponse;
@@ -232,43 +235,70 @@ class PrefacturaController extends Controller
         ], 201);
     }
 
-    public function update(UpdatePrefacturaRequest $request, int $id): JsonResponse
+    public function update(UpdatePrefacturaRequest $request, int $id, CargosEstancia $cargos): JsonResponse
     {
-        $resultado = DB::transaction(function () use ($request, $id) {
-            // CANDADO y comprobación DENTRO de la transacción: leer el estado antes y
-            // escribir después deja una ventana en la que otra sesión puede cerrar, y
-            // la cabecera de un documento ya emitido cambiaría debajo de su sello.
-            $prefactura = FactPrefactura::query()->whereKey($id)->lockForUpdate()->firstOrFail();
+        try {
+            $resultado = DB::transaction(function () use ($request, $id, $cargos) {
+                // CANDADO y comprobación DENTRO de la transacción: leer el estado antes y
+                // escribir después deja una ventana en la que otra sesión puede cerrar, y
+                // la cabecera de un documento ya emitido cambiaría debajo de su sello.
+                $prefactura = FactPrefactura::query()->whereKey($id)->lockForUpdate()->firstOrFail();
 
-            if ($respuesta = $this->rechazarSiCerrada($prefactura)) {
-                return $respuesta;
-            }
+                if ($respuesta = $this->rechazarSiCerrada($prefactura)) {
+                    return $respuesta;
+                }
 
-            if ($respuesta = $this->rechazarSiDescartada($prefactura)) {
-                return $respuesta;
-            }
+                if ($respuesta = $this->rechazarSiDescartada($prefactura)) {
+                    return $respuesta;
+                }
 
-            $antes = $this->datosRegistrados($prefactura);
-            $prefactura->update($request->validated());
+                $antes = $this->datosRegistrados($prefactura);
+                $salidaAnterior = $prefactura->salida_at?->format('Y-m-d H:i:s');
+                $prefactura->update($request->validated());
 
-            // Una reabierta NO es un borrador: tiene folio gastado, documento emitido y versión guardada. La bitácora es con lo que se
-            // reconstruye qué le pasó al folio, así que la descripción dice lo que el documento es en este momento.
-            $descripcion = $prefactura->estaReabierta()
-                ? "Se editó la cabecera de la prefactura {$prefactura->id} (folio {$prefactura->folio}), reabierta para corregirse."
-                : "Se editó el borrador de prefactura {$prefactura->id}.";
+                // La estancia se recalcula SOLO cuando la salida cambia. Guardar la cabecera
+                // por otro motivo no debe pisar una cantidad que el operador corrigió a mano:
+                // la regla acierta en el 86,1% de los casos y el 13,9% restante es suyo. Es el
+                // mismo criterio de `OperacionesDiariasController::validarFechaSiCambia()`.
+                // Dentro del candado de arriba, y con la cabecera ya escrita.
+                $salidaNueva = $prefactura->salida_at?->format('Y-m-d H:i:s');
 
-            Bitacora::log(
-                modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
-                accion: Bitacora::ACCION_ACTUALIZAR,
-                descripcion: $descripcion,
-                usuarioId: $request->user()->id,
-                registroId: $prefactura->id,
-                datosAnteriores: $antes,
-                datosNuevos: $this->datosRegistrados($prefactura->fresh()),
-            );
+                if ($salidaNueva !== $salidaAnterior && $salidaNueva !== null && $prefactura->llegada_at !== null) {
+                    $tramos = CalculadoraEstancia::tramos($prefactura->llegada_at, $prefactura->salida_at);
 
-            return $prefactura;
-        });
+                    // Los dos ajustes de estancia siguen siendo manuales: se quedan en cero.
+                    $cargos->recalcular(
+                        $prefactura,
+                        $tramos['pernoctas'],
+                        $tramos['transitos2h'],
+                        $tramos['transitos12h'],
+                    );
+                }
+
+                // Una reabierta NO es un borrador: tiene folio gastado, documento emitido y versión guardada. La bitácora es con lo que se
+                // reconstruye qué le pasó al folio, así que la descripción dice lo que el documento es en este momento.
+                $descripcion = $prefactura->estaReabierta()
+                    ? "Se editó la cabecera de la prefactura {$prefactura->id} (folio {$prefactura->folio}), reabierta para corregirse."
+                    : "Se editó el borrador de prefactura {$prefactura->id}.";
+
+                Bitacora::log(
+                    modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
+                    accion: Bitacora::ACCION_ACTUALIZAR,
+                    descripcion: $descripcion,
+                    usuarioId: $request->user()->id,
+                    registroId: $prefactura->id,
+                    datosAnteriores: $antes,
+                    datosNuevos: $this->datosRegistrados($prefactura->fresh()),
+                );
+
+                return $prefactura;
+            });
+        } catch (ServicioDeEstanciaNoDisponibleException $e) {
+            // Se revirtió todo, también la cabecera: guardar una salida sin poder cobrar su
+            // estancia dejaría una prefactura que parece completa y no lo es. El mensaje
+            // ya dice qué hacer.
+            return response()->json(['message' => $e->getMessage(), 'codigo' => 'servicio_estancia_no_disponible'], 422);
+        }
 
         if ($resultado instanceof JsonResponse) {
             return $resultado;
