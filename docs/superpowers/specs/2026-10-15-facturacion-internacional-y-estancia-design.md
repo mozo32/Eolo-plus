@@ -85,7 +85,7 @@ hrs`) y 4 (`Tránsito 24 hrs - pernocta`):
 | Folios comparados | 2 803 |
 | La regla acierta | **2 412 (86,1 %)** |
 | Falla | 391 (13,9 %) |
-| Con fechas inservibles (salida anterior a la llegada, o nulas) | 31 |
+| Con fechas inservibles (salida anterior a la llegada, o nulas) | 29 |
 
 Los desajustes se agrupan, y ninguno parece una regla distinta:
 
@@ -104,6 +104,19 @@ casos en que ese resto se convierte en una pernocta más. Al aplicar esa
 «corrección» el acierto **cayó del 86,1 % al 62,0 %**.
 
 La regla buena es la de abajo. Quien revise esta spec no debe rehacer ese atajo.
+
+### 3c. La cifra de «fechas inservibles» que escribí primero (31) estaba mal
+
+Decía 31 y son **29**. El script con el que medí contaba como «folio con estancia»
+a los que solo tenían renglones de AJUSTE (los servicios 109 y 110), que no son
+tramos y la regla no los deriva. Contando solo los tres tramos —que es lo que mide
+la regla— salen 29, y dos definiciones distintas de «inservible» (`strtotime` con
+nulos filtrados antes, y `Carbon::parse` sin filtro) dan 29 sin discrepar en una
+sola fila.
+
+Las tres cifras que sostienen la spec no cambian: 2803 comparados, 2412 aciertos,
+86,1 %. Esos dos folios de más nunca llegaron a compararse en ninguna de las dos
+cuentas, porque en ambas eran inservibles.
 
 ### 4. «Despacho de Vuelos» no es un servicio internacional
 

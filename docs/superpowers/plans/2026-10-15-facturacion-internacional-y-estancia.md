@@ -531,7 +531,7 @@ Esperado, exactamente:
 Folios comparados: 2803
   La regla acierta en: 2412  (86.1%)
   Falla en:            391  (13.9%)
-  Con fechas inservibles: 31
+  Con fechas inservibles: 29
 ```
 
 **Si la cifra no es 86,1 % sobre 2 803 folios, PARA.** No ajustes la regla para
