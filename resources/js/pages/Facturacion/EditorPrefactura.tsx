@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import CabeceraPantalla from './components/CabeceraPantalla';
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO, TD, TH, campoConError, errorStyle, labelStyle, sectionTitle, toast } from './components/estilos';
-import { esConceptoComisionAmex, esConceptoDeEstancia, esHora24, esMontoPositivo, fechaHoraSinZona, formatearMonto, formatearTasa, partirFechaHora, unirFechaHora } from './components/formato';
+import { esConceptoComisionAmex, esConceptoDeEstancia, esHora24, esMontoPositivo, fechaHoraSinZona, formatearHora24, formatearMonto, formatearTasa, partirFechaHora, unirFechaHora } from './components/formato';
 import ModalEstancia, { type CantidadesEstancia } from './components/ModalEstancia';
 import ModalReabrir from './components/ModalReabrir';
 import ModalRenglon, { type DatosRenglon } from './components/ModalRenglon';
@@ -496,6 +496,9 @@ export default function EditorPrefactura({ id }: Props) {
             if (hora !== '' && !esHora24(hora)) return MENSAJE_HORA_24;
             if (fecha !== '' && hora === '') return 'Falta la hora, en formato de 24 horas (por ejemplo, 14:30).';
             if (fecha === '' && hora !== '') return 'Falta la fecha.';
+            // El invariante: solo se manda null si los dos campos están vacíos (limpiar). Cubre lo que las reglas de arriba no enumeran, p. ej.
+            // un `<input type="date">` con año de cinco dígitos ("20266-01-01"), que `unirFechaHora` no acepta.
+            if ((fecha !== '' || hora !== '') && unirFechaHora(fecha, hora) === null) return 'La fecha no es válida.';
             return undefined;
         };
         const errorLlegada = errorDeHora(form.llegadaFecha, form.llegadaHora);
@@ -1111,7 +1114,7 @@ export default function EditorPrefactura({ id }: Props) {
                                         aria-label="Hora de llegada, en formato de 24 horas"
                                         value={soloLectura ? partirFechaHora(prefactura.llegada_at).hora : form.llegadaHora}
                                         disabled={soloLectura}
-                                        onChange={e => cambiar('llegadaHora', e.target.value, 'llegada_at')}
+                                        onChange={e => cambiar('llegadaHora', formatearHora24(e.target.value), 'llegada_at')}
                                         className={campoConError(!!erroresForm.llegada_at)}
                                         aria-invalid={erroresForm.llegada_at ? true : undefined}
                                     />
@@ -1144,7 +1147,7 @@ export default function EditorPrefactura({ id }: Props) {
                                         aria-label="Hora de salida, en formato de 24 horas"
                                         value={soloLectura ? partirFechaHora(prefactura.salida_at).hora : form.salidaHora}
                                         disabled={soloLectura}
-                                        onChange={e => cambiar('salidaHora', e.target.value, 'salida_at')}
+                                        onChange={e => cambiar('salidaHora', formatearHora24(e.target.value), 'salida_at')}
                                         className={campoConError(!!erroresForm.salida_at)}
                                         aria-invalid={erroresForm.salida_at ? true : undefined}
                                     />

@@ -263,6 +263,17 @@ export function esHora24(hora: string): boolean {
 }
 
 /**
+ * Lo que se teclea en el campo de hora: deja solo dígitos (máximo 4) y pone los dos puntos solo ("1430" -> "14:30"). Así la hora se
+ * puede escribir con un teclado numérico, que en iOS y en muchos Android no trae el ":". Mismo enfoque que `formatearHora24` de la
+ * entrega de turno de Rampa.
+ */
+export function formatearHora24(valor: string): string {
+    const numeros = valor.replace(/\D/g, '').slice(0, 4);
+
+    return numeros.length <= 2 ? numeros : `${numeros.slice(0, 2)}:${numeros.slice(2)}`;
+}
+
+/**
  * Los cargos de estancia (pernocta y los dos tránsitos) los pone «Recalcular estancia» con la tarifa de la matrícula; el
  * precio del catálogo es relleno. Por eso no se agregan a mano y, en un renglón, se marcan: el recálculo los reemplaza.
  */
