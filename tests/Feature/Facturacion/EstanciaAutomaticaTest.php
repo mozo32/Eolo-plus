@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Bitacora;
 use App\Models\FactPrefactura;
 use App\Models\FactServicio;
 
@@ -170,4 +171,78 @@ test('sin recalculo no hay aviso de estancia', function () {
     $this->putJson("/api/facturacion/prefacturas/{$p->id}", cabecera($p))
         ->assertOk()
         ->assertJson(fn ($json) => $json->where('estancia_aviso', null)->etc());
+});
+
+
+test('corregir la salida CONSERVA los dos ajustes manuales de estancia', function () {
+    // `recalcular()` borra los cinco conceptos de estancia y solo recrea los que traen
+    // cantidad. Pasarle 0 en los ajustes no es «dejarlos»: es borrarlos, y la prefactura
+    // cobraría de menos sin que nadie se enterara.
+    foreach ([
+        FactServicio::CONCEPTO_ESTANCIA_AJUSTE_2H_12H => 'Ajuste de Estancia_de 2 hrs a 12 hrs',
+        FactServicio::CONCEPTO_ESTANCIA_AJUSTE_12H_PERNOCTA => 'Ajuste de Estancia_de 12 hrs a pernocta',
+    ] as $concepto => $nombre) {
+        FactServicio::create(['nombre' => $nombre, 'precio_unitario' => 0, 'concepto' => $concepto]);
+    }
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = conEstancia();
+
+    $this->putJson("/api/facturacion/prefacturas/{$p->id}", cabecera($p, ['salida_at' => '2026-10-22 12:00:00']))->assertOk();
+
+    // El operador abre «Recalcular estancia» y añade los dos ajustes.
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/estancia", [
+        'pernoctas' => 7,
+        'transitos_2h' => 0,
+        'transitos_12h' => 0,
+        'ajustes_2h_12h' => 2,
+        'ajustes_12h_pernocta' => 3,
+    ])->assertOk();
+
+    // Y luego corrige la salida porque el avión se retrasó.
+    $this->putJson("/api/facturacion/prefacturas/{$p->id}", cabecera($p, ['salida_at' => '2026-10-23 12:00:00']))->assertOk();
+
+    expect(cantidadDe($p->fresh(), FactServicio::CONCEPTO_ESTANCIA_PERNOCTA))->toBe(8)
+        ->and(cantidadDe($p->fresh(), FactServicio::CONCEPTO_ESTANCIA_AJUSTE_2H_12H))->toBe(2)
+        ->and(cantidadDe($p->fresh(), FactServicio::CONCEPTO_ESTANCIA_AJUSTE_12H_PERNOCTA))->toBe(3)
+        ->and($p->fresh()->renglones()->count())->toBe(3);
+});
+
+test('el recalculo automatico deja constancia en la bitacora, con las cantidades aplicadas', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = conEstancia();
+
+    $this->putJson("/api/facturacion/prefacturas/{$p->id}", cabecera($p, ['salida_at' => '2026-10-22 20:15:00']))->assertOk();
+
+    $entrada = Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)
+        ->where('accion', Bitacora::ACCION_ACTUALIZAR)
+        ->where('registro_id', $p->id)
+        ->where('descripcion', 'like', 'Se recalculó la estancia%')
+        ->sole();
+
+    // 7 dias y 8:15 -> 7 pernoctas y 1 transito de 12 h: 2 renglones.
+    expect($entrada->descripcion)->toContain("prefactura {$p->id}")->toContain('2 renglones')
+        ->and($entrada->datos_nuevos)->toBe([
+            'pernoctas' => 7,
+            'transitos_2h' => 0,
+            'transitos_12h' => 1,
+            'ajustes_2h_12h' => 0,
+            'ajustes_12h_pernocta' => 0,
+        ])
+        ->and($entrada->datos_anteriores)->toBe([
+            'pernoctas' => 0,
+            'transitos_2h' => 0,
+            'transitos_12h' => 0,
+            'ajustes_2h_12h' => 0,
+            'ajustes_12h_pernocta' => 0,
+        ]);
+});
+
+test('guardar sin que cambie la salida no anota ningun recalculo', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = conEstancia();
+
+    $this->putJson("/api/facturacion/prefacturas/{$p->id}", cabecera($p, ['origen' => 'KMIA']))->assertOk();
+
+    expect(Bitacora::where('registro_id', $p->id)->where('descripcion', 'like', 'Se recalculó la estancia%')->count())->toBe(0);
 });

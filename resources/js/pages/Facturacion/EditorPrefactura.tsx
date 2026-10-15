@@ -517,7 +517,7 @@ export default function EditorPrefactura({ id }: Props) {
 
         try {
             // La matrícula y el tipo de destino no se editan aquí (el destino internacional lo marca su botón), pero el servidor los exige.
-            const { prefactura: guardada } = await apiPrefacturas.editar(prefactura.id, {
+            const { prefactura: guardada, estancia_aviso: avisoDeEstancia } = await apiPrefacturas.editar(prefactura.id, {
                 aeronave_id: prefactura.aeronave_id,
                 tipo_destino: prefactura.tipo_destino,
                 cliente_id: form.clienteId,
@@ -529,6 +529,21 @@ export default function EditorPrefactura({ id }: Props) {
 
             aplicar(guardada);
             setForm(formularioDe(guardada));
+
+            if (avisoDeEstancia !== null) {
+                // Al guardar la salida el servidor recalcula la estancia y puede dejarla sin cobrar (Guarda, sin ficha, tarifa nula) o perder una
+                // cortesía. Un toast de «guardado» encima sería el cobro silencioso: se queda como aviso en la tabla y se explica en un diálogo.
+                setAvisoCargos(avisoDeEstancia);
+                await Swal.fire({
+                    icon: 'warning',
+                    titleText: 'Encabezado guardado, con un aviso de estancia',
+                    text: avisoDeEstancia,
+                    confirmButtonColor: '#4f46e5',
+                });
+
+                return;
+            }
+
             toast.fire({ icon: 'success', titleText: 'Encabezado guardado.' });
         } catch (e) {
             const delCampo = e instanceof ErrorApi && e.codigo === null ? Object.entries(e.errors).filter(([campo]) => CAMPOS_DEL_ENCABEZADO.includes(campo as CampoEncabezado)) : [];

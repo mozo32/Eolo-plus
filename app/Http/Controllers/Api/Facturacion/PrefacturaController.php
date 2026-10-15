@@ -14,6 +14,7 @@ use App\Models\FactConfiguracion;
 use App\Models\FactPrefactura;
 use App\Models\FactPrefacturaRenglon;
 use App\Models\FactPrefacturaVersion;
+use App\Models\FactServicio;
 use App\Models\OperacionDiaria;
 use App\Services\CalculadoraEstancia;
 use App\Services\CargosEstancia;
@@ -271,13 +272,42 @@ class PrefacturaController extends Controller
                 if ($salidaNueva !== $salidaAnterior && $salidaNueva !== null && $prefactura->llegada_at !== null) {
                     $tramos = CalculadoraEstancia::tramos($prefactura->llegada_at, $prefactura->salida_at);
 
-                    // Los dos ajustes de estancia siguen siendo manuales: se quedan en cero.
-                    $avisoDeEstancia = $cargos->recalcular(
+                    // `recalcular()` borra los CINCO conceptos de estancia y recrea los que
+                    // traen cantidad, así que pasarle 0 en los dos ajustes los borraría. Los
+                    // ajustes son manuales (la regla no los calcula): se leen de los renglones
+                    // que hay y se devuelven tal cual. Antes del recálculo: después ya no están.
+                    $cantidadesAnteriores = $this->cantidadesDeEstancia($prefactura);
+
+                    $resultado = $cargos->recalcular(
                         $prefactura,
                         $tramos['pernoctas'],
                         $tramos['transitos2h'],
                         $tramos['transitos12h'],
-                    )['motivo'] ?? null;
+                        $cantidadesAnteriores['ajustes_2h_12h'],
+                        $cantidadesAnteriores['ajustes_12h_pernocta'],
+                    );
+
+                    $avisoDeEstancia = $resultado['motivo'] ?? null;
+
+                    // Es el único camino que cambia cobros sin que nadie lo pida, así que
+                    // queda anotado igual que `PATCH /estancia` (mismas claves), con las
+                    // cantidades de antes: sin ellas no se puede reconstruir por qué un
+                    // folio cobró 8 pernoctas en vez de 7.
+                    Bitacora::log(
+                        modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
+                        accion: Bitacora::ACCION_ACTUALIZAR,
+                        descripcion: "Se recalculó la estancia de la prefactura {$prefactura->id} al cambiar la salida: {$resultado['renglones']} renglones.",
+                        usuarioId: $request->user()->id,
+                        registroId: $prefactura->id,
+                        datosAnteriores: $cantidadesAnteriores,
+                        datosNuevos: [
+                            'pernoctas' => $tramos['pernoctas'],
+                            'transitos_2h' => $tramos['transitos2h'],
+                            'transitos_12h' => $tramos['transitos12h'],
+                            'ajustes_2h_12h' => $cantidadesAnteriores['ajustes_2h_12h'],
+                            'ajustes_12h_pernocta' => $cantidadesAnteriores['ajustes_12h_pernocta'],
+                        ],
+                    );
                 }
 
                 // Una reabierta NO es un borrador: tiene folio gastado, documento emitido y versión guardada. La bitácora es con lo que se
@@ -558,6 +588,30 @@ class PrefacturaController extends Controller
     public function fichaDe(int $id): array
     {
         return $this->presentar(FactPrefactura::findOrFail($id)->fresh(), conRenglones: true);
+    }
+
+    /**
+     * Las cantidades de estancia que la prefactura tiene hoy, con las claves de
+     * `PATCH /estancia`. Se lee por el `concepto` del renglón, que es justo lo que
+     * `CargosEstancia` borra al recalcular: lo que se conserva es lo que se borraría.
+     *
+     * @return array{pernoctas: int, transitos_2h: int, transitos_12h: int, ajustes_2h_12h: int, ajustes_12h_pernocta: int}
+     */
+    private function cantidadesDeEstancia(FactPrefactura $prefactura): array
+    {
+        $porConcepto = $prefactura->renglones()
+            ->whereIn('concepto', FactServicio::CONCEPTOS_ESTANCIA)
+            ->get(['concepto', 'cantidad'])
+            ->groupBy('concepto')
+            ->map(fn ($renglones) => (int) $renglones->sum('cantidad'));
+
+        return [
+            'pernoctas' => $porConcepto[FactServicio::CONCEPTO_ESTANCIA_PERNOCTA] ?? 0,
+            'transitos_2h' => $porConcepto[FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H] ?? 0,
+            'transitos_12h' => $porConcepto[FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H] ?? 0,
+            'ajustes_2h_12h' => $porConcepto[FactServicio::CONCEPTO_ESTANCIA_AJUSTE_2H_12H] ?? 0,
+            'ajustes_12h_pernocta' => $porConcepto[FactServicio::CONCEPTO_ESTANCIA_AJUSTE_12H_PERNOCTA] ?? 0,
+        ];
     }
 
     /**

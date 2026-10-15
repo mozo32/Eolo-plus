@@ -576,7 +576,12 @@ export const urlVersionPrefactura = (id: number, version: number) => `${BASE}/pr
 export const apiPrefacturas = {
     ficha: (id: number) => pedir<{ prefactura: Prefactura }>(`${BASE}/prefacturas/${id}`),
     crear: (datos: Record<string, unknown>) => pedir<{ prefactura: Prefactura }>(`${BASE}/prefacturas`, { method: 'POST', body: datos }),
-    editar: (id: number, datos: Record<string, unknown>) => pedir<{ prefactura: Prefactura }>(`${BASE}/prefacturas/${id}`, { method: 'PUT', body: datos }),
+    /**
+     * `estancia_aviso` es el `motivo` de recalcular la estancia cuando la salida cambió (Guarda, sin ficha, tarifa nula, cortesías
+     * conservadas o perdidas). Es null si no hubo recálculo o no hubo nada que avisar; si trae texto, la pantalla debe mostrarlo.
+     */
+    editar: (id: number, datos: Record<string, unknown>) =>
+        pedir<{ prefactura: Prefactura; estancia_aviso: string | null }>(`${BASE}/prefacturas/${id}`, { method: 'PUT', body: datos }),
     /**
      * Sin `confirmarSinCobro`, el servidor rechaza (422, ErrorApi.codigo `sin_cobro`, con `cuerpo.faltante`) si los pagos no cubren el total.
      * Solo se manda `true` cuando quien opera confirmó ESE aviso, y con `faltanteConfirmado` —la cifra que vio—: el servidor la compara con
