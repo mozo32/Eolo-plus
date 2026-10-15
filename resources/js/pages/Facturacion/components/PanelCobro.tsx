@@ -25,6 +25,19 @@ interface Props {
 }
 
 /**
+ * Lo que falta por cobrar, listo para meterlo en el campo de monto; '' si no hay nada que
+ * proponer.
+ *
+ * Dos casos se quedan en vacío a propósito. Si los totales no se pudieron calcular, `por_cobrar`
+ * viene nulo y poner un número inventado seria peor que no poner nada. Y si no falta nada —ya
+ * está pagado, o hay sobrepago— rellenar con '0.00' pondría un valor que el servidor rechaza,
+ * porque el mínimo de un pago es 0.01.
+ */
+function loQueFaltaComoMonto(porCobrar: string | null): string {
+    return esMontoPositivo(porCobrar) ? String(porCobrar) : '';
+}
+
+/**
  * El cobro de una prefactura: los pagos, lo pagado, lo que falta, y el sobrepago.
  *
  *  - Todas las cifras son las del servidor. Aquí no se suma ni se resta dinero.
@@ -44,7 +57,11 @@ export default function PanelCobro({ prefactura, onCambio, onError }: Props) {
     const [versionFormas, setVersionFormas] = useState(0);
 
     const [formaId, setFormaId] = useState('');
-    const [monto, setMonto] = useState('');
+    const [monto, setMonto] = useState(() => loQueFaltaComoMonto(prefactura.por_cobrar));
+    // Mientras nadie toque el campo, el monto sigue a lo que falta por cobrar. En cuanto se
+    // teclea algo deja de seguirlo: perder lo que alguien está escribiendo porque la prefactura
+    // se recargó por otro motivo es un fallo silencioso, y aquí se escriben cobros.
+    const [montoTocado, setMontoTocado] = useState(false);
     const [errorForma, setErrorForma] = useState<string | null>(null);
     const [errorMonto, setErrorMonto] = useState<string | null>(null);
     const [avisoForma, setAvisoForma] = useState<string | null>(null);
@@ -88,6 +105,12 @@ export default function PanelCobro({ prefactura, onCambio, onError }: Props) {
     const hayCambio = esMontoPositivo(prefactura.cambio);
     const hayCobradoDeMas = esMontoPositivo(prefactura.cobrado_de_mas);
 
+    useEffect(() => {
+        if (montoTocado) return;
+
+        setMonto(loQueFaltaComoMonto(prefactura.por_cobrar));
+    }, [prefactura.por_cobrar, montoTocado]);
+
     const cambiarForma = (valor: string) => {
         setFormaId(valor);
         setErrorForma(null);
@@ -96,6 +119,7 @@ export default function PanelCobro({ prefactura, onCambio, onError }: Props) {
 
     const cambiarMonto = (valor: string) => {
         setMonto(valor);
+        setMontoTocado(true);
         setErrorMonto(null);
         setAvisoForma(null);
     };
@@ -116,6 +140,9 @@ export default function PanelCobro({ prefactura, onCambio, onError }: Props) {
 
         try {
             await apiPrefacturas.agregarPago(prefactura.id, { forma_pago_id: Number(formaId), monto: monto.trim() });
+            // Se vuelve a enganchar: el efecto de arriba lo pondrá en el saldo que quede cuando
+            // `onCambio()` traiga la prefactura recargada. Así se encadenan pagos parciales sin teclear.
+            setMontoTocado(false);
             setMonto('');
             toast.fire({ icon: 'success', titleText: 'Pago registrado.' });
             await onCambio();

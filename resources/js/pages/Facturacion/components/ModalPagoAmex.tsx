@@ -3,7 +3,7 @@ import { CreditCard } from 'lucide-react';
 import { useState } from 'react';
 import CampoMonto from './CampoMonto';
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO } from './estilos';
-import { comisionVistaPrevia, formatearMonto, formatearTasa, validarMonto } from './formato';
+import { comisionVistaPrevia, esMontoPositivo, formatearMonto, formatearTasa, validarMonto } from './formato';
 import ModalBase from './ModalBase';
 
 /** El máximo de un pago (`fact_prefactura_pagos.monto`, decimal 12,2): el mismo que valida el servidor. */
@@ -40,7 +40,10 @@ interface Registrado {
  *    `ComisionAmex::calcular()`); el servidor puede ajustarla unos centavos. Al terminar se muestra la suya.
  */
 export default function ModalPagoAmex({ prefactura, onCerrar, onCambio, onError }: Props) {
-    const [monto, setMonto] = useState('');
+    // Se abre con lo que falta por cobrar. OJO: el pago Amex agrega su renglón de comisión, así
+    // que al cubrir el faltante con esta cifra quedará pendiente la comisión y hará falta un
+    // segundo pago. Es lo que pidió el departamento, y el modal ya muestra la comisión estimada.
+    const [monto, setMonto] = useState(() => (esMontoPositivo(prefactura.por_cobrar) ? String(prefactura.por_cobrar) : ''));
     const [errorMonto, setErrorMonto] = useState<string | null>(null);
     const [mensajeGeneral, setMensajeGeneral] = useState<string | null>(null);
     const [enviando, setEnviando] = useState(false);
