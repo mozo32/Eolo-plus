@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import CabeceraPantalla from './components/CabeceraPantalla';
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO, TD, TH, campoConError, errorStyle, labelStyle, sectionTitle, toast } from './components/estilos';
-import { aCampoFechaHora, deCampoFechaHora, esConceptoComisionAmex, esConceptoDeEstancia, esMontoPositivo, fechaHoraSinZona, formatearMonto, formatearTasa } from './components/formato';
+import { esConceptoComisionAmex, esConceptoDeEstancia, esHora24, esMontoPositivo, fechaHoraSinZona, formatearMonto, formatearTasa, partirFechaHora, unirFechaHora } from './components/formato';
 import ModalEstancia, { type CantidadesEstancia } from './components/ModalEstancia';
 import ModalReabrir from './components/ModalReabrir';
 import ModalRenglon, { type DatosRenglon } from './components/ModalRenglon';
@@ -17,6 +17,7 @@ import PanelNotas from './components/PanelNotas';
 import SelectorCliente from './components/SelectorCliente';
 
 const TEXTO_MAX = 120;
+const MENSAJE_HORA_24 = 'La hora va en formato de 24 horas, de 00:00 a 23:59 (por ejemplo, 14:30).';
 
 /** Lo mismo que acepta el servidor para la etiqueta de un grupo. */
 const GRUPO_MAX = 60;
@@ -37,8 +38,10 @@ const CODIGOS_DE_ESTADO = ['incompleta', 'ya_cerrada', 'ya_descartada', 'sello_i
 interface FormularioEncabezado {
     clienteId: number | null;
     clienteNombre: string | null;
-    llegada: string;
-    salida: string;
+    llegadaFecha: string;
+    llegadaHora: string;
+    salidaFecha: string;
+    salidaHora: string;
     origen: string;
     destino: string;
 }
@@ -50,14 +53,22 @@ const CAMPOS_DEL_ENCABEZADO: CampoEncabezado[] = ['cliente_id', 'llegada_at', 's
 const formularioDe = (p: Prefactura): FormularioEncabezado => ({
     clienteId: p.cliente_id,
     clienteNombre: p.cliente,
-    llegada: aCampoFechaHora(p.llegada_at),
-    salida: aCampoFechaHora(p.salida_at),
+    llegadaFecha: partirFechaHora(p.llegada_at).fecha,
+    llegadaHora: partirFechaHora(p.llegada_at).hora,
+    salidaFecha: partirFechaHora(p.salida_at).fecha,
+    salidaHora: partirFechaHora(p.salida_at).hora,
     origen: p.origen ?? '',
     destino: p.destino ?? '',
 });
 
 const sonIguales = (a: FormularioEncabezado, b: FormularioEncabezado): boolean =>
-    a.clienteId === b.clienteId && a.llegada === b.llegada && a.salida === b.salida && a.origen === b.origen && a.destino === b.destino;
+    a.clienteId === b.clienteId &&
+    a.llegadaFecha === b.llegadaFecha &&
+    a.llegadaHora === b.llegadaHora &&
+    a.salidaFecha === b.salidaFecha &&
+    a.salidaHora === b.salidaHora &&
+    a.origen === b.origen &&
+    a.destino === b.destino;
 
 /**
  * El cuerpo del diálogo de agrupar: la explicación y, si la prefactura ya tiene grupos, un botón por etiqueta que la copia al campo.
@@ -477,7 +488,22 @@ export default function EditorPrefactura({ id }: Props) {
         if (ocupado) return;
 
         const nuevos: Partial<Record<CampoEncabezado, string>> = {};
-        if (form.llegada !== '' && form.salida !== '' && form.salida < form.llegada) nuevos.salida_at = 'La salida no puede ser anterior a la llegada.';
+        // La fecha y la hora van en campos aparte: una hora mal escrita, o un campo sin su pareja, no se manda (`unirFechaHora` daría null y se
+        // borraría la fecha del servidor sin avisar).
+        const llegadaUnida = unirFechaHora(form.llegadaFecha, form.llegadaHora);
+        const salidaUnida = unirFechaHora(form.salidaFecha, form.salidaHora);
+        const errorDeHora = (fecha: string, hora: string): string | undefined => {
+            if (hora !== '' && !esHora24(hora)) return MENSAJE_HORA_24;
+            if (fecha !== '' && hora === '') return 'Falta la hora, en formato de 24 horas (por ejemplo, 14:30).';
+            if (fecha === '' && hora !== '') return 'Falta la fecha.';
+            return undefined;
+        };
+        const errorLlegada = errorDeHora(form.llegadaFecha, form.llegadaHora);
+        const errorSalida = errorDeHora(form.salidaFecha, form.salidaHora);
+        if (errorLlegada !== undefined) nuevos.llegada_at = errorLlegada;
+        if (errorSalida !== undefined) nuevos.salida_at = errorSalida;
+        // Ya unidas, las dos tienen el mismo formato ("AAAA-MM-DD HH:MM:00"): comparar las cadenas equivale a comparar los instantes.
+        if (llegadaUnida !== null && salidaUnida !== null && salidaUnida < llegadaUnida) nuevos.salida_at = 'La salida no puede ser anterior a la llegada.';
         if (form.origen.trim().length > TEXTO_MAX) nuevos.origen = `El origen no puede pasar de ${TEXTO_MAX} caracteres.`;
         if (form.destino.trim().length > TEXTO_MAX) nuevos.destino = `El destino no puede pasar de ${TEXTO_MAX} caracteres.`;
 
@@ -492,8 +518,8 @@ export default function EditorPrefactura({ id }: Props) {
                 aeronave_id: prefactura.aeronave_id,
                 tipo_destino: prefactura.tipo_destino,
                 cliente_id: form.clienteId,
-                llegada_at: deCampoFechaHora(form.llegada),
-                salida_at: deCampoFechaHora(form.salida),
+                llegada_at: llegadaUnida,
+                salida_at: salidaUnida,
                 origen: form.origen.trim() === '' ? null : form.origen.trim(),
                 destino: form.destino.trim() === '' ? null : form.destino.trim(),
             });
@@ -1065,15 +1091,31 @@ export default function EditorPrefactura({ id }: Props) {
                                 <label htmlFor="encabezado-llegada" className={labelStyle}>
                                     Llegada
                                 </label>
-                                <input
-                                    id="encabezado-llegada"
-                                    type="datetime-local"
-                                    value={soloLectura ? aCampoFechaHora(prefactura.llegada_at) : form.llegada}
-                                    disabled={soloLectura}
-                                    onChange={e => cambiar('llegada', e.target.value, 'llegada_at')}
-                                    className={campoConError(!!erroresForm.llegada_at)}
-                                    aria-invalid={erroresForm.llegada_at ? true : undefined}
-                                />
+                                <div className="grid grid-cols-[1fr_7rem] gap-2">
+                                    <input
+                                        id="encabezado-llegada"
+                                        type="date"
+                                        value={soloLectura ? partirFechaHora(prefactura.llegada_at).fecha : form.llegadaFecha}
+                                        disabled={soloLectura}
+                                        onChange={e => cambiar('llegadaFecha', e.target.value, 'llegada_at')}
+                                        className={campoConError(!!erroresForm.llegada_at)}
+                                        aria-invalid={erroresForm.llegada_at ? true : undefined}
+                                    />
+                                    <input
+                                        id="encabezado-llegada-hora"
+                                        type="text"
+                                        inputMode="numeric"
+                                        autoComplete="off"
+                                        placeholder="HH:MM"
+                                        maxLength={5}
+                                        aria-label="Hora de llegada, en formato de 24 horas"
+                                        value={soloLectura ? partirFechaHora(prefactura.llegada_at).hora : form.llegadaHora}
+                                        disabled={soloLectura}
+                                        onChange={e => cambiar('llegadaHora', e.target.value, 'llegada_at')}
+                                        className={campoConError(!!erroresForm.llegada_at)}
+                                        aria-invalid={erroresForm.llegada_at ? true : undefined}
+                                    />
+                                </div>
                                 {erroresForm.llegada_at && <p className={errorStyle}>{erroresForm.llegada_at}</p>}
                             </div>
 
@@ -1081,16 +1123,32 @@ export default function EditorPrefactura({ id }: Props) {
                                 <label htmlFor="encabezado-salida" className={labelStyle}>
                                     Salida
                                 </label>
-                                <input
-                                    id="encabezado-salida"
-                                    type="datetime-local"
-                                    value={soloLectura ? aCampoFechaHora(prefactura.salida_at) : form.salida}
-                                    min={soloLectura ? undefined : form.llegada || undefined}
-                                    disabled={soloLectura}
-                                    onChange={e => cambiar('salida', e.target.value, 'salida_at')}
-                                    className={campoConError(!!erroresForm.salida_at)}
-                                    aria-invalid={erroresForm.salida_at ? true : undefined}
-                                />
+                                <div className="grid grid-cols-[1fr_7rem] gap-2">
+                                    <input
+                                        id="encabezado-salida"
+                                        type="date"
+                                        value={soloLectura ? partirFechaHora(prefactura.salida_at).fecha : form.salidaFecha}
+                                        min={soloLectura ? undefined : form.llegadaFecha || undefined}
+                                        disabled={soloLectura}
+                                        onChange={e => cambiar('salidaFecha', e.target.value, 'salida_at')}
+                                        className={campoConError(!!erroresForm.salida_at)}
+                                        aria-invalid={erroresForm.salida_at ? true : undefined}
+                                    />
+                                    <input
+                                        id="encabezado-salida-hora"
+                                        type="text"
+                                        inputMode="numeric"
+                                        autoComplete="off"
+                                        placeholder="HH:MM"
+                                        maxLength={5}
+                                        aria-label="Hora de salida, en formato de 24 horas"
+                                        value={soloLectura ? partirFechaHora(prefactura.salida_at).hora : form.salidaHora}
+                                        disabled={soloLectura}
+                                        onChange={e => cambiar('salidaHora', e.target.value, 'salida_at')}
+                                        className={campoConError(!!erroresForm.salida_at)}
+                                        aria-invalid={erroresForm.salida_at ? true : undefined}
+                                    />
+                                </div>
                                 {erroresForm.salida_at && <p className={errorStyle}>{erroresForm.salida_at}</p>}
                             </div>
 

@@ -232,16 +232,34 @@ export function fechaHoraSinZona(valor: string | null | undefined): string {
     return partes ? `${partes[3]}/${partes[2]}/${partes[1]} ${partes[4]}:${partes[5]}` : '—';
 }
 
-/** De "2026-09-30 14:30:00" al valor de un `<input type="datetime-local">` ("2026-09-30T14:30"); '' si no hay. */
-export function aCampoFechaHora(valor: string | null | undefined): string {
+/** Formato de 24 horas, de 00:00 a 23:59. */
+const HORA_24 = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+/**
+ * Parte "2026-09-30 14:30:00" en los dos campos que se dibujan, sin pasar por `Date` (que correría la hora a la zona del navegador).
+ *
+ * Van separados porque `<input type="datetime-local">` —y también `type="time"`— se pintan según el idioma del navegador: en español
+ * salen con AM/PM y la hora se teclea por casillas. El día sigue en un `type="date"`, que no tiene ese problema, y la hora pasa a ser
+ * texto en 24 h.
+ */
+export function partirFechaHora(valor: string | null | undefined): { fecha: string; hora: string } {
     const partes = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/.exec(valor ?? '');
 
-    return partes ? `${partes[1]}T${partes[2]}` : '';
+    return partes ? { fecha: partes[1], hora: partes[2] } : { fecha: '', hora: '' };
 }
 
-/** Del `<input type="datetime-local">` a lo que recibe el servidor ("2026-09-30 14:30:00"); null si está vacío. */
-export function deCampoFechaHora(texto: string): string | null {
-    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(texto) ? `${texto.replace('T', ' ')}:00` : null;
+/** Junta los dos campos en lo que recibe el servidor ("2026-09-30 14:30:00"); null si falta uno o la hora no es válida. */
+export function unirFechaHora(fecha: string, hora: string): string | null {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !HORA_24.test(hora)) {
+        return null;
+    }
+
+    return `${fecha} ${hora}:00`;
+}
+
+/** Para avisar al usuario antes de enviar. */
+export function esHora24(hora: string): boolean {
+    return HORA_24.test(hora);
 }
 
 /**
