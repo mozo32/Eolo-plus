@@ -387,6 +387,65 @@ class PrefacturaRenglonController extends Controller
     }
 
     /**
+     * Marca que el vuelo LLEGÓ del extranjero y carga el paquete de entrada.
+     *
+     * Hermano de `internacional()`, que hace lo propio con la salida. Son endpoints
+     * separados porque las dos direcciones son independientes: medido, 386 de 485
+     * folios internacionales lo son en una sola. Este no toca `tipo_destino`.
+     */
+    public function origenInternacional(Request $request, int $id, CargosEstancia $cargos): JsonResponse
+    {
+        $prefactura = FactPrefactura::findOrFail($id);
+
+        if ($respuesta = $this->rechazoRapido($prefactura)) {
+            return $respuesta;
+        }
+
+        $resultado = DB::transaction(function () use ($request, $prefactura, $cargos) {
+            if ($respuesta = $this->rechazarSiDescartada($this->bloquear($prefactura->id))) {
+                return $respuesta;
+            }
+
+            $resultado = $cargos->agregarPaqueteInternacional($prefactura, FactServicio::PAQUETE_ENTRADA);
+
+            // Igual que con el destino: solo se marca si la prefactura TIENE algo del
+            // paquete de entrada, lo agregado ahora o lo que ya estaba.
+            $marcada = $resultado['en_paquete'] > 0;
+
+            if ($marcada) {
+                $prefactura->update(['tipo_origen' => FactPrefactura::DESTINO_INTERNACIONAL]);
+            }
+
+            Bitacora::log(
+                modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
+                accion: Bitacora::ACCION_ACTUALIZAR,
+                descripcion: $marcada
+                    ? "Se marcó el origen internacional de la prefactura {$prefactura->id} y se agregaron {$resultado['renglones']} servicios del paquete de entrada."
+                    : "Se intentó marcar el origen internacional de la prefactura {$prefactura->id}: no se agregó ningún servicio del paquete de entrada y sigue nacional.",
+                usuarioId: $request->user()->id,
+                registroId: $prefactura->id,
+                datosNuevos: [
+                    'tipo_origen' => $marcada ? FactPrefactura::DESTINO_INTERNACIONAL : $prefactura->tipo_origen,
+                    'servicios_agregados' => $resultado['renglones'],
+                    'servicios_faltantes' => $resultado['faltantes'],
+                ],
+            );
+
+            return $resultado;
+        });
+
+        if ($resultado instanceof JsonResponse) {
+            return $resultado;
+        }
+
+        return response()->json([
+            'message' => $resultado['motivo'] ?? 'Paquete de entrada agregado.',
+            'renglones' => $resultado['renglones'],
+            'motivo' => $resultado['motivo'],
+        ]);
+    }
+
+    /**
      * La prefactura leída con candado, dentro de la transacción. Con ella se
      * comprueba «descartada» bajo el mismo candado que `descartar`, no solo en el
      * chequeo rápido: entre el `findOrFail` y aquí otra sesión pudo descartarla.

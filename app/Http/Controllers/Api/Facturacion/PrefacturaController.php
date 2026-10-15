@@ -565,6 +565,7 @@ class PrefacturaController extends Controller
             'salida_at' => $p->salida_at?->toDateTimeString(),
             'origen' => $p->origen,
             'destino' => $p->destino,
+            'tipo_origen' => $p->tipo_origen,
             'tipo_destino' => $p->tipo_destino,
             'nota_interna' => $p->nota_interna,
             'nota_externa' => $p->nota_externa,
