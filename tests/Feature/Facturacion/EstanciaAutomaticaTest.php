@@ -117,3 +117,57 @@ test('si no hay servicio de estancia activo, la salida NO se guarda a medias', f
     expect($p->fresh()->salida_at)->toBeNull()
         ->and($p->fresh()->renglones()->count())->toBe(0);
 });
+
+test('limpiar la salida NO recalcula ni revienta, y los renglones quedan intactos', function () {
+    // Cubre la guarda `$salidaNueva !== null`: sin ella, `tramos($llegada, null)` lanza un
+    // TypeError y el PUT responde 500.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = conEstancia();
+
+    $this->putJson("/api/facturacion/prefacturas/{$p->id}", cabecera($p, ['salida_at' => '2026-10-22 20:15:00']))->assertOk();
+    expect(cantidadDe($p->fresh(), FactServicio::CONCEPTO_ESTANCIA_PERNOCTA))->toBe(7)
+        ->and($p->fresh()->renglones()->count())->toBe(2);
+
+    $this->putJson("/api/facturacion/prefacturas/{$p->id}", cabecera($p, ['salida_at' => null]))
+        ->assertOk()
+        ->assertJson(fn ($json) => $json->where('estancia_aviso', null)->etc());
+
+    expect($p->fresh()->salida_at)->toBeNull()
+        ->and(cantidadDe($p->fresh(), FactServicio::CONCEPTO_ESTANCIA_PERNOCTA))->toBe(7)
+        ->and(cantidadDe($p->fresh(), FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H))->toBe(1)
+        ->and($p->fresh()->renglones()->count())->toBe(2);
+});
+
+test('una salida sin llegada no calcula nada ni revienta', function () {
+    // Cubre la guarda `llegada_at !== null`: sin ella, `tramos(null, $salida)` lanza un TypeError.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = conEstancia();
+
+    $this->putJson("/api/facturacion/prefacturas/{$p->id}", cabecera($p, ['llegada_at' => null, 'salida_at' => '2026-10-22 20:15:00']))
+        ->assertOk();
+
+    expect($p->fresh()->salida_at)->not->toBeNull()
+        ->and($p->fresh()->renglones()->count())->toBe(0);
+});
+
+test('el aviso de recalcular() llega en la respuesta: una aeronave en Guarda no paga estancia', function () {
+    // `PATCH /estancia` muestra este texto; el PUT no puede tragárselo, o la estancia
+    // queda sin cobrar (o pierde una cortesía) sin que nadie lo sepa.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = conEstancia(App\Models\FactAeronave::ESTATUS_GUARDA);
+
+    $respuesta = $this->putJson("/api/facturacion/prefacturas/{$p->id}", cabecera($p, ['salida_at' => '2026-10-22 20:15:00']))
+        ->assertOk();
+
+    expect($respuesta->json('estancia_aviso'))->toContain('Guarda')->toContain('no paga estancia')
+        ->and($p->fresh()->renglones()->count())->toBe(0);
+});
+
+test('sin recalculo no hay aviso de estancia', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $p = conEstancia(App\Models\FactAeronave::ESTATUS_GUARDA);
+
+    $this->putJson("/api/facturacion/prefacturas/{$p->id}", cabecera($p))
+        ->assertOk()
+        ->assertJson(fn ($json) => $json->where('estancia_aviso', null)->etc());
+});

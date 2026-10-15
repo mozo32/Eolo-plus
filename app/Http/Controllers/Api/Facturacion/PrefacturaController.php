@@ -237,8 +237,13 @@ class PrefacturaController extends Controller
 
     public function update(UpdatePrefacturaRequest $request, int $id, CargosEstancia $cargos): JsonResponse
     {
+        // El texto que `recalcular()` devuelve en `motivo` (Guarda, sin ficha, tarifa nula,
+        // cortesías conservadas o perdidas). Se sube a la respuesta: sin él, la estancia
+        // puede quedar sin cobrar y nadie se entera.
+        $avisoDeEstancia = null;
+
         try {
-            $resultado = DB::transaction(function () use ($request, $id, $cargos) {
+            $resultado = DB::transaction(function () use ($request, $id, $cargos, &$avisoDeEstancia) {
                 // CANDADO y comprobación DENTRO de la transacción: leer el estado antes y
                 // escribir después deja una ventana en la que otra sesión puede cerrar, y
                 // la cabecera de un documento ya emitido cambiaría debajo de su sello.
@@ -267,12 +272,12 @@ class PrefacturaController extends Controller
                     $tramos = CalculadoraEstancia::tramos($prefactura->llegada_at, $prefactura->salida_at);
 
                     // Los dos ajustes de estancia siguen siendo manuales: se quedan en cero.
-                    $cargos->recalcular(
+                    $avisoDeEstancia = $cargos->recalcular(
                         $prefactura,
                         $tramos['pernoctas'],
                         $tramos['transitos2h'],
                         $tramos['transitos12h'],
-                    );
+                    )['motivo'] ?? null;
                 }
 
                 // Una reabierta NO es un borrador: tiene folio gastado, documento emitido y versión guardada. La bitácora es con lo que se
@@ -307,6 +312,7 @@ class PrefacturaController extends Controller
         return response()->json([
             'message' => 'Prefactura actualizada.',
             'prefactura' => $this->presentar($resultado->fresh(), conRenglones: true),
+            'estancia_aviso' => $avisoDeEstancia,
         ]);
     }
 
