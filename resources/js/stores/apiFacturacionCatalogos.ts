@@ -499,6 +499,8 @@ export interface Prefactura {
     origen: string | null;
     destino: string | null;
     tipo_destino: 'nacional' | 'internacional';
+    /** De dónde VIENE el vuelo; independiente de `tipo_destino`. */
+    tipo_origen: 'nacional' | 'internacional';
     /** Los totales los calcula siempre el servidor; null si no pudo (`totales_error` dice por qué). */
     subtotal: string | null;
     iva: string | null;
@@ -606,6 +608,8 @@ export const apiPrefacturas = {
     estancia: (id: number, datos: DatosEstancia) => pedir<{ renglones: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/estancia`, { method: 'PATCH', body: datos }),
     /** `motivo` llega cuando el paquete no se agregó completo; con `renglones` 0 el destino sigue nacional. */
     internacional: (id: number) => pedir<{ renglones: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/internacional`, { method: 'PATCH' }),
+    /** Hermano de `internacional` para el origen: carga el paquete de ENTRADA y no toca `tipo_destino`. */
+    origenInternacional: (id: number) => pedir<{ renglones: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/origen-internacional`, { method: 'PATCH' }),
     /**
      * Reabre una cerrada para corregirla (exige el subdepartamento `factReabrirPrefactura`: sin él, 403). El documento actual queda como versión.
      * Errores de negocio: `no_reabrible` (409, no está cerrada), `totales_no_calculables` (422); el motivo, de 10 a 500 caracteres, falla con 422 por campo.

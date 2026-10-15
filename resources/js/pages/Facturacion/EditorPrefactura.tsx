@@ -3,7 +3,7 @@ import { facturacionPrefacturas } from '@/routes';
 import { ErrorApi, apiPrefacturas, mensajeDeError, urlCotizacionPrefactura, urlDocumentoPrefactura, urlVersionPrefactura, type DiscrepanciaSello, type Prefactura, type RenglonPrefactura, type VersionPrefactura } from '@/stores/apiFacturacionCatalogos';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { ArrowLeft, Ban, FileText, Gift, Globe, Group, History, Lock, LockOpen, Plus, Printer, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, Ungroup, X } from 'lucide-react';
+import { ArrowLeft, Ban, FileText, Gift, Globe, Group, History, Lock, LockOpen, PlaneLanding, Plus, Printer, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, Ungroup, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import CabeceraPantalla from './components/CabeceraPantalla';
@@ -722,6 +722,43 @@ export default function EditorPrefactura({ id }: Props) {
             });
         });
 
+    const marcarOrigenInternacional = () =>
+        ejecutar('origen-internacional', 'No se pudo marcar el origen como internacional', async () => {
+            const confirmacion = await Swal.fire({
+                titleText: 'Marcar el origen como internacional',
+                text: 'Se agregan a la prefactura los servicios del paquete de ENTRADA, los que cobra una aeronave que llega del extranjero. No hay forma de deshacerlo desde esta pantalla.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, marcar el origen',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#4f46e5',
+                reverseButtons: true,
+            });
+            if (!confirmacion.isConfirmed) return;
+
+            const { renglones: agregados, motivo } = await apiPrefacturas.origenInternacional(prefactura.id);
+            await cargar();
+
+            if (motivo !== null) {
+                setAvisoCargos(motivo);
+                await Swal.fire({
+                    icon: agregados === 0 ? 'error' : 'warning',
+                    titleText: agregados === 0 ? 'No se agregó el paquete de entrada' : 'El paquete de entrada quedó incompleto',
+                    text: motivo,
+                    confirmButtonColor: '#4f46e5',
+                });
+                return;
+            }
+
+            toast.fire({
+                icon: 'success',
+                titleText:
+                    agregados === 0
+                        ? 'Origen marcado internacional: el paquete ya estaba en los renglones.'
+                        : `Origen marcado internacional: se agregaron ${agregados} ${agregados === 1 ? 'servicio' : 'servicios'} de entrada.`,
+            });
+        });
+
     const descartar = () =>
         ejecutar('descartar', 'No se pudo descartar el borrador', async () => {
             const confirmacion = await Swal.fire({
@@ -1227,6 +1264,14 @@ export default function EditorPrefactura({ id }: Props) {
                                             <span className="flex items-center gap-2">
                                                 <Globe size={14} />
                                                 MARCAR INTERNACIONAL
+                                            </span>
+                                        </button>
+                                    )}
+                                    {prefactura.tipo_origen === 'nacional' && (
+                                        <button type="button" onClick={() => void marcarOrigenInternacional()} disabled={ocupado} className={BOTON_SECUNDARIO}>
+                                            <span className="flex items-center gap-2">
+                                                <PlaneLanding size={14} />
+                                                MARCAR ORIGEN INTERNACIONAL
                                             </span>
                                         </button>
                                     )}
