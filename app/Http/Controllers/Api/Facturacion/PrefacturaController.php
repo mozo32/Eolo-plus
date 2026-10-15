@@ -200,14 +200,56 @@ class PrefacturaController extends Controller
         return response()->json(['prefactura' => $this->presentar($prefactura, conRenglones: true)]);
     }
 
-    public function store(StorePrefacturaRequest $request): JsonResponse
+    /**
+     * Las cantidades de estancia que corresponden a las fechas de esta prefactura.
+     *
+     * Es de SOLO LECTURA: no escribe ningún renglón. Existe para que el formulario de
+     * «Recalcular estancia» se abra ya relleno en lugar de pedir las cantidades a mano, que es
+     * lo que hacía que el cálculo no pareciera automático.
+     *
+     * La regla NO se duplica en el navegador: está medida contra 2803 prefacturas históricas
+     * (86,1 % de acierto, comprobable con `facturacion:comparar-estancia`) y dos copias se
+     * separarían la primera vez que alguien tocara una. Por eso la pantalla pregunta.
+     *
+     * Las claves salen en la forma que espera `PATCH /estancia`, para que el formulario las
+     * pueda devolver tal cual.
+     */
+    public function estanciaSugerida(int $id): JsonResponse
     {
-        $prefactura = DB::transaction(function () use ($request) {
+        $prefactura = FactPrefactura::findOrFail($id);
+
+        if ($prefactura->llegada_at === null || $prefactura->salida_at === null) {
+            return response()->json([
+                'pernoctas' => 0,
+                'transitos_2h' => 0,
+                'transitos_12h' => 0,
+                'motivo' => 'Para calcular la estancia hacen falta la llegada y la salida. Captúralas en el encabezado y vuelve a intentarlo.',
+            ]);
+        }
+
+        $tramos = CalculadoraEstancia::tramos($prefactura->llegada_at, $prefactura->salida_at);
+
+        return response()->json([
+            'pernoctas' => $tramos['pernoctas'],
+            'transitos_2h' => $tramos['transitos2h'],
+            'transitos_12h' => $tramos['transitos12h'],
+            'motivo' => null,
+        ]);
+    }
+
+    public function store(StorePrefacturaRequest $request, CargosEstancia $cargos): JsonResponse
+    {
+        $prefactura = DB::transaction(function () use ($request, $cargos) {
             $prefactura = FactPrefactura::create($request->validated() + [
                 'estado' => FactPrefactura::ESTADO_BORRADOR,
                 'user_id' => $request->user()->id,
                 'status' => FactPrefactura::STATUS_ACTIVO,
             ]);
+
+            // El derecho de vuelos no depende del destino: lo manda la casilla de la ficha de
+            // la aeronave, y por eso se agrega aquí, al abrir el borrador, y no con el paquete
+            // internacional. Si el servicio falta o está de baja, el borrador se crea igual.
+            $cargos->agregarDerechoDeVuelos($prefactura);
 
             Bitacora::log(
                 modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,

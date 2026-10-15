@@ -1,6 +1,6 @@
-import { ErrorApi } from '@/stores/apiFacturacionCatalogos';
+import { apiPrefacturas, ErrorApi } from '@/stores/apiFacturacionCatalogos';
 import { RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO, campoConError, errorStyle, labelStyle } from './estilos';
 import ModalBase from './ModalBase';
 
@@ -15,6 +15,8 @@ export interface CantidadesEstancia {
 }
 
 interface Props {
+    /** De qué prefactura, para preguntarle al servidor las cantidades que proponen sus fechas. */
+    prefacturaId: number;
     onCerrar: () => void;
     /** Recalcula. Debe lanzar el ErrorApi si el servidor rechaza; el modal muestra los errores por campo. */
     onGuardar: (cantidades: CantidadesEstancia) => Promise<void>;
@@ -42,16 +44,58 @@ const CAMPOS_DE_AJUSTE: DefinicionCampo[] = [
 const CAMPOS = [...CAMPOS_DE_ESTANCIA, ...CAMPOS_DE_AJUSTE];
 
 /**
- * Recalcular la estancia: las cinco cantidades las teclea una persona (no se
- * pueden derivar de la llegada y la salida) y cero es válido en cada una.
- * Los dos ajustes cobran la DIFERENCIA entre dos tramos, no el tramo entero.
- * Reemplaza los cargos de estancia que la prefactura ya tenga.
+ * Recalcular la estancia.
+ *
+ * Los tres tramos se PROPONEN desde la llegada y la salida: el modal se abre ya relleno y la
+ * persona solo confirma. La regla la aplica el servidor (`CalculadoraEstancia`, medida contra
+ * 2803 prefacturas históricas) y aquí no se duplica, porque dos copias se separan la primera
+ * vez que alguien toca una.
+ *
+ * Siguen siendo editables a propósito: la regla acierta en el 86 % de los casos y el 14 %
+ * restante —una cortesía, una estancia larga a tanto alzado— lo decide la persona.
+ *
+ * Los dos ajustes NO se proponen: cobran la DIFERENCIA entre dos tramos y el histórico no da
+ * para derivarlos. Reemplaza los cargos de estancia que la prefactura ya tenga.
  */
-export default function ModalEstancia({ onCerrar, onGuardar }: Props) {
+export default function ModalEstancia({ prefacturaId, onCerrar, onGuardar }: Props) {
     const [valores, setValores] = useState<Record<Campo, string>>({ pernoctas: '0', transitos_2h: '0', transitos_12h: '0', ajustes_2h_12h: '0', ajustes_12h_pernocta: '0' });
     const [errores, setErrores] = useState<Partial<Record<Campo, string>>>({});
     const [mensajeGeneral, setMensajeGeneral] = useState<string | null>(null);
     const [guardando, setGuardando] = useState(false);
+    const [sugerencia, setSugerencia] = useState<{ cargando: boolean; motivo: string | null }>({ cargando: true, motivo: null });
+
+    // Las cantidades se piden al abrir. Si el servidor no puede calcularlas —faltan fechas, o
+    // la consulta falla— el formulario se queda en ceros, que es como estaba antes, y lo dice:
+    // quedarse callado haría pensar que la estancia es cero.
+    useEffect(() => {
+        let vigente = true;
+
+        apiPrefacturas
+            .estanciaSugerida(prefacturaId)
+            .then(propuesta => {
+                if (!vigente) return;
+
+                setValores(previos => ({
+                    ...previos,
+                    pernoctas: String(propuesta.pernoctas),
+                    transitos_2h: String(propuesta.transitos_2h),
+                    transitos_12h: String(propuesta.transitos_12h),
+                }));
+                setSugerencia({ cargando: false, motivo: propuesta.motivo });
+            })
+            .catch(error => {
+                if (!vigente) return;
+
+                setSugerencia({
+                    cargando: false,
+                    motivo: `No se pudieron calcular las cantidades desde las fechas (${error instanceof Error ? error.message : 'error inesperado'}). Captúralas a mano.`,
+                });
+            });
+
+        return () => {
+            vigente = false;
+        };
+    }, [prefacturaId]);
 
     const tieneCambios = CAMPOS.some(({ campo }) => valores[campo] !== '0');
 
@@ -119,6 +163,13 @@ export default function ModalEstancia({ onCerrar, onGuardar }: Props) {
         <ModalBase idTitulo="titulo-modal-estancia" titulo="Recalcular estancia" subtitulo="Cuántos cargos de estancia corresponden" tieneCambios={tieneCambios} onCerrar={onCerrar} ancho="max-w-lg">
             <form onSubmit={guardar} noValidate className="space-y-5">
                 <div className="border bg-slate-50 p-5 space-y-4">
+                    <p className="text-[11px] font-semibold text-slate-500">
+                        {sugerencia.cargando
+                            ? 'Calculando las cantidades desde la llegada y la salida…'
+                            : sugerencia.motivo === null
+                              ? 'Las cantidades salen de la llegada y la salida de esta prefactura. Corrígelas si hace falta.'
+                              : sugerencia.motivo}
+                    </p>
                     <p className="text-[11px] font-semibold text-slate-500">
                         Los cargos de estancia que ya tiene la prefactura se reemplazan por los de estas cantidades, con la tarifa de la matrícula. Pon 0 donde no haya. Una aeronave en Guarda no paga estancia.
                     </p>

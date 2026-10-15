@@ -700,11 +700,11 @@ export default function EditorPrefactura({ id }: Props) {
     const marcarInternacional = () =>
         ejecutar('internacional', 'No se pudo marcar como internacional', async () => {
             const confirmacion = await Swal.fire({
-                titleText: 'Marcar como internacional',
-                text: 'Se agregan a la prefactura los servicios del paquete internacional. No hay forma de deshacerlo desde esta pantalla.',
+                titleText: 'Marcar la SALIDA como internacional',
+                text: 'Se agregan los servicios del paquete de SALIDA, los que cobra una aeronave que se va al extranjero. No hay forma de deshacerlo desde esta pantalla.',
                 icon: 'question',
                 showCancelButton: true,
-                confirmButtonText: 'Sí, marcar internacional',
+                confirmButtonText: 'Sí, marcar la salida',
                 cancelButtonText: 'Cancelar',
                 confirmButtonColor: '#4f46e5',
                 reverseButtons: true,
@@ -740,11 +740,11 @@ export default function EditorPrefactura({ id }: Props) {
     const marcarOrigenInternacional = () =>
         ejecutar('origen-internacional', 'No se pudo marcar el origen como internacional', async () => {
             const confirmacion = await Swal.fire({
-                titleText: 'Marcar el origen como internacional',
-                text: 'Se agregan a la prefactura los servicios del paquete de ENTRADA, los que cobra una aeronave que llega del extranjero. No hay forma de deshacerlo desde esta pantalla.',
+                titleText: 'Marcar la LLEGADA como internacional',
+                text: 'Se agregan los servicios del paquete de ENTRADA, los que cobra una aeronave que llega del extranjero. No hay forma de deshacerlo desde esta pantalla.',
                 icon: 'question',
                 showCancelButton: true,
-                confirmButtonText: 'Sí, marcar el origen',
+                confirmButtonText: 'Sí, marcar la llegada',
                 cancelButtonText: 'Cancelar',
                 confirmButtonColor: '#4f46e5',
                 reverseButtons: true,
@@ -1278,7 +1278,7 @@ export default function EditorPrefactura({ id }: Props) {
                                         <button type="button" onClick={() => void marcarInternacional()} disabled={ocupado} className={BOTON_SECUNDARIO}>
                                             <span className="flex items-center gap-2">
                                                 <Globe size={14} />
-                                                MARCAR INTERNACIONAL
+                                                SALIDA INTERNACIONAL
                                             </span>
                                         </button>
                                     )}
@@ -1286,7 +1286,7 @@ export default function EditorPrefactura({ id }: Props) {
                                         <button type="button" onClick={() => void marcarOrigenInternacional()} disabled={ocupado} className={BOTON_SECUNDARIO}>
                                             <span className="flex items-center gap-2">
                                                 <PlaneLanding size={14} />
-                                                MARCAR ORIGEN INTERNACIONAL
+                                                LLEGADA INTERNACIONAL
                                             </span>
                                         </button>
                                     )}
@@ -1548,7 +1548,7 @@ export default function EditorPrefactura({ id }: Props) {
             </div>
 
             {modal === 'renglon' && <ModalRenglon onCerrar={() => setModal(null)} onGuardar={agregarRenglon} />}
-            {modal === 'estancia' && <ModalEstancia onCerrar={() => setModal(null)} onGuardar={recalcularEstancia} />}
+            {modal === 'estancia' && <ModalEstancia prefacturaId={prefactura.id} onCerrar={() => setModal(null)} onGuardar={recalcularEstancia} />}
             {modal === 'reabrir' && <ModalReabrir folio={prefactura.folio} onCerrar={() => setModal(null)} onGuardar={reabrirPrefactura} />}
         </AppLayout>
     );

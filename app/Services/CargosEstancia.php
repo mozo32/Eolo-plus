@@ -456,4 +456,55 @@ class CargosEstancia
     {
         return (int) $prefactura->renglones()->reorder()->max('orden');
     }
+
+    /** El nombre con el que el catálogo llama al derecho de vuelos. Es la llave: no lleva concepto. */
+    public const SERVICIO_DERECHO_VUELOS = 'Despacho de Vuelos';
+
+    /**
+     * Agrega «Despacho de Vuelos» si la aeronave lo cobra, al abrir el borrador.
+     *
+     * NO es un servicio del paquete internacional, aunque se describiera así al principio.
+     * Su regla es la casilla `cobra_derecho_vuelos` de la ficha, y se cobra igual en un vuelo
+     * nacional que en uno internacional. Lo confirma el histórico, donde aparece en el 53% de
+     * los folios puramente nacionales, y lo tienen marcado 814 de las 846 aeronaves.
+     *
+     * Un catálogo incompleto NO puede impedir abrir un borrador: si el servicio falta o está
+     * de baja no se agrega nada y el borrador se crea igual. Dejar al operador sin poder
+     * trabajar por una fila que falta en otra pantalla sería peor que cobrarlo a mano.
+     *
+     * @return int cuántos renglones agregó: 1 o 0
+     */
+    public function agregarDerechoDeVuelos(FactPrefactura $prefactura): int
+    {
+        $cobra = FactAeronave::query()
+            ->where('aeronave_id', $prefactura->aeronave_id)
+            ->value('cobra_derecho_vuelos');
+
+        if (! $cobra) {
+            return 0;
+        }
+
+        $servicio = FactServicio::query()
+            ->where('nombre', self::SERVICIO_DERECHO_VUELOS)
+            ->where('status', FactServicio::STATUS_ACTIVO)
+            ->first();
+
+        if ($servicio === null) {
+            return 0;
+        }
+
+        $prefactura->renglones()->create([
+            'servicio_id' => $servicio->id,
+            'nombre_servicio' => $servicio->nombre,
+            'precio_unitario' => $servicio->precio_unitario,
+            'cantidad' => 1,
+            'es_de_tercero' => $servicio->es_de_tercero,
+            'margen' => $servicio->margen,
+            'ajuste_precio' => $servicio->ajuste_precio,
+            'concepto' => null,
+            'orden' => $this->maximoOrden($prefactura) + 1,
+        ]);
+
+        return 1;
+    }
 }

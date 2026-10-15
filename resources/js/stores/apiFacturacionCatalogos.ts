@@ -616,6 +616,13 @@ export const apiPrefacturas = {
     /** Hermano de `internacional` para el origen: carga el paquete de ENTRADA y no toca `tipo_destino`. */
     origenInternacional: (id: number) => pedir<{ renglones: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/origen-internacional`, { method: 'PATCH' }),
     /**
+     * Las cantidades de estancia que corresponden a la llegada y la salida guardadas. Solo lectura: no escribe nada.
+     * La regla vive en el servidor (`CalculadoraEstancia`, medida contra 2803 prefacturas): aquí NO se duplica.
+     * `motivo` dice por qué salen en cero, y es null cuando el cálculo se pudo hacer.
+     */
+    estanciaSugerida: (id: number) =>
+        pedir<{ pernoctas: number; transitos_2h: number; transitos_12h: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/estancia-sugerida`),
+    /**
      * Reabre una cerrada para corregirla (exige el subdepartamento `factReabrirPrefactura`: sin él, 403). El documento actual queda como versión.
      * Errores de negocio: `no_reabrible` (409, no está cerrada), `totales_no_calculables` (422); el motivo, de 10 a 500 caracteres, falla con 422 por campo.
      */

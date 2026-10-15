@@ -21,7 +21,7 @@ interface Props {
     llegadaInicial?: number | null;
 }
 
-type TipoDestino = 'nacional' | 'internacional';
+type TipoOrigen = 'nacional' | 'internacional';
 
 type BusquedaMatricula = { estado: 'vacia' } | { estado: 'buscando' } | { estado: 'error'; mensaje: string } | { estado: 'listo'; coincidencias: AeronaveFacturable[] };
 
@@ -37,9 +37,13 @@ function llegadaComoTexto(llegada: LlegadaOperacion): string | null {
 }
 
 /**
- * Alta de un borrador. Pide lo único que el servidor exige: la matrícula y si el
- * destino es nacional o internacional. El cliente y las fechas se completan en el
- * editor.
+ * Alta de un borrador. Pide la matrícula y si la aeronave VIENE del extranjero. El cliente y
+ * las fechas se completan en el editor.
+ *
+ * Pregunta por la llegada y no por el destino porque una prefactura nace cuando la aeronave
+ * aterriza: lo primero que corresponde cobrar son los trámites de ENTRADA (DSMEE, DNR, la
+ * autorización de internación, la basura de SENASICA...). Los de SALIDA se agregan más tarde,
+ * cuando se sabe que el vuelo siguiente sale al extranjero, con su propio botón en el editor.
  *
  * Al teclear una matrícula que existe, se ofrecen sus llegadas recientes de
  * Operaciones Diarias para precargar fecha, hora y lugar, y se graba el vínculo
@@ -49,7 +53,7 @@ function llegadaComoTexto(llegada: LlegadaOperacion): string | null {
 export default function ModalNuevaPrefactura({ onCerrar, onCreada, matriculaInicial = '', llegadaInicial = null }: Props) {
     const [matricula, setMatricula] = useState(matriculaInicial);
     const [respuestaBusqueda, setRespuestaBusqueda] = useState<ResultadoBusqueda | null>(null);
-    const [tipoDestino, setTipoDestino] = useState<TipoDestino>('nacional');
+    const [tipoOrigen, setTipoOrigen] = useState<TipoOrigen>('nacional');
 
     const [respuestaLlegadas, setRespuestaLlegadas] = useState<ResultadoLlegadas | null>(null);
     const [llegadaElegida, setLlegadaElegida] = useState<number | null>(llegadaInicial);
@@ -123,7 +127,7 @@ export default function ModalNuevaPrefactura({ onCerrar, onCreada, matriculaInic
     // Una elección que ya no está en la lista (se cambió de matrícula) no cuenta.
     const llegadaUsada = llegadas.find(l => l.id === llegadaElegida) ?? null;
 
-    const tieneCambios = matricula !== '' || tipoDestino !== 'nacional';
+    const tieneCambios = matricula !== '' || tipoOrigen !== 'nacional';
 
     const crear = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -159,9 +163,9 @@ export default function ModalNuevaPrefactura({ onCerrar, onCreada, matriculaInic
 
             const { prefactura } = await apiPrefacturas.crear(datos);
 
-            if (tipoDestino === 'internacional') {
+            if (tipoOrigen === 'internacional') {
                 try {
-                    const { renglones, motivo } = await apiPrefacturas.internacional(prefactura.id);
+                    const { renglones, motivo } = await apiPrefacturas.origenInternacional(prefactura.id);
 
                     // Un 200 no basta: con `renglones` 0 el servidor no agregó nada y dejó el borrador nacional, y con un motivo el paquete
                     // quedó incompleto (cobra de menos). En los dos casos hay que decirlo ahora, porque el editor no vuelve a avisar.
@@ -242,14 +246,14 @@ export default function ModalNuevaPrefactura({ onCerrar, onCreada, matriculaInic
                     </div>
 
                     <div>
-                        <label htmlFor="nueva-destino" className={labelStyle}>
-                            Destino <span className="text-red-500">*</span>
+                        <label htmlFor="nueva-origen" className={labelStyle}>
+                            ¿Viene del extranjero? <span className="text-red-500">*</span>
                         </label>
-                        <select id="nueva-destino" value={tipoDestino} onChange={e => setTipoDestino(e.target.value as TipoDestino)} className={campoConError(false)}>
-                            <option value="nacional">Nacional</option>
-                            <option value="internacional">Internacional</option>
+                        <select id="nueva-origen" value={tipoOrigen} onChange={e => setTipoOrigen(e.target.value as TipoOrigen)} className={campoConError(false)}>
+                            <option value="nacional">No, llegada nacional</option>
+                            <option value="internacional">Sí, llegada internacional</option>
                         </select>
-                        {tipoDestino === 'internacional' && <p className="mt-1 text-[10px] font-bold text-slate-400 italic">Al crearla se agregan los servicios del paquete internacional.</p>}
+                        {tipoOrigen === 'internacional' && <p className="mt-1 text-[10px] font-bold text-slate-400 italic">Al crearla se agregan los servicios del paquete de ENTRADA. Los de salida se agregan después, desde el editor.</p>}
                     </div>
                 </div>
 
