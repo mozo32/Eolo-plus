@@ -18,8 +18,9 @@ use InvalidArgumentException;
  * de aparecer como una fila editada que nadie recuerda.
  *
  * `atras` se cuenta INCLUSIVE y en días de calendario: `1` deja hoy y ayer —dos días—, y
- * `3` deja cuatro. `null` no pone mínimo. `futuro` solo es `true` en Operaciones
- * Programadas, que por naturaleza registra lo que todavía no ha pasado.
+ * `3` deja cuatro. `null` no pone mínimo. `futuro` es `true` solo donde se
+ * registra lo que todavía no ha pasado: Operaciones Programadas y el servicio de
+ * comisariato, que agenda entregas de catering por adelantado.
  *
  * OJO con el punto: las claves lo llevan pero NO son anidamiento. Viajan al navegador como
  * claves literales, así que no se leen con `->where('ventanasDeFecha.a.b')` ni con
@@ -45,7 +46,10 @@ final class VentanasDeFecha
         'operaciones.salida' => ['atras' => 3, 'futuro' => false],
         'despacho.informacion_general' => ['atras' => 3, 'futuro' => false],
         'autotanque.servicio' => ['atras' => 3, 'futuro' => false],
-        'comisariato.entrega' => ['atras' => 3, 'futuro' => false],
+        // El comisariato agenda entregas de catering ANTES de que ocurran, asi que no lleva
+        // techo. Es la segunda excepcion a «nada en el futuro», junto a Operaciones
+        // Programadas. El suelo de 3 dias se conserva: lo que se pidio quitar fue el techo.
+        'comisariato.entrega' => ['atras' => 3, 'futuro' => true],
         'csae.entrada' => ['atras' => 3, 'futuro' => false],
         'csae.salida' => ['atras' => 3, 'futuro' => false],
         'pernocta.dia' => ['atras' => 3, 'futuro' => false],

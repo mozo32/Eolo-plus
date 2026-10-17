@@ -87,11 +87,10 @@ beforeEach(fn () => remotaEnMemoria());
 function fechasDelMensaje(string $clave): array
 {
     $ventana = VentanasDeFecha::para($clave);
+    // null donde la ventana no tiene ese extremo: el mensaje de la regla tampoco lo nombra.
+    $bonita = fn (?string $dia) => $dia === null ? null : Carbon::parse($dia)->format('d/m/Y');
 
-    return [
-        'min' => Carbon::parse($ventana['min'])->format('d/m/Y'),
-        'max' => Carbon::parse($ventana['max'])->format('d/m/Y'),
-    ];
+    return ['min' => $bonita($ventana['min']), 'max' => $bonita($ventana['max'])];
 }
 
 function mensajeDeFecha($respuesta, string $campo = 'fecha'): string
@@ -413,7 +412,9 @@ function enLaVentana(string $dia, string $clave): bool
 {
     ['min' => $min, 'max' => $max] = VentanasDeFecha::para($clave);
 
-    return $dia >= $min && $dia <= $max;
+    // Un extremo nulo es «sin limite por ese lado», no «no pasa nadie»: comparar contra null
+    // daria falso siempre y una ventana sin techo (comisariato, programadas) nunca cuadraria.
+    return ($min === null || $dia >= $min) && ($max === null || $dia <= $max);
 }
 
 it('ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
@@ -874,13 +875,16 @@ it('COMISARIATO alta: rechaza con 422 y no escribe una fecha de entrega fuera de
     $respuesta = $this->postJson('/api/ServicioComisariato', cargaDeComisariato(Carbon::today()->addDays($desplazamiento)->toDateString()));
 
     $respuesta->assertUnprocessable()->assertJsonValidationErrors('fechaEntrega');
+    // Sin techo, el mensaje de la regla solo nombra el suelo. No se le exige un maximo que
+    // esta ventana ya no tiene.
     ['min' => $min, 'max' => $max] = fechasDelMensaje('comisariato.entrega');
-    expect(mensajeDeFecha($respuesta, 'fechaEntrega'))->toContain($min)->toContain($max);
+    expect($max)->toBeNull();
+    expect(mensajeDeFecha($respuesta, 'fechaEntrega'))->toContain($min);
     expect(ServicioComisariato::count())->toBe($antes);
     // Tampoco se dio de alta la matricula en la base remota: la validacion corta antes.
     expect(DB::connection('remota')->table('tb_matricula')->count())->toBe(0);
 })->with([
-    'en el futuro' => [1],
+    // Ya no hay caso «en el futuro»: el comisariato lo acepta a proposito.
     'demasiado antigua' => [-4],
 ]);
 
@@ -913,6 +917,10 @@ it('COMISARIATO alta: una fecha dentro de ventana escribe (la regla no rechaza t
 })->with([
     'hoy' => [0],
     'el borde de atras' => [-3],
+    // El comisariato es la SEGUNDA excepcion a la regla de «nada en el futuro», junto a
+    // Operaciones Programadas: una entrega de catering se agenda antes de que ocurra.
+    'manana' => [1],
+    'dentro de un mes' => [30],
 ]);
 
 it('COMISARIATO edicion: rechaza con 422 y no modifica la fecha de una edicion fuera de ventana', function (int $desplazamiento) {
@@ -926,13 +934,30 @@ it('COMISARIATO edicion: rechaza con 422 y no modifica la fecha de una edicion f
     );
 
     $respuesta->assertUnprocessable()->assertJsonValidationErrors('fechaEntrega');
-    ['min' => $min, 'max' => $max] = fechasDelMensaje('comisariato.entrega');
-    expect(mensajeDeFecha($respuesta, 'fechaEntrega'))->toContain($min)->toContain($max);
+    ['min' => $min] = fechasDelMensaje('comisariato.entrega');
+    expect(mensajeDeFecha($respuesta, 'fechaEntrega'))->toContain($min);
     expect($servicio->fresh()->fecha_entrega->toDateString())->toBe($original);
     expect($servicio->fresh()->catering)->toBe('Original');
 })->with([
-    'futuro' => [1],
+    // El futuro ya no se rechaza aqui: tiene su propia prueba, mas abajo.
     'antigua' => [-4],
+]);
+
+it('COMISARIATO edicion: una fecha FUTURA si se acepta, y queda guardada', function (int $desplazamiento) {
+    // La excepcion que pidio el departamento: una entrega de catering se agenda antes de
+    // que ocurra, asi que el comisariato no lleva techo. Es la segunda clave con
+    // `futuro => true`, junto a Operaciones Programadas.
+    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $servicio = comisariatoParaEditar(Carbon::today()->toDateString());
+    $futura = Carbon::today()->addDays($desplazamiento)->toDateString();
+
+    $this->putJson("/api/ServicioComisariato/{$servicio->id}", cargaDeComisariato($futura, 'Agendado'))->assertOk();
+
+    expect($servicio->fresh()->fecha_entrega->toDateString())->toBe($futura)
+        ->and($servicio->fresh()->catering)->toBe('Agendado');
+})->with([
+    'manana' => [1],
+    'dentro de un mes' => [30],
 ]);
 
 it('COMISARIATO edicion: deja corregir otros campos de un registro antiguo si no se toca su fecha', function () {
@@ -3052,11 +3077,13 @@ it('LA EXCEPCION es una excepcion y no un agujero: la MISMA fecha futura se acep
     'dentro de un mes' => [30],
 ]);
 
-it('PROGRAMADAS: solo ella tiene `futuro` y solo ella carece de suelo (si otra lo tuviera, la excepcion se habria ensanchado)', function () {
+it('solo DOS claves tienen `futuro`, y solo una carece de suelo (si otra lo tuviera, la excepcion se habria ensanchado)', function () {
+    // El comisariato se sumo a las que admiten futuro: agenda entregas de catering antes de
+    // que ocurran. Pero conserva su suelo, asi que sin suelo sigue habiendo una sola.
     $conFuturo = array_keys(array_filter(VentanasDeFecha::CLAVES, fn ($v) => $v['futuro']));
     $sinSuelo = array_keys(array_filter(VentanasDeFecha::CLAVES, fn ($v) => $v['atras'] === null));
 
-    expect($conFuturo)->toBe(['programadas.operacion'])
+    expect($conFuturo)->toBe(['comisariato.entrega', 'programadas.operacion'])
         ->and($sinSuelo)->toBe(['programadas.operacion']);
 });
 

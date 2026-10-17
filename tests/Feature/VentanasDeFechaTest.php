@@ -34,14 +34,21 @@ test('UNA CLAVE DESCONOCIDA LANZA, no devuelve un valor por omision', function (
         ->toThrow(InvalidArgumentException::class);
 });
 
-test('SOLO Operaciones Programadas admite futuro; se recorre la tabla entera', function () {
+/**
+ * Las DOS claves que admiten futuro, escritas a mano. Las dos registran algo que todavia no
+ * ha pasado: una operacion que se programa, y una entrega de catering que se agenda. Ampliar
+ * la lista exige reconocerlo aqui, que es justo lo que esta prueba defiende.
+ */
+const CLAVES_CON_FUTURO = ['programadas.operacion', 'comisariato.entrega'];
+
+test('SOLO las dos excepciones admiten futuro; se recorre la tabla entera', function () {
     // Asi, un formulario nuevo mal declarado sale en rojo en vez de colarse.
     Carbon::setTestNow('2026-10-07 15:00:00');
 
     foreach (array_keys(VentanasDeFecha::CLAVES) as $clave) {
         $max = VentanasDeFecha::para($clave)['max'];
 
-        if ($clave === 'programadas.operacion') {
+        if (in_array($clave, CLAVES_CON_FUTURO, true)) {
             expect($max)->toBeNull("la excepcion {$clave} deberia admitir futuro");
 
             continue;
@@ -58,6 +65,8 @@ test('todas() devuelve una entrada por clave', function () {
 
 test('todo formulario salvo la excepcion tiene suelo, y el suelo no pasa del techo', function () {
     // Una clave con `atras => null` por descuido dejaria el calendario abierto hacia el pasado.
+    // Ojo: carecer de TECHO y carecer de SUELO son cosas distintas. El comisariato admite
+    // futuro pero conserva su suelo de 3 dias; la unica sin suelo sigue siendo programadas.
     Carbon::setTestNow('2026-10-07 15:00:00');
 
     foreach (array_keys(VentanasDeFecha::CLAVES) as $clave) {
@@ -68,7 +77,10 @@ test('todo formulario salvo la excepcion tiene suelo, y el suelo no pasa del tec
         $ventana = VentanasDeFecha::para($clave);
 
         expect($ventana['min'])->not->toBeNull("la clave {$clave} no deberia quedar sin suelo");
-        expect($ventana['min'] <= $ventana['max'])->toBeTrue("la clave {$clave} tiene el suelo por encima del techo");
+
+        if ($ventana['max'] !== null) {
+            expect($ventana['min'] <= $ventana['max'])->toBeTrue("la clave {$clave} tiene el suelo por encima del techo");
+        }
     }
 });
 
@@ -208,7 +220,7 @@ test('la tabla de ventanas esta fijada a mano: cambiar una exige reconocerlo aqu
         'operaciones.salida' => ['atras' => 3, 'futuro' => false],
         'despacho.informacion_general' => ['atras' => 3, 'futuro' => false],
         'autotanque.servicio' => ['atras' => 3, 'futuro' => false],
-        'comisariato.entrega' => ['atras' => 3, 'futuro' => false],
+        'comisariato.entrega' => ['atras' => 3, 'futuro' => true],
         'csae.entrada' => ['atras' => 3, 'futuro' => false],
         'csae.salida' => ['atras' => 3, 'futuro' => false],
         'pernocta.dia' => ['atras' => 3, 'futuro' => false],
