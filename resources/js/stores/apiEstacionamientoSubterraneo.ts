@@ -155,3 +155,40 @@ export async function obtenerVehiculosMasDeCincoDias(
 
     return data;
 }
+
+export type FilaExcelEstacionamiento = {
+    placas: string;
+    vehiculo: string;
+    color: string | null;
+    matricula: string | null;
+    responsable: string;
+    /** Días del mes con registro, ascendentes y sin repetir. */
+    dias: number[];
+    total: number;
+};
+
+export type RejillaExcelEstacionamiento = {
+    mes: string;
+    /** Días que tiene el mes: 28, 29, 30 o 31. */
+    dias: number;
+    filas: FilaExcelEstacionamiento[];
+};
+
+export const obtenerExcelEstacionamiento = async (
+    mes: string,
+): Promise<RejillaExcelEstacionamiento> => {
+    const response = await fetch(`/api/EstacionamientoSubTerraneo/Excel/${mes}`, {
+        method: "GET",
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+        },
+        credentials: "same-origin",
+    });
+
+    if (!response.ok) {
+        throw new Error('No fue posible obtener los registros del mes');
+    }
+
+    return await response.json();
+};
