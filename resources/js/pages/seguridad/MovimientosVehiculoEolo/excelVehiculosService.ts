@@ -54,13 +54,22 @@ export async function descargarExcelVehiculos(filas: FilaExcelVehiculo[]): Promi
     });
 
     const encabezado = hoja.getRow(1);
-    encabezado.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    encabezado.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF003E51' },
-    };
-    encabezado.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // Celda a celda, no sobre el objeto Row: ExcelJS emite un estilo de fila como
+    // `customFormat="1"`, y entonces Excel pinta el relleno oscuro a lo ancho de toda la
+    // hoja, mucho más allá de la última columna. La altura sí es propiedad de la fila.
+    COLUMNAS_EXCEL_VEHICULOS.forEach((_, indice) => {
+        const celda = encabezado.getCell(indice + 1);
+
+        celda.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        celda.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF003E51' },
+        };
+        celda.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+
     encabezado.height = 22;
 
     hoja.autoFilter = {
