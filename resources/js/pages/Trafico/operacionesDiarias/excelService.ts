@@ -522,8 +522,13 @@ export const prepararFilasReporteOperaciones = (
             movimientosCsae
         );
         // Esta fila cruza la visita pero no la cuenta: otra estancia es la dueña. Se
-        // enseñan las fechas, que es lo que se va a buscar, y se deja vacia la estancia
-        // para que la columna siga sumando el tiempo real una sola vez.
+        // enseñan las fechas, que es lo que se va a buscar, y la estancia se deja vacia
+        // porque el tiempo lo pinta la dueña.
+        //
+        // DEUDA CONOCIDA: en una fila MIXTA --que posee una corrida y refleja otra-- esta
+        // bandera va en false, asi que la celda se llena con el tiempo de TODAS las que
+        // enseña, no solo las que posee. Los agregados del backend si distinguen las dos
+        // cosas; el Excel no los lee. Hoy no existe ninguna fila mixta en los datos.
         const csaeEsReferencia = Boolean(
             llegada?.csae_es_referencia ?? salida?.csae_es_referencia
         );

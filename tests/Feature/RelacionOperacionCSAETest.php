@@ -280,7 +280,7 @@ it('YA FUNCIONABA: una corrida dada de baja (status N) no cuenta', function () {
     relacionEsperaSinCorridas(relacionFila(relacionExcel(), $llegada));
 });
 
-it('YA FUNCIONABA: los siete campos del contrato con el navegador existen en cada fila', function () {
+it('YA FUNCIONABA: los ocho campos del contrato con el navegador existen en cada fila', function () {
     $llegada = relacionLlegada('XA-CTR', '2026-05-20 10:00');
     relacionMovimiento('XA-CTR', '2026-05-20 11:00', '2026-05-20 12:00');
 
@@ -291,6 +291,7 @@ it('YA FUNCIONABA: los siete campos del contrato con el navegador existen en cad
         'fecha_hora_csae',
         'fecha_hora_salida_csae',
         'movimientos_csae',
+        'csae_es_referencia',
         'cantidad_visitas_csae',
         'minutos_estancia_csae_total',
         'salidas_csae_pendientes',
@@ -328,7 +329,7 @@ it('DEFECTO: una corrida cuya salida de CSAE llega DESPUES de la salida de opera
         ->and($excel['huerfanos'])->toBe([]);
 });
 
-it('DEFECTO doble conteo: con dos llegadas abiertas la corrida posterior a la segunda sale SOLO bajo la segunda', function () {
+it('DEFECTO doble conteo: con dos llegadas abiertas la corrida posterior a la segunda la CUENTA solo la segunda', function () {
     $primera = relacionLlegada('XA-DOB', '2026-03-01 08:00');
     $segunda = relacionLlegada('XA-DOB', '2026-04-01 08:00');
     $movimiento = relacionMovimiento('XA-DOB', '2026-04-02 09:00', '2026-04-03 09:00');
@@ -641,7 +642,7 @@ it('CLASE: una corrida sin salida dura hasta `ahora`, y `ahora` se inyecta', fun
         ->and($despuesDeLaSegunda['operaciones']->firstWhere('id', 3)->cantidad_visitas_csae)->toBe(1);
 });
 
-it('CLASE: si el historial trae una llegada mas reciente que las filas a decorar, se queda la corrida', function () {
+it('CLASE: si el historial trae una llegada mas reciente que las filas a decorar, esa cuenta la corrida', function () {
     $visible = fn () => relacionOperacionSuelta(1, 'llegada', 'XA-HIS', '2026-05-05 10:00');
     $fueraDelFiltro = relacionOperacionSuelta(2, 'llegada', 'XA-HIS', '2026-06-08 10:00');
     $corrida = relacionMovimientoSuelto(10, 'XA-HIS', '2026-06-10 09:00', '2026-06-11 09:00');
@@ -868,12 +869,14 @@ it('REPARTO: una fila que POSEE una corrida y REFLEJA otra no es referencia', fu
     // Cruza las dos: la posee la segunda, la primera solo la refleja.
     $compartida = relacionMovimiento('XA-MIX', '2026-03-12 08:00', '2026-03-15 08:00');
 
-    $fila = relacionFila(relacionExcel(), $primera);
+    $excel = relacionExcel();
+    $fila = relacionFila($excel, $primera);
 
     expect(relacionIdsDe($fila))->toBe([$suya->id, $compartida->id])
         ->and($fila['csae_es_referencia'])->toBeFalse()
         ->and($fila['cantidad_visitas_csae'])->toBe(1)
-        ->and(relacionFila(relacionExcel(), $segunda)['cantidad_visitas_csae'])->toBe(1);
+        ->and($fila['minutos_estancia_csae_total'])->toBe(1440)
+        ->and(relacionFila($excel, $segunda)['cantidad_visitas_csae'])->toBe(1);
 });
 
 it('REPARTO: una corrida sin estancia sigue siendo huerfana aunque otra se reparta', function () {
@@ -888,4 +891,24 @@ it('REPARTO: una corrida sin estancia sigue siendo huerfana aunque otra se repar
 
     expect(relacionIdsDe(relacionFila($excel, $llegada)))->not->toContain($fuera->id)
         ->and(collect($excel['huerfanos'])->pluck('id')->all())->toBe([$fuera->id]);
+});
+
+it('DEUDA CONOCIDA: una llegada sin salida registrada MUESTRA corridas muy posteriores', function () {
+    // Una estancia sin salida no tiene techo, asi que solapa con todo lo que venga despues.
+    // Mientras la corrida iba a una sola estancia esto no se veia; ahora la fila abierta la
+    // enseña. El total no se mueve --la cuenta la llegada mas reciente-- pero la fila de marzo
+    // acaba mostrando una visita de agosto. Esta prueba fija ese comportamiento a proposito:
+    // si algun dia se le pone techo a las estancias sin salida, esta prueba debe cambiar.
+    $abierta = relacionLlegada('XA-ABI', '2026-03-01 08:00');
+    $posterior = relacionLlegada('XA-ABI', '2026-08-01 08:00');
+    relacionSalida('XA-ABI', '2026-08-10 08:00');
+    $corrida = relacionMovimiento('XA-ABI', '2026-08-02 09:00', '2026-08-03 09:00');
+
+    $excel = relacionExcel();
+    $filaAbierta = relacionFila($excel, $abierta);
+
+    expect(relacionIdsDe($filaAbierta))->toBe([$corrida->id])
+        ->and($filaAbierta['csae_es_referencia'])->toBeTrue()
+        ->and($filaAbierta['cantidad_visitas_csae'])->toBe(0)
+        ->and(relacionFila($excel, $posterior)['cantidad_visitas_csae'])->toBe(1);
 });

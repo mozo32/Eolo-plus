@@ -25,6 +25,14 @@ use Illuminate\Support\Collection;
  * y sus agregados en cero, de modo que la suma de visitas sobre todas las filas sigue siendo el
  * número de corridas. Las que no solapan con ninguna estancia son los huérfanos.
  *
+ * CUIDADO con las estancias sin salida. No tienen techo, así que solapan con todo lo posterior.
+ * Mientras cada corrida se asignaba a una sola estancia eso era inofensivo: la llegada más
+ * reciente se la quedaba y la fila abierta salía vacía. Ahora la fila abierta las MUESTRA todas,
+ * así que a una llegada a la que se le olvidó registrar la salida le aparecerán corridas
+ * posteriores que no son suyas. Los totales no se ven afectados, porque la dueña sigue siendo la
+ * llegada más reciente. Ponerle techo en la siguiente llegada --solo para lo que se muestra, no
+ * para elegir dueña-- cerraría el hueco; hoy no cambiaría ni una fila de los datos reales.
+ *
  * No toca la base de datos ni la petición: recibe colecciones y devuelve datos, así que se prueba
  * sin HTTP. A las operaciones les añade, sin quitar ni renombrar nada, los campos que el Excel del
  * navegador ya lee: `mantenimiento_csae`, `fecha_hora_csae`, `fecha_hora_salida_csae`,
