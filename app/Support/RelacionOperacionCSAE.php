@@ -15,10 +15,10 @@ use Illuminate\Support\Collection;
  *
  * La pertenencia es por SOLAPE, no por contención. El intervalo de la corrida va de su entrada a su
  * salida (o hasta `$ahora` si no tiene salida); el de la estancia, de la llegada a la primera salida
- * posterior de la misma matrícula (o, si no la hay, hasta la siguiente llegada; ver abajo). Una corrida es de la estancia si los
- * dos intervalos se cruzan, extremos incluidos. Así una corrida registrada un minuto antes de la
- * llegada no se pierde, y una cuya salida se registró después de la salida de operación diaria
- * tampoco.
+ * posterior de la misma matrícula (o, si no la hay, hasta la siguiente llegada; ver abajo). Una
+ * corrida es de la estancia si los dos intervalos se cruzan, extremos incluidos. Así una corrida
+ * registrada un minuto antes de la llegada no se pierde, y una cuya salida se registró después de
+ * la salida de operación diaria tampoco.
  *
  * Una corrida se MUESTRA en todas las estancias que solapan con ella, y se CUENTA en una sola: la
  * de llegada más reciente. Las demás la enseñan como referencia, con `csae_es_referencia` en true
@@ -146,6 +146,11 @@ final class RelacionOperacionCSAE
 
                 return $llegadas
                     ->map(function (array $llegada) use ($salidas, $llegadas) {
+                        // La salida NO se consume: la misma salida puede cerrar varias estancias.
+                        // De ahi que una estancia solo este abierta si no hay NINGUNA salida
+                        // posterior a su llegada, y por tanto que las abiertas sean siempre un
+                        // sufijo. El techo de abajo se apoya en eso; si esto pasa a emparejar
+                        // consumiendo salidas, hay que repensar el techo.
                         $salida = $salidas->first(
                             fn (array $posible) => $posible['momento']->greaterThan($llegada['momento'])
                         );
@@ -190,8 +195,8 @@ final class RelacionOperacionCSAE
      * Todas las estancias que solapan con la corrida, de la mas antigua a la mas reciente.
      *
      * La aritmetica del solape es la de siempre: el intervalo de la corrida va de su entrada a su
-     * salida (o hasta `$ahora`), el de la estancia de la llegada a la primera salida posterior (o
-     * sin techo), y pertenecen si se cruzan con los extremos incluidos.
+     * salida (o hasta `$ahora`), el de la estancia de la llegada a la primera salida posterior, y
+     * pertenecen si se cruzan con los extremos incluidos.
      *
      * Una estancia sin salida termina en su techo (la siguiente llegada de la misma matricula); si
      * tampoco lo tiene, sigue abierta indefinidamente.

@@ -889,9 +889,10 @@ it('REPARTO: una corrida sin estancia sigue siendo huerfana aunque otra se repar
 });
 
 it('TECHO: una llegada sin salida registrada NO muestra corridas de una estancia posterior', function () {
-    // Una estancia sin salida no tiene techo, asi que solapa con todo lo que venga despues.
-    // Para mostrar se le pone techo en la siguiente llegada: la fila de marzo no tiene por que
-    // enseñar una visita de agosto que es de la llegada de agosto.
+    // Una estancia sin salida terminaria solapando con todo lo posterior, asi que se le pone
+    // techo en la siguiente llegada: la fila de marzo no tiene por que enseñar una visita de
+    // agosto, que es de la llegada de agosto. El techo entra tambien para elegir dueña, y aun
+    // asi no mueve ningun total: nunca deja fuera a la mas reciente que solapa.
     $abierta = relacionLlegada('XA-ABI', '2026-03-01 08:00');
     $posterior = relacionLlegada('XA-ABI', '2026-08-01 08:00');
     $corrida = relacionMovimiento('XA-ABI', '2026-08-02 09:00', '2026-08-03 09:00');
