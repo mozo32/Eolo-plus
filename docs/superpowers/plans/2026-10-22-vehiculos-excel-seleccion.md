@@ -304,6 +304,43 @@ it('cada fila trae las doce columnas del reporte, en orden', function () {
     ]);
 });
 
+it('cada columna lleva el valor de su campo, no el del vecino', function () {
+    // Un cruce como `'matricula' => $movimiento->motivo` pasaría todas las demás
+    // pruebas y metería el dato equivocado en una columna del Excel. Aquí cada campo
+    // lleva un valor distinto y reconocible, así que un cruce salta a la vista. De
+    // paso fija el formato de `fechaHora`, que el modal pinta tal cual.
+    vehiculoDePrueba('01-KIA', 'KIA');
+    movimientoDe('01-KIA', [
+        'created_at' => '2026-04-07 15:42:09',
+        'tipo' => 'Entrada',
+        'chofer' => 'Chofer Uno',
+        'kilometraje' => 54321,
+        'gasolina' => '3/4',
+        'destino' => 'Destino Dos',
+        'autoriza' => 'Autoriza Tres',
+        'matricula' => 'XA-CUATRO',
+        'motivo' => 'Motivo Cinco',
+        'observaciones' => 'Observaciones Seis',
+    ]);
+
+    $fila = consultarExcel(['vehiculos' => ['01-KIA']])->assertOk()->json('0');
+
+    expect($fila)->toBe([
+        'vehiculo' => 'KIA',
+        'numeroEconomico' => '01-KIA',
+        'fechaHora' => '2026-04-07 15:42',
+        'tipo' => 'Entrada',
+        'chofer' => 'Chofer Uno',
+        'kilometraje' => 54321,
+        'gasolina' => '3/4',
+        'destino' => 'Destino Dos',
+        'autoriza' => 'Autoriza Tres',
+        'matricula' => 'XA-CUATRO',
+        'motivo' => 'Motivo Cinco',
+        'observaciones' => 'Observaciones Seis',
+    ]);
+});
+
 it('trae el nombre del vehículo, no solo su número económico', function () {
     vehiculoDePrueba('01-KIA', 'KIA');
     movimientoDe('01-KIA');
@@ -447,7 +484,7 @@ En `routes/api.php`, dentro del grupo `prefix('VehiculoEolo')`, después de la l
 TEST_TOKEN=903 php artisan test tests/Feature/MovimientosVehiculoEolo/ExcelVehiculosTest.php
 ```
 
-Esperado: 14 pruebas en verde.
+Esperado: 15 pruebas en verde.
 
 - [ ] **Step 6: Comprobar que las pruebas muerden**
 
@@ -1294,7 +1331,7 @@ El endpoint nuevo no cambia ninguna respuesta existente, así que no se esperan 
 TEST_TOKEN=904 php artisan test
 ```
 
-**Nunca con `--parallel`.** Esperado: 2444 pruebas de antes más las 14 de la Task 1, sin ningún fallo. Tarda unos seis minutos; déjalo acabar.
+**Nunca con `--parallel`.** Esperado: 2444 pruebas de antes más las 15 de la Task 1, sin ningún fallo. Tarda unos seis minutos; déjalo acabar.
 
 Después:
 
