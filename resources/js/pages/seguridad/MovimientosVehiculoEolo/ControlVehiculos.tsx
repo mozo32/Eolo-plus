@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, FileSpreadsheet } from 'lucide-react';
 import { usePage } from '@inertiajs/react';
 import { Vehiculo } from './types';
 import { Indicadores } from './Indicadores';
 import { TablaVehiculos } from './TablaVehiculos';
 import { ModalMovimiento } from './ModalMovimiento';
 import { ModalNuevoVehiculo } from './ModalNuevoVehiculo';
+import { ExcelVehiculosModal } from './ExcelVehiculosModal';
 import { apiVehiculoEolo } from '@/stores/apiVehiculoEolo';
 
 /**
@@ -22,6 +23,8 @@ const ControlVehiculos = () => {
     const [isNuevoModalOpen, setIsNuevoModalOpen] = useState(false);
     const [selectedVehiculo, setSelectedVehiculo] = useState<Vehiculo | null>(null);
     const [tipoAccion, setTipoAccion] = useState<'Salida' | 'Entrada'>('Salida');
+    const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
+    const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
     const { auth } = usePage<{ auth: { user: { roles?: { slug: string }[] } } }>().props;
     // La lista ENTERA, no roles[0]: con dos roles, el permitido podría no ser el primero.
     const puedeDesactivar = (auth.user.roles ?? []).some(rol => ROLES_PARA_DESACTIVAR.includes(rol.slug));
@@ -70,6 +73,28 @@ const ControlVehiculos = () => {
             alert('Error: ' + (error.message || 'No se pudo cambiar el estado del vehículo'));
         }
     };
+
+    const alternarSeleccion = (id: string) => {
+        setSeleccionados(previos => {
+            const siguiente = new Set(previos);
+
+            if (siguiente.has(id)) {
+                siguiente.delete(id);
+            } else {
+                siguiente.add(id);
+            }
+
+            return siguiente;
+        });
+    };
+
+    const alternarTodos = () => {
+        setSeleccionados(previos =>
+            previos.size === vehiculos.length ? new Set() : new Set(vehiculos.map(v => v.id)),
+        );
+    };
+
+    const vehiculosSeleccionados = vehiculos.filter(v => seleccionados.has(v.id));
 
     const abrirModal = (vehiculo: Vehiculo, tipo: 'Salida' | 'Entrada') => {
         setSelectedVehiculo(vehiculo);
@@ -123,13 +148,28 @@ const ControlVehiculos = () => {
                         </h1>
                         <p className="text-gray-500">Gestión de flota vehicular</p>
                     </div>
-                    <button
-                        onClick={() => setIsNuevoModalOpen(true)}
-                        className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
-                    >
-                        <Plus size={18} />
-                        Nuevo Vehículo
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setIsExcelModalOpen(true)}
+                            disabled={seleccionados.size === 0}
+                            title={
+                                seleccionados.size === 0
+                                    ? 'Marca al menos un vehículo para exportar'
+                                    : `Exportar ${seleccionados.size} vehículo(s)`
+                            }
+                            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-100"
+                        >
+                            <FileSpreadsheet size={18} />
+                            Excel
+                        </button>
+                        <button
+                            onClick={() => setIsNuevoModalOpen(true)}
+                            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                        >
+                            <Plus size={18} />
+                            Nuevo Vehículo
+                        </button>
+                    </div>
                 </header>
 
                 {loading ? (
@@ -145,6 +185,9 @@ const ControlVehiculos = () => {
                             onAccion={abrirModal}
                             puedeDesactivar={puedeDesactivar}
                             onCambiarActivo={handleCambiarActivo}
+                            seleccionados={seleccionados}
+                            onAlternarSeleccion={alternarSeleccion}
+                            onAlternarTodos={alternarTodos}
                         />
                     </>
                 )}
@@ -163,6 +206,14 @@ const ControlVehiculos = () => {
                 onClose={() => setIsNuevoModalOpen(false)}
                 onSubmit={handleNuevoVehiculo}
             />
+
+            {isExcelModalOpen && (
+                <ExcelVehiculosModal
+                    isOpen
+                    vehiculosSeleccionados={vehiculosSeleccionados}
+                    onClose={() => setIsExcelModalOpen(false)}
+                />
+            )}
         </div>
     );
 };

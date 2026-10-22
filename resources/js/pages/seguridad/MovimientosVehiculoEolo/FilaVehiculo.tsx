@@ -8,14 +8,32 @@ interface Props {
     onAccion: (vehiculo: Vehiculo, tipo: 'Salida' | 'Entrada') => void;
     puedeDesactivar: boolean;
     onCambiarActivo: (vehiculo: Vehiculo) => void;
+    seleccionado: boolean;
+    onAlternarSeleccion: () => void;
 }
 
-export const FilaVehiculo = ({ vehiculo, onAccion, puedeDesactivar, onCambiarActivo }: Props) => {
+export const FilaVehiculo = ({
+    vehiculo,
+    onAccion,
+    puedeDesactivar,
+    onCambiarActivo,
+    seleccionado,
+    onAlternarSeleccion,
+}: Props) => {
     const [showHistory, setShowHistory] = useState(false);
 
     return (
         <>
             <tr className="border-t border-gray-100 hover:bg-gray-50 transition-all">
+                <td className="p-4 w-12">
+                    <input
+                        type="checkbox"
+                        checked={seleccionado}
+                        onChange={onAlternarSeleccion}
+                        title={`Seleccionar ${vehiculo.nombre}`}
+                        className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                </td>
                 <td className="p-4 font-medium text-gray-700">
                     <div className="flex items-center gap-3">
                         <div className="p-2 rounded-lg bg-gray-100 text-gray-600">
