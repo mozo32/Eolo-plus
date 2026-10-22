@@ -1,5 +1,5 @@
 //apiVehiculoEolo.ts
-import { Vehiculo } from "@/pages/seguridad/MovimientosVehiculoEolo/types";
+import { Vehiculo, FilaExcelVehiculo, FiltrosExcelVehiculos } from "@/pages/seguridad/MovimientosVehiculoEolo/types";
 
 function getXsrfToken(): string {
     const match = document.cookie
@@ -61,6 +61,25 @@ export const apiVehiculoEolo = {
             method: 'PATCH',
             headers: headers,
             body: JSON.stringify({ activo }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw result;
+        return result;
+    },
+    getExcel: async (
+        vehiculoIds: string[],
+        filtros: FiltrosExcelVehiculos = {},
+    ): Promise<FilaExcelVehiculo[]> => {
+        const params = new URLSearchParams();
+        vehiculoIds.forEach(id => params.append('vehiculos[]', id));
+        if (filtros.chofer) params.append('chofer', filtros.chofer);
+        if (filtros.tipo && filtros.tipo !== 'Todos') params.append('tipo', filtros.tipo);
+        if (filtros.fechaInicio) params.append('fecha_inicio', filtros.fechaInicio);
+        if (filtros.fechaFin) params.append('fecha_fin', filtros.fechaFin);
+
+        const response = await fetch(`/api/VehiculoEolo/Excel/?${params.toString()}`, {
+            method: 'GET',
+            headers: headers,
         });
         const result = await response.json();
         if (!response.ok) throw result;
