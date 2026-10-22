@@ -109,7 +109,8 @@ export const ExcelVehiculosModal = ({ isOpen, vehiculosSeleccionados, onClose }:
                         </p>
                         <button
                             onClick={limpiarFiltros}
-                            className="text-[10px] font-bold text-gray-400 hover:text-gray-600 tracking-wider"
+                            disabled={consultando}
+                            className="text-[10px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-40 tracking-wider"
                         >
                             LIMPIAR FILTROS
                         </button>
@@ -123,6 +124,7 @@ export const ExcelVehiculosModal = ({ isOpen, vehiculosSeleccionados, onClose }:
                                 placeholder="Chofer..."
                                 className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                                 value={chofer}
+                                disabled={consultando}
                                 onChange={(e) => { setChofer(e.target.value); invalidarConsulta(); }}
                             />
                         </div>
@@ -131,6 +133,7 @@ export const ExcelVehiculosModal = ({ isOpen, vehiculosSeleccionados, onClose }:
                                 type="date"
                                 className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-gray-600 bg-white"
                                 value={fechaInicio}
+                                disabled={consultando}
                                 onChange={(e) => { setFechaInicio(e.target.value); invalidarConsulta(); }}
                             />
                             <span className="text-gray-400 text-xs">-</span>
@@ -138,12 +141,14 @@ export const ExcelVehiculosModal = ({ isOpen, vehiculosSeleccionados, onClose }:
                                 type="date"
                                 className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-gray-600 bg-white"
                                 value={fechaFin}
+                                disabled={consultando}
                                 onChange={(e) => { setFechaFin(e.target.value); invalidarConsulta(); }}
                             />
                         </div>
                         <select
                             className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-gray-600 bg-white cursor-pointer"
                             value={tipo}
+                            disabled={consultando}
                             onChange={(e) => { setTipo(e.target.value as 'Todos' | 'Entrada' | 'Salida'); invalidarConsulta(); }}
                         >
                             <option value="Todos">Todos los tipos</option>
