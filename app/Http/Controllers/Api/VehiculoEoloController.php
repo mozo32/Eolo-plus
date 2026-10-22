@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Models\Bitacora;
 use App\Models\Vehiculo;
 use App\Models\movimientoVehiculo;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +15,13 @@ use Illuminate\Support\Facades\Storage;
 
 class VehiculoEoloController extends Controller
 {
+    /**
+     * Roles que pueden dar de baja o de alta un vehículo. Se comprueba la lista
+     * entera de roles del usuario, no el primero: con dos roles, el permitido
+     * podría no ser el primero.
+     */
+    private const ROLES_PARA_CAMBIAR_ACTIVO = ['fbo', 'admin2', 'admin'];
+
     public function index()
     {
         try {
@@ -38,6 +46,55 @@ class VehiculoEoloController extends Controller
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
+    }
+
+    public function cambiarActivo(Request $request, string $id)
+    {
+        if (! $request->user()?->hasAnyRole(self::ROLES_PARA_CAMBIAR_ACTIVO)) {
+            return response()->json([
+                'message' => 'No tienes permiso para dar de baja o de alta un vehículo.',
+            ], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'activo' => 'required|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $vehiculo = Vehiculo::findOrFail($id);
+        $activo = $request->boolean('activo');
+
+        if (! $activo && $vehiculo->estado === 'En Ruta') {
+            return response()->json([
+                'message' => "El vehículo {$vehiculo->id} está En Ruta. Registra su entrada antes de desactivarlo.",
+            ], 409);
+        }
+
+        $vehiculo->update(['activo' => $activo]);
+
+        Bitacora::log(
+            Bitacora::MODULO_MOVIMIENTOS_VEHICULOS,
+            $activo ? Bitacora::ACCION_ACTIVAR : Bitacora::ACCION_DESACTIVAR,
+            ($activo ? 'Reactivó' : 'Desactivó')." el vehículo {$vehiculo->id} ({$vehiculo->nombre})",
+            datosNuevos: ['vehiculo_id' => $vehiculo->id, 'activo' => $activo],
+        );
+
+        return response()->json([
+            'message' => $activo
+                ? 'Vehículo reactivado'
+                : 'Vehículo desactivado',
+            'vehiculo' => [
+                'id' => $vehiculo->id,
+                'nombre' => $vehiculo->nombre,
+                'estado' => $vehiculo->estado,
+                'activo' => $vehiculo->activo,
+            ],
+        ], 200);
     }
 
     public function registrarMovimiento(Request $request)

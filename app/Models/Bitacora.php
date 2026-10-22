@@ -20,6 +20,7 @@ class Bitacora extends Model
     public const MODULO_PRESTAMO_CHALECOS = 'PRESTAMO_CHALECOS';
 
     public const MODULO_GESTION_USUARIOS = 'GESTION_USUARIOS';
+    public const MODULO_MOVIMIENTOS_VEHICULOS = 'MOVIMIENTOS_VEHICULOS';
 
     public const ACCION_CREAR = 'CREAR';
     public const ACCION_ACTUALIZAR = 'ACTUALIZAR';

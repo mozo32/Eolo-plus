@@ -202,6 +202,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('VehiculoEolo')->group(functi
     Route::get('/', [VehiculoEoloController::class, 'index']);
     Route::post('/movimientos', [VehiculoEoloController::class, 'registrarMovimiento']);
     Route::get('/vehiculos/{id}/movimientos', [VehiculoEoloController::class, 'obtenerHistorial']);
+    Route::patch('/vehiculos/{id}/activo', [VehiculoEoloController::class, 'cambiarActivo']);
     Route::post('/', [VehiculoEoloController::class, 'store']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('RegistroVisitantes')->group(function () {
