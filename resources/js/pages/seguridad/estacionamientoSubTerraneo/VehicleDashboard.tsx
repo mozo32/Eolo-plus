@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Calendar, ChevronRight, FileText, Filter, Plus, X, TriangleAlert } from 'lucide-react';
+import { Calendar, ChevronRight, FileText, Filter, Plus, X, TriangleAlert, FileSpreadsheet } from 'lucide-react';
 import { listarEstaSubTerraneo, obtenerVehiculosMasDeCincoDias} from '@/stores/apiEstacionamientoSubterraneo';
 import VehicleDetail from './VehicleDetail';
 import RoundRegisterForm from './RoundRegisterForm';
 import VehiculosEstacionados from './VehiculosEstacionados';
+import ModalExcelEstacionamiento from './ModalExcelEstacionamiento';
 
 interface MesRegistro {
     valor: string;
@@ -36,6 +37,7 @@ const VehicleDashboard = () => {
     const [isDetailOpen, setIsDetailOpen] = useState(false);
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [isVehiclesAlertOpen, setIsVehiclesAlertOpen] = useState(false);
+    const [mesParaExcel, setMesParaExcel] = useState<string | null>(null);
 
     const cargarMeses = async () => {
         try {
@@ -300,6 +302,17 @@ const VehicleDashboard = () => {
                                                         type="button"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
+                                                            setMesParaExcel(mes.valor);
+                                                        }}
+                                                        className="p-2 rounded transition-colors text-slate-400 hover:text-emerald-600"
+                                                        title="Descargar Excel del mes"
+                                                    >
+                                                        <FileSpreadsheet size={16} />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
                                                             handleOpenDetail(mes);
                                                         }}
                                                         className="p-2 rounded transition-colors text-slate-400 hover:text-sky-600"
@@ -396,6 +409,12 @@ const VehicleDashboard = () => {
                         </div>
                     </div>
                 </div>
+            )}
+            {mesParaExcel !== null && (
+                <ModalExcelEstacionamiento
+                    mes={mesParaExcel}
+                    onClose={() => setMesParaExcel(null)}
+                />
             )}
         </div>
     );
