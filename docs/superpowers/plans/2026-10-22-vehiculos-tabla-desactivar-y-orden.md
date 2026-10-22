@@ -180,10 +180,13 @@ it('devuelve los movimientos del más nuevo al más viejo', function () {
     vehiculoDePrueba('TC-84', 'SUBURBAN');
     movimientosDePrueba('TC-84', 3);
 
-    $tipos = Vehiculo::find('TC-84')->movimientos->pluck('tipo')->all();
+    // Se asegura sobre el kilometraje (1000 + i), que es distinto en cada fila.
+    // Sobre `tipo` no serviría: la secuencia Salida/Entrada/Salida es un
+    // palíndromo y se lee igual del derecho que del revés, así que la prueba
+    // pasaría también sin el orden, o con el orden al revés.
+    $kilometrajes = Vehiculo::find('TC-84')->movimientos->pluck('kilometraje')->all();
 
-    // movimientosDePrueba crea Salida, Entrada, Salida en ese orden.
-    expect($tipos)->toBe(['Salida', 'Entrada', 'Salida']);
+    expect($kilometrajes)->toBe([1003, 1002, 1001]);
 });
 ```
 
