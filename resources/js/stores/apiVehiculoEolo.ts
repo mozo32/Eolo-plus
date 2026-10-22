@@ -56,6 +56,16 @@ export const apiVehiculoEolo = {
         if (!response.ok) throw new Error('Error al obtener historial');
         return await response.json();
     },
+    cambiarActivo: async (vehiculoId: string, activo: boolean) => {
+        const response = await fetch(`/api/VehiculoEolo/vehiculos/${vehiculoId}/activo`, {
+            method: 'PATCH',
+            headers: headers,
+            body: JSON.stringify({ activo }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw result;
+        return result;
+    },
     crearVehiculo: async (vehiculo: any) => {
         const response = await fetch('/api/VehiculoEolo', {
             method: 'POST',

@@ -1,11 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
+import { usePage } from '@inertiajs/react';
 import { Vehiculo } from './types';
 import { Indicadores } from './Indicadores';
 import { TablaVehiculos } from './TablaVehiculos';
 import { ModalMovimiento } from './ModalMovimiento';
 import { ModalNuevoVehiculo } from './ModalNuevoVehiculo';
 import { apiVehiculoEolo } from '@/stores/apiVehiculoEolo';
+
+/**
+ * Roles que pueden dar de baja o de alta un vehículo. La misma lista que
+ * guarda el servidor en VehiculoEoloController::ROLES_PARA_CAMBIAR_ACTIVO:
+ * aquí solo decide si se dibuja el botón, el permiso de verdad está allá.
+ */
+const ROLES_PARA_DESACTIVAR = ['fbo', 'admin2', 'admin'];
 
 const ControlVehiculos = () => {
     const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
@@ -14,6 +22,9 @@ const ControlVehiculos = () => {
     const [isNuevoModalOpen, setIsNuevoModalOpen] = useState(false);
     const [selectedVehiculo, setSelectedVehiculo] = useState<Vehiculo | null>(null);
     const [tipoAccion, setTipoAccion] = useState<'Salida' | 'Entrada'>('Salida');
+    const { auth } = usePage<{ auth: { user: { roles?: { slug: string }[] } } }>().props;
+    // La lista ENTERA, no roles[0]: con dos roles, el permitido podría no ser el primero.
+    const puedeDesactivar = (auth.user.roles ?? []).some(rol => ROLES_PARA_DESACTIVAR.includes(rol.slug));
 
     const fetchVehiculos = async () => {
         try {
@@ -39,6 +50,24 @@ const ControlVehiculos = () => {
             alert("Vehículo agregado exitosamente");
         } catch (error: any) {
             alert("Error al crear: " + (error.message || "Error desconocido"));
+        }
+    };
+
+    const handleCambiarActivo = async (vehiculo: Vehiculo) => {
+        const desactivando = vehiculo.activo;
+        const pregunta = desactivando
+            ? `¿Desactivar ${vehiculo.nombre} (${vehiculo.id})? Dejará de poder registrar entradas y salidas; su bitácora se seguirá consultando.`
+            : `¿Reactivar ${vehiculo.nombre} (${vehiculo.id})?`;
+
+        if (!window.confirm(pregunta)) {
+            return;
+        }
+
+        try {
+            await apiVehiculoEolo.cambiarActivo(vehiculo.id, !vehiculo.activo);
+            await fetchVehiculos();
+        } catch (error: any) {
+            alert('Error: ' + (error.message || 'No se pudo cambiar el estado del vehículo'));
         }
     };
 
@@ -114,6 +143,8 @@ const ControlVehiculos = () => {
                         <TablaVehiculos
                             vehiculos={vehiculos}
                             onAccion={abrirModal}
+                            puedeDesactivar={puedeDesactivar}
+                            onCambiarActivo={handleCambiarActivo}
                         />
                     </>
                 )}

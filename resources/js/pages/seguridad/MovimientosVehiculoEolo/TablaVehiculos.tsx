@@ -4,9 +4,11 @@ import { FilaVehiculo } from './FilaVehiculo';
 interface Props {
     vehiculos: Vehiculo[];
     onAccion: (vehiculo: Vehiculo, tipo: 'Salida' | 'Entrada') => void;
+    puedeDesactivar: boolean;
+    onCambiarActivo: (vehiculo: Vehiculo) => void;
 }
 
-export const TablaVehiculos = ({ vehiculos, onAccion }: Props) => {
+export const TablaVehiculos = ({ vehiculos, onAccion, puedeDesactivar, onCambiarActivo }: Props) => {
     return (
         <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
             <table className="w-full text-left">
@@ -24,6 +26,8 @@ export const TablaVehiculos = ({ vehiculos, onAccion }: Props) => {
                             key={v.id}
                             vehiculo={v}
                             onAccion={onAccion}
+                            puedeDesactivar={puedeDesactivar}
+                            onCambiarActivo={onCambiarActivo}
                         />
                     ))}
                 </tbody>

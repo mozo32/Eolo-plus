@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { Vehiculo } from './types';
-import { Car, ArrowUpRight, ArrowDownLeft, History, X } from 'lucide-react';
+import { Car, ArrowUpRight, ArrowDownLeft, History, X, Ban, RotateCcw } from 'lucide-react';
 import { HistorialVehiculo } from './HistorialVehiculo';
 
 interface Props {
     vehiculo: Vehiculo;
     onAccion: (vehiculo: Vehiculo, tipo: 'Salida' | 'Entrada') => void;
+    puedeDesactivar: boolean;
+    onCambiarActivo: (vehiculo: Vehiculo) => void;
 }
 
-export const FilaVehiculo = ({ vehiculo, onAccion }: Props) => {
+export const FilaVehiculo = ({ vehiculo, onAccion, puedeDesactivar, onCambiarActivo }: Props) => {
     const [showHistory, setShowHistory] = useState(false);
 
     return (
@@ -52,21 +54,46 @@ export const FilaVehiculo = ({ vehiculo, onAccion }: Props) => {
                             <History size={18} />
                         </button>
 
-                        <button
-                            onClick={() => onAccion(vehiculo, 'Salida')}
-                            disabled={vehiculo.estado === 'En Ruta'}
-                            className="bg-red-50 text-red-600 p-2 rounded-lg hover:bg-red-600 hover:text-white disabled:opacity-30 transition-all shadow-sm"
-                        >
-                            <ArrowUpRight size={18} />
-                        </button>
+                        {vehiculo.activo && (
+                            <>
+                                <button
+                                    onClick={() => onAccion(vehiculo, 'Salida')}
+                                    disabled={vehiculo.estado === 'En Ruta'}
+                                    className="bg-red-50 text-red-600 p-2 rounded-lg hover:bg-red-600 hover:text-white disabled:opacity-30 transition-all shadow-sm"
+                                >
+                                    <ArrowUpRight size={18} />
+                                </button>
 
-                        <button
-                            onClick={() => onAccion(vehiculo, 'Entrada')}
-                            disabled={vehiculo.estado === 'En Planta'}
-                            className="bg-blue-50 text-blue-600 p-2 rounded-lg hover:bg-blue-600 hover:text-white disabled:opacity-30 transition-all shadow-sm"
-                        >
-                            <ArrowDownLeft size={18} />
-                        </button>
+                                <button
+                                    onClick={() => onAccion(vehiculo, 'Entrada')}
+                                    disabled={vehiculo.estado === 'En Planta'}
+                                    className="bg-blue-50 text-blue-600 p-2 rounded-lg hover:bg-blue-600 hover:text-white disabled:opacity-30 transition-all shadow-sm"
+                                >
+                                    <ArrowDownLeft size={18} />
+                                </button>
+                            </>
+                        )}
+
+                        {puedeDesactivar && (
+                            <button
+                                onClick={() => onCambiarActivo(vehiculo)}
+                                disabled={vehiculo.activo && vehiculo.estado === 'En Ruta'}
+                                title={
+                                    vehiculo.activo && vehiculo.estado === 'En Ruta'
+                                        ? 'Está En Ruta: registra su entrada antes de desactivarlo'
+                                        : vehiculo.activo
+                                          ? 'Desactivar vehículo'
+                                          : 'Reactivar vehículo'
+                                }
+                                className={`p-2 rounded-lg disabled:opacity-30 transition-all shadow-sm ${
+                                    vehiculo.activo
+                                        ? 'bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white'
+                                        : 'bg-green-50 text-green-600 hover:bg-green-600 hover:text-white'
+                                }`}
+                            >
+                                {vehiculo.activo ? <Ban size={18} /> : <RotateCcw size={18} />}
+                            </button>
+                        )}
                     </div>
                 </td>
             </tr>
