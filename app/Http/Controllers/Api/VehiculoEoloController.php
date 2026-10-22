@@ -17,14 +17,22 @@ class VehiculoEoloController extends Controller
     public function index()
     {
         try {
-            $vehiculos = Vehiculo::all()->map(function ($v) {
-                return [
-                    'id' => $v->id,
-                    'nombre' => $v->nombre,
-                    'estado' => $v->estado,
-                    'ultimaActividad' => $v->ultima_actividad ?? 'N/A'
-                ];
-            });
+            $vehiculos = Vehiculo::query()
+                ->withCount('movimientos')
+                ->orderByDesc('activo')
+                ->orderByDesc('movimientos_count')
+                ->orderBy('id')
+                ->get()
+                ->map(function (Vehiculo $v) {
+                    return [
+                        'id' => $v->id,
+                        'nombre' => $v->nombre,
+                        'estado' => $v->estado,
+                        'ultimaActividad' => $v->ultima_actividad ?? 'N/A',
+                        'activo' => $v->activo,
+                        'movimientos' => $v->movimientos_count,
+                    ];
+                });
 
             return response()->json($vehiculos, 200);
         } catch (\Exception $e) {
