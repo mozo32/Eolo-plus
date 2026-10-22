@@ -337,12 +337,9 @@ it('DEFECTO doble conteo: con dos llegadas abiertas la corrida posterior a la se
     $excel = relacionExcel();
 
     expect(relacionIdsDe(relacionFila($excel, $segunda)))->toBe([$movimiento->id]);
-    // La primera ahora MUESTRA la corrida, pero no la cuenta: el reparto a todas las
-    // estancias no reabre el doble conteo porque los agregados solo cuentan lo poseido.
-    $filaPrimera = relacionFila($excel, $primera);
-    expect(relacionIdsDe($filaPrimera))->toBe([$movimiento->id])
-        ->and($filaPrimera['csae_es_referencia'])->toBeTrue()
-        ->and($filaPrimera['cantidad_visitas_csae'])->toBe(0);
+    // Con techo en la siguiente llegada, la primera vuelve a no enseñar nada: esa corrida
+    // es de la segunda estancia, no suya.
+    relacionEsperaSinCorridas(relacionFila($excel, $primera));
     expect($excel['huerfanos'])->toBe([]);
 });
 
@@ -651,11 +648,9 @@ it('CLASE: si el historial trae una llegada mas reciente que las filas a decorar
     $conHistorial = relacionSuelta([$visible()], [$corrida], [$visible(), $fueraDelFiltro]);
 
     expect(relacionIdsEn($sinHistorial, 1))->toBe([10])
-        // La duena (id 2) esta fuera del filtro: la fila visible la MUESTRA como
-        // referencia y no la cuenta, asi que el total de ese Excel no se mueve.
-        ->and(relacionIdsEn($conHistorial, 1))->toBe([10])
-        ->and($conHistorial['operaciones']->firstWhere('id', 1)->csae_es_referencia)->toBeTrue()
-        ->and($conHistorial['operaciones']->firstWhere('id', 1)->cantidad_visitas_csae)->toBe(0)
+        // La llegada del historial le pone techo a la visible, asi que la corrida es solo
+        // de aquella y esta no la enseña.
+        ->and(relacionIdsEn($conHistorial, 1))->toBe([])
         ->and($conHistorial['huerfanos'])->toHaveCount(0)
         ->and($conHistorial['operaciones'])->toHaveCount(1);
 });
@@ -893,21 +888,45 @@ it('REPARTO: una corrida sin estancia sigue siendo huerfana aunque otra se repar
         ->and(collect($excel['huerfanos'])->pluck('id')->all())->toBe([$fuera->id]);
 });
 
-it('DEUDA CONOCIDA: una llegada sin salida registrada MUESTRA corridas muy posteriores', function () {
+it('TECHO: una llegada sin salida registrada NO muestra corridas de una estancia posterior', function () {
     // Una estancia sin salida no tiene techo, asi que solapa con todo lo que venga despues.
-    // Mientras la corrida iba a una sola estancia esto no se veia; ahora la fila abierta la
-    // enseña. El total no se mueve --la cuenta la llegada mas reciente-- pero la fila de marzo
-    // acaba mostrando una visita de agosto. Esta prueba fija ese comportamiento a proposito:
-    // si algun dia se le pone techo a las estancias sin salida, esta prueba debe cambiar.
+    // Para mostrar se le pone techo en la siguiente llegada: la fila de marzo no tiene por que
+    // enseñar una visita de agosto que es de la llegada de agosto.
     $abierta = relacionLlegada('XA-ABI', '2026-03-01 08:00');
     $posterior = relacionLlegada('XA-ABI', '2026-08-01 08:00');
     $corrida = relacionMovimiento('XA-ABI', '2026-08-02 09:00', '2026-08-03 09:00');
 
     $excel = relacionExcel();
-    $filaAbierta = relacionFila($excel, $abierta);
 
-    expect(relacionIdsDe($filaAbierta))->toBe([$corrida->id])
-        ->and($filaAbierta['csae_es_referencia'])->toBeTrue()
-        ->and($filaAbierta['cantidad_visitas_csae'])->toBe(0)
+    relacionEsperaSinCorridas(relacionFila($excel, $abierta));
+    expect(relacionIdsDe(relacionFila($excel, $posterior)))->toBe([$corrida->id])
         ->and(relacionFila($excel, $posterior)['cantidad_visitas_csae'])->toBe(1);
+});
+
+it('TECHO: una estancia sin salida y sin llegada posterior sigue sin techo', function () {
+    // El techo es la siguiente llegada. Si no la hay, la estancia sigue abierta y se queda
+    // la corrida aunque llegue mucho despues: es el comportamiento de siempre.
+    $unica = relacionLlegada('XA-SOL', '2026-01-01 10:00');
+    $corrida = relacionMovimiento('XA-SOL', '2028-01-01 10:00', '2028-01-02 10:00');
+
+    $fila = relacionFila(relacionExcel(), $unica);
+
+    expect(relacionIdsDe($fila))->toBe([$corrida->id])
+        ->and($fila['cantidad_visitas_csae'])->toBe(1);
+});
+
+it('TECHO: una estancia CON salida no se ve afectada por la llegada siguiente', function () {
+    // El techo solo entra cuando no hay salida registrada. Con salida, manda la salida.
+    $primera = relacionLlegada('XA-CON', '2026-03-01 08:00');
+    relacionSalida('XA-CON', '2026-03-20 08:00');
+    $segunda = relacionLlegada('XA-CON', '2026-03-10 08:00');
+    relacionSalida('XA-CON', '2026-03-25 08:00');
+    $corrida = relacionMovimiento('XA-CON', '2026-03-12 08:00', '2026-03-15 08:00');
+
+    $excel = relacionExcel();
+
+    expect(relacionIdsDe(relacionFila($excel, $primera)))->toBe([$corrida->id])
+        ->and(relacionFila($excel, $primera)['csae_es_referencia'])->toBeTrue()
+        ->and(relacionIdsDe(relacionFila($excel, $segunda)))->toBe([$corrida->id])
+        ->and(relacionFila($excel, $segunda)['cantidad_visitas_csae'])->toBe(1);
 });

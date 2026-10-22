@@ -25,13 +25,10 @@ use Illuminate\Support\Collection;
  * y sus agregados en cero, de modo que la suma de visitas sobre todas las filas sigue siendo el
  * número de corridas. Las que no solapan con ninguna estancia son los huérfanos.
  *
- * CUIDADO con las estancias sin salida. No tienen techo, así que solapan con todo lo posterior.
- * Mientras cada corrida se asignaba a una sola estancia eso era inofensivo: la llegada más
- * reciente se la quedaba y la fila abierta salía vacía. Ahora la fila abierta las MUESTRA todas,
- * así que a una llegada a la que se le olvidó registrar la salida le aparecerán corridas
- * posteriores que no son suyas. Los totales no se ven afectados, porque la dueña sigue siendo la
- * llegada más reciente. Ponerle techo en la siguiente llegada --solo para lo que se muestra, no
- * para elegir dueña-- cerraría el hueco; hoy no cambiaría ni una fila de los datos reales.
+ * Las estancias sin salida no tienen fin, así que solaparían con todo lo posterior. Se les pone
+ * techo en la siguiente llegada de la misma matrícula, de modo que a una llegada a la que se le
+ * olvidó registrar la salida no le aparezcan visitas que son de una estancia posterior. El techo
+ * no mueve los totales: nunca deja fuera a la estancia más reciente que solapa, que es la dueña.
  *
  * No toca la base de datos ni la petición: recibe colecciones y devuelve datos, así que se prueba
  * sin HTTP. A las operaciones les añade, sin quitar ni renombrar nada, los campos que el Excel del
@@ -93,6 +90,13 @@ final class RelacionOperacionCSAE
 
             // Las estancias vienen de la mas antigua a la mas reciente, asi que la
             // dueña es la ultima: la misma regla de siempre.
+            //
+            // El techo entra tambien para elegir dueña, y eso NO mueve ningun total: una
+            // estancia solo esta abierta si no hay ninguna salida posterior a su llegada, asi
+            // que las abiertas son siempre un sufijo y la ultima no tiene llegada que le ponga
+            // techo. Por eso el techo nunca deja fuera a la mas reciente, y la dueña sale la
+            // misma con techo que sin el. Si algun dia las salidas se emparejan consumiendolas
+            // --una salida por estancia-- esto deja de ser cierto y hay que repensarlo.
             $claveDeLaDuena = $estancias[array_key_last($estancias)]['clave'];
 
             foreach ($estancias as $estancia) {
@@ -119,10 +123,11 @@ final class RelacionOperacionCSAE
     }
 
     /**
-     * Las estancias de cada matrícula: una por llegada, con su inicio y su fin (o `null` si no tiene
-     * salida registrada). Ordenadas de la más antigua a la más reciente.
+     * Las estancias de cada matrícula: una por llegada, con su inicio, su fin (o `null` si no tiene
+     * salida registrada) y su techo (el momento de la siguiente llegada de la misma matrícula, o
+     * `null` si no la hay). Ordenadas de la más antigua a la más reciente.
      *
-     * @return Collection<string, array<int, array{clave: string, inicio: Carbon, fin: ?Carbon}>>
+     * @return Collection<string, array<int, array{clave: string, inicio: Carbon, fin: ?Carbon, techo: ?Carbon}>>
      */
     private static function estanciasPorMatricula(Collection $operaciones): Collection
     {
@@ -137,11 +142,14 @@ final class RelacionOperacionCSAE
             ->groupBy('matricula')
             ->map(function (Collection $deLaMatricula) {
                 $salidas = $deLaMatricula->where('tipo', 'SALIDA');
+                $llegadas = $deLaMatricula->whereIn('tipo', ['LLEGADA', 'ENTRADA']);
 
-                return $deLaMatricula
-                    ->whereIn('tipo', ['LLEGADA', 'ENTRADA'])
-                    ->map(function (array $llegada) use ($salidas) {
+                return $llegadas
+                    ->map(function (array $llegada) use ($salidas, $llegadas) {
                         $salida = $salidas->first(
+                            fn (array $posible) => $posible['momento']->greaterThan($llegada['momento'])
+                        );
+                        $siguienteLlegada = $llegadas->first(
                             fn (array $posible) => $posible['momento']->greaterThan($llegada['momento'])
                         );
 
@@ -149,6 +157,7 @@ final class RelacionOperacionCSAE
                             'clave' => $llegada['clave'],
                             'inicio' => $llegada['momento'],
                             'fin' => $salida['momento'] ?? null,
+                            'techo' => $siguienteLlegada['momento'] ?? null,
                         ];
                     })
                     ->values()
@@ -184,9 +193,12 @@ final class RelacionOperacionCSAE
      * salida (o hasta `$ahora`), el de la estancia de la llegada a la primera salida posterior (o
      * sin techo), y pertenecen si se cruzan con los extremos incluidos.
      *
-     * @param  array<int, array{clave: string, inicio: Carbon, fin: ?Carbon}>  $estancias  De la mas antigua a la mas reciente.
+     * Una estancia sin salida termina en su techo (la siguiente llegada de la misma matricula); si
+     * tampoco lo tiene, sigue abierta indefinidamente.
+     *
+     * @param  array<int, array{clave: string, inicio: Carbon, fin: ?Carbon, techo: ?Carbon}>  $estancias  De la mas antigua a la mas reciente.
      * @param  array{entrada: Carbon, salida: ?Carbon}  $corrida
-     * @return array<int, array{clave: string, inicio: Carbon, fin: ?Carbon}>
+     * @return array<int, array{clave: string, inicio: Carbon, fin: ?Carbon, techo: ?Carbon}>
      */
     private static function estanciasQueSolapan(array $estancias, array $corrida, Carbon $ahora): array
     {
@@ -199,9 +211,11 @@ final class RelacionOperacionCSAE
         return array_values(array_filter(
             $estancias,
             function (array $estancia) use ($corrida, $finDeLaCorrida) {
+                $finDeLaEstancia = $estancia['fin'] ?? $estancia['techo'];
+
                 $empiezaAntesDeQueTermineLaCorrida = $estancia['inicio']->lessThanOrEqualTo($finDeLaCorrida);
-                $terminaDespuesDeQueEmpieceLaCorrida = $estancia['fin'] === null
-                    || $estancia['fin']->greaterThanOrEqualTo($corrida['entrada']);
+                $terminaDespuesDeQueEmpieceLaCorrida = $finDeLaEstancia === null
+                    || $finDeLaEstancia->greaterThanOrEqualTo($corrida['entrada']);
 
                 return $empiezaAntesDeQueTermineLaCorrida && $terminaDespuesDeQueEmpieceLaCorrida;
             }
