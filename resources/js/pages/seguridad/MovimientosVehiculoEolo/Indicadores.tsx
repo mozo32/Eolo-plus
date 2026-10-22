@@ -5,8 +5,13 @@ interface Props {
 }
 
 export const Indicadores = ({ vehiculos }: Props) => {
-    const enPlanta = vehiculos.filter(v => v.estado === 'En Planta').length;
-    const enRuta = vehiculos.filter(v => v.estado === 'En Ruta').length;
+    // Solo las unidades que pueden trabajar hoy. Un vehículo desactivado está siempre
+    // «En Planta» —no pudo salir—, así que sin este filtro la tarjeta lo contaría como
+    // disponible justo encima de la tabla donde sale marcado DESACTIVADO.
+    const disponibles = vehiculos.filter(v => v.activo);
+
+    const enPlanta = disponibles.filter(v => v.estado === 'En Planta').length;
+    const enRuta = disponibles.filter(v => v.estado === 'En Ruta').length;
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
