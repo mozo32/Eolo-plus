@@ -747,6 +747,8 @@ Los cuatro filtros son los mismos de `HistorialVehiculo.tsx`, con su mismo aspec
 
 Regla de seguridad del flujo: cambiar cualquier filtro borra las filas consultadas, de modo que el botón de descarga se apaga. Sin eso se podría descargar un archivo distinto del que se está viendo, que es justo lo que el invariante de la spec prohíbe.
 
+Y por el mismo motivo, **los cinco controles de filtro se apagan mientras la consulta viaja** (`disabled={consultando}`). Si no, cambiar un filtro con la petición en vuelo dejaría que la respuesta tardía rellenara `filas` con el resultado de los filtros VIEJOS mientras la pantalla ya enseña los nuevos, y la descarga se encendería sobre datos que no corresponden a lo que se ve. Apagar los controles cierra esa ventana sin necesidad de llevar la cuenta de peticiones en vuelo.
+
 - [ ] **Step 1: Escribir el componente**
 
 Crear `resources/js/pages/seguridad/MovimientosVehiculoEolo/ExcelVehiculosModal.tsx`:
@@ -863,7 +865,8 @@ export const ExcelVehiculosModal = ({ isOpen, vehiculosSeleccionados, onClose }:
                         </p>
                         <button
                             onClick={limpiarFiltros}
-                            className="text-[10px] font-bold text-gray-400 hover:text-gray-600 tracking-wider"
+                            disabled={consultando}
+                            className="text-[10px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-40 tracking-wider"
                         >
                             LIMPIAR FILTROS
                         </button>
@@ -877,6 +880,7 @@ export const ExcelVehiculosModal = ({ isOpen, vehiculosSeleccionados, onClose }:
                                 placeholder="Chofer..."
                                 className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                                 value={chofer}
+                                disabled={consultando}
                                 onChange={(e) => { setChofer(e.target.value); invalidarConsulta(); }}
                             />
                         </div>
@@ -885,6 +889,7 @@ export const ExcelVehiculosModal = ({ isOpen, vehiculosSeleccionados, onClose }:
                                 type="date"
                                 className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-gray-600 bg-white"
                                 value={fechaInicio}
+                                disabled={consultando}
                                 onChange={(e) => { setFechaInicio(e.target.value); invalidarConsulta(); }}
                             />
                             <span className="text-gray-400 text-xs">-</span>
@@ -892,12 +897,14 @@ export const ExcelVehiculosModal = ({ isOpen, vehiculosSeleccionados, onClose }:
                                 type="date"
                                 className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-gray-600 bg-white"
                                 value={fechaFin}
+                                disabled={consultando}
                                 onChange={(e) => { setFechaFin(e.target.value); invalidarConsulta(); }}
                             />
                         </div>
                         <select
                             className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-gray-600 bg-white cursor-pointer"
                             value={tipo}
+                            disabled={consultando}
                             onChange={(e) => { setTipo(e.target.value as 'Todos' | 'Entrada' | 'Salida'); invalidarConsulta(); }}
                         >
                             <option value="Todos">Todos los tipos</option>
@@ -1012,6 +1019,7 @@ El modal todavía no se puede probar a mano porque nadie lo monta. Léelo y conf
 2. «Descargar Excel» está apagado mientras no haya al menos una fila consultada.
 3. La cabecera de la vista previa y las celdas recorren la **misma** `COLUMNAS_EXCEL_VEHICULOS` que usa el servicio: no hay ninguna lista de columnas escrita dos veces.
 4. Un fallo de red deja el modal abierto, con los filtros puestos y el mensaje a la vista.
+5. Los cinco controles de filtro llevan `disabled={consultando}`, así que no se puede cambiar un filtro con la consulta en vuelo.
 
 - [ ] **Step 4: Commit**
 
@@ -1149,15 +1157,24 @@ Pasar las props nuevas a la tabla:
                         />
 ```
 
-Y montar el modal junto a los otros dos, al final del componente, después de `<ModalNuevoVehiculo ... />`:
+Y montar el modal junto a los otros dos, al final del componente, después de `<ModalNuevoVehiculo ... />`. **Montado condicionalmente, no siempre:**
 
 ```tsx
-            <ExcelVehiculosModal
-                isOpen={isExcelModalOpen}
-                vehiculosSeleccionados={vehiculosSeleccionados}
-                onClose={() => setIsExcelModalOpen(false)}
-            />
+            {isExcelModalOpen && (
+                <ExcelVehiculosModal
+                    isOpen
+                    vehiculosSeleccionados={vehiculosSeleccionados}
+                    onClose={() => setIsExcelModalOpen(false)}
+                />
+            )}
 ```
+
+El `{isExcelModalOpen && ...}` no es decorativo: el modal guarda sus filtros y sus
+filas consultadas en su propio estado, y si quedara montado al cerrarse, ese estado
+sobreviviría. Al reabrirlo tras cambiar la selección verías la vista previa de los
+vehículos de antes, y podrías descargarla. Desmontarlo lo reinicia. El `isOpen` se
+queda como está en la interfaz del componente: su `return null` interno pasa a ser un
+segundo cinturón.
 
 - [ ] **Step 2: La columna y la casilla de cabecera en `TablaVehiculos.tsx`**
 
