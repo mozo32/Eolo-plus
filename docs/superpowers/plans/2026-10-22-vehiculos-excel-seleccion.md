@@ -32,7 +32,7 @@
 
 | Archivo | Responsabilidad |
 |---|---|
-| `tests/Feature/MovimientosVehiculoEolo/ExcelVehiculosTest.php` | El endpoint: filtros, validación, forma de la fila |
+| `tests/Feature/MovimientosVehiculoEolo/ExcelVehiculosTest.php` | El endpoint: filtros, orden, validación, forma de la fila |
 | `resources/js/pages/seguridad/MovimientosVehiculoEolo/excelVehiculosService.ts` | Las columnas del reporte y el armado del libro |
 | `resources/js/pages/seguridad/MovimientosVehiculoEolo/ExcelVehiculosModal.tsx` | El modal: filtros, consultar, vista previa, descargar |
 
@@ -314,14 +314,15 @@ it('trae el nombre del vehículo, no solo su número económico', function () {
         ->and($fila['numeroEconomico'])->toBe('01-KIA');
 });
 
-it('rechaza una lista de vehículos vacía', function () {
+it('rechaza la petición sin vehículos', function () {
     // Sin esto, un descuido en la pantalla exportaría la flota entera en silencio.
-    consultarExcel(['vehiculos' => []])
-        ->assertUnprocessable()
-        ->assertJsonValidationErrors('vehiculos');
-});
-
-it('rechaza la petición sin el parámetro vehiculos', function () {
+    //
+    // Hay UNA sola prueba y no dos porque, sobre una cadena de consulta, «lista vacía»
+    // y «parámetro ausente» son indistinguibles: `http_build_query(['vehiculos' => []])`
+    // devuelve la cadena vacía. La regla que se dispara en ambos casos es `required`.
+    // El `min:1` de la validación es defensa en profundidad para un llamador que no use
+    // GET; una cadena de consulta no puede ejercerlo, y una prueba que dijera lo
+    // contrario estaría mintiendo.
     consultarExcel([])
         ->assertUnprocessable()
         ->assertJsonValidationErrors('vehiculos');
@@ -446,7 +447,7 @@ En `routes/api.php`, dentro del grupo `prefix('VehiculoEolo')`, después de la l
 TEST_TOKEN=903 php artisan test tests/Feature/MovimientosVehiculoEolo/ExcelVehiculosTest.php
 ```
 
-Esperado: 15 pruebas en verde.
+Esperado: 14 pruebas en verde.
 
 - [ ] **Step 6: Comprobar que las pruebas muerden**
 
@@ -454,7 +455,7 @@ Antes de dar la tarea por buena, verifica que tres de ellas no son decorativas. 
 
 1. Quita `->orderBy('created_at', 'desc')` → debe fallar «ordena del movimiento más nuevo al más viejo».
 2. Cambia `whereDate('created_at', '>=', ...)` por `'>'` → debe fallar «la fecha de inicio incluye el propio día».
-3. Cambia `'vehiculos' => 'required|array|min:1'` por `'vehiculos' => 'nullable|array'` → deben fallar las dos pruebas de rechazo.
+3. Cambia `'vehiculos' => 'required|array|min:1'` por `'vehiculos' => 'nullable|array'` → debe fallar «rechaza la petición sin vehículos».
 
 Si alguna no se pone en rojo, para y repórtalo: esa prueba no está probando lo que dice. Después de cada prueba, restaura el código y confirma con `git diff --stat` que el controlador queda intacto.
 
@@ -1293,7 +1294,7 @@ El endpoint nuevo no cambia ninguna respuesta existente, así que no se esperan 
 TEST_TOKEN=904 php artisan test
 ```
 
-**Nunca con `--parallel`.** Esperado: 2444 pruebas de antes más las 15 de la Task 1, sin ningún fallo. Tarda unos seis minutos; déjalo acabar.
+**Nunca con `--parallel`.** Esperado: 2444 pruebas de antes más las 14 de la Task 1, sin ningún fallo. Tarda unos seis minutos; déjalo acabar.
 
 Después:
 
