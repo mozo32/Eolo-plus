@@ -147,7 +147,7 @@ function relacionIdsDe(array $fila): array
 }
 
 /**
- * Que la estancia no tenga NINGUNA corrida colgada: los siete campos del contrato en su valor vacio.
+ * Que la estancia no tenga NINGUNA corrida colgada: los ocho campos del contrato en su valor vacio.
  *
  * @param  array<string, mixed>  $fila
  */
@@ -157,6 +157,7 @@ function relacionEsperaSinCorridas(array $fila): void
         ->and($fila['fecha_hora_csae'])->toBeNull()
         ->and($fila['fecha_hora_salida_csae'])->toBeNull()
         ->and($fila['movimientos_csae'])->toBe([])
+        ->and($fila['csae_es_referencia'])->toBeFalse()
         ->and($fila['cantidad_visitas_csae'])->toBe(0)
         ->and($fila['minutos_estancia_csae_total'])->toBe(0)
         ->and($fila['salidas_csae_pendientes'])->toBe(0);
@@ -335,7 +336,12 @@ it('DEFECTO doble conteo: con dos llegadas abiertas la corrida posterior a la se
     $excel = relacionExcel();
 
     expect(relacionIdsDe(relacionFila($excel, $segunda)))->toBe([$movimiento->id]);
-    relacionEsperaSinCorridas(relacionFila($excel, $primera));
+    // La primera ahora MUESTRA la corrida, pero no la cuenta: el reparto a todas las
+    // estancias no reabre el doble conteo porque los agregados solo cuentan lo poseido.
+    $filaPrimera = relacionFila($excel, $primera);
+    expect(relacionIdsDe($filaPrimera))->toBe([$movimiento->id])
+        ->and($filaPrimera['csae_es_referencia'])->toBeTrue()
+        ->and($filaPrimera['cantidad_visitas_csae'])->toBe(0);
     expect($excel['huerfanos'])->toBe([]);
 });
 
@@ -354,7 +360,7 @@ it('DEFECTO doble conteo: la suma de visitas de todas las estancias es el numero
         ->and($filas->sum('minutos_estancia_csae_total'))->toBe(2880);
 });
 
-it('DEFECTO doble conteo: una corrida que cruza dos estancias se queda con la de llegada mas reciente', function () {
+it('DEFECTO doble conteo: una corrida que cruza dos estancias la cuenta la de llegada mas reciente', function () {
     $primera = relacionLlegada('XA-CRU', '2026-03-01 08:00');
     relacionSalida('XA-CRU', '2026-03-20 08:00');
     $segunda = relacionLlegada('XA-CRU', '2026-03-10 08:00');
@@ -364,7 +370,12 @@ it('DEFECTO doble conteo: una corrida que cruza dos estancias se queda con la de
     $excel = relacionExcel();
 
     expect(relacionIdsDe(relacionFila($excel, $segunda)))->toBe([$movimiento->id]);
-    relacionEsperaSinCorridas(relacionFila($excel, $primera));
+    // La primera ahora MUESTRA la corrida, pero no la cuenta: el reparto a todas las
+    // estancias no reabre el doble conteo porque los agregados solo cuentan lo poseido.
+    $filaPrimera = relacionFila($excel, $primera);
+    expect(relacionIdsDe($filaPrimera))->toBe([$movimiento->id])
+        ->and($filaPrimera['csae_es_referencia'])->toBeTrue()
+        ->and($filaPrimera['cantidad_visitas_csae'])->toBe(0);
 });
 
 it('HUERFANOS: las corridas de N113SR y N811GR no tienen operacion diaria y salen aparte', function () {
@@ -622,9 +633,12 @@ it('CLASE: una corrida sin salida dura hasta `ahora`, y `ahora` se inyecta', fun
 
     expect(relacionIdsEn($antesDeLaSegunda, 1))->toBe([10])
         ->and(relacionIdsEn($antesDeLaSegunda, 3))->toBe([])
-        // Todavia corriendo cuando llego la segunda: se la queda la mas reciente.
-        ->and(relacionIdsEn($despuesDeLaSegunda, 1))->toBe([])
-        ->and(relacionIdsEn($despuesDeLaSegunda, 3))->toBe([10]);
+        // Todavia corriendo cuando llego la segunda: las dos la MUESTRAN, y la cuenta
+        // la de llegada mas reciente.
+        ->and(relacionIdsEn($despuesDeLaSegunda, 1))->toBe([10])
+        ->and(relacionIdsEn($despuesDeLaSegunda, 3))->toBe([10])
+        ->and($despuesDeLaSegunda['operaciones']->firstWhere('id', 1)->cantidad_visitas_csae)->toBe(0)
+        ->and($despuesDeLaSegunda['operaciones']->firstWhere('id', 3)->cantidad_visitas_csae)->toBe(1);
 });
 
 it('CLASE: si el historial trae una llegada mas reciente que las filas a decorar, se queda la corrida', function () {
@@ -636,7 +650,11 @@ it('CLASE: si el historial trae una llegada mas reciente que las filas a decorar
     $conHistorial = relacionSuelta([$visible()], [$corrida], [$visible(), $fueraDelFiltro]);
 
     expect(relacionIdsEn($sinHistorial, 1))->toBe([10])
-        ->and(relacionIdsEn($conHistorial, 1))->toBe([])
+        // La duena (id 2) esta fuera del filtro: la fila visible la MUESTRA como
+        // referencia y no la cuenta, asi que el total de ese Excel no se mueve.
+        ->and(relacionIdsEn($conHistorial, 1))->toBe([10])
+        ->and($conHistorial['operaciones']->firstWhere('id', 1)->csae_es_referencia)->toBeTrue()
+        ->and($conHistorial['operaciones']->firstWhere('id', 1)->cantidad_visitas_csae)->toBe(0)
         ->and($conHistorial['huerfanos'])->toHaveCount(0)
         ->and($conHistorial['operaciones'])->toHaveCount(1);
 });
@@ -744,4 +762,130 @@ it('CLASE: una salida de operacion diaria con la misma hora que la llegada no la
     );
 
     expect(relacionIdsEn($resultado, 1))->toBe([10]);
+});
+
+// ===========================================================================
+// REPARTO A TODAS LAS ESTANCIAS. Una corrida que cruza varias se MUESTRA en todas y se
+// CUENTA en una: la de llegada mas reciente, igual que antes.
+// ===========================================================================
+
+it('REPARTO XB-GTH: la corrida que cruza dos estancias se ve en las dos', function () {
+    // El caso que motiva el trabajo. Llega y sale el 24, vuelve a entrar y sale el 25;
+    // la corrida de CSAE va del 24 a las 12:30 al 25 a las 14:37 y cruza las dos.
+    $primera = relacionLlegada('XB-GTH', '2026-06-24 12:01');
+    relacionSalida('XB-GTH', '2026-06-24 13:52');
+    $segunda = relacionLlegada('XB-GTH', '2026-06-25 11:27');
+    relacionSalida('XB-GTH', '2026-06-25 14:37');
+    $corrida = relacionMovimiento('XB-GTH', '2026-06-24 12:30', '2026-06-25 14:37');
+
+    $excel = relacionExcel();
+
+    expect(relacionIdsDe(relacionFila($excel, $primera)))->toBe([$corrida->id])
+        ->and(relacionIdsDe(relacionFila($excel, $segunda)))->toBe([$corrida->id]);
+});
+
+it('REPARTO XB-GTH: solo la llegada mas reciente la cuenta', function () {
+    $primera = relacionLlegada('XB-GTH', '2026-06-24 12:01');
+    relacionSalida('XB-GTH', '2026-06-24 13:52');
+    $segunda = relacionLlegada('XB-GTH', '2026-06-25 11:27');
+    relacionSalida('XB-GTH', '2026-06-25 14:37');
+    relacionMovimiento('XB-GTH', '2026-06-24 12:30', '2026-06-25 14:37');
+
+    $excel = relacionExcel();
+    $filaPrimera = relacionFila($excel, $primera);
+    $filaSegunda = relacionFila($excel, $segunda);
+
+    expect($filaPrimera['csae_es_referencia'])->toBeTrue()
+        ->and($filaPrimera['cantidad_visitas_csae'])->toBe(0)
+        ->and($filaSegunda['csae_es_referencia'])->toBeFalse()
+        ->and($filaSegunda['cantidad_visitas_csae'])->toBe(1);
+});
+
+it('REPARTO: una fila de referencia trae las fechas aunque no cuente', function () {
+    // Lo que el departamento va a buscar: la fila de la primera llegada tiene que
+    // enseñar la visita, no quedarse en blanco como hasta ahora.
+    $primera = relacionLlegada('XA-REF', '2026-03-01 08:00');
+    relacionSalida('XA-REF', '2026-03-10 08:00');
+    relacionLlegada('XA-REF', '2026-03-05 08:00');
+    relacionSalida('XA-REF', '2026-03-20 08:00');
+    relacionMovimiento('XA-REF', '2026-03-06 09:00', '2026-03-07 09:00');
+
+    $fila = relacionFila(relacionExcel(), $primera);
+
+    expect($fila['mantenimiento_csae'])->toBeTrue()
+        ->and($fila['fecha_hora_csae'])->toBe('06/03/2026 09:00:00')
+        ->and($fila['fecha_hora_salida_csae'])->toBe('07/03/2026 09:00:00')
+        ->and($fila['movimientos_csae'])->toHaveCount(1)
+        ->and($fila['minutos_estancia_csae_total'])->toBe(0)
+        ->and($fila['salidas_csae_pendientes'])->toBe(0);
+});
+
+it('REPARTO: una corrida que cruza TRES estancias se ve en las tres y cuenta en una', function () {
+    $a = relacionLlegada('XA-TRES', '2026-04-01 08:00');
+    relacionSalida('XA-TRES', '2026-05-01 08:00');
+    $b = relacionLlegada('XA-TRES', '2026-04-10 08:00');
+    relacionSalida('XA-TRES', '2026-06-01 08:00');
+    $c = relacionLlegada('XA-TRES', '2026-04-20 08:00');
+    relacionSalida('XA-TRES', '2026-07-01 08:00');
+    $corrida = relacionMovimiento('XA-TRES', '2026-04-25 08:00', '2026-04-26 08:00');
+
+    $excel = relacionExcel();
+
+    expect(relacionIdsDe(relacionFila($excel, $a)))->toBe([$corrida->id])
+        ->and(relacionIdsDe(relacionFila($excel, $b)))->toBe([$corrida->id])
+        ->and(relacionIdsDe(relacionFila($excel, $c)))->toBe([$corrida->id])
+        ->and(relacionFila($excel, $a)['cantidad_visitas_csae'])->toBe(0)
+        ->and(relacionFila($excel, $b)['cantidad_visitas_csae'])->toBe(0)
+        ->and(relacionFila($excel, $c)['cantidad_visitas_csae'])->toBe(1);
+});
+
+it('REPARTO: una corrida que cruza UNA sola estancia no la marca como referencia', function () {
+    // Es el caso de las 46 corridas de 73 que no deben cambiar en nada.
+    $llegada = relacionLlegada('XA-UNA', '2026-03-01 08:00');
+    relacionSalida('XA-UNA', '2026-03-10 08:00');
+    $corrida = relacionMovimiento('XA-UNA', '2026-03-02 09:00', '2026-03-03 09:00');
+
+    $fila = relacionFila(relacionExcel(), $llegada);
+
+    expect($fila['csae_es_referencia'])->toBeFalse()
+        ->and(relacionIdsDe($fila))->toBe([$corrida->id])
+        ->and($fila['cantidad_visitas_csae'])->toBe(1)
+        ->and($fila['minutos_estancia_csae_total'])->toBe(1440);
+});
+
+it('REPARTO: una fila que POSEE una corrida y REFLEJA otra no es referencia', function () {
+    // El caso mixto. Con los datos de hoy no ocurre ni una vez --57 estancias poseen
+    // alguna corrida, 16 reflejan alguna, y la interseccion es cero-- asi que esta
+    // prueba es el unico sitio donde la regla queda fijada: los agregados cuentan solo
+    // lo que la estancia posee, y poseer algo basta para no ser referencia.
+    $primera = relacionLlegada('XA-MIX', '2026-03-01 08:00');
+    relacionSalida('XA-MIX', '2026-03-20 08:00');
+    $segunda = relacionLlegada('XA-MIX', '2026-03-10 08:00');
+    relacionSalida('XA-MIX', '2026-03-25 08:00');
+
+    // Solo cruza la primera: la posee.
+    $suya = relacionMovimiento('XA-MIX', '2026-03-02 09:00', '2026-03-03 09:00');
+    // Cruza las dos: la posee la segunda, la primera solo la refleja.
+    $compartida = relacionMovimiento('XA-MIX', '2026-03-12 08:00', '2026-03-15 08:00');
+
+    $fila = relacionFila(relacionExcel(), $primera);
+
+    expect(relacionIdsDe($fila))->toBe([$suya->id, $compartida->id])
+        ->and($fila['csae_es_referencia'])->toBeFalse()
+        ->and($fila['cantidad_visitas_csae'])->toBe(1)
+        ->and(relacionFila(relacionExcel(), $segunda)['cantidad_visitas_csae'])->toBe(1);
+});
+
+it('REPARTO: una corrida sin estancia sigue siendo huerfana aunque otra se reparta', function () {
+    $llegada = relacionLlegada('XA-HUE', '2026-03-01 08:00');
+    relacionSalida('XA-HUE', '2026-03-20 08:00');
+    relacionLlegada('XA-HUE', '2026-03-10 08:00');
+    relacionSalida('XA-HUE', '2026-03-25 08:00');
+    relacionMovimiento('XA-HUE', '2026-03-12 08:00', '2026-03-15 08:00');
+    $fuera = relacionMovimiento('XA-HUE', '2026-08-01 08:00', '2026-08-02 08:00');
+
+    $excel = relacionExcel();
+
+    expect(relacionIdsDe(relacionFila($excel, $llegada)))->not->toContain($fuera->id)
+        ->and(collect($excel['huerfanos'])->pluck('id')->all())->toBe([$fuera->id]);
 });

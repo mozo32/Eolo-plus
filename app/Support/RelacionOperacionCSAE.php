@@ -20,15 +20,16 @@ use Illuminate\Support\Collection;
  * llegada no se pierde, y una cuya salida se registró después de la salida de operación diaria
  * tampoco.
  *
- * Cada corrida se asigna a UNA sola estancia: la de llegada más reciente entre las que solapan con
- * ella. Eso es lo que hace seguro dejar sin techo una estancia sin salida: la siguiente llegada se
- * queda la corrida. Las que no solapan con ninguna estancia son los huérfanos.
+ * Una corrida se MUESTRA en todas las estancias que solapan con ella, y se CUENTA en una sola: la
+ * de llegada más reciente. Las demás la enseñan como referencia, con `csae_es_referencia` en true
+ * y sus agregados en cero, de modo que la suma de visitas sobre todas las filas sigue siendo el
+ * número de corridas. Las que no solapan con ninguna estancia son los huérfanos.
  *
  * No toca la base de datos ni la petición: recibe colecciones y devuelve datos, así que se prueba
  * sin HTTP. A las operaciones les añade, sin quitar ni renombrar nada, los campos que el Excel del
  * navegador ya lee: `mantenimiento_csae`, `fecha_hora_csae`, `fecha_hora_salida_csae`,
- * `movimientos_csae`, `cantidad_visitas_csae`, `minutos_estancia_csae_total` y
- * `salidas_csae_pendientes`.
+ * `movimientos_csae`, `csae_es_referencia`, `cantidad_visitas_csae`, `minutos_estancia_csae_total`
+ * y `salidas_csae_pendientes`.
  */
 final class RelacionOperacionCSAE
 {
@@ -63,27 +64,44 @@ final class RelacionOperacionCSAE
         $ahora = $ahora ? Carbon::instance($ahora) : Carbon::now();
 
         $estanciasPorMatricula = self::estanciasPorMatricula($historial ?? $operaciones);
-        $asignadas = [];
+        $mostradas = [];
+        $poseidas = [];
         $huerfanos = collect();
 
         foreach (self::corridasEnOrden($movimientos) as $corrida) {
-            $estancia = self::estanciaMasReciente(
+            $estancias = self::estanciasQueSolapan(
                 $estanciasPorMatricula->get($corrida['matricula'], []),
                 $corrida,
                 $ahora,
             );
 
-            if ($estancia === null) {
+            if ($estancias === []) {
                 $huerfanos->push(self::huerfano($corrida));
 
                 continue;
             }
 
-            $asignadas[$estancia['clave']][] = self::visita($corrida);
+            $visita = self::visita($corrida);
+
+            // Las estancias vienen de la mas antigua a la mas reciente, asi que la
+            // dueña es la ultima: la misma regla de siempre.
+            $claveDeLaDuena = $estancias[array_key_last($estancias)]['clave'];
+
+            foreach ($estancias as $estancia) {
+                $mostradas[$estancia['clave']][] = $visita;
+            }
+
+            $poseidas[$claveDeLaDuena][] = $visita;
         }
 
-        $operaciones->each(function ($operacion) use ($asignadas) {
-            self::decorar($operacion, $asignadas[self::claveDe($operacion)] ?? []);
+        $operaciones->each(function ($operacion) use ($mostradas, $poseidas) {
+            $clave = self::claveDe($operacion);
+
+            self::decorar(
+                $operacion,
+                $mostradas[$clave] ?? [],
+                $poseidas[$clave] ?? [],
+            );
         });
 
         return [
@@ -152,13 +170,17 @@ final class RelacionOperacionCSAE
     }
 
     /**
-     * De las estancias que solapan con la corrida, la de llegada más reciente; `null` si ninguna.
+     * Todas las estancias que solapan con la corrida, de la mas antigua a la mas reciente.
      *
-     * @param  array<int, array{clave: string, inicio: Carbon, fin: ?Carbon}>  $estancias  De la más antigua a la más reciente.
+     * La aritmetica del solape es la de siempre: el intervalo de la corrida va de su entrada a su
+     * salida (o hasta `$ahora`), el de la estancia de la llegada a la primera salida posterior (o
+     * sin techo), y pertenecen si se cruzan con los extremos incluidos.
+     *
+     * @param  array<int, array{clave: string, inicio: Carbon, fin: ?Carbon}>  $estancias  De la mas antigua a la mas reciente.
      * @param  array{entrada: Carbon, salida: ?Carbon}  $corrida
-     * @return array{clave: string, inicio: Carbon, fin: ?Carbon}|null
+     * @return array<int, array{clave: string, inicio: Carbon, fin: ?Carbon}>
      */
-    private static function estanciaMasReciente(array $estancias, array $corrida, Carbon $ahora): ?array
+    private static function estanciasQueSolapan(array $estancias, array $corrida, Carbon $ahora): array
     {
         $finDeLaCorrida = $corrida['salida'] ?? $ahora;
 
@@ -166,48 +188,54 @@ final class RelacionOperacionCSAE
             $finDeLaCorrida = $corrida['entrada'];
         }
 
-        foreach (array_reverse($estancias) as $estancia) {
-            $empiezaAntesDeQueTermineLaCorrida = $estancia['inicio']->lessThanOrEqualTo($finDeLaCorrida);
-            $terminaDespuesDeQueEmpieceLaCorrida = $estancia['fin'] === null
-                || $estancia['fin']->greaterThanOrEqualTo($corrida['entrada']);
+        return array_values(array_filter(
+            $estancias,
+            function (array $estancia) use ($corrida, $finDeLaCorrida) {
+                $empiezaAntesDeQueTermineLaCorrida = $estancia['inicio']->lessThanOrEqualTo($finDeLaCorrida);
+                $terminaDespuesDeQueEmpieceLaCorrida = $estancia['fin'] === null
+                    || $estancia['fin']->greaterThanOrEqualTo($corrida['entrada']);
 
-            if ($empiezaAntesDeQueTermineLaCorrida && $terminaDespuesDeQueEmpieceLaCorrida) {
-                return $estancia;
+                return $empiezaAntesDeQueTermineLaCorrida && $terminaDespuesDeQueEmpieceLaCorrida;
             }
-        }
-
-        return null;
+        ));
     }
 
     /**
-     * Pone en la operación los siete campos del contrato: vacíos, y llenos si es una llegada con
-     * corridas.
+     * Pone en la operacion los ocho campos del contrato: vacios, y llenos si la estancia cruza
+     * alguna corrida.
      *
-     * @param  array<int, array<string, mixed>>  $visitas
+     * `$mostradas` son todas las corridas que la estancia cruza; `$poseidas`, las que ademas
+     * cuenta. Los agregados salen SOLO de las poseidas, para que la suma sobre todas las filas
+     * siga siendo el numero de corridas y no una por cada fila que la enseña.
+     *
+     * @param  array<int, array<string, mixed>>  $mostradas
+     * @param  array<int, array<string, mixed>>  $poseidas
      */
-    private static function decorar(object $operacion, array $visitas): void
+    private static function decorar(object $operacion, array $mostradas, array $poseidas): void
     {
         $operacion->mantenimiento_csae = false;
         $operacion->fecha_hora_csae = null;
         $operacion->fecha_hora_salida_csae = null;
         $operacion->movimientos_csae = [];
+        $operacion->csae_es_referencia = false;
         $operacion->cantidad_visitas_csae = 0;
         $operacion->minutos_estancia_csae_total = 0;
         $operacion->salidas_csae_pendientes = 0;
 
-        if ($visitas === []) {
+        if ($mostradas === []) {
             return;
         }
 
-        $primera = $visitas[0];
+        $primera = $mostradas[0];
 
         $operacion->mantenimiento_csae = true;
         $operacion->fecha_hora_csae = $primera['fecha_hora_entrada'];
         $operacion->fecha_hora_salida_csae = $primera['fecha_hora_salida'];
-        $operacion->movimientos_csae = $visitas;
-        $operacion->cantidad_visitas_csae = count($visitas);
-        $operacion->minutos_estancia_csae_total = (int) array_sum(array_column($visitas, 'minutos_estancia'));
-        $operacion->salidas_csae_pendientes = count(array_filter($visitas, fn (array $visita) => $visita['pendiente']));
+        $operacion->movimientos_csae = $mostradas;
+        $operacion->csae_es_referencia = $poseidas === [];
+        $operacion->cantidad_visitas_csae = count($poseidas);
+        $operacion->minutos_estancia_csae_total = (int) array_sum(array_column($poseidas, 'minutos_estancia'));
+        $operacion->salidas_csae_pendientes = count(array_filter($poseidas, fn (array $visita) => $visita['pendiente']));
     }
 
     /**
