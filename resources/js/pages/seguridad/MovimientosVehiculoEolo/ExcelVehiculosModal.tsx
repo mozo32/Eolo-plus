@@ -187,8 +187,9 @@ export const ExcelVehiculosModal = ({ isOpen, vehiculosSeleccionados, onClose }:
                     {hayFilas && (
                         <>
                             <p className="mb-3 text-xs text-gray-500">
-                                Mostrando {filasVistaPrevia.length} de {filas!.length} movimientos.
-                                La descarga incluye los {filas!.length}.
+                                {filas!.length > FILAS_VISTA_PREVIA
+                                    ? `Mostrando ${filasVistaPrevia.length} de ${filas!.length} movimientos. La descarga incluye los ${filas!.length}.`
+                                    : `${filas!.length} ${filas!.length === 1 ? 'movimiento' : 'movimientos'}.`}
                             </p>
                             <table className="w-full text-left text-xs">
                                 <thead className="bg-gray-100 border-b">
