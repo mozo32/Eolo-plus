@@ -272,6 +272,74 @@ class VehiculoEoloController extends Controller
         return response()->json($movimientos);
     }
 
+    /**
+     * Movimientos de VARIOS vehículos, como filas planas para el Excel.
+     *
+     * No devuelve imágenes a propósito: `obtenerHistorial` llama a Storage::exists por
+     * cada una para construir su URL, y el libro de Excel no las contiene. Esa es la
+     * razón de que esta consulta exista en vez de llamar seis veces a la otra.
+     */
+    public function obtenerExcel(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'vehiculos' => 'required|array|min:1',
+            'vehiculos.*' => 'required|string|exists:vehiculos,id',
+            'chofer' => 'nullable|string|max:255',
+            'tipo' => 'nullable|in:Entrada,Salida',
+            'fecha_inicio' => 'nullable|date',
+            'fecha_fin' => 'nullable|date',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $ids = $request->input('vehiculos');
+
+        $movimientos = movimientoVehiculo::query()
+            ->whereIn('vehiculo_id', $ids)
+            ->when($request->chofer, function ($query, $chofer) {
+                $query->where('chofer', 'like', '%' . $chofer . '%');
+            })
+            ->when($request->tipo, function ($query, $tipo) {
+                $query->where('tipo', $tipo);
+            })
+            ->when($request->fecha_inicio, function ($query, $fechaInicio) {
+                $query->whereDate('created_at', '>=', $fechaInicio);
+            })
+            ->when($request->fecha_fin, function ($query, $fechaFin) {
+                $query->whereDate('created_at', '<=', $fechaFin);
+            })
+            ->orderBy('created_at', 'desc')
+            ->orderBy('vehiculo_id')
+            ->get();
+
+        $nombres = Vehiculo::query()
+            ->whereIn('id', $ids)
+            ->pluck('nombre', 'id');
+
+        $filas = $movimientos->map(function (movimientoVehiculo $movimiento) use ($nombres) {
+            return [
+                'vehiculo' => $nombres[$movimiento->vehiculo_id] ?? '',
+                'numeroEconomico' => $movimiento->vehiculo_id,
+                'fechaHora' => $movimiento->created_at?->format('Y-m-d H:i'),
+                'tipo' => $movimiento->tipo,
+                'chofer' => $movimiento->chofer,
+                'kilometraje' => $movimiento->kilometraje,
+                'gasolina' => $movimiento->gasolina,
+                'destino' => $movimiento->destino,
+                'autoriza' => $movimiento->autoriza,
+                'matricula' => $movimiento->matricula,
+                'motivo' => $movimiento->motivo,
+                'observaciones' => $movimiento->observaciones,
+            ];
+        });
+
+        return response()->json($filas->values(), 200);
+    }
+
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [

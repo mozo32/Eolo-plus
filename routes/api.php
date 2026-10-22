@@ -200,6 +200,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('MovimientosCSAE')->group(fun
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('VehiculoEolo')->group(function () {
     Route::get('/', [VehiculoEoloController::class, 'index']);
+    Route::get('/Excel/', [VehiculoEoloController::class, 'obtenerExcel']);
     Route::post('/movimientos', [VehiculoEoloController::class, 'registrarMovimiento']);
     Route::get('/vehiculos/{id}/movimientos', [VehiculoEoloController::class, 'obtenerHistorial']);
     Route::patch('/vehiculos/{id}/activo', [VehiculoEoloController::class, 'cambiarActivo']);
