@@ -178,6 +178,29 @@ it('los cinco datos de identificación salen del registro más reciente del mes'
         ->and($fila['responsable'])->toBe('NUEVO');
 });
 
+it('el registro más reciente gana aunque se haya insertado primero', function () {
+    // Insertado al revés a propósito: el de fecha posterior entra PRIMERO, así que tiene
+    // el id MENOR. Sin el `orderBy('fecha_ingreso')` la base devolvería orden de clave
+    // primaria y ganaría el viejo, y ninguna otra prueba lo vería.
+    registroDeEstacionamiento('ABC-123', '2026-09-20 08:00:00', ['vehiculo' => 'NUEVO']);
+    registroDeEstacionamiento('ABC-123', '2026-09-03 08:00:00', ['vehiculo' => 'VIEJO']);
+
+    $fila = consultarRejilla('2026-09')->assertOk()->json('filas.0');
+
+    expect($fila['vehiculo'])->toBe('NUEVO');
+});
+
+it('con la misma fecha y hora, gana el registro insertado después', function () {
+    // El desempate por id que pide la spec. Sin él, la fila dependería del orden en que
+    // la base devuelva las filas, que no está garantizado.
+    registroDeEstacionamiento('ABC-123', '2026-09-10 08:00:00', ['vehiculo' => 'PRIMERO']);
+    registroDeEstacionamiento('ABC-123', '2026-09-10 08:00:00', ['vehiculo' => 'SEGUNDO']);
+
+    $fila = consultarRejilla('2026-09')->assertOk()->json('filas.0');
+
+    expect($fila['vehiculo'])->toBe('SEGUNDO');
+});
+
 it('los días salen ascendentes y sin repetir, y el total cuadra con su longitud', function () {
     // Se insertan desordenados a propósito: si el endpoint devolviera el orden de
     // inserción, esta prueba lo vería.
@@ -197,7 +220,7 @@ it('solo entran los registros del mes pedido', function () {
     // un filtro mal puesto se cuela.
     registroDeEstacionamiento('ABC-123', '2026-08-31 23:59:00');
     registroDeEstacionamiento('ABC-123', '2026-09-15 08:00:00');
-    registroDeEstacionamiento('ABC-123', '2026-10-01 00:01:00');
+    registroDeEstacionamiento('ABC-123', '2026-10-01 00:00:00');
 
     $fila = consultarRejilla('2026-09')->assertOk()->json('filas.0');
 
@@ -323,7 +346,11 @@ En `app/Http/Controllers/Api/EstacionamientoSubterraneoController.php`, después
     {
         $request->merge(['mes' => $mes]);
         $request->validate([
-            'mes' => ['required', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'],
+            // El modificador D no es decorativo: sin el, `$` tambien casa ANTES de un
+            // salto de linea final, asi que un «2026-09
+» pasaria la validacion y
+            // reventaria despues en Carbon con un 500 donde se espera un 422.
+            'mes' => ['required', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/D'],
         ]);
 
         $inicio = Carbon::createFromFormat('Y-m-d H:i:s', $mes . '-01 00:00:00')->startOfDay();
@@ -387,7 +414,7 @@ En `routes/api.php`, dentro del grupo `prefix('EstacionamientoSubTerraneo')`, de
 TEST_TOKEN=907 php artisan test tests/Feature/EstacionamientoSubterraneo/ExcelMensualTest.php
 ```
 
-Esperado: 14 pruebas en verde.
+Esperado: 16 pruebas en verde.
 
 - [ ] **Step 6: Comprobar que las pruebas muerden**
 
@@ -1021,7 +1048,7 @@ El endpoint nuevo es aditivo y no cambia ninguna respuesta existente, así que n
 TEST_TOKEN=908 php artisan test
 ```
 
-**Nunca con `--parallel`.** Esperado: 2459 pruebas de antes más las 14 de la Task 1, o sea **2473**, sin ningún fallo. Tarda unos seis minutos; déjalo acabar.
+**Nunca con `--parallel`.** Esperado: 2459 pruebas de antes más las 16 de la Task 1, o sea **2475**, sin ningún fallo. Tarda unos seis minutos; déjalo acabar.
 
 Después:
 
