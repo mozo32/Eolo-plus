@@ -19,7 +19,17 @@ export const FilaVehiculo = ({ vehiculo, onAccion }: Props) => {
                         <div className="p-2 rounded-lg bg-gray-100 text-gray-600">
                             <Car size={18} />
                         </div>
-                        <span className="font-bold">{vehiculo.nombre}</span>
+                        <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold">{vehiculo.nombre}</span>
+                                {!vehiculo.activo && (
+                                    <span className="px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 text-[10px] font-bold uppercase tracking-wide">
+                                        Desactivado
+                                    </span>
+                                )}
+                            </div>
+                            <span className="text-xs font-mono text-gray-400">{vehiculo.id}</span>
+                        </div>
                     </div>
                 </td>
                 <td className="p-4">

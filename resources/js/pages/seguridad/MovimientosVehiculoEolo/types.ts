@@ -5,4 +5,8 @@ export interface Vehiculo {
     nombre: string;
     estado: EstadoVehiculo;
     ultimaActividad: string;
+    /** De alta en la flota. Distinto de `estado`, que es dónde está el vehículo. */
+    activo: boolean;
+    /** Cuántos movimientos tiene. El servidor ordena la tabla con esto. */
+    movimientos: number;
 }
