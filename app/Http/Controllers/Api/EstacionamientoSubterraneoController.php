@@ -99,6 +99,68 @@ class EstacionamientoSubterraneoController extends Controller
 
         return response()->json($registros);
     }
+
+    /**
+     * Rejilla mensual para el Excel: una fila por placa, con los días que tuvo registro.
+     *
+     * El módulo no modela estancias con entrada y salida —`fecha_salida` está en NULL en
+     * todos los registros y nadie la escribe—, sino una fila por vehículo por día de
+     * ronda. Por eso un día se marca si existe un registro, sin calcular nada entre dos
+     * fechas.
+     *
+     * No reutiliza `show()` a propósito: aquel agrupa por (placas, vehiculo, matricula),
+     * así que una placa cuyo vehículo se escribió distinto algún día sale partida en
+     * varias filas con sus días repartidos.
+     */
+    public function obtenerExcel(Request $request, string $mes)
+    {
+        $request->merge(['mes' => $mes]);
+        $request->validate([
+            'mes' => ['required', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'],
+        ]);
+
+        $inicio = Carbon::createFromFormat('Y-m-d H:i:s', $mes . '-01 00:00:00')->startOfDay();
+        $fin = $inicio->copy()->endOfMonth()->endOfDay();
+
+        $registros = EstacionamientoSubterraneo::query()
+            ->whereBetween('fecha_ingreso', [$inicio, $fin])
+            ->orderBy('fecha_ingreso')
+            ->orderBy('id')
+            ->get(['id', 'placas', 'vehiculo', 'color', 'matricula', 'responsable', 'fecha_ingreso']);
+
+        $filas = $registros
+            ->groupBy(fn (EstacionamientoSubterraneo $registro) => strtoupper(trim($registro->placas)))
+            ->map(function ($grupo, string $placas) {
+                // Los registros vienen ordenados ascendente por fecha_ingreso e id, así
+                // que el último del grupo es el más reciente del mes.
+                $ultimo = $grupo->last();
+
+                $dias = $grupo
+                    ->map(fn (EstacionamientoSubterraneo $registro) => (int) $registro->fecha_ingreso->day)
+                    ->unique()
+                    ->sort()
+                    ->values();
+
+                return [
+                    'placas' => $placas,
+                    'vehiculo' => $ultimo->vehiculo,
+                    'color' => $ultimo->color,
+                    'matricula' => $ultimo->matricula,
+                    'responsable' => $ultimo->responsable,
+                    'dias' => $dias->all(),
+                    'total' => $dias->count(),
+                ];
+            })
+            ->sortKeys()
+            ->values();
+
+        return response()->json([
+            'mes' => $mes,
+            'dias' => $inicio->daysInMonth,
+            'filas' => $filas,
+        ], 200);
+    }
+
     public function buscarPlacas(Request $request)
     {
         $term = $request->query('q');

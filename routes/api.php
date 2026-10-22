@@ -117,6 +117,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('EstacionamientoSubTerraneo')
     Route::get('/alerta',[EstacionamientoSubterraneoController::class, 'vehiculosMasDeCincoDias']);
     Route::post('/',[EstacionamientoSubterraneoController::class, 'store'])->name('estacionamiento.store');
     Route::get('/detalle/{fecha}',[EstacionamientoSubterraneoController::class, 'show']);
+    Route::get('/Excel/{mes}',[EstacionamientoSubterraneoController::class, 'obtenerExcel']);
     Route::get('/buscar-placas',[EstacionamientoSubterraneoController::class, 'buscarPlacas']);
     Route::get('/detalle-placa/{placa}',[EstacionamientoSubterraneoController::class, 'detallePorPlaca']);
 });
