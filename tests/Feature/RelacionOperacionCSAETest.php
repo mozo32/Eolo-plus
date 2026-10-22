@@ -901,7 +901,6 @@ it('DEUDA CONOCIDA: una llegada sin salida registrada MUESTRA corridas muy poste
     // si algun dia se le pone techo a las estancias sin salida, esta prueba debe cambiar.
     $abierta = relacionLlegada('XA-ABI', '2026-03-01 08:00');
     $posterior = relacionLlegada('XA-ABI', '2026-08-01 08:00');
-    relacionSalida('XA-ABI', '2026-08-10 08:00');
     $corrida = relacionMovimiento('XA-ABI', '2026-08-02 09:00', '2026-08-03 09:00');
 
     $excel = relacionExcel();
