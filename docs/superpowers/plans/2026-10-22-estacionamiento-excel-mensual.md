@@ -93,6 +93,7 @@ Crear `tests/Feature/EstacionamientoSubterraneo/ExcelMensualTest.php`:
 
 use App\Models\EstacionamientoSubterraneo;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 
 /*
  * La rejilla mensual del estacionamiento. El módulo NO modela estancias con entrada y
@@ -178,27 +179,34 @@ it('los cinco datos de identificación salen del registro más reciente del mes'
         ->and($fila['responsable'])->toBe('NUEVO');
 });
 
-it('el registro más reciente gana aunque se haya insertado primero', function () {
-    // Insertado al revés a propósito: el de fecha posterior entra PRIMERO, así que tiene
-    // el id MENOR. Sin el `orderBy('fecha_ingreso')` la base devolvería orden de clave
-    // primaria y ganaría el viejo, y ninguna otra prueba lo vería.
-    registroDeEstacionamiento('ABC-123', '2026-09-20 08:00:00', ['vehiculo' => 'NUEVO']);
-    registroDeEstacionamiento('ABC-123', '2026-09-03 08:00:00', ['vehiculo' => 'VIEJO']);
+it('la consulta pide explícitamente el orden por fecha y por id', function () {
+    // Esta prueba mira el SQL y no el resultado, a propósito, y conviene saber por qué.
+    //
+    // La tabla tiene índice en `fecha_ingreso`, así que sqlite resuelve el
+    // `whereBetween` recorriendo ese índice y devuelve las filas YA en orden de
+    // (fecha_ingreso, rowid) — exactamente el orden que piden los dos `orderBy`. Quitar
+    // las cláusulas no cambia la respuesta, y por eso NINGUNA prueba de comportamiento
+    // puede verlas: se intentó con los registros insertados al revés y siguió en verde.
+    //
+    // Pero el orden decide de qué registro salen las cinco columnas de identificación, y
+    // en MySQL depende del plan que elija el motor. Pinchar el SQL es lo único que se
+    // pone en rojo si alguien borra las cláusulas por limpieza.
+    registroDeEstacionamiento('ABC-123', '2026-09-10 08:00:00');
 
-    $fila = consultarRejilla('2026-09')->assertOk()->json('filas.0');
+    $consultas = [];
+    DB::listen(function ($consulta) use (&$consultas) {
+        $consultas[] = $consulta->sql;
+    });
 
-    expect($fila['vehiculo'])->toBe('NUEVO');
-});
+    consultarRejilla('2026-09')->assertOk();
 
-it('con la misma fecha y hora, gana el registro insertado después', function () {
-    // El desempate por id que pide la spec. Sin él, la fila dependería del orden en que
-    // la base devuelva las filas, que no está garantizado.
-    registroDeEstacionamiento('ABC-123', '2026-09-10 08:00:00', ['vehiculo' => 'PRIMERO']);
-    registroDeEstacionamiento('ABC-123', '2026-09-10 08:00:00', ['vehiculo' => 'SEGUNDO']);
+    $sqlDeLaTabla = collect($consultas)
+        ->first(fn (string $sql) => str_contains($sql, 'estacionamiento_subterraneos'));
 
-    $fila = consultarRejilla('2026-09')->assertOk()->json('filas.0');
+    // Sin comillas, para no depender de si el motor las pone dobles o invertidas.
+    $normalizado = str_replace(['"', '`'], '', (string) $sqlDeLaTabla);
 
-    expect($fila['vehiculo'])->toBe('SEGUNDO');
+    expect($normalizado)->toContain('order by fecha_ingreso asc, id asc');
 });
 
 it('los días salen ascendentes y sin repetir, y el total cuadra con su longitud', function () {
@@ -414,7 +422,7 @@ En `routes/api.php`, dentro del grupo `prefix('EstacionamientoSubTerraneo')`, de
 TEST_TOKEN=907 php artisan test tests/Feature/EstacionamientoSubterraneo/ExcelMensualTest.php
 ```
 
-Esperado: 16 pruebas en verde.
+Esperado: 15 pruebas en verde.
 
 - [ ] **Step 6: Comprobar que las pruebas muerden**
 
@@ -1048,7 +1056,7 @@ El endpoint nuevo es aditivo y no cambia ninguna respuesta existente, así que n
 TEST_TOKEN=908 php artisan test
 ```
 
-**Nunca con `--parallel`.** Esperado: 2459 pruebas de antes más las 16 de la Task 1, o sea **2475**, sin ningún fallo. Tarda unos seis minutos; déjalo acabar.
+**Nunca con `--parallel`.** Esperado: 2459 pruebas de antes más las 15 de la Task 1, o sea **2474**, sin ningún fallo. Tarda unos seis minutos; déjalo acabar.
 
 Después:
 
