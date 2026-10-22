@@ -39,6 +39,17 @@ beforeEach(function () {
     $this->actingAs(usuarioAdmin(), 'sanctum');
 });
 
+it('rechaza a un invitado', function () {
+    // El beforeEach autentica, así que esta prueba cierra la sesión para comprobar el
+    // candado de verdad. La ruta vive dentro del grupo auth:sanctum; si alguien la
+    // sacara de ahí, los datos de un mes entero quedarían públicos y nada fallaría.
+    auth('sanctum')->forgetUser();
+    app('auth')->forgetGuards();
+
+    test()->getJson('/api/EstacionamientoSubTerraneo/Excel/2026-09')
+        ->assertUnauthorized();
+});
+
 it('una placa con varios registros el mismo día cuenta un solo día', function () {
     // De los 2 491 pares (placa, día) del histórico, 469 tienen más de un registro. Si
     // la celda contara filas en vez de marcar presencia, los totales saldrían inflados.
@@ -67,17 +78,21 @@ it('una placa cuyo vehículo cambió entre días sale en UNA fila, no en dos', f
 });
 
 it('los cinco datos de identificación salen del registro más reciente del mes', function () {
-    registroDeEstacionamiento('ABC-123', '2026-09-03 08:00:00', [
-        'vehiculo' => 'VIEJO',
-        'color' => 'VIEJO',
-        'matricula' => 'VIEJO',
-        'responsable' => 'VIEJO',
-    ]);
+    // El orden de inserción es deliberado: el registro más reciente (09-20) se crea
+    // PRIMERO y por tanto tiene el id menor. Si el orden de creación coincidiera con el de
+    // fecha, quitar `orderBy('fecha_ingreso')` y dejar solo `orderBy('id')` no cambiaría
+    // el resultado y esta prueba no mordería.
     registroDeEstacionamiento('ABC-123', '2026-09-20 08:00:00', [
         'vehiculo' => 'NUEVO',
         'color' => 'NUEVO',
         'matricula' => 'NUEVO',
         'responsable' => 'NUEVO',
+    ]);
+    registroDeEstacionamiento('ABC-123', '2026-09-03 08:00:00', [
+        'vehiculo' => 'VIEJO',
+        'color' => 'VIEJO',
+        'matricula' => 'VIEJO',
+        'responsable' => 'VIEJO',
     ]);
 
     $fila = consultarRejilla('2026-09')->assertOk()->json('filas.0');

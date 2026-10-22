@@ -1,16 +1,13 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-import type {
-    FilaExcelEstacionamiento,
-    RejillaExcelEstacionamiento,
-} from '@/stores/apiEstacionamientoSubterraneo';
+import type { RejillaExcelEstacionamiento } from '@/stores/apiEstacionamientoSubterraneo';
 
 /**
  * Las cinco columnas de identificación, en orden. El modal pinta esta misma lista, así
  * que la vista previa y el libro no pueden divergir.
  */
 export const COLUMNAS_FIJAS: {
-    clave: keyof FilaExcelEstacionamiento;
+    clave: 'placas' | 'vehiculo' | 'color' | 'matricula' | 'responsable';
     titulo: string;
     ancho: number;
 }[] = [
@@ -80,20 +77,28 @@ export async function descargarExcelEstacionamiento(
     }
 
     encabezado.getCell(totalColumnas).value = 'TOTAL';
-    encabezado.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    encabezado.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF003E51' },
-    };
-    encabezado.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    // El estilo va celda por celda. Asignarlo al objeto Row lo emite como estilo de fila
+    // (customFormat="1") y Excel pinta el relleno a lo ancho de toda la hoja, mucho más
+    // allá de TOTAL. ExcelPernoctaDia hace lo mismo: solo la altura va en la fila.
+    for (let columna = 1; columna <= totalColumnas; columna++) {
+        const celda = encabezado.getCell(columna);
+        celda.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        celda.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF003E51' },
+        };
+        celda.alignment = { horizontal: 'center', vertical: 'middle' };
+    }
+
     encabezado.height = 20;
 
     rejilla.filas.forEach((fila, indice) => {
         const renglon = hoja.getRow(3 + indice);
 
         COLUMNAS_FIJAS.forEach((columna, posicion) => {
-            renglon.getCell(posicion + 1).value = (fila[columna.clave] as string | null) ?? '';
+            renglon.getCell(posicion + 1).value = fila[columna.clave] ?? '';
         });
 
         const presentes = new Set(fila.dias);

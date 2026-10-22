@@ -152,7 +152,7 @@ export default function ModalExcelEstacionamiento({ mes, onClose }: Props) {
                                                         key={columna.clave}
                                                         className="p-2 text-slate-700 whitespace-nowrap border border-slate-200"
                                                     >
-                                                        {(fila[columna.clave] as string | null) ?? ''}
+                                                        {fila[columna.clave] ?? ''}
                                                     </td>
                                                 ))}
                                                 {dias.map(dia => (
