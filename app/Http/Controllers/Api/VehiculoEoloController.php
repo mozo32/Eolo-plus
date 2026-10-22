@@ -121,6 +121,14 @@ class VehiculoEoloController extends Controller
             ], 422);
         }
 
+        $vehiculo = Vehiculo::find($request->vehiculo_id);
+
+        if ($vehiculo && ! $vehiculo->activo) {
+            return response()->json([
+                'message' => "El vehículo {$vehiculo->id} ({$vehiculo->nombre}) está desactivado. Reactívalo para registrar entradas o salidas.",
+            ], 409);
+        }
+
         $rutasGuardadas = [];
 
         try {
