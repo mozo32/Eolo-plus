@@ -95,3 +95,60 @@ function usuarioSinAcceso(): App\Models\User
 {
     return usuarioConSubdepartamento('entregaTurno', 'Rampa', 'empleado');
 }
+
+/**
+ * Vehículo de la flota Eolo. El id ES el número económico, una cadena.
+ */
+function vehiculoDePrueba(
+    string $id,
+    string $nombre,
+    string $estado = 'En Planta',
+    bool $activo = true
+): App\Models\Vehiculo {
+    return App\Models\Vehiculo::create([
+        'id' => $id,
+        'nombre' => $nombre,
+        'estado' => $estado,
+        'activo' => $activo,
+    ]);
+}
+
+/**
+ * Usuario con un rol concreto, para los candados de MovimientosVehiculoEolo.
+ *
+ * No se llama `usuarioConRol`: ese nombre ya está tomado como función global
+ * en tests/Feature/OperacionesDiarias/CancelarOperacionTest.php.
+ */
+function usuarioVehiculosConRol(string $slug): App\Models\User
+{
+    $usuario = App\Models\User::factory()->create();
+    $rol = App\Models\Role::firstOrCreate(
+        ['slug' => $slug],
+        ['nombre' => ucfirst($slug)]
+    );
+    $usuario->roles()->attach($rol->id);
+
+    return $usuario;
+}
+
+/**
+ * N movimientos de un vehículo, para las pruebas de conteo y orden.
+ */
+function movimientosDePrueba(string $vehiculoId, int $cuantos): void
+{
+    foreach (range(1, $cuantos) as $i) {
+        $movimiento = App\Models\movimientoVehiculo::create([
+            'vehiculo_id' => $vehiculoId,
+            'tipo' => $i % 2 === 1 ? 'Salida' : 'Entrada',
+            'chofer' => 'Chofer de prueba',
+            'kilometraje' => 1000 + $i,
+            'gasolina' => '1/2',
+        ]);
+
+        // Marcas de tiempo separadas a propósito. Creados todos en el mismo
+        // segundo, el orden por `created_at` sería un empate y la prueba del
+        // orden pasaría o fallaría según el humor de la base. `created_at` no
+        // está en $fillable, así que se escribe con forceFill.
+        $movimiento->forceFill(['created_at' => now()->addSeconds($i)])->save();
+    }
+}
