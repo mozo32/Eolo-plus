@@ -117,13 +117,19 @@ function usuarioVehiculosConRol(string $slug): App\Models\User
 function movimientosDePrueba(string $vehiculoId, int $cuantos): void
 {
     foreach (range(1, $cuantos) as $i) {
-        App\Models\movimientoVehiculo::create([
+        $movimiento = App\Models\movimientoVehiculo::create([
             'vehiculo_id' => $vehiculoId,
             'tipo' => $i % 2 === 1 ? 'Salida' : 'Entrada',
             'chofer' => 'Chofer de prueba',
             'kilometraje' => 1000 + $i,
             'gasolina' => '1/2',
         ]);
+
+        // Marcas de tiempo separadas a propósito. Creados todos en el mismo
+        // segundo, el orden por `created_at` sería un empate y la prueba del
+        // orden pasaría o fallaría según el humor de la base. `created_at` no
+        // está en $fillable, así que se escribe con forceFill.
+        $movimiento->forceFill(['created_at' => now()->addSeconds($i)])->save();
     }
 }
 ```
