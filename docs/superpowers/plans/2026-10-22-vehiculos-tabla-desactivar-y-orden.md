@@ -567,6 +567,22 @@ it('los tres roles permitidos pueden desactivar', function (string $rol) {
     'administrador' => ['admin'],
 ]);
 
+it('el permiso no depende del ORDEN de los roles del usuario', function () {
+    // La decisión 4 del diseño: se mira la lista entera, no `roles[0]`. Sin esta
+    // prueba, alguien podría «simplificar» a `roles[0]->slug` y la suite entera
+    // seguiría verde mientras un usuario con dos roles pierde el permiso.
+    $usuario = usuarioVehiculosConRol('empleado');
+    $rolFbo = App\Models\Role::firstOrCreate(['slug' => 'fbo'], ['nombre' => 'FBO']);
+    $usuario->roles()->attach($rolFbo->id);
+
+    $this->actingAs($usuario, 'sanctum');
+    vehiculoDePrueba('01-KIA', 'KIA');
+
+    cambiarActivo('01-KIA', false)->assertOk();
+
+    expect(Vehiculo::find('01-KIA')->activo)->toBeFalse();
+});
+
 it('un rol sin permiso recibe 403 y el vehículo no cambia', function () {
     $this->actingAs(usuarioVehiculosConRol('empleado'), 'sanctum');
     vehiculoDePrueba('01-KIA', 'KIA');
