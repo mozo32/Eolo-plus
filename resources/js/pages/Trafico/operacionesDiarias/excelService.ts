@@ -40,6 +40,8 @@ export type Operacion = {
     fecha_hora_llegada_csae?: string | null;
     fecha_hora_salida_csae?: string | null;
     movimientos_csae?: MovimientoCsaeOperacion[];
+    /** La fila enseña la visita pero no la cuenta: otra estancia es la dueña. */
+    csae_es_referencia?: boolean | number | null;
     cantidad_visitas_csae?: number;
     minutos_estancia_csae_total?: number;
     salidas_csae_pendientes?: number;
@@ -519,6 +521,12 @@ export const prepararFilasReporteOperaciones = (
         const minutosEstanciaCsae = calcularMinutosEstanciaCsae(
             movimientosCsae
         );
+        // Esta fila cruza la visita pero no la cuenta: otra estancia es la dueña. Se
+        // enseñan las fechas, que es lo que se va a buscar, y se deja vacia la estancia
+        // para que la columna siga sumando el tiempo real una sola vez.
+        const csaeEsReferencia = Boolean(
+            llegada?.csae_es_referencia ?? salida?.csae_es_referencia
+        );
 
         const mantenimientoCsae = Boolean(
             llegada?.mantenimiento_csae ||
@@ -536,18 +544,20 @@ export const prepararFilasReporteOperaciones = (
 
         const partesEstanciaCsae: string[] = [];
 
-        if (cantidadCompletadasCsae > 0) {
-            partesEstanciaCsae.push(
-                formatearDuracionMinutos(minutosEstanciaCsae)
-            );
-        }
+        if (!csaeEsReferencia) {
+            if (cantidadCompletadasCsae > 0) {
+                partesEstanciaCsae.push(
+                    formatearDuracionMinutos(minutosEstanciaCsae)
+                );
+            }
 
-        if (cantidadPendientesCsae > 0) {
-            partesEstanciaCsae.push(
-                cantidadPendientesCsae === 1
-                    ? '1 salida pendiente'
-                    : `${cantidadPendientesCsae} salidas pendientes`
-            );
+            if (cantidadPendientesCsae > 0) {
+                partesEstanciaCsae.push(
+                    cantidadPendientesCsae === 1
+                        ? '1 salida pendiente'
+                        : `${cantidadPendientesCsae} salidas pendientes`
+                );
+            }
         }
 
         return {
@@ -577,7 +587,7 @@ export const prepararFilasReporteOperaciones = (
             estanciaPendiente: Boolean(
                 (!llegada && salida) || (llegada && !salida)
             ),
-            estanciaCsaePendiente: cantidadPendientesCsae > 0,
+            estanciaCsaePendiente: !csaeEsReferencia && cantidadPendientesCsae > 0,
         };
     });
 };
