@@ -1332,10 +1332,20 @@ El cambio de `index()` altera una respuesta de API que otras pruebas podrían es
 - [ ] **Step 1: Correr la suite entera, en serie**
 
 ```bash
-php artisan test
+TEST_TOKEN=901 php artisan test
 ```
 
-**Nunca con `--parallel`**: en este proyecto da fallos falsos.
+**Nunca con `--parallel`**: en este proyecto da fallos falsos. `TEST_TOKEN` **no** es ejecución en paralelo: es el mecanismo propio de Laravel para que `Storage::fake` use un directorio de disco falso distinto (`public_test_901` en vez de `public`). Las pruebas siguen corriendo en serie y se comprueba exactamente lo mismo.
+
+Hace falta porque en esta máquina quedó un directorio atascado en
+`storage/framework/testing/disks/public/movimientos-vehiculos/1` que no se puede
+listar ni borrar («Acceso denegado» desde `rm`, `rd /s /q` y hasta `Get-Acl`):
+algún proceso lo tiene cogido. Mientras siga ahí, las pruebas que escriben una
+imagen de verdad fallan con «Unable to create a directory». Usa un número que no
+hayas usado antes en esta máquina y borra después el `public_test_<n>` que deje.
+
+Para arreglarlo de raíz hace falta cerrar lo que lo retiene (vite, VS Code o
+Apache) o reiniciar, y entonces borrar el directorio.
 
 Esperado: el total de la rama `main` (2412 en verde en `dbf0ce9`) más las de este plan, sin ningún fallo.
 
