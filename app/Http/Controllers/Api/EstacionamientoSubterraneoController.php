@@ -116,7 +116,10 @@ class EstacionamientoSubterraneoController extends Controller
     {
         $request->merge(['mes' => $mes]);
         $request->validate([
-            'mes' => ['required', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'],
+            // El modificador D no es decorativo: sin él, `$` también casa ANTES de un
+            // salto de línea final, así que un «2026-09\n» pasaría la validación y
+            // reventaría después en Carbon con un 500 donde se espera un 422.
+            'mes' => ['required', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/D'],
         ]);
 
         $inicio = Carbon::createFromFormat('Y-m-d H:i:s', $mes . '-01 00:00:00')->startOfDay();

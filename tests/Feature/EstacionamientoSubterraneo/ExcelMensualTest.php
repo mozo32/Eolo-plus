@@ -2,6 +2,7 @@
 
 use App\Models\EstacionamientoSubterraneo;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 
 /*
  * La rejilla mensual del estacionamiento. El módulo NO modela estancias con entrada y
@@ -87,6 +88,36 @@ it('los cinco datos de identificación salen del registro más reciente del mes'
         ->and($fila['responsable'])->toBe('NUEVO');
 });
 
+it('la consulta pide explícitamente el orden por fecha y por id', function () {
+    // Esta prueba mira el SQL y no el resultado, a propósito, y conviene saber por qué.
+    //
+    // La tabla tiene índice en `fecha_ingreso`, así que sqlite resuelve el
+    // `whereBetween` recorriendo ese índice y devuelve las filas YA en orden de
+    // (fecha_ingreso, rowid) — exactamente el orden que piden los dos `orderBy`. Quitar
+    // las cláusulas no cambia la respuesta, y por eso NINGUNA prueba de comportamiento
+    // puede verlas: se intentó con los registros insertados al revés y siguió en verde.
+    //
+    // Pero el orden decide de qué registro salen las cinco columnas de identificación, y
+    // en MySQL depende del plan que elija el motor. Pinchar el SQL es lo único que se
+    // pone en rojo si alguien borra las cláusulas por limpieza.
+    registroDeEstacionamiento('ABC-123', '2026-09-10 08:00:00');
+
+    $consultas = [];
+    DB::listen(function ($consulta) use (&$consultas) {
+        $consultas[] = $consulta->sql;
+    });
+
+    consultarRejilla('2026-09')->assertOk();
+
+    $sqlDeLaTabla = collect($consultas)
+        ->first(fn (string $sql) => str_contains($sql, 'estacionamiento_subterraneos'));
+
+    // Sin comillas, para no depender de si el motor las pone dobles o invertidas.
+    $normalizado = str_replace(['"', '`'], '', (string) $sqlDeLaTabla);
+
+    expect($normalizado)->toContain('order by fecha_ingreso asc, id asc');
+});
+
 it('los días salen ascendentes y sin repetir, y el total cuadra con su longitud', function () {
     // Se insertan desordenados a propósito: si el endpoint devolviera el orden de
     // inserción, esta prueba lo vería.
@@ -106,7 +137,7 @@ it('solo entran los registros del mes pedido', function () {
     // un filtro mal puesto se cuela.
     registroDeEstacionamiento('ABC-123', '2026-08-31 23:59:00');
     registroDeEstacionamiento('ABC-123', '2026-09-15 08:00:00');
-    registroDeEstacionamiento('ABC-123', '2026-10-01 00:01:00');
+    registroDeEstacionamiento('ABC-123', '2026-10-01 00:00:00');
 
     $fila = consultarRejilla('2026-09')->assertOk()->json('filas.0');
 
