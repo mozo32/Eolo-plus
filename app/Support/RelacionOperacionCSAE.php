@@ -15,7 +15,7 @@ use Illuminate\Support\Collection;
  *
  * La pertenencia es por SOLAPE, no por contención. El intervalo de la corrida va de su entrada a su
  * salida (o hasta `$ahora` si no tiene salida); el de la estancia, de la llegada a la primera salida
- * posterior de la misma matrícula (o sin techo si no la hay). Una corrida es de la estancia si los
+ * posterior de la misma matrícula (o, si no la hay, hasta la siguiente llegada; ver abajo). Una corrida es de la estancia si los
  * dos intervalos se cruzan, extremos incluidos. Así una corrida registrada un minuto antes de la
  * llegada no se pierde, y una cuya salida se registró después de la salida de operación diaria
  * tampoco.
