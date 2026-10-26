@@ -616,7 +616,9 @@ test('los servicios de estancia no se agregan a mano: dan 422 y no crean renglon
         ->assertStatus(422)
         ->assertJsonValidationErrors(['servicio_id']);
 
-    expect($respuesta->json('errors.servicio_id.0'))->toContain('Recalcular estancia')
+    // El mensaje nombra el boton que SI hace el trabajo, asi que si ese boton se renombra, este
+    // texto tiene que seguirlo: mandar al operador a un boton que no existe es peor que no decir nada.
+    expect($respuesta->json('errors.servicio_id.0'))->toContain('Estancia y ajustes')
         ->and(FactPrefacturaRenglon::count())->toBe(0);
 })->with([
     'pernocta' => FactServicio::CONCEPTO_ESTANCIA_PERNOCTA,

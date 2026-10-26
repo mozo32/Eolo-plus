@@ -160,7 +160,7 @@ export default function ModalEstancia({ prefacturaId, onCerrar, onGuardar }: Pro
     );
 
     return (
-        <ModalBase idTitulo="titulo-modal-estancia" titulo="Recalcular estancia" subtitulo="Cuántos cargos de estancia corresponden" tieneCambios={tieneCambios} onCerrar={onCerrar} ancho="max-w-lg">
+        <ModalBase idTitulo="titulo-modal-estancia" titulo="Estancia y ajustes" subtitulo="Cuántos cargos corresponden, y los ajustes si se quedó más tiempo" tieneCambios={tieneCambios} onCerrar={onCerrar} ancho="max-w-lg">
             <form onSubmit={guardar} noValidate className="space-y-5">
                 <div className="border bg-slate-50 p-5 space-y-4">
                     <p className="text-[11px] font-semibold text-slate-500">

@@ -86,7 +86,7 @@ test('cambiar la salida SI vuelve a calcular', function () {
 
 test('las cantidades calculadas siguen siendo editables por el camino de siempre', function () {
     // No hay endpoint para editar la cantidad de UN renglón: las de estancia se corrigen
-    // reenviando las cantidades por `PATCH /estancia`, que es el botón «Recalcular estancia».
+    // reenviando las cantidades por `PATCH /estancia`, que es el botón «Estancia y ajustes».
     // Esa es la salida del 13,9% de casos que la regla no reproduce.
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $p = conEstancia();
@@ -190,7 +190,7 @@ test('corregir la salida CONSERVA los dos ajustes manuales de estancia', functio
 
     $this->putJson("/api/facturacion/prefacturas/{$p->id}", cabecera($p, ['salida_at' => '2026-10-22 12:00:00']))->assertOk();
 
-    // El operador abre «Recalcular estancia» y añade los dos ajustes.
+    // El operador abre «Estancia y ajustes» y añade los dos ajustes.
     $this->patchJson("/api/facturacion/prefacturas/{$p->id}/estancia", [
         'pernoctas' => 7,
         'transitos_2h' => 0,

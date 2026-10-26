@@ -8,6 +8,28 @@ import ModalBase from './ModalBase';
 const CANTIDAD_MAX = 9999;
 const REMISION_MAX = 255;
 
+/**
+ * TEMPORAL: el alta se dejó con los campos del sistema viejo, así que Proveedor no se pinta y
+ * viaja en null. La remisión SI se captura: el departamento la quiere aunque no se diga de qué
+ * proveedor.
+ *
+ * No se borró nada: el estado, la validación y el envío siguen enteros, y el backend acepta
+ * `proveedor_id` como opcional. Poner esto en `true` devuelve el campo tal cual estaba. En los
+ * datos de hoy hay 12 renglones con proveedor, capturados antes de ocultarlo; esos conservan el
+ * suyo, pero mientras esté en `false` no se pueden capturar nuevos desde aquí.
+ */
+const MUESTRA_PROVEEDOR = false;
+
+/** Valor del menú de categoría para los servicios que no tienen una activa. */
+const SIN_CATEGORIA = 'sin-categoria';
+
+/**
+ * La categoría de un servicio PARA ESTE MENU: la suya si está activa, y si no, el cajón de los
+ * sueltos. Asi ningun servicio activo se vuelve inalcanzable por no tener categoria o por
+ * tenerla dada de baja, que es lo unico que el paso nuevo podria romper.
+ */
+const claveDeCategoria = (servicio: Servicio): string => (servicio.categoria !== null && servicio.categoria.status === 'A' ? String(servicio.categoria.id) : SIN_CATEGORIA);
+
 export interface DatosRenglon {
     servicio_id: number;
     cantidad: number;
@@ -38,6 +60,7 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
     const [cargando, setCargando] = useState(true);
     const [errorCatalogos, setErrorCatalogos] = useState<string | null>(null);
 
+    const [categoriaId, setCategoriaId] = useState('');
     const [servicioId, setServicioId] = useState('');
     const [cantidad, setCantidad] = useState('1');
     const [proveedorId, setProveedorId] = useState('');
@@ -71,6 +94,29 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
     const opcionesServicio = useMemo(() => servicios.filter(s => s.status === 'A' && !esConceptoDeEstancia(s.concepto)).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')), [servicios]);
     const opcionesProveedor = useMemo(() => proveedores.filter(p => p.status === 'A').sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')), [proveedores]);
 
+    /**
+     * Las categorías salen de los propios servicios, no del catálogo: así solo se ofrecen las que
+     * de verdad tienen algo que elegir, y no hay forma de entrar en una y encontrarla vacía.
+     */
+    const opcionesCategoria = useMemo(() => {
+        const porClave = new Map<string, string>();
+
+        for (const servicio of opcionesServicio) {
+            const clave = claveDeCategoria(servicio);
+
+            if (! porClave.has(clave)) {
+                porClave.set(clave, clave === SIN_CATEGORIA ? 'Sin categoría' : (servicio.categoria?.nombre ?? 'Sin categoría'));
+            }
+        }
+
+        // Alfabético, y «Sin categoría» al final: es el cajón de los sueltos, no una categoría más.
+        return [...porClave.entries()]
+            .map(([clave, nombre]) => ({ clave, nombre }))
+            .sort((a, b) => (a.clave === SIN_CATEGORIA ? 1 : b.clave === SIN_CATEGORIA ? -1 : a.nombre.localeCompare(b.nombre, 'es')));
+    }, [opcionesServicio]);
+
+    const serviciosDeLaCategoria = useMemo(() => (categoriaId === '' ? [] : opcionesServicio.filter(s => claveDeCategoria(s) === categoriaId)), [opcionesServicio, categoriaId]);
+
     const servicio = opcionesServicio.find(s => String(s.id) === servicioId) ?? null;
     const cantidadNumero = /^\d+$/.test(cantidad.trim()) ? Number(cantidad.trim()) : null;
 
@@ -86,12 +132,15 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
 
     const limpiarError = (campo: Campo) => setErrores(previos => (previos[campo] ? { ...previos, [campo]: undefined } : previos));
 
-    const tieneCambios = servicioId !== '' || cantidad !== '1' || proveedorId !== '' || remision !== '';
+    const tieneCambios = categoriaId !== '' || servicioId !== '' || cantidad !== '1' || proveedorId !== '' || remision !== '';
 
     const validar = (): Partial<Record<Campo, string>> => {
         const nuevos: Partial<Record<Campo, string>> = {};
 
-        if (servicioId === '') nuevos.servicio_id = 'Elige el servicio que se va a agregar.';
+        // El aviso apunta al paso que falta: decir «elige el servicio» con el menu deshabilitado
+        // manda al usuario a un campo que no puede tocar.
+        if (categoriaId === '') nuevos.servicio_id = 'Elige primero la categoría del servicio.';
+        else if (servicioId === '') nuevos.servicio_id = 'Elige el servicio que se va a agregar.';
 
         if (cantidadNumero === null || cantidadNumero < 1) nuevos.cantidad = 'La cantidad debe ser un número entero de al menos 1.';
         else if (cantidadNumero > CANTIDAD_MAX) nuevos.cantidad = 'La cantidad no puede pasar de 9,999.';
@@ -137,13 +186,39 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
                     <h4 className={sectionTitle}>Servicio</h4>
 
                     <div>
+                        <label htmlFor="renglon-categoria" className={labelStyle}>
+                            Categoría <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                            id="renglon-categoria"
+                            autoFocus
+                            value={categoriaId}
+                            onChange={e => {
+                                setCategoriaId(e.target.value);
+                                // El servicio elegido era de la categoria anterior: se limpia para que
+                                // no se cuele uno que ya no esta a la vista.
+                                setServicioId('');
+                                limpiarError('servicio_id');
+                            }}
+                            className={campoConError(false)}
+                        >
+                            <option value="">Elige una categoría…</option>
+                            {opcionesCategoria.map(c => (
+                                <option key={c.clave} value={c.clave}>
+                                    {c.nombre}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
                         <label htmlFor="renglon-servicio" className={labelStyle}>
                             Servicio <span className="text-red-500">*</span>
                         </label>
                         <select
                             id="renglon-servicio"
-                            autoFocus
                             value={servicioId}
+                            disabled={categoriaId === ''}
                             onChange={e => {
                                 setServicioId(e.target.value);
                                 limpiarError('servicio_id');
@@ -151,10 +226,10 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
                             className={campoConError(!!errores.servicio_id)}
                             aria-invalid={errores.servicio_id ? true : undefined}
                         >
-                            <option value="">Elige un servicio…</option>
-                            {opcionesServicio.map(s => (
+                            <option value="">{categoriaId === '' ? 'Elige primero una categoría…' : 'Elige un servicio…'}</option>
+                            {serviciosDeLaCategoria.map(s => (
                                 <option key={s.id} value={s.id}>
-                                    {s.nombre}
+                                    {s.nombre} — {formatearMonto(s.precio_unitario)}
                                 </option>
                             ))}
                         </select>
@@ -162,7 +237,7 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
                         {cargando && <p className="mt-1 text-[10px] font-bold text-slate-400 italic">Cargando servicios…</p>}
                         {errorCatalogos && <p className={errorStyle}>No se pudieron cargar los catálogos: {errorCatalogos}</p>}
                         <p className="mt-1 text-[10px] font-bold text-slate-400 italic">
-                            Los cargos de estancia no aparecen aquí: los pone «Recalcular estancia», porque su precio sale de la tarifa de la matrícula.
+                            Los cargos de estancia no aparecen aquí: los pone «Estancia y ajustes», porque su precio sale de la tarifa de la matrícula.
                         </p>
                     </div>
 
@@ -186,33 +261,35 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
                         {errores.cantidad && <p className={errorStyle}>{errores.cantidad}</p>}
                     </div>
 
-                    <div>
-                        <label htmlFor="renglon-proveedor" className={labelStyle}>
-                            Proveedor
-                        </label>
-                        <select
-                            id="renglon-proveedor"
-                            value={proveedorId}
-                            onChange={e => {
-                                setProveedorId(e.target.value);
-                                limpiarError('proveedor_id');
-                            }}
-                            className={campoConError(!!errores.proveedor_id)}
-                            aria-invalid={errores.proveedor_id ? true : undefined}
-                        >
-                            <option value="">Sin proveedor</option>
-                            {opcionesProveedor.map(p => (
-                                <option key={p.id} value={p.id}>
-                                    {p.nombre}
-                                </option>
-                            ))}
-                        </select>
-                        {errores.proveedor_id && <p className={errorStyle}>{errores.proveedor_id}</p>}
-                    </div>
+                    {MUESTRA_PROVEEDOR && (
+                        <div>
+                            <label htmlFor="renglon-proveedor" className={labelStyle}>
+                                Proveedor
+                            </label>
+                            <select
+                                id="renglon-proveedor"
+                                value={proveedorId}
+                                onChange={e => {
+                                    setProveedorId(e.target.value);
+                                    limpiarError('proveedor_id');
+                                }}
+                                className={campoConError(!!errores.proveedor_id)}
+                                aria-invalid={errores.proveedor_id ? true : undefined}
+                            >
+                                <option value="">Sin proveedor</option>
+                                {opcionesProveedor.map(p => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.nombre}
+                                    </option>
+                                ))}
+                            </select>
+                            {errores.proveedor_id && <p className={errorStyle}>{errores.proveedor_id}</p>}
+                        </div>
+                    )}
 
                     <div>
                         <label htmlFor="renglon-remision" className={labelStyle}>
-                            Remisión
+                            No. Remisión
                         </label>
                         <input
                             id="renglon-remision"

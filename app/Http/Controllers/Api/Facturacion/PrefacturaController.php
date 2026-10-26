@@ -204,7 +204,7 @@ class PrefacturaController extends Controller
      * Las cantidades de estancia que corresponden a las fechas de esta prefactura.
      *
      * Es de SOLO LECTURA: no escribe ningún renglón. Existe para que el formulario de
-     * «Recalcular estancia» se abra ya relleno en lugar de pedir las cantidades a mano, que es
+     * «Estancia y ajustes» se abra ya relleno en lugar de pedir las cantidades a mano, que es
      * lo que hacía que el cálculo no pareciera automático.
      *
      * La regla NO se duplica en el navegador: está medida contra 2803 prefacturas históricas

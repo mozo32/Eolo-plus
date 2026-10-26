@@ -431,7 +431,7 @@ export interface PagoPrefactura {
     es_comision_amex: boolean;
 }
 
-/** Lo que recibe «Recalcular estancia». Los ajustes cobran la DIFERENCIA entre dos tramos, no el tramo entero. */
+/** Lo que recibe «Estancia y ajustes». Los ajustes cobran la DIFERENCIA entre dos tramos, no el tramo entero. */
 export type DatosEstancia = {
     pernoctas: number;
     transitos_2h: number;
@@ -449,7 +449,7 @@ export interface RenglonPrefactura {
     cantidad: number;
     margen: string;
     ajuste_precio: AjustePrecio;
-    /** Los cargos de estancia empiezan por `estancia_`: los reemplaza "Recalcular estancia". */
+    /** Los cargos de estancia empiezan por `estancia_`: los reemplaza "Estancia y ajustes". */
     concepto: string | null;
     remision: string | null;
     /** null si el servidor no pudo calcularlo (`importe_error` dice por qué). */

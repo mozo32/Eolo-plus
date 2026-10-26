@@ -39,7 +39,7 @@ class StoreRenglonRequest extends FormRequest
             ->exists();
 
         if ($esEstancia) {
-            $fallar('Los cargos de estancia no se agregan a mano: los pone «Recalcular estancia», porque su precio sale de la tarifa de la matrícula y no del catálogo.');
+            $fallar('Los cargos de estancia no se agregan a mano: los pone «Estancia y ajustes», porque su precio sale de la tarifa de la matrícula y no del catálogo.');
         }
     }
 

@@ -1268,10 +1268,13 @@ export default function EditorPrefactura({ id }: Props) {
                                         <Plus size={14} />
                                         AGREGAR SERVICIO
                                     </button>
+                                    {/* Se llamaba «RECALCULAR ESTANCIA»: describía lo que hace por dentro, no para
+                                        qué sirve, y quien buscaba cobrar más tiempo porque la aeronave se quedó
+                                        no lo abría nunca. Los dos ajustes de tramo viven aquí dentro. */}
                                     <button type="button" onClick={() => setModal('estancia')} disabled={ocupado} className={BOTON_SECUNDARIO}>
                                         <span className="flex items-center gap-2">
                                             <RefreshCw size={14} />
-                                            RECALCULAR ESTANCIA
+                                            ESTANCIA Y AJUSTES
                                         </span>
                                     </button>
                                     {prefactura.tipo_destino === 'nacional' && (
@@ -1336,7 +1339,7 @@ export default function EditorPrefactura({ id }: Props) {
                                                 <p className="text-[11px] font-black uppercase text-slate-800">
                                                     {renglon.nombre_servicio}
                                                     {esConceptoDeEstancia(renglon.concepto) && (
-                                                        <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-[9px] font-black text-sky-700" title="Cargo de estancia: lo reemplaza «Recalcular estancia».">
+                                                        <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-[9px] font-black text-sky-700" title="Cargo de estancia: lo reemplaza «Estancia y ajustes».">
                                                             ESTANCIA
                                                         </span>
                                                     )}

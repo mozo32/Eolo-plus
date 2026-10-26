@@ -274,7 +274,7 @@ export function formatearHora24(valor: string): string {
 }
 
 /**
- * Los cargos de estancia (pernocta y los dos tránsitos) los pone «Recalcular estancia» con la tarifa de la matrícula; el
+ * Los cargos de estancia (pernocta y los dos tránsitos) los pone «Estancia y ajustes» con la tarifa de la matrícula; el
  * precio del catálogo es relleno. Por eso no se agregan a mano y, en un renglón, se marcan: el recálculo los reemplaza.
  */
 export const esConceptoDeEstancia = (concepto: string | null | undefined): boolean => typeof concepto === 'string' && concepto.startsWith('estancia_');

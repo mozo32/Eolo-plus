@@ -15,7 +15,7 @@ use App\Models\FactServicio;
  *    el servicio aparece en el 53% de los folios puramente nacionales.
  *
  * 2. La estancia tenía que calcularse sola y no lo parecía, porque el cálculo se disparaba al
- *    guardar la cabecera y el operador usa el botón «Recalcular estancia», que seguía pidiendo
+ *    guardar la cabecera y el operador usa el botón «Estancia y ajustes», que seguía pidiendo
  *    las cantidades a mano. Ahora hay un endpoint de solo lectura que las propone desde las
  *    fechas, para que el formulario se abra relleno.
  */
