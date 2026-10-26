@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\FactPrefactura;
+use App\Models\FactPrefacturaRemisionExcluida;
 use App\Models\Remision;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -62,6 +63,7 @@ final class RemisionesFacturables
             ->whereBetween('fecha', [$inicio->toDateString(), $fin->toDateString()])
             ->where('status_prefactura', false)
             ->whereNotExists(self::yaCobradaEnUnaPrefacturaActiva(...))
+            ->whereNotExists(fn (QueryBuilder $consulta) => self::excluidaAMano($consulta, $prefactura->id))
             ->orderBy('fecha')
             ->orderBy('hora_inicial')
             ->orderBy('id')
@@ -143,6 +145,48 @@ final class RemisionesFacturables
     {
         self::renglonesEnPrefacturaActiva($consulta->select(DB::raw(1)))
             ->whereColumn('r.remision_combustible_id', 'remisiones.id');
+    }
+
+    /** Las que el operador quitó A MANO de ESTA prefactura. Ver `excluir()`. */
+    private static function excluidaAMano(QueryBuilder $consulta, int $prefacturaId): void
+    {
+        $consulta->select(DB::raw(1))
+            ->from('fact_prefactura_remisiones_excluidas as x')
+            ->where('x.prefactura_id', $prefacturaId)
+            ->whereColumn('x.remision_id', 'remisiones.id');
+    }
+
+    /**
+     * Apunta que el operador quitó esta remisión de esta prefactura a propósito.
+     *
+     * Se llama al borrar un renglón que lleva `remision_combustible_id`. Sin esto, quitar el
+     * renglón libera la remisión y la siguiente carga de la pantalla —que sincroniza siempre,
+     * y eso es deliberado— la vuelve a meter con su importe.
+     *
+     * Idempotente: quitar y volver a quitar es la misma decisión, y la tabla tiene un único
+     * por la pareja.
+     */
+    public static function excluir(FactPrefactura $prefactura, int $remisionId, int $userId): void
+    {
+        FactPrefacturaRemisionExcluida::firstOrCreate(
+            ['prefactura_id' => $prefactura->id, 'remision_id' => $remisionId],
+            ['user_id' => $userId],
+        );
+    }
+
+    /**
+     * Borra la exclusión: volver a poner la remisión A MANO en esa misma prefactura revoca la
+     * decisión anterior.
+     *
+     * Si no, la remisión quedaría marcada como «esta no entra» mientras su renglón está puesto,
+     * y la contradicción se vería en cuanto el renglón se tocara por otra vía.
+     */
+    public static function revocarExclusion(FactPrefactura $prefactura, int $remisionId): void
+    {
+        FactPrefacturaRemisionExcluida::query()
+            ->where('prefactura_id', $prefactura->id)
+            ->where('remision_id', $remisionId)
+            ->delete();
     }
 
     /**

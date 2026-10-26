@@ -754,3 +754,133 @@ test('el buscador SIGUE ofreciendo las remisiones de otra matricula: atar el alt
 
     expect(collect($respuesta->json('remisiones'))->pluck('id')->all())->toContain($ajena->id);
 });
+
+// ---------------------------------------------------------------------------
+// I-1: lo que el operador quita a proposito no vuelve a entrar solo
+// ---------------------------------------------------------------------------
+
+test('IMPORTANTE I-1: un renglon de combustible que el operador quita NO vuelve a entrar solo', function () {
+    // El operador ve que ese combustible no va en este documento (lo paga el operador
+    // directamente, o Rampa lo capturo en la matricula equivocada) y quita el renglon. Antes
+    // de este arreglo bastaba con recargar la pantalla para que volviera a entrar, con su
+    // importe, y el unico recurso era marcarlo cortesia: seguia saliendo impreso a $0.00.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    remisionDe($prefactura, '2026-10-20', '10:00:00');
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
+        ->assertOk()->assertJsonPath('agregados', 1);
+
+    $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
+    $this->deleteJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones/{$renglon->id}")->assertOk();
+
+    // Recargar la pantalla sincroniza otra vez. La decision del operador se respeta.
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
+        ->assertOk()->assertJsonPath('agregados', 0);
+
+    expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
+});
+
+test('el alta A MANO de la misma remision revoca la exclusion', function () {
+    // Volver a ponerla a proposito es deshacer la decision anterior. Si la marca sobreviviera,
+    // la remision quedaria apuntada como «esta no entra» con su renglon puesto.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00');
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")->assertOk();
+    $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
+    $this->deleteJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones/{$renglon->id}")->assertOk();
+
+    expect(App\Models\FactPrefacturaRemisionExcluida::where('prefactura_id', $prefactura->id)
+        ->where('remision_id', $remision->id)->exists())->toBeTrue();
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'remision_combustible_id' => $remision->id,
+    ])->assertCreated();
+
+    expect(App\Models\FactPrefacturaRemisionExcluida::where('prefactura_id', $prefactura->id)
+        ->where('remision_id', $remision->id)->exists())->toBeFalse();
+});
+
+test('quitar dos veces la misma remision no revienta por el unico de la tabla', function () {
+    // Se excluye, se vuelve a dar de alta a mano (revoca) y se vuelve a quitar: la segunda
+    // exclusion es la misma decision y la tabla tiene un unico por la pareja.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00');
+
+    foreach ([1, 2] as $vuelta) {
+        $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+            'servicio_id' => $servicio->id,
+            'cantidad' => 1,
+            'remision_combustible_id' => $remision->id,
+        ])->assertCreated();
+
+        $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
+        $this->deleteJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones/{$renglon->id}")->assertOk();
+    }
+
+    expect(App\Models\FactPrefacturaRemisionExcluida::where('prefactura_id', $prefactura->id)
+        ->where('remision_id', $remision->id)->count())->toBe(1);
+});
+
+test('la exclusion es de ESTA prefactura: otro documento de la misma matricula la sigue trayendo', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00');
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")->assertOk();
+    $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
+    $this->deleteJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones/{$renglon->id}")->assertOk();
+
+    // Otro borrador de LA MISMA matricula y la misma ventana.
+    $otra = FactPrefactura::create([
+        'aeronave_id' => $prefactura->aeronave_id,
+        'estado' => FactPrefactura::ESTADO_BORRADOR,
+        'tipo_destino' => FactPrefactura::DESTINO_NACIONAL,
+        'llegada_at' => '2026-10-20 08:00:00',
+        'salida_at' => '2026-10-20 18:00:00',
+        'user_id' => $prefactura->user_id,
+    ]);
+
+    $this->postJson("/api/facturacion/prefacturas/{$otra->id}/remisiones/sincronizar")
+        ->assertOk()->assertJsonPath('agregados', 1);
+
+    expect(RemisionesFacturables::candidatas($prefactura->fresh())->pluck('id')->all())->toBe([]);
+});
+
+test('el buscador manual SIGUE ofreciendo una remision excluida: excluirla del automatico no es prohibirla', function () {
+    // El operador puede haberse equivocado al quitarla, y volver a ponerla es su derecho.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00');
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")->assertOk();
+    $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
+    $this->deleteJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones/{$renglon->id}")->assertOk();
+
+    $respuesta = $this->getJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones")->assertOk();
+    $fila = collect($respuesta->json('remisiones'))->firstWhere('id', $remision->id);
+
+    expect($fila)->not->toBeNull()
+        ->and($fila['en_este_documento'])->toBeFalse()
+        ->and($fila['tomada_por'])->toBeNull();
+});
+
+test('quitar un renglon SIN remision no apunta ninguna exclusion', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $renglon = renglonDe($prefactura, 500.0, 1);
+
+    $this->deleteJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones/{$renglon->id}")->assertOk();
+
+    expect(App\Models\FactPrefacturaRemisionExcluida::count())->toBe(0);
+});

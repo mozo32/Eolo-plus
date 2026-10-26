@@ -103,6 +103,12 @@ class PrefacturaRenglonController extends Controller
                 'orden' => (int) $actual->renglones()->reorder()->max('orden') + 1,
             ]);
 
+            // Ponerla a propósito revoca el «esta no entra» de una baja anterior: si no, la
+            // remisión quedaría marcada como excluida con su renglón puesto.
+            if ($remision !== null) {
+                RemisionesFacturables::revocarExclusion($actual, $remision->id);
+            }
+
             Bitacora::log(
                 modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
                 accion: Bitacora::ACCION_CREAR,
@@ -310,15 +316,25 @@ class PrefacturaRenglonController extends Controller
             // Borrado por modelo: dispara `deleting` y con él la guarda de cerrada.
             $fila = $actual->renglones()->whereKey($renglon)->firstOrFail();
             $nombre = $fila->nombre_servicio;
+            $remisionId = $fila->remision_combustible_id;
             $fila->delete();
+
+            // Quitar el renglón LIBERA la remisión, y la pantalla sincroniza en cada carga: sin
+            // apuntar la decisión, lo que el operador quita a propósito vuelve a entrar solo.
+            // Se revoca dándola de alta a mano otra vez en esta misma prefactura.
+            if ($remisionId !== null) {
+                RemisionesFacturables::excluir($actual, $remisionId, $request->user()->id);
+            }
 
             Bitacora::log(
                 modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
                 accion: Bitacora::ACCION_ELIMINAR,
-                descripcion: "Se quitó el servicio {$nombre} de la prefactura {$actual->id}.",
+                descripcion: "Se quitó el servicio {$nombre} de la prefactura {$actual->id}."
+                    .($remisionId === null ? '' : ' Esa remisión ya no se traerá sola a este documento.'),
                 usuarioId: $request->user()->id,
                 registroId: $actual->id,
-                datosAnteriores: ['renglon_id' => $renglon, 'nombre_servicio' => $nombre],
+                datosAnteriores: ['renglon_id' => $renglon, 'nombre_servicio' => $nombre]
+                    + ($remisionId === null ? [] : ['remision_combustible_id' => $remisionId]),
             );
 
             return null;
