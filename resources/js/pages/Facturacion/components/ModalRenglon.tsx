@@ -1,14 +1,48 @@
-import { ErrorApi, FILTROS_AERONAVES_VACIOS, apiProveedores, apiServicios, obtenerAeronavesFacturablesApi, type AeronaveFacturable, type Proveedor, type Servicio } from '@/stores/apiFacturacionCatalogos';
+import {
+    ErrorApi,
+    FILTROS_AERONAVES_VACIOS,
+    YA_EN_ESTE_DOCUMENTO,
+    apiPrefacturas,
+    apiProveedores,
+    apiServicios,
+    obtenerAeronavesFacturablesApi,
+    type AeronaveFacturable,
+    type Proveedor,
+    type RemisionFacturable,
+    type Servicio,
+} from '@/stores/apiFacturacionCatalogos';
 import { Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO, campoConError, errorStyle, labelStyle, sectionTitle } from './estilos';
-import { esConceptoDeEstancia, formatearMonto, importeVistaPrevia } from './formato';
+import { esConceptoDeEstancia, fechaMexico, formatearMonto, importeVistaPrevia } from './formato';
 import ModalBase from './ModalBase';
 
 const CANTIDAD_MAX = 9999;
 const REMISION_MAX = 255;
 const ESPERA_AERONAVE_MS = 300;
 const MAXIMO_AERONAVES = 20;
+const ESPERA_REMISION_MS = 300;
+
+/** La remisión que ya está en ESTA prefactura no se puede elegir otra vez: el servidor lo rechaza con 422. */
+const yaEstaEnEsteDocumento = (remision: RemisionFacturable): boolean => remision.tomada_por === YA_EN_ESTE_DOCUMENTO;
+
+/** Los litros de una remisión llegan como texto ("2650.00"): "2,650". */
+const formatearLitros = (litros: string): string => Number(litros).toLocaleString('es-MX', { maximumFractionDigits: 2 });
+
+/** La opción del menú: «EOLO-9397 — 20/10/2026 10:00 — 2,650 L a $25.99», más lo que impide o advierte. */
+function etiquetaDeRemision(remision: RemisionFacturable): string {
+    const hora = remision.hora_inicial === null ? '' : ` ${remision.hora_inicial.slice(0, 5)}`;
+    const precio = remision.precio === null ? '' : ` a ${formatearMonto(remision.precio)}`;
+    let etiqueta = `${remision.folio} — ${fechaMexico(remision.fecha)}${hora} — ${formatearLitros(remision.total_litros)} L${precio}`;
+
+    // «ya está en este documento» es la frase entera, no un folio: no lleva «ya facturada en» delante.
+    if (yaEstaEnEsteDocumento(remision)) etiqueta += ` · ${YA_EN_ESTE_DOCUMENTO}`;
+    else if (remision.tomada_por !== null) etiqueta += ` · ya facturada en ${remision.tomada_por}`;
+
+    if (remision.sin_precio) etiqueta += ' · sin precio';
+
+    return etiqueta;
+}
 
 /** Los tres tramos SI se pueden agregar, a nombre de otra aeronave; los dos ajustes no. */
 const CONCEPTOS_DE_TRANSITO = ['estancia_transito_2h', 'estancia_transito_12h', 'estancia_pernocta'];
@@ -44,15 +78,21 @@ export interface DatosRenglon {
     remision: string | null;
     /** Solo en los tres tramos de tránsito: la aeronave cuya tarifa se cobra. */
     aeronave_id: number | null;
+    /** Solo en el combustible: la remisión de la que salen los litros y el precio. null cobra a mano, al precio del catálogo. */
+    remision_combustible_id: number | null;
 }
 
 interface Props {
+    /** La prefactura que se edita: el buscador de remisiones marca cuáles ya están en ella. */
+    prefacturaId: number;
+    /** La matrícula de la prefactura: con ella arranca el buscador de remisiones. */
+    matricula: string | null;
     onCerrar: () => void;
     /** Agrega el renglón. Debe lanzar el ErrorApi si el servidor rechaza; el modal muestra los errores por campo. */
     onGuardar: (datos: DatosRenglon) => Promise<void>;
 }
 
-type Campo = 'servicio_id' | 'cantidad' | 'proveedor_id' | 'remision' | 'aeronave_id';
+type Campo = 'servicio_id' | 'cantidad' | 'proveedor_id' | 'remision' | 'aeronave_id' | 'remision_combustible_id';
 
 /**
  * Agregar un servicio a una prefactura: servicio (solo activos, sin los de
@@ -63,7 +103,7 @@ type Campo = 'servicio_id' | 'cantidad' | 'proveedor_id' | 'remision' | 'aeronav
  * cantidad, y la cifra que cuenta (la del renglón y la de los totales) la
  * calcula el servidor al guardar.
  */
-export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
+export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuardar }: Props) {
     const [servicios, setServicios] = useState<Servicio[]>([]);
     const [proveedores, setProveedores] = useState<Proveedor[]>([]);
     const [cargando, setCargando] = useState(true);
@@ -80,6 +120,12 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
     const [aeronaveElegida, setAeronaveElegida] = useState<AeronaveFacturable | null>(null);
     const [errorAeronave, setErrorAeronave] = useState<string | null>(null);
     const [buscandoAeronave, setBuscandoAeronave] = useState(false);
+
+    const [busquedaRemision, setBusquedaRemision] = useState(matricula ?? '');
+    const [remisiones, setRemisiones] = useState<RemisionFacturable[]>([]);
+    const [remisionElegida, setRemisionElegida] = useState<RemisionFacturable | null>(null);
+    const [errorRemision, setErrorRemision] = useState<string | null>(null);
+    const [buscandoRemision, setBuscandoRemision] = useState(false);
 
     const [errores, setErrores] = useState<Partial<Record<Campo, string>>>({});
     const [mensajeGeneral, setMensajeGeneral] = useState<string | null>(null);
@@ -136,6 +182,7 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
     const cantidadNumero = /^\d+$/.test(cantidad.trim()) ? Number(cantidad.trim()) : null;
 
     const pideMatricula = esTramoDeTransito(servicio?.concepto);
+    const esCombustible = servicio?.concepto === 'combustible';
 
     useEffect(() => {
         if (! pideMatricula) return;
@@ -165,6 +212,34 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
         };
     }, [busquedaAeronave, pideMatricula]);
 
+    useEffect(() => {
+        if (! esCombustible) return;
+
+        let vigente = true;
+
+        const temporizador = setTimeout(async () => {
+            setBuscandoRemision(true);
+
+            try {
+                const respuesta = await apiPrefacturas.remisionesDe(prefacturaId, busquedaRemision);
+                if (!vigente) return;
+                setRemisiones(respuesta.remisiones);
+                setErrorRemision(null);
+            } catch (e) {
+                if (!vigente) return;
+                setRemisiones([]);
+                setErrorRemision(e instanceof Error ? e.message : 'No se pudieron cargar las remisiones.');
+            } finally {
+                if (vigente) setBuscandoRemision(false);
+            }
+        }, busquedaRemision === '' ? 0 : ESPERA_REMISION_MS);
+
+        return () => {
+            vigente = false;
+            clearTimeout(temporizador);
+        };
+    }, [busquedaRemision, esCombustible, prefacturaId]);
+
     /** La tarifa EFECTIVA del tramo —propia o heredada de la categoría—, ya resuelta por el servidor. */
     const tarifaDelTramo = (aeronave: AeronaveFacturable, concepto: string | null | undefined): string | null =>
         concepto === 'estancia_transito_2h' ? aeronave.tarifa_transito_2h_efectiva
@@ -174,14 +249,21 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
 
     // En un tránsito ajeno el precio NO es el del catálogo —ahí vale 99.00, que es relleno— sino
     // la tarifa de la aeronave elegida. Es el mismo precio que el servidor va a cobrar.
+    // Con una remisión elegida pasa lo mismo: el precio y los litros son los de la remisión, no los del catálogo ni la cantidad tecleada.
+    const litrosDeLaRemision = remisionElegida === null ? null : Math.trunc(Number(remisionElegida.total_litros));
     const precioEfectivo = pideMatricula
         ? (aeronaveElegida === null ? null : tarifaDelTramo(aeronaveElegida, servicio?.concepto))
-        : (servicio?.precio_unitario ?? null);
+        : esCombustible && remisionElegida !== null
+          ? remisionElegida.precio
+          : (servicio?.precio_unitario ?? null);
 
     // Vista previa: un ajuste desconocido lanza (a propósito: cobrar sin ajuste en silencio sería peor), y aquí se dice.
     let vistaPrevia: { importe: number } | { problema: string } | null = null;
     if (servicio && pideMatricula && aeronaveElegida !== null && precioEfectivo === null) {
         vistaPrevia = { problema: 'Esta aeronave no tiene tarifa para ese tramo, ni propia ni por su categoría: no hay precio que cobrar.' };
+    } else if (servicio && esCombustible && remisionElegida !== null) {
+        // El servidor cobra los litros enteros a su precio, sin margen ni ajuste: congela lo que dice la remisión.
+        vistaPrevia = precioEfectivo !== null && litrosDeLaRemision !== null ? { importe: importeVistaPrevia(Number(precioEfectivo), 0, 'ninguno', litrosDeLaRemision) } : null;
     } else if (servicio && precioEfectivo !== null && cantidadNumero !== null && cantidadNumero >= 1 && cantidadNumero <= CANTIDAD_MAX) {
         try {
             // El ajeno no lleva margen ni ajuste del catálogo: su precio es la tarifa de la aeronave, y el servidor lo cobra así.
@@ -197,7 +279,16 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
 
     const limpiarError = (campo: Campo) => setErrores(previos => (previos[campo] ? { ...previos, [campo]: undefined } : previos));
 
-    const tieneCambios = categoriaId !== '' || servicioId !== '' || cantidad !== '1' || proveedorId !== '' || remision !== '' || aeronaveElegida !== null;
+    /** Al cambiar de servicio la remisión elegida deja de aplicar; el buscador vuelve a la matrícula de la prefactura. */
+    const limpiarRemision = () => {
+        setRemisionElegida(null);
+        setBusquedaRemision(matricula ?? '');
+        setRemisiones([]);
+        setErrorRemision(null);
+        limpiarError('remision_combustible_id');
+    };
+
+    const tieneCambios = categoriaId !== '' || servicioId !== '' || cantidad !== '1' || proveedorId !== '' || remision !== '' || aeronaveElegida !== null || remisionElegida !== null;
 
     const validar = (): Partial<Record<Campo, string>> => {
         const nuevos: Partial<Record<Campo, string>> = {};
@@ -209,8 +300,11 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
 
         if (pideMatricula && aeronaveElegida === null) nuevos.aeronave_id = 'Elige la aeronave cuyo tránsito se va a cobrar.';
 
-        if (cantidadNumero === null || cantidadNumero < 1) nuevos.cantidad = 'La cantidad debe ser un número entero de al menos 1.';
-        else if (cantidadNumero > CANTIDAD_MAX) nuevos.cantidad = 'La cantidad no puede pasar de 9,999.';
+        // Con una remisión elegida la cantidad no se usa (los litros los pone la remisión), así que no se valida.
+        if (remisionElegida === null) {
+            if (cantidadNumero === null || cantidadNumero < 1) nuevos.cantidad = 'La cantidad debe ser un número entero de al menos 1.';
+            else if (cantidadNumero > CANTIDAD_MAX) nuevos.cantidad = 'La cantidad no puede pasar de 9,999.';
+        }
 
         if (remision.trim().length > REMISION_MAX) nuevos.remision = `La remisión no puede pasar de ${REMISION_MAX} caracteres.`;
 
@@ -224,17 +318,20 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
         const nuevos = validar();
         setErrores(nuevos);
         setMensajeGeneral(null);
-        if (Object.keys(nuevos).length > 0 || cantidadNumero === null) return;
+        // Con una remisión el servidor ignora la cantidad y toma los litros de ella, pero la exige entera y de al menos 1: va el mínimo.
+        const cantidadAEnviar = remisionElegida === null ? cantidadNumero : 1;
+        if (Object.keys(nuevos).length > 0 || cantidadAEnviar === null) return;
 
         setGuardando(true);
 
         try {
             await onGuardar({
                 servicio_id: Number(servicioId),
-                cantidad: cantidadNumero,
+                cantidad: cantidadAEnviar,
                 proveedor_id: proveedorId === '' ? null : Number(proveedorId),
                 remision: remision.trim() === '' ? null : remision.trim(),
                 aeronave_id: pideMatricula ? (aeronaveElegida?.aeronave_id ?? null) : null,
+                remision_combustible_id: esCombustible ? (remisionElegida?.id ?? null) : null,
             });
         } catch (error) {
             if (error instanceof ErrorApi && Object.keys(error.errors).length > 0) {
@@ -252,6 +349,12 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
     const opcionesAeronave = [
         ...(aeronaveElegida !== null && ! aeronaves.some(a => a.aeronave_id === aeronaveElegida.aeronave_id) ? [aeronaveElegida] : []),
         ...aeronaves,
+    ];
+
+    // Igual que con las aeronaves: la elegida va primero aunque esta búsqueda no la traiga.
+    const opcionesRemision = [
+        ...(remisionElegida !== null && ! remisiones.some(r => r.id === remisionElegida.id) ? [remisionElegida] : []),
+        ...remisiones,
     ];
 
     return (
@@ -275,6 +378,7 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
                                 setServicioId('');
                                 setAeronaveElegida(null);
                                 setBusquedaAeronave('');
+                                limpiarRemision();
                                 limpiarError('servicio_id');
                                 limpiarError('aeronave_id');
                             }}
@@ -301,6 +405,7 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
                                 setServicioId(e.target.value);
                                 setAeronaveElegida(null);
                                 setBusquedaAeronave('');
+                                limpiarRemision();
                                 limpiarError('servicio_id');
                                 limpiarError('aeronave_id');
                             }}
@@ -366,6 +471,48 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
                         </div>
                     )}
 
+                    {esCombustible && (
+                        <div>
+                            <label htmlFor="renglon-remision-combustible" className={labelStyle}>
+                                Remisión de combustible
+                            </label>
+                            <p className="mb-1 text-[10px] font-bold text-slate-400 italic">Opcional. Con una remisión, los litros y el precio salen de ella; sin ella, se cobra a mano al precio del catálogo.</p>
+                            <input
+                                type="text"
+                                value={busquedaRemision}
+                                onChange={e => setBusquedaRemision(e.target.value)}
+                                placeholder="Buscar matrícula…"
+                                autoComplete="off"
+                                className="mb-2 w-full text-[11px] border border-slate-200 p-2 rounded bg-white outline-none focus:border-blue-400"
+                                aria-label="Buscar remisiones por matrícula"
+                            />
+                            <select
+                                id="renglon-remision-combustible"
+                                value={remisionElegida === null ? '' : String(remisionElegida.id)}
+                                onChange={e => {
+                                    setRemisionElegida(opcionesRemision.find(r => String(r.id) === e.target.value) ?? null);
+                                    limpiarError('remision_combustible_id');
+                                    limpiarError('cantidad');
+                                }}
+                                className={campoConError(!!errores.remision_combustible_id)}
+                                aria-invalid={errores.remision_combustible_id ? true : undefined}
+                            >
+                                <option value="">Sin remisión (cobrar a mano)</option>
+                                {opcionesRemision.map(r => (
+                                    <option key={r.id} value={r.id} disabled={r.sin_precio || yaEstaEnEsteDocumento(r)}>
+                                        {etiquetaDeRemision(r)}
+                                    </option>
+                                ))}
+                            </select>
+                            {buscandoRemision && <p className="mt-1 text-[10px] font-bold text-slate-400 italic">Buscando…</p>}
+                            {errorRemision && <p className={errorStyle}>{errorRemision}</p>}
+                            {!buscandoRemision && !errorRemision && busquedaRemision !== '' && remisiones.length === 0 && (
+                                <p className="mt-1 text-[10px] font-bold text-slate-400 italic">Ninguna remisión coincide.</p>
+                            )}
+                            {errores.remision_combustible_id && <p className={errorStyle}>{errores.remision_combustible_id}</p>}
+                        </div>
+                    )}
+
                     <div>
                         <label htmlFor="renglon-cantidad" className={labelStyle}>
                             Cantidad <span className="text-red-500">*</span>
@@ -375,7 +522,8 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
                             type="text"
                             inputMode="numeric"
                             autoComplete="off"
-                            value={cantidad}
+                            value={litrosDeLaRemision === null ? cantidad : String(litrosDeLaRemision)}
+                            disabled={remisionElegida !== null}
                             onChange={e => {
                                 setCantidad(e.target.value);
                                 limpiarError('cantidad');
@@ -383,6 +531,7 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
                             className={campoConError(!!errores.cantidad)}
                             aria-invalid={errores.cantidad ? true : undefined}
                         />
+                        {remisionElegida !== null && <p className="mt-1 text-[10px] font-bold text-slate-400 italic">Los litros los pone la remisión.</p>}
                         {errores.cantidad && <p className={errorStyle}>{errores.cantidad}</p>}
                     </div>
 

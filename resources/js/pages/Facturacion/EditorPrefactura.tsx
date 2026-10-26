@@ -1,6 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import { facturacionPrefacturas } from '@/routes';
-import { ErrorApi, apiPrefacturas, mensajeDeError, urlCotizacionPrefactura, urlDocumentoPrefactura, urlVersionPrefactura, type DiscrepanciaSello, type Prefactura, type RenglonPrefactura, type VersionPrefactura } from '@/stores/apiFacturacionCatalogos';
+import { ErrorApi, apiPrefacturas, mensajeDeError, urlCotizacionPrefactura, urlDocumentoPrefactura, urlVersionPrefactura, type DiscrepanciaSello, type Prefactura, type RenglonPrefactura, type ResultadoSincronizar, type VersionPrefactura } from '@/stores/apiFacturacionCatalogos';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
 import { ArrowLeft, Ban, FileText, Gift, Globe, Group, History, Lock, LockOpen, PlaneLanding, Plus, Printer, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, Ungroup, X } from 'lucide-react';
@@ -303,6 +303,8 @@ export default function EditorPrefactura({ id }: Props) {
     const [modal, setModal] = useState<'renglon' | 'estancia' | 'reabrir' | null>(null);
     const [accionando, setAccionando] = useState<string | null>(null);
     const [avisoCargos, setAvisoCargos] = useState<string | null>(null);
+    // Las remisiones de combustible cobradas aquí cuya carga ya no cae en la estancia. Solo avisa: el renglón no se toca.
+    const [remisionesFuera, setRemisionesFuera] = useState<ResultadoSincronizar['fuera_de_ventana']>([]);
 
     const peticionRef = useRef(0);
     const prefacturaRef = useRef<Prefactura | null>(null);
@@ -346,6 +348,38 @@ export default function EditorPrefactura({ id }: Props) {
     useEffect(() => {
         void cargar();
     }, [cargar]);
+
+    /**
+     * Trae las remisiones de combustible de la estancia (el servidor es idempotente: llamarla de más no duplica nada) y recarga los
+     * renglones. Un fallo aquí no es un fallo de la pantalla: se avisa y lo demás sigue como estaba.
+     */
+    const sincronizarRemisiones = useCallback(async () => {
+        try {
+            const resultado = await apiPrefacturas.sincronizarRemisiones(id);
+            setRemisionesFuera(resultado.fuera_de_ventana);
+            await cargar();
+
+            if (resultado.agregados > 0) {
+                toast.fire({ icon: 'success', titleText: resultado.agregados === 1 ? 'Se trajo 1 remisión de combustible.' : `Se trajeron ${resultado.agregados} remisiones de combustible.` });
+            }
+        } catch (e) {
+            toast.fire({ icon: 'warning', titleText: `No se pudieron traer las remisiones de combustible. ${mensajeDeError(e)}`, timer: 8000 });
+            // Un 409 dice que la ficha en pantalla ya no es la del servidor (se cerró o se descartó): se refresca.
+            if (e instanceof ErrorApi && e.status === 409) await cargar();
+        }
+    }, [id, cargar]);
+
+    // Una sola vez por prefactura y solo si se puede editar: en una cerrada o descartada el servidor ni siquiera la admite.
+    const sincronizadaRef = useRef<number | null>(null);
+    const prefacturaId = prefactura?.id ?? null;
+    const sePuedeSincronizar = prefactura !== null && prefactura.estado !== 'cerrada' && prefactura.status !== 'N';
+
+    useEffect(() => {
+        if (prefacturaId === null || !sePuedeSincronizar || sincronizadaRef.current === prefacturaId) return;
+
+        sincronizadaRef.current = prefacturaId;
+        void sincronizarRemisiones();
+    }, [prefacturaId, sePuedeSincronizar, sincronizarRemisiones]);
 
     const breadcrumbs: BreadcrumbItem[] = [{ title: 'Prefacturas', href: facturacionPrefacturas().url }, { title: prefactura ? (prefactura.folio === null ? `Borrador ${prefactura.matricula ?? ''}`.trim() : `Folio ${prefactura.folio}`) : 'Prefactura' }];
 
@@ -517,6 +551,7 @@ export default function EditorPrefactura({ id }: Props) {
 
         try {
             // La matrícula y el tipo de destino no se editan aquí (el destino internacional lo marca su botón), pero el servidor los exige.
+            const salidaAnterior = prefactura.salida_at;
             const { prefactura: guardada, estancia_aviso: avisoDeEstancia } = await apiPrefacturas.editar(prefactura.id, {
                 aeronave_id: prefactura.aeronave_id,
                 tipo_destino: prefactura.tipo_destino,
@@ -530,10 +565,14 @@ export default function EditorPrefactura({ id }: Props) {
             aplicar(guardada);
             setForm(formularioDe(guardada));
 
+            // La ventana de la estancia cambió con la salida: pueden entrar cargas nuevas, o quedar fuera alguna ya cobrada.
+            const cambioLaSalida = guardada.salida_at !== salidaAnterior;
+
             if (avisoDeEstancia !== null) {
                 // Al guardar la salida el servidor recalcula la estancia y puede dejarla sin cobrar (Guarda, sin ficha, tarifa nula) o perder una
                 // cortesía. Un toast de «guardado» encima sería el cobro silencioso: se queda como aviso en la tabla y se explica en un diálogo.
                 setAvisoCargos(avisoDeEstancia);
+                if (cambioLaSalida) await sincronizarRemisiones();
                 await Swal.fire({
                     icon: 'warning',
                     titleText: 'Encabezado guardado, con un aviso de estancia',
@@ -545,6 +584,8 @@ export default function EditorPrefactura({ id }: Props) {
             }
 
             toast.fire({ icon: 'success', titleText: 'Encabezado guardado.' });
+            // Después del aviso de guardado: si trae remisiones, su aviso es el que queda a la vista.
+            if (cambioLaSalida) await sincronizarRemisiones();
         } catch (e) {
             const delCampo = e instanceof ErrorApi && e.codigo === null ? Object.entries(e.errors).filter(([campo]) => CAMPOS_DEL_ENCABEZADO.includes(campo as CampoEncabezado)) : [];
 
@@ -672,6 +713,8 @@ export default function EditorPrefactura({ id }: Props) {
             if (!confirmado) return;
 
             await apiPrefacturas.quitarRenglon(prefactura.id, renglonId);
+            // Quitado el renglón, su folio ya no está «fuera de la estancia»: el aviso no puede seguir nombrándolo.
+            setRemisionesFuera(previas => previas.filter(r => r.renglon_id !== renglonId));
             toast.fire({ icon: 'success', titleText: 'Servicio quitado.' });
             await cargar();
         });
@@ -1303,6 +1346,13 @@ export default function EditorPrefactura({ id }: Props) {
                             </p>
                         )}
 
+                        {remisionesFuera.length > 0 && (
+                            <div role="alert" className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-6 py-3 text-[12px] font-bold text-amber-800">
+                                <TriangleAlert size={16} className="mt-0.5 shrink-0" />
+                                <span>Estas remisiones quedaron fuera de la estancia: {remisionesFuera.map(r => r.folio).join(', ')}. Revísalas y quítalas si no corresponden.</span>
+                            </div>
+                        )}
+
                         {avisoCargos && (
                             <div role="status" className="flex items-start justify-between gap-3 border-b border-sky-100 bg-sky-50 px-6 py-3 text-[12px] font-bold text-sky-800">
                                 <span>{avisoCargos}</span>
@@ -1550,7 +1600,7 @@ export default function EditorPrefactura({ id }: Props) {
                 </div>
             </div>
 
-            {modal === 'renglon' && <ModalRenglon onCerrar={() => setModal(null)} onGuardar={agregarRenglon} />}
+            {modal === 'renglon' && <ModalRenglon prefacturaId={prefactura.id} matricula={prefactura.matricula} onCerrar={() => setModal(null)} onGuardar={agregarRenglon} />}
             {modal === 'estancia' && <ModalEstancia prefacturaId={prefactura.id} onCerrar={() => setModal(null)} onGuardar={recalcularEstancia} />}
             {modal === 'reabrir' && <ModalReabrir folio={prefactura.folio} onCerrar={() => setModal(null)} onGuardar={reabrirPrefactura} />}
         </AppLayout>

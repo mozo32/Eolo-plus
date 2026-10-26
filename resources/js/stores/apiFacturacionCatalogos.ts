@@ -420,6 +420,27 @@ async function pedir<T>(url: string, { method, body }: OpcionesPedir = {}): Prom
     return leer<T>(await fetch(url, method ? escritura(method, body) : LECTURA));
 }
 
+/** Lo que dice `tomada_por` cuando la remisión ya tiene renglón en ESTA prefactura. Es la constante `RemisionesFacturables::YA_EN_ESTE_DOCUMENTO` del servidor: si allá cambia, cambia aquí. */
+export const YA_EN_ESTE_DOCUMENTO = 'ya está en este documento';
+
+/** Una remisión de combustible que se puede cobrar en la prefactura. `total_litros` y `precio` llegan como texto ("2650.00", "25.9940"). */
+export type RemisionFacturable = {
+    id: number;
+    folio: string;
+    fecha: string;
+    hora_inicial: string | null;
+    total_litros: string;
+    precio: string | null;
+    /** El documento que ya la tiene, o null si está libre. Si ya está en ESTA prefactura trae el texto de `YA_EN_ESTE_DOCUMENTO`. */
+    tomada_por: string | null;
+    sin_precio: boolean;
+};
+
+export type ResultadoSincronizar = {
+    agregados: number;
+    fuera_de_ventana: { renglon_id: number; folio: string }[];
+};
+
 /** Un pago de la prefactura. `concepto` es null salvo en Efectivo, Amex, AvCard y Saldo a favor. */
 export interface PagoPrefactura {
     id: number;
@@ -608,6 +629,10 @@ export const apiPrefacturas = {
     cortesia: (id: number, renglon: number, esCortesia: boolean) =>
         pedir<{ message: string; prefactura: Prefactura }>(`${BASE}/prefacturas/${id}/renglones/${renglon}/cortesia`, { method: 'PATCH', body: { es_cortesia: esCortesia } }),
     agregarRenglon: (id: number, datos: Record<string, unknown>) => pedir<{ renglon_id: number }>(`${BASE}/prefacturas/${id}/renglones`, { method: 'POST', body: datos }),
+    /** Trae las remisiones de combustible de la estancia y las agrega como renglones. Idempotente: llamarlo en cada carga no duplica nada. */
+    sincronizarRemisiones: (id: number) => pedir<ResultadoSincronizar>(`${BASE}/prefacturas/${id}/remisiones/sincronizar`, { method: 'POST' }),
+    /** Las remisiones de una matrícula, para elegir una a mano. `q` es la matrícula a buscar. */
+    remisionesDe: (id: number, q: string) => pedir<{ remisiones: RemisionFacturable[] }>(`${BASE}/prefacturas/${id}/remisiones?q=${encodeURIComponent(q)}`),
     quitarRenglon: (id: number, renglon: number) => pedir<{ message: string }>(`${BASE}/prefacturas/${id}/renglones/${renglon}`, { method: 'DELETE' }),
     /** Los dos ajustes son opcionales: ausentes cuentan 0. */
     estancia: (id: number, datos: DatosEstancia) => pedir<{ renglones: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/estancia`, { method: 'PATCH', body: datos }),
