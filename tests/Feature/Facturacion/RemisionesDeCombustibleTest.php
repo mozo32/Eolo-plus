@@ -276,10 +276,14 @@ test('el buscador marca la que ya esta en ESTA prefactura como tal, no como libr
     renglonDeRemision($prefactura, $remision);
     $matricula = $prefactura->aeronave->matricula;
 
-    expect(RemisionesFacturables::paraElegir($matricula)->first()->tomada_por)
-        ->toBe("borrador #{$prefactura->id}")
-        ->and(RemisionesFacturables::paraElegir($matricula, $prefactura->id)->first()->tomada_por)
-        ->toBe(RemisionesFacturables::YA_EN_ESTE_DOCUMENTO);
+    $deOtro = RemisionesFacturables::paraElegir($matricula)->first();
+    $enEste = RemisionesFacturables::paraElegir($matricula, $prefactura->id)->first();
+
+    // Desde fuera de la prefactura la tiene OTRO documento; desde dentro, es esta: un booleano, no una frase.
+    expect($deOtro->tomada_por)->toBe("borrador #{$prefactura->id}")
+        ->and($deOtro->en_este_documento)->toBeFalse()
+        ->and($enEste->en_este_documento)->toBeTrue()
+        ->and($enEste->tomada_por)->toBeNull();
 });
 
 // ---------------------------------------------------------------------------
@@ -367,6 +371,39 @@ test('una prefactura cerrada no recibe renglones de sincronizar', function () {
     expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
 });
 
+test('una prefactura REABIERTA no recibe renglones de sincronizar', function () {
+    // Una reabierta es un documento ya emitido que alguien abrio para corregir algo concreto: que
+    // al abrirlo le aparezcan solos renglones de combustible le cambia el total a espaldas de quien
+    // lo reabrio. Lo automatico no la toca; lo que se corrige a proposito se hace a mano.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    remisionDe($prefactura, '2026-10-20', '10:00:00');
+    $prefactura->update(['estado' => FactPrefactura::ESTADO_REABIERTA, 'folio' => 10002]);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
+        ->assertConflict()
+        ->assertJsonPath('codigo', 'reabierta');
+
+    expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
+});
+
+test('en una REABIERTA se sigue pudiendo elegir una remision a mano', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00');
+    $prefactura->update(['estado' => FactPrefactura::ESTADO_REABIERTA, 'folio' => 10002]);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'remision_combustible_id' => $remision->id,
+    ])->assertCreated();
+
+    expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole()->remision_combustible_id)->toBe($remision->id);
+});
+
 test('sincronizar exige el subdepartamento', function () {
     $this->actingAs(usuarioSinAcceso());
     $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
@@ -391,7 +428,9 @@ test('el buscador del modal devuelve las remisiones de la matricula con sus marc
     $porId = collect($respuesta->json('remisiones'))->keyBy('id');
 
     expect($porId->get($libre->id)['tomada_por'])->toBeNull()
-        ->and($porId->get($deRampa->id)['tomada_por'])->toBe('OV-123');
+        ->and($porId->get($libre->id)['en_este_documento'])->toBeFalse()
+        ->and($porId->get($deRampa->id)['tomada_por'])->toBe('OV-123')
+        ->and($porId->get($deRampa->id)['en_este_documento'])->toBeFalse();
 });
 
 test('se puede agregar a mano una remision YA tomada, que es lo decidido', function () {
@@ -515,8 +554,11 @@ test('el buscador no presenta como libre la remision que ya esta en este documen
 
     $respuesta = $this->getJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones")->assertOk();
 
-    expect(collect($respuesta->json('remisiones'))->firstWhere('id', $remision->id)['tomada_por'])
-        ->toBe('ya está en este documento');
+    $fila = collect($respuesta->json('remisiones'))->firstWhere('id', $remision->id);
+
+    // Un booleano, no una frase que la pantalla tenga que comparar: `tomada_por` es solo de quien la tiene OTRO documento.
+    expect($fila['en_este_documento'])->toBeTrue()
+        ->and($fila['tomada_por'])->toBeNull();
 });
 
 test('la misma remision no se cobra dos veces en el mismo documento', function () {

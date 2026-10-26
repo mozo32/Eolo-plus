@@ -30,9 +30,6 @@ use Illuminate\Support\Facades\DB;
  */
 final class RemisionesFacturables
 {
-    /** Lo que dice `tomada_por` cuando la remisión ya tiene renglón en la prefactura que se está editando. */
-    public const YA_EN_ESTE_DOCUMENTO = 'ya está en este documento';
-
     /**
      * Las remisiones LIBRES de la matrícula de la prefactura dentro de su estancia.
      *
@@ -82,13 +79,14 @@ final class RemisionesFacturables
 
     /**
      * Las remisiones de una matrícula para el buscador del modal: TODAS, con o sin precio y
-     * tomadas o no, cada una con `tomada_por` y `sin_precio` puestos.
+     * tomadas o no, cada una con `tomada_por`, `en_este_documento` y `sin_precio` puestos.
      *
      * No acota por ventana a propósito: el buscador manual es justo para los casos que la
      * automática no cubre.
      *
      * `$excluyePrefacturaId` es la prefactura que se está editando: una remisión que ya tiene
-     * renglón ahí sale marcada como `YA_EN_ESTE_DOCUMENTO`, no como libre.
+     * renglón ahí sale con `en_este_documento` en verdadero y sin `tomada_por`, no como libre:
+     * `tomada_por` es solo de quién la tiene OTRO documento.
      *
      * @return Collection<int, Remision>
      */
@@ -101,7 +99,8 @@ final class RemisionesFacturables
             ->get()
             ->each(function (Remision $remision) use ($excluyePrefacturaId) {
                 $remision->sin_precio = $remision->precio === null;
-                $remision->tomada_por = self::quienLaTiene($remision, $excluyePrefacturaId);
+                $remision->en_este_documento = self::estaEnEsteDocumento($remision, $excluyePrefacturaId);
+                $remision->tomada_por = $remision->en_este_documento ? null : self::quienLaTiene($remision);
             });
     }
 
@@ -134,22 +133,24 @@ final class RemisionesFacturables
     }
 
     /**
-     * El documento que ya la tiene, o null si está libre.
+     * Si la remisión ya tiene renglón en la prefactura que se está editando.
      *
      * Hay tres estados y no dos: libre, tomada por OTRO documento (que se puede elegir a mano
      * para rescatar una marca puesta por error) y ya en ESTE documento, que no se puede repetir
      * porque sería cobrar dos veces el mismo despacho. Por eso la propia prefactura no se
-     * excluye: se nombra aparte.
+     * excluye: se nombra aparte, con un booleano y no con una frase que la pantalla compare.
      */
-    private static function quienLaTiene(Remision $remision, ?int $enPrefacturaId): ?string
+    private static function estaEnEsteDocumento(Remision $remision, ?int $enPrefacturaId): bool
     {
-        if ($enPrefacturaId !== null && self::renglonesEnPrefacturaActiva(DB::query())
+        return $enPrefacturaId !== null && self::renglonesEnPrefacturaActiva(DB::query())
             ->where('r.remision_combustible_id', $remision->id)
             ->where('p.id', $enPrefacturaId)
-            ->exists()) {
-            return self::YA_EN_ESTE_DOCUMENTO;
-        }
+            ->exists();
+    }
 
+    /** El documento que ya la tiene (otro, o este si se llama sin excluirlo), o null si está libre. */
+    private static function quienLaTiene(Remision $remision): ?string
+    {
         if ($remision->status_prefactura) {
             return $remision->folio_orden_venta ?: 'otro documento';
         }

@@ -149,6 +149,7 @@ class PrefacturaRenglonController extends Controller
                 'total_litros' => $r->total_litros,
                 'precio' => $r->precio,
                 'tomada_por' => $r->tomada_por,
+                'en_este_documento' => $r->en_este_documento,
                 'sin_precio' => $r->sin_precio,
             ])
             ->all();
@@ -171,7 +172,7 @@ class PrefacturaRenglonController extends Controller
     {
         $prefactura = FactPrefactura::findOrFail($id);
 
-        if ($respuesta = $this->rechazoRapido($prefactura)) {
+        if ($respuesta = $this->rechazoRapido($prefactura) ?? $this->rechazarSincronizarSiReabierta($prefactura)) {
             return $respuesta;
         }
 
@@ -186,7 +187,7 @@ class PrefacturaRenglonController extends Controller
         return DB::transaction(function () use ($id, $servicio, $request) {
             $actual = $this->bloquear($id);
 
-            if ($respuesta = $this->rechazarSiDescartada($actual)) {
+            if ($respuesta = $this->rechazarSiDescartada($actual) ?? $this->rechazarSincronizarSiReabierta($actual)) {
                 return $respuesta;
             }
 
@@ -225,6 +226,24 @@ class PrefacturaRenglonController extends Controller
                 'fuera_de_ventana' => $this->remisionesFueraDeVentana($actual),
             ]);
         });
+    }
+
+    /**
+     * Una reabierta es un documento ya emitido que alguien abrió para corregir algo concreto:
+     * que al abrirlo le aparezcan solos renglones de combustible le cambia el total a espaldas de
+     * quien lo reabrió. La sincronización automática no la toca; el alta a mano SÍ funciona en
+     * ella, que es como se corrige a propósito.
+     */
+    private function rechazarSincronizarSiReabierta(FactPrefactura $prefactura): ?JsonResponse
+    {
+        if (! $prefactura->estaReabierta()) {
+            return null;
+        }
+
+        return response()->json([
+            'message' => 'Esta prefactura está reabierta: no se le traen remisiones solas. Elige las que correspondan desde «Agregar servicio».',
+            'codigo' => 'reabierta',
+        ], 409);
     }
 
     /**
