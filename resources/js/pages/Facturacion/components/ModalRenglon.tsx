@@ -236,6 +236,13 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
         }
     };
 
+    // El elegido va primero aunque esta busqueda no lo traiga: si no, el menu se ve vacio
+    // mientras el cobro sigue apuntando a esa aeronave.
+    const opcionesAeronave = [
+        ...(aeronaveElegida !== null && ! aeronaves.some(a => a.aeronave_id === aeronaveElegida.aeronave_id) ? [aeronaveElegida] : []),
+        ...aeronaves,
+    ];
+
     return (
         <ModalBase idTitulo="titulo-modal-renglon" titulo="Agregar servicio" subtitulo="Elige el servicio y la cantidad" tieneCambios={tieneCambios} onCerrar={onCerrar} ancho="max-w-xl">
             <form onSubmit={guardar} noValidate className="space-y-5">
@@ -292,7 +299,7 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
                             <option value="">{categoriaId === '' ? 'Elige primero una categoría…' : 'Elige un servicio…'}</option>
                             {serviciosDeLaCategoria.map(s => (
                                 <option key={s.id} value={s.id}>
-                                    {s.nombre} — {formatearMonto(s.precio_unitario)}
+                                    {esTramoDeTransito(s.concepto) ? `${s.nombre} — según la aeronave` : `${s.nombre} — ${formatearMonto(s.precio_unitario)}`}
                                 </option>
                             ))}
                         </select>
@@ -323,14 +330,14 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
                                 id="renglon-aeronave"
                                 value={aeronaveElegida === null ? '' : String(aeronaveElegida.aeronave_id)}
                                 onChange={e => {
-                                    setAeronaveElegida(aeronaves.find(a => String(a.aeronave_id) === e.target.value) ?? null);
+                                    setAeronaveElegida(opcionesAeronave.find(a => String(a.aeronave_id) === e.target.value) ?? null);
                                     limpiarError('aeronave_id');
                                 }}
                                 className={campoConError(!!errores.aeronave_id)}
                                 aria-invalid={errores.aeronave_id ? true : undefined}
                             >
                                 <option value="">Elige la aeronave…</option>
-                                {aeronaves.map(a => (
+                                {opcionesAeronave.map(a => (
                                     <option key={a.aeronave_id} value={a.aeronave_id}>
                                         {a.matricula ?? `Aeronave ${a.aeronave_id}`}
                                     </option>

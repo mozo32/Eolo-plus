@@ -1253,3 +1253,23 @@ test('un transito ajeno con cantidad 2 cobra dos veces la tarifa de la ajena', f
         ->and($renglon->cantidad)->toBe(2)
         ->and($renglon->nombre_servicio)->toBe('Transito 02 hrs — '.$ajena->matricula);
 });
+
+test('un servicio normal con aeronave_id en null se sigue agregando', function () {
+    // La pantalla manda SIEMPRE la clave `aeronave_id`, y en un servicio normal va en null. Si
+    // `nullable` no cortara la cadena de reglas, `soloParaTransito` rechazaria el alta de
+    // cualquier servicio: el camino que usa casi todo el mundo.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = conEstancia();
+    $normal = FactServicio::create(['nombre' => 'Remolque', 'precio_unitario' => 867.87]);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $normal->id,
+        'cantidad' => 1,
+        'aeronave_id' => null,
+    ])->assertCreated();
+
+    $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
+
+    expect((float) $renglon->precio_unitario)->toBe(867.87)
+        ->and($renglon->nombre_servicio)->toBe('Remolque');
+});
