@@ -75,7 +75,7 @@ de facturación. Las viejas traen precios históricos distintos (16.63, 20.08, 1
 
 | # | Decisión | Por qué |
 |---|---|---|
-| 1 | El enlace es una columna **`remision_id` en el renglón** | El enlace vive donde vive el cobro: quitar el renglón o descartar la prefactura liberan la remisión sin que nadie tenga que acordarse de limpiar nada |
+| 1 | El enlace es una columna **`remision_combustible_id` en el renglón** | El enlace vive donde vive el cobro: quitar el renglón o descartar la prefactura liberan la remisión sin que nadie tenga que acordarse de limpiar nada |
 | 2 | La ventana va de **la llegada a `now()`**, y se reajusta al guardar la salida | Al iniciar la prefactura casi nunca hay salida: 16 de 27. Esperarla significaría no ver el combustible hasta el final |
 | 3 | Lo **automático** trae solo las remisiones **libres** | Que el sistema meta solo una remisión ya facturada no es «bajo responsabilidad de quien captura»: es un doble cobro que nadie decidió |
 | 4 | Lo **manual** sí ofrece las ya facturadas, avisadas | Rescata una marca puesta por error, y ahí sí hay alguien decidiendo |
@@ -88,7 +88,7 @@ de facturación. Las viejas traen precios históricos distintos (16.63, 20.08, 1
 
 ### Entra
 
-- La columna `remision_id` en `fact_prefactura_renglones` y su migración.
+- La columna `remision_combustible_id` en `fact_prefactura_renglones` y su migración.
 - La búsqueda automática al abrir la prefactura y al guardar la salida.
 - El buscador de remisiones en el modal de servicios, para la categoría Combustible & Servicios.
 - El aviso de las remisiones que quedan fuera de la ventana tras acotarla.
@@ -97,7 +97,7 @@ de facturación. Las viejas traen precios históricos distintos (16.63, 20.08, 1
 
 - **Cambiar el marcado manual desde Rampa.** `vincularPrefactura`, `status_prefactura` y
   `folio_orden_venta` se quedan como están, y las 89 marcas existentes se respetan.
-- **Escribir `status_prefactura` desde Facturación.** El enlace nuevo es `remision_id`; duplicar
+- **Escribir `status_prefactura` desde Facturación.** El enlace nuevo es `remision_combustible_id`; duplicar
   la marca obligaría a mantener las dos en sincronía.
 - **Productos distintos de la turbosina.** Hay uno solo en los datos.
 - **Ampliar la columna `cantidad`.** Ver «Riesgos».
@@ -108,14 +108,20 @@ de facturación. Las viejas traen precios históricos distintos (16.63, 20.08, 1
 ### La columna y qué significa «tomada»
 
 ```
-fact_prefactura_renglones.remision_id   bigint unsigned, nullable, FK -> remisiones.id
+fact_prefactura_renglones.remision_combustible_id   bigint unsigned, nullable, FK -> remisiones.id
 ```
+
+**Por qué ese nombre y no `remision_id`.** La tabla YA tiene una columna `remision`: un
+`varchar` con el número de remisión del PROVEEDOR, que se captura a mano en el modal como
+«No. Remisión» y no tiene nada que ver con esto. `remision_id` al lado de `remision` serían dos
+conceptos distintos con casi el mismo nombre en la misma tabla, y el primero que los confunda
+escribirá un cargo mal. El nombre largo es feo y es el correcto.
 
 Solo la llevan los renglones de combustible nacidos de una remisión. Una remisión está **tomada**
 si se cumple cualquiera de las dos:
 
 1. `status_prefactura = 1` — el marcado manual desde Rampa.
-2. Existe un renglón con ese `remision_id` **en una prefactura con `status = 'A'`**.
+2. Existe un renglón con ese `remision_combustible_id` **en una prefactura con `status = 'A'`**.
 
 La segunda condición es la que evita la contabilidad manual. Descartar una prefactura solo pone
 `status = 'N'` y **deja sus renglones en pie** —medido: 78 renglones vivos en 13 prefacturas
@@ -146,7 +152,7 @@ tomada por su propio renglón, así que deja de ser elegible.
 
 ```
 servicio_id       7 (Combustible JET A-1)
-remision_id       el id de la remisión
+remision_combustible_id       el id de la remisión
 nombre_servicio   "Combustible JET A-1 — EOLO-9397"   (el nombre del servicio y el folio)
 precio_unitario   el `precio` de la remisión, no el del catálogo
 cantidad          los `total_litros` de la remisión
@@ -190,7 +196,7 @@ añade.
 
 ### El aviso de la ventana
 
-Tras guardar una salida, los renglones con `remision_id` cuya remisión quede **fuera** de la
+Tras guardar una salida, los renglones con `remision_combustible_id` cuya remisión quede **fuera** de la
 ventana nueva se señalan en pantalla: «esta remisión quedó fuera de la estancia». El renglón no se
 quita ni se modifica; el aviso es de pantalla, no del documento impreso.
 
@@ -255,7 +261,7 @@ enlace nuevo, se sabe en qué prefactura está. Cuando viene de Rampa, `folio_or
 libre y se mostrará tal cual se tecleó, sin garantía de que corresponda a una prefactura que
 exista.
 
-**Dos mecanismos para la misma idea.** `status_prefactura` y `remision_id` responden los dos a
+**Dos mecanismos para la misma idea.** `status_prefactura` y `remision_combustible_id` responden los dos a
 «¿está facturada?», y este diseño los consulta a los dos sin unificarlos. Unificarlos exigiría
 migrar las 89 marcas existentes a enlaces reales, y no se puede: su `folio_orden_venta` es texto
 libre que no siempre apunta a una prefactura de este sistema.
