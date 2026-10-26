@@ -1065,11 +1065,13 @@ function servicioDeTransito(string $concepto): FactServicio
     return FactServicio::where('concepto', $concepto)->firstOrFail();
 }
 
-test('un transito de otra aeronave se cobra con la tarifa de ESA aeronave, no con el catalogo', function () {
+test('un transito de otra aeronave se cobra con la tarifa de ESA aeronave, no con el catalogo', function (string $concepto, float $tarifa, string $nombreDelServicio) {
+    // Los tres tramos, porque las tarifas de `aeronaveAjena()` son distintas a proposito: si el
+    // `match` del controlador cruzara dos ramas, el precio saldria del tramo equivocado.
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $prefactura = conEstancia();
     $ajena = aeronaveAjena();
-    $servicio = servicioDeTransito(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H);
+    $servicio = servicioDeTransito($concepto);
 
     $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
         'servicio_id' => $servicio->id,
@@ -1079,11 +1081,15 @@ test('un transito de otra aeronave se cobra con la tarifa de ESA aeronave, no co
 
     $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
 
-    expect((float) $renglon->precio_unitario)->toBe(6000.00)
+    expect((float) $renglon->precio_unitario)->toBe($tarifa)
         ->and($renglon->concepto)->toBeNull()
-        ->and($renglon->nombre_servicio)->toBe('Transito 12 hrs — '.$ajena->matricula)
+        ->and($renglon->nombre_servicio)->toBe($nombreDelServicio.' — '.$ajena->matricula)
         ->and($renglon->servicio_id)->toBe($servicio->id);
-});
+})->with([
+    'tránsito de 2 h' => [FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H, 3000.00, 'Transito 02 hrs'],
+    'tránsito de 12 h' => [FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H, 6000.00, 'Transito 12 hrs'],
+    'pernocta' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA, 9000.00, 'Transito 24 hrs - pernocta'],
+]);
 
 test('DEFECTO que este trabajo evita: «Estancia y ajustes» NO borra ni duplica el transito ajeno', function () {
     // Es la prueba que define el trabajo. El renglon ajeno no lleva concepto de estancia, y
@@ -1198,7 +1204,7 @@ test('se rechaza una aeronave ajena sin tarifa para ese tramo', function () {
         'aeronave_id' => $ajena->id,
     ])->assertStatus(422);
 
-    expect($respuesta->json('errors.aeronave_id.0'))->toContain('tarifa')
+    expect($respuesta->json('errors.aeronave_id.0'))->toContain('no tiene tarifa')
         ->and(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
 });
 
@@ -1272,4 +1278,29 @@ test('un servicio normal con aeronave_id en null se sigue agregando', function (
 
     expect((float) $renglon->precio_unitario)->toBe(867.87)
         ->and($renglon->nombre_servicio)->toBe('Remolque');
+});
+
+test('el transito ajeno no hereda el margen ni el ajuste de precio del catalogo: su precio sale de la tarifa', function () {
+    // `margen` y `ajuste_precio` se editan desde la pantalla de servicios. Si el renglon ajeno
+    // los copiara, un `sin_iva` en «Transito 12 hrs» dividiria entre 1.16 el tramo de la ajena
+    // y no el de la propia. CargosEstancia escribe 0 y «ninguno» en los suyos; el ajeno, igual.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = conEstancia();
+    $ajena = aeronaveAjena();
+    $servicio = servicioDeTransito(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H);
+    $servicio->update(['margen' => 10, 'ajuste_precio' => FactServicio::AJUSTE_SIN_IVA]);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'aeronave_id' => $ajena->id,
+    ])->assertCreated();
+
+    $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
+
+    expect((float) $renglon->margen)->toBe(0.0)
+        ->and($renglon->ajuste_precio)->toBe(FactServicio::AJUSTE_NINGUNO)
+        ->and($renglon->es_de_tercero)->toBeFalse()
+        ->and((float) $renglon->precio_unitario)->toBe(6000.00)
+        ->and($renglon->importe())->toBe('6000.00');
 });

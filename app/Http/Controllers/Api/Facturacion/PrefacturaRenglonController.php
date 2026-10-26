@@ -69,9 +69,12 @@ class PrefacturaRenglonController extends Controller
                 'nombre_servicio' => $ajena === null ? $servicio->nombre : $ajena['nombre'],
                 'precio_unitario' => $ajena === null ? $servicio->precio_unitario : $ajena['precio'],
                 'cantidad' => $request->validated()['cantidad'],
-                'es_de_tercero' => $servicio->es_de_tercero,
-                'margen' => $servicio->margen,
-                'ajuste_precio' => $servicio->ajuste_precio,
+                // El precio del ajeno sale de la tarifa de la aeronave, no del catálogo, así que los
+                // ajustes del catálogo (margen, ajuste de precio, tercero) no le aplican: es lo mismo
+                // que hace CargosEstancia con los cargos propios, que escriben false, 0 y «ninguno».
+                'es_de_tercero' => $ajena === null ? $servicio->es_de_tercero : false,
+                'margen' => $ajena === null ? $servicio->margen : 0,
+                'ajuste_precio' => $ajena === null ? $servicio->ajuste_precio : FactServicio::AJUSTE_NINGUNO,
                 'concepto' => $ajena === null ? $servicio->concepto : null,
                 'proveedor_id' => $request->validated()['proveedor_id'] ?? null,
                 'remision' => $request->validated()['remision'] ?? null,

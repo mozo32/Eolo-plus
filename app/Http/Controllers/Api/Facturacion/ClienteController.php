@@ -13,9 +13,11 @@ use Illuminate\Http\Request;
 /**
  * Catálogo de clientes de facturación.
  *
- * Consultar es para cualquier usuario con sesión; escribir exige el
- * subdepartamento factClientes (ver routes/api.php). Nada se borra: se da de
- * baja con una actualización atómica.
+ * Consultar es para cualquier usuario con sesión. Dar de alta acepta el
+ * subdepartamento factClientes o factPrefacturas, porque quien captura una
+ * prefactura necesita registrar al cliente sin salir de la pantalla; editar y
+ * dar de baja siguen siendo solo de factClientes (ver routes/api.php). Nada se
+ * borra: se da de baja con una actualización atómica.
  */
 class ClienteController extends Controller
 {

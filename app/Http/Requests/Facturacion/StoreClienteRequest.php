@@ -6,7 +6,7 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class StoreClienteRequest extends FormRequest
 {
-    /** El acceso lo resuelve el middleware subdep:factClientes. */
+    /** El acceso lo resuelve el middleware subdep:factClientes,factPrefacturas (ver routes/api.php). */
     public function authorize(): bool
     {
         return true;

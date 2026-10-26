@@ -8,6 +8,7 @@ import ModalBase from './ModalBase';
 const CANTIDAD_MAX = 9999;
 const REMISION_MAX = 255;
 const ESPERA_AERONAVE_MS = 300;
+const MAXIMO_AERONAVES = 20;
 
 /** Los tres tramos SI se pueden agregar, a nombre de otra aeronave; los dos ajustes no. */
 const CONCEPTOS_DE_TRANSITO = ['estancia_transito_2h', 'estancia_transito_12h', 'estancia_pernocta'];
@@ -77,6 +78,7 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
     const [busquedaAeronave, setBusquedaAeronave] = useState('');
     const [aeronaves, setAeronaves] = useState<AeronaveFacturable[]>([]);
     const [aeronaveElegida, setAeronaveElegida] = useState<AeronaveFacturable | null>(null);
+    const [errorAeronave, setErrorAeronave] = useState<string | null>(null);
     const [buscandoAeronave, setBuscandoAeronave] = useState(false);
 
     const [errores, setErrores] = useState<Partial<Record<Campo, string>>>({});
@@ -144,10 +146,14 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
             setBuscandoAeronave(true);
 
             try {
-                const pagina = await obtenerAeronavesFacturablesApi({ ...FILTROS_AERONAVES_VACIOS, q: busquedaAeronave }, 1, 20);
-                if (vigente) setAeronaves(pagina.data);
-            } catch {
-                if (vigente) setAeronaves([]);
+                const pagina = await obtenerAeronavesFacturablesApi({ ...FILTROS_AERONAVES_VACIOS, q: busquedaAeronave }, 1, MAXIMO_AERONAVES);
+                if (!vigente) return;
+                setAeronaves(pagina.data);
+                setErrorAeronave(null);
+            } catch (e) {
+                if (!vigente) return;
+                setAeronaves([]);
+                setErrorAeronave(e instanceof Error ? e.message : 'No se pudieron cargar las aeronaves.');
             } finally {
                 if (vigente) setBuscandoAeronave(false);
             }
@@ -178,7 +184,12 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
         vistaPrevia = { problema: 'Esta aeronave no tiene tarifa para ese tramo, ni propia ni por su categoría: no hay precio que cobrar.' };
     } else if (servicio && precioEfectivo !== null && cantidadNumero !== null && cantidadNumero >= 1 && cantidadNumero <= CANTIDAD_MAX) {
         try {
-            vistaPrevia = { importe: importeVistaPrevia(Number(precioEfectivo), Number(servicio.margen), servicio.ajuste_precio, cantidadNumero) };
+            // El ajeno no lleva margen ni ajuste del catálogo: su precio es la tarifa de la aeronave, y el servidor lo cobra así.
+            vistaPrevia = {
+                importe: pideMatricula
+                    ? importeVistaPrevia(Number(precioEfectivo), 0, 'ninguno', cantidadNumero)
+                    : importeVistaPrevia(Number(precioEfectivo), Number(servicio.margen), servicio.ajuste_precio, cantidadNumero),
+            };
         } catch {
             vistaPrevia = { problema: 'El ajuste de precio de este servicio no se reconoce: no se puede mostrar la vista previa.' };
         }
@@ -344,6 +355,13 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
                                 ))}
                             </select>
                             {buscandoAeronave && <p className="mt-1 text-[10px] font-bold text-slate-400 italic">Buscando…</p>}
+                            {errorAeronave && <p className={errorStyle}>{errorAeronave}</p>}
+                            {!buscandoAeronave && !errorAeronave && aeronaves.length === MAXIMO_AERONAVES && (
+                                <p className="mt-1 text-[10px] font-bold text-slate-400 italic">Se muestran los primeros {MAXIMO_AERONAVES}; escribe más para acotar.</p>
+                            )}
+                            {!buscandoAeronave && !errorAeronave && busquedaAeronave !== '' && aeronaves.length === 0 && (
+                                <p className="mt-1 text-[10px] font-bold text-slate-400 italic">Ninguna aeronave coincide.</p>
+                            )}
                             {errores.aeronave_id && <p className={errorStyle}>{errores.aeronave_id}</p>}
                         </div>
                     )}
