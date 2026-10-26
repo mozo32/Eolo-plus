@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api\Facturacion;
 use App\Http\Controllers\Api\Facturacion\Concerns\RechazaPrefacturaCerrada;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Facturacion\StoreRenglonRequest;
+use App\Models\Aeronave;
 use App\Models\Bitacora;
+use App\Models\FactAeronave;
 use App\Models\FactPrefactura;
 use App\Models\FactServicio;
 use App\Services\CargosEstancia;
@@ -40,7 +42,20 @@ class PrefacturaRenglonController extends Controller
 
         $servicio = FactServicio::findOrFail($request->validated()['servicio_id']);
 
-        $renglon = DB::transaction(function () use ($request, $id, $servicio) {
+        // El tránsito de OTRA aeronave: el precio sale de la tarifa de esa aeronave y el nombre
+        // dice de quién es. Se guarda SIN concepto de estancia, que es lo que lo hace sobrevivir
+        // a «Estancia y ajustes» —que borra por concepto— sin duplicarse.
+        $ajena = null;
+
+        if ($request->validated()['aeronave_id'] ?? null) {
+            $ajena = $this->resolverTransitoAjeno($prefactura, $servicio, (int) $request->validated()['aeronave_id']);
+
+            if ($ajena instanceof JsonResponse) {
+                return $ajena;
+            }
+        }
+
+        $renglon = DB::transaction(function () use ($request, $id, $servicio, $ajena) {
             $actual = $this->bloquear($id);
 
             if ($respuesta = $this->rechazarSiDescartada($actual)) {
@@ -51,13 +66,13 @@ class PrefacturaRenglonController extends Controller
             // mañana, este documento no se mueve.
             $renglon = $actual->renglones()->create([
                 'servicio_id' => $servicio->id,
-                'nombre_servicio' => $servicio->nombre,
-                'precio_unitario' => $servicio->precio_unitario,
+                'nombre_servicio' => $ajena === null ? $servicio->nombre : $ajena['nombre'],
+                'precio_unitario' => $ajena === null ? $servicio->precio_unitario : $ajena['precio'],
                 'cantidad' => $request->validated()['cantidad'],
                 'es_de_tercero' => $servicio->es_de_tercero,
                 'margen' => $servicio->margen,
                 'ajuste_precio' => $servicio->ajuste_precio,
-                'concepto' => $servicio->concepto,
+                'concepto' => $ajena === null ? $servicio->concepto : null,
                 'proveedor_id' => $request->validated()['proveedor_id'] ?? null,
                 'remision' => $request->validated()['remision'] ?? null,
                 // `reorder()`: la relación trae ORDER BY, que un agregado no admite en MySQL estricto.
@@ -467,5 +482,46 @@ class PrefacturaRenglonController extends Controller
         }
 
         return $mensajes;
+    }
+
+    /**
+     * El nombre y el precio de un tránsito cobrado a nombre de otra aeronave, o el 422 que
+     * corresponda.
+     *
+     * @return array{nombre: string, precio: string}|JsonResponse
+     */
+    private function resolverTransitoAjeno(FactPrefactura $prefactura, FactServicio $servicio, int $aeronaveId): array|JsonResponse
+    {
+        if ($aeronaveId === (int) $prefactura->aeronave_id) {
+            return $this->rechazoDeMatricula('Para la estancia de esta aeronave usa «Estancia y ajustes»: por aquí el cargo se duplicaría al recalcular.');
+        }
+
+        $ficha = FactAeronave::query()->with('aeronave')->where('aeronave_id', $aeronaveId)->first();
+        $matricula = $ficha?->aeronave?->matricula ?? Aeronave::whereKey($aeronaveId)->value('matricula') ?? '';
+
+        if ($ficha === null) {
+            return $this->rechazoDeMatricula("{$matricula} no tiene ficha de facturación, así que no hay tarifas que aplicar.");
+        }
+
+        if ($ficha->estatus === FactAeronave::ESTATUS_GUARDA) {
+            return $this->rechazoDeMatricula("{$matricula} está en Guarda y una aeronave en Guarda no paga estancia.");
+        }
+
+        $tarifa = match ($servicio->concepto) {
+            FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H => $ficha->tarifaTransito2h(),
+            FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H => $ficha->tarifaTransito12h(),
+            FactServicio::CONCEPTO_ESTANCIA_PERNOCTA => $ficha->tarifaPernocta(),
+        };
+
+        if ($tarifa === null) {
+            return $this->rechazoDeMatricula("{$matricula} no tiene tarifa de «{$servicio->nombre}», ni propia ni por su categoría, así que no hay precio que cobrar.");
+        }
+
+        return ['nombre' => "{$servicio->nombre} — {$matricula}", 'precio' => (string) $tarifa];
+    }
+
+    private function rechazoDeMatricula(string $mensaje): JsonResponse
+    {
+        return response()->json(['message' => $mensaje, 'errors' => ['aeronave_id' => [$mensaje]]], 422);
     }
 }

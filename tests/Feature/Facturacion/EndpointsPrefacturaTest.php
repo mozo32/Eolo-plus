@@ -1035,3 +1035,221 @@ test('editar el encabezado no cambia el destino a internacional: eso lo hace su 
 
     expect($p->fresh()->tipo_destino)->toBe(FactPrefactura::DESTINO_NACIONAL);
 });
+
+/*
+ * TRANSITO DE OTRA AERONAVE. Una prefactura es de una matricula, pero puede cobrar el transito
+ * de otra: se factura a XB-ACA y se incluye el transito de XA-CCC porque lo paga el mismo
+ * cliente. El renglon se guarda SIN concepto de estancia, que es lo unico que lo hace sobrevivir
+ * a «Estancia y ajustes»; la matricula viaja en el nombre.
+ */
+
+/** Una aeronave ajena con ficha, tarifas y la matricula pedida. */
+function aeronaveAjena(string $estatus = FactAeronave::ESTATUS_TRANSITO, bool $conTarifas = true): App\Models\Aeronave
+{
+    $aeronave = App\Models\Aeronave::create(['matricula' => matriculaDePrueba()]);
+
+    FactAeronave::create([
+        'aeronave_id' => $aeronave->id,
+        'estatus' => $estatus,
+        'tarifa_pernocta' => $conTarifas ? 9000.00 : null,
+        'tarifa_transito_2h' => $conTarifas ? 3000.00 : null,
+        'tarifa_transito_12h' => $conTarifas ? 6000.00 : null,
+    ]);
+
+    return $aeronave;
+}
+
+/** El servicio del tramo indicado, creado por `conEstancia()`. */
+function servicioDeTransito(string $concepto): FactServicio
+{
+    return FactServicio::where('concepto', $concepto)->firstOrFail();
+}
+
+test('un transito de otra aeronave se cobra con la tarifa de ESA aeronave, no con el catalogo', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = conEstancia();
+    $ajena = aeronaveAjena();
+    $servicio = servicioDeTransito(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'aeronave_id' => $ajena->id,
+    ])->assertCreated();
+
+    $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
+
+    expect((float) $renglon->precio_unitario)->toBe(6000.00)
+        ->and($renglon->concepto)->toBeNull()
+        ->and($renglon->nombre_servicio)->toBe('Transito 12 hrs — '.$ajena->matricula)
+        ->and($renglon->servicio_id)->toBe($servicio->id);
+});
+
+test('DEFECTO que este trabajo evita: «Estancia y ajustes» NO borra ni duplica el transito ajeno', function () {
+    // Es la prueba que define el trabajo. El renglon ajeno no lleva concepto de estancia, y
+    // `quitarEstancia()` borra por concepto: por eso sobrevive. Los cargos propios SI se
+    // reemplazan, que es lo que ese boton hace.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = conEstancia();
+    $ajena = aeronaveAjena();
+    $servicio = servicioDeTransito(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'aeronave_id' => $ajena->id,
+    ])->assertCreated();
+
+    // Dos recalculos seguidos: si el ajeno se duplicara, el segundo lo delataria.
+    foreach ([1, 2] as $vuelta) {
+        $this->patchJson("/api/facturacion/prefacturas/{$prefactura->id}/estancia", [
+            'pernoctas' => 0,
+            'transitos_2h' => 0,
+            'transitos_12h' => 1,
+            'ajustes_2h_12h' => 0,
+            'ajustes_12h_pernocta' => 0,
+        ])->assertOk();
+    }
+
+    $ajenos = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->whereNull('concepto')->get();
+    $propios = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->whereNotNull('concepto')->get();
+
+    expect($ajenos)->toHaveCount(1)
+        ->and((float) $ajenos->first()->precio_unitario)->toBe(6000.00)
+        ->and($propios)->toHaveCount(1)
+        ->and((float) $propios->first()->precio_unitario)->toBe(2338.00);
+});
+
+test('un transito SIN aeronave_id se sigue rechazando con el mensaje de siempre', function () {
+    // No regresion: la validacion se abre por una rendija y el resto sigue cerrado.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = conEstancia();
+    $servicio = servicioDeTransito(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H);
+
+    $respuesta = $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+    ])->assertStatus(422)->assertJsonValidationErrors(['servicio_id']);
+
+    expect($respuesta->json('errors.servicio_id.0'))->toContain('Estancia y ajustes')
+        ->and(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
+});
+
+test('los dos ajustes de estancia se siguen rechazando, con matricula ajena y sin ella', function (string $concepto) {
+    // No regresion: los ajustes son para subir de tramo la estancia PROPIA y salen de
+    // «Estancia y ajustes». Una matricula ajena no los habilita.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = conEstancia();
+    $ajena = aeronaveAjena();
+    $servicio = FactServicio::create(['nombre' => 'Ajuste '.$concepto, 'precio_unitario' => 0.0, 'concepto' => $concepto]);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", ['servicio_id' => $servicio->id, 'cantidad' => 1])
+        ->assertStatus(422)->assertJsonValidationErrors(['servicio_id']);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", ['servicio_id' => $servicio->id, 'cantidad' => 1, 'aeronave_id' => $ajena->id])
+        ->assertStatus(422)->assertJsonValidationErrors(['servicio_id']);
+
+    expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
+})->with([
+    'ajuste 2h a 12h' => FactServicio::CONCEPTO_ESTANCIA_AJUSTE_2H_12H,
+    'ajuste 12h a pernocta' => FactServicio::CONCEPTO_ESTANCIA_AJUSTE_12H_PERNOCTA,
+]);
+
+test('se rechaza la matricula de la PROPIA prefactura y se manda a «Estancia y ajustes»', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = conEstancia();
+    $servicio = servicioDeTransito(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H);
+
+    $respuesta = $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'aeronave_id' => $prefactura->aeronave_id,
+    ])->assertStatus(422);
+
+    expect($respuesta->json('errors.aeronave_id.0'))->toContain('Estancia y ajustes')
+        ->and(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
+});
+
+test('se rechaza una aeronave ajena en Guarda', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = conEstancia();
+    $ajena = aeronaveAjena(FactAeronave::ESTATUS_GUARDA);
+    $servicio = servicioDeTransito(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H);
+
+    $respuesta = $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'aeronave_id' => $ajena->id,
+    ])->assertStatus(422);
+
+    expect($respuesta->json('errors.aeronave_id.0'))->toContain('Guarda')
+        ->and(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
+});
+
+test('se rechaza una aeronave ajena sin tarifa para ese tramo', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = conEstancia();
+    $ajena = aeronaveAjena(conTarifas: false);
+    $servicio = servicioDeTransito(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H);
+
+    $respuesta = $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'aeronave_id' => $ajena->id,
+    ])->assertStatus(422);
+
+    expect($respuesta->json('errors.aeronave_id.0'))->toContain('tarifa')
+        ->and(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
+});
+
+test('se rechaza una aeronave ajena sin ficha de facturacion', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = conEstancia();
+    $sinFicha = App\Models\Aeronave::create(['matricula' => matriculaDePrueba()]);
+    $servicio = servicioDeTransito(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H);
+
+    $respuesta = $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'aeronave_id' => $sinFicha->id,
+    ])->assertStatus(422);
+
+    expect($respuesta->json('errors.aeronave_id.0'))->toContain('ficha')
+        ->and(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
+});
+
+test('aeronave_id en un servicio que NO es de transito se rechaza', function () {
+    // Aceptarlo en silencio esconderia un error de quien llama: en un servicio normal el campo
+    // no significa nada y el precio seguiria saliendo del catalogo.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = conEstancia();
+    $ajena = aeronaveAjena();
+    $normal = FactServicio::create(['nombre' => 'Remolque', 'precio_unitario' => 867.87]);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $normal->id,
+        'cantidad' => 1,
+        'aeronave_id' => $ajena->id,
+    ])->assertStatus(422)->assertJsonValidationErrors(['aeronave_id']);
+
+    expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
+});
+
+test('un transito ajeno con cantidad 2 cobra dos veces la tarifa de la ajena', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = conEstancia();
+    $ajena = aeronaveAjena();
+    $servicio = servicioDeTransito(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 2,
+        'aeronave_id' => $ajena->id,
+    ])->assertCreated();
+
+    $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
+
+    expect((float) $renglon->precio_unitario)->toBe(3000.00)
+        ->and($renglon->cantidad)->toBe(2)
+        ->and($renglon->nombre_servicio)->toBe('Transito 02 hrs — '.$ajena->matricula);
+});
