@@ -1,4 +1,4 @@
-import { ErrorApi, apiProveedores, apiServicios, type Proveedor, type Servicio } from '@/stores/apiFacturacionCatalogos';
+import { ErrorApi, FILTROS_AERONAVES_VACIOS, apiProveedores, apiServicios, obtenerAeronavesFacturablesApi, type AeronaveFacturable, type Proveedor, type Servicio } from '@/stores/apiFacturacionCatalogos';
 import { Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO, campoConError, errorStyle, labelStyle, sectionTitle } from './estilos';
@@ -7,6 +7,12 @@ import ModalBase from './ModalBase';
 
 const CANTIDAD_MAX = 9999;
 const REMISION_MAX = 255;
+const ESPERA_AERONAVE_MS = 300;
+
+/** Los tres tramos SI se pueden agregar, a nombre de otra aeronave; los dos ajustes no. */
+const CONCEPTOS_DE_TRANSITO = ['estancia_transito_2h', 'estancia_transito_12h', 'estancia_pernocta'];
+
+const esTramoDeTransito = (concepto: string | null | undefined): boolean => typeof concepto === 'string' && CONCEPTOS_DE_TRANSITO.includes(concepto);
 
 /**
  * TEMPORAL: el alta se dejó con los campos del sistema viejo, así que Proveedor no se pinta y
@@ -35,6 +41,8 @@ export interface DatosRenglon {
     cantidad: number;
     proveedor_id: number | null;
     remision: string | null;
+    /** Solo en los tres tramos de tránsito: la aeronave cuya tarifa se cobra. */
+    aeronave_id: number | null;
 }
 
 interface Props {
@@ -43,7 +51,7 @@ interface Props {
     onGuardar: (datos: DatosRenglon) => Promise<void>;
 }
 
-type Campo = 'servicio_id' | 'cantidad' | 'proveedor_id' | 'remision';
+type Campo = 'servicio_id' | 'cantidad' | 'proveedor_id' | 'remision' | 'aeronave_id';
 
 /**
  * Agregar un servicio a una prefactura: servicio (solo activos, sin los de
@@ -65,6 +73,11 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
     const [cantidad, setCantidad] = useState('1');
     const [proveedorId, setProveedorId] = useState('');
     const [remision, setRemision] = useState('');
+
+    const [busquedaAeronave, setBusquedaAeronave] = useState('');
+    const [aeronaves, setAeronaves] = useState<AeronaveFacturable[]>([]);
+    const [aeronaveElegida, setAeronaveElegida] = useState<AeronaveFacturable | null>(null);
+    const [buscandoAeronave, setBuscandoAeronave] = useState(false);
 
     const [errores, setErrores] = useState<Partial<Record<Campo, string>>>({});
     const [mensajeGeneral, setMensajeGeneral] = useState<string | null>(null);
@@ -91,7 +104,7 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
         };
     }, []);
 
-    const opcionesServicio = useMemo(() => servicios.filter(s => s.status === 'A' && !esConceptoDeEstancia(s.concepto)).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')), [servicios]);
+    const opcionesServicio = useMemo(() => servicios.filter(s => s.status === 'A' && (!esConceptoDeEstancia(s.concepto) || esTramoDeTransito(s.concepto))).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')), [servicios]);
     const opcionesProveedor = useMemo(() => proveedores.filter(p => p.status === 'A').sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')), [proveedores]);
 
     /**
@@ -120,11 +133,52 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
     const servicio = opcionesServicio.find(s => String(s.id) === servicioId) ?? null;
     const cantidadNumero = /^\d+$/.test(cantidad.trim()) ? Number(cantidad.trim()) : null;
 
+    const pideMatricula = esTramoDeTransito(servicio?.concepto);
+
+    useEffect(() => {
+        if (! pideMatricula) return;
+
+        let vigente = true;
+
+        const temporizador = setTimeout(async () => {
+            setBuscandoAeronave(true);
+
+            try {
+                const pagina = await obtenerAeronavesFacturablesApi({ ...FILTROS_AERONAVES_VACIOS, q: busquedaAeronave }, 1, 20);
+                if (vigente) setAeronaves(pagina.data);
+            } catch {
+                if (vigente) setAeronaves([]);
+            } finally {
+                if (vigente) setBuscandoAeronave(false);
+            }
+        }, busquedaAeronave === '' ? 0 : ESPERA_AERONAVE_MS);
+
+        return () => {
+            vigente = false;
+            clearTimeout(temporizador);
+        };
+    }, [busquedaAeronave, pideMatricula]);
+
+    /** La tarifa EFECTIVA del tramo —propia o heredada de la categoría—, ya resuelta por el servidor. */
+    const tarifaDelTramo = (aeronave: AeronaveFacturable, concepto: string | null | undefined): string | null =>
+        concepto === 'estancia_transito_2h' ? aeronave.tarifa_transito_2h_efectiva
+            : concepto === 'estancia_transito_12h' ? aeronave.tarifa_transito_12h_efectiva
+                : concepto === 'estancia_pernocta' ? aeronave.tarifa_pernocta_efectiva
+                    : null;
+
+    // En un tránsito ajeno el precio NO es el del catálogo —ahí vale 99.00, que es relleno— sino
+    // la tarifa de la aeronave elegida. Es el mismo precio que el servidor va a cobrar.
+    const precioEfectivo = pideMatricula
+        ? (aeronaveElegida === null ? null : tarifaDelTramo(aeronaveElegida, servicio?.concepto))
+        : (servicio?.precio_unitario ?? null);
+
     // Vista previa: un ajuste desconocido lanza (a propósito: cobrar sin ajuste en silencio sería peor), y aquí se dice.
     let vistaPrevia: { importe: number } | { problema: string } | null = null;
-    if (servicio && cantidadNumero !== null && cantidadNumero >= 1 && cantidadNumero <= CANTIDAD_MAX) {
+    if (servicio && pideMatricula && aeronaveElegida !== null && precioEfectivo === null) {
+        vistaPrevia = { problema: 'Esta aeronave no tiene tarifa para ese tramo, ni propia ni por su categoría: no hay precio que cobrar.' };
+    } else if (servicio && precioEfectivo !== null && cantidadNumero !== null && cantidadNumero >= 1 && cantidadNumero <= CANTIDAD_MAX) {
         try {
-            vistaPrevia = { importe: importeVistaPrevia(Number(servicio.precio_unitario), Number(servicio.margen), servicio.ajuste_precio, cantidadNumero) };
+            vistaPrevia = { importe: importeVistaPrevia(Number(precioEfectivo), Number(servicio.margen), servicio.ajuste_precio, cantidadNumero) };
         } catch {
             vistaPrevia = { problema: 'El ajuste de precio de este servicio no se reconoce: no se puede mostrar la vista previa.' };
         }
@@ -132,7 +186,7 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
 
     const limpiarError = (campo: Campo) => setErrores(previos => (previos[campo] ? { ...previos, [campo]: undefined } : previos));
 
-    const tieneCambios = categoriaId !== '' || servicioId !== '' || cantidad !== '1' || proveedorId !== '' || remision !== '';
+    const tieneCambios = categoriaId !== '' || servicioId !== '' || cantidad !== '1' || proveedorId !== '' || remision !== '' || aeronaveElegida !== null;
 
     const validar = (): Partial<Record<Campo, string>> => {
         const nuevos: Partial<Record<Campo, string>> = {};
@@ -141,6 +195,8 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
         // manda al usuario a un campo que no puede tocar.
         if (categoriaId === '') nuevos.servicio_id = 'Elige primero la categoría del servicio.';
         else if (servicioId === '') nuevos.servicio_id = 'Elige el servicio que se va a agregar.';
+
+        if (pideMatricula && aeronaveElegida === null) nuevos.aeronave_id = 'Elige la aeronave cuyo tránsito se va a cobrar.';
 
         if (cantidadNumero === null || cantidadNumero < 1) nuevos.cantidad = 'La cantidad debe ser un número entero de al menos 1.';
         else if (cantidadNumero > CANTIDAD_MAX) nuevos.cantidad = 'La cantidad no puede pasar de 9,999.';
@@ -167,6 +223,7 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
                 cantidad: cantidadNumero,
                 proveedor_id: proveedorId === '' ? null : Number(proveedorId),
                 remision: remision.trim() === '' ? null : remision.trim(),
+                aeronave_id: pideMatricula ? (aeronaveElegida?.aeronave_id ?? null) : null,
             });
         } catch (error) {
             if (error instanceof ErrorApi && Object.keys(error.errors).length > 0) {
@@ -198,7 +255,10 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
                                 // El servicio elegido era de la categoria anterior: se limpia para que
                                 // no se cuele uno que ya no esta a la vista.
                                 setServicioId('');
+                                setAeronaveElegida(null);
+                                setBusquedaAeronave('');
                                 limpiarError('servicio_id');
+                                limpiarError('aeronave_id');
                             }}
                             className={campoConError(false)}
                         >
@@ -221,7 +281,10 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
                             disabled={categoriaId === ''}
                             onChange={e => {
                                 setServicioId(e.target.value);
+                                setAeronaveElegida(null);
+                                setBusquedaAeronave('');
                                 limpiarError('servicio_id');
+                                limpiarError('aeronave_id');
                             }}
                             className={campoConError(!!errores.servicio_id)}
                             aria-invalid={errores.servicio_id ? true : undefined}
@@ -237,9 +300,46 @@ export default function ModalRenglon({ onCerrar, onGuardar }: Props) {
                         {cargando && <p className="mt-1 text-[10px] font-bold text-slate-400 italic">Cargando servicios…</p>}
                         {errorCatalogos && <p className={errorStyle}>No se pudieron cargar los catálogos: {errorCatalogos}</p>}
                         <p className="mt-1 text-[10px] font-bold text-slate-400 italic">
-                            Los cargos de estancia no aparecen aquí: los pone «Estancia y ajustes», porque su precio sale de la tarifa de la matrícula.
+                            Los tránsitos de OTRA aeronave se agregan aquí, con su matrícula. La estancia de la aeronave de esta prefactura sale de «Estancia y ajustes», que la calcula con su tarifa.
                         </p>
                     </div>
+
+                    {pideMatricula && (
+                        <div>
+                            <label htmlFor="renglon-aeronave" className={labelStyle}>
+                                Matrícula de la aeronave <span className="text-red-500">*</span>
+                            </label>
+                            <p className="mb-1 text-[10px] font-bold text-slate-400 italic">El precio sale de la tarifa de ESTA aeronave, no del catálogo.</p>
+                            <input
+                                type="text"
+                                value={busquedaAeronave}
+                                onChange={e => setBusquedaAeronave(e.target.value)}
+                                placeholder="Buscar matrícula…"
+                                autoComplete="off"
+                                className="mb-2 w-full text-[11px] border border-slate-200 p-2 rounded bg-white outline-none focus:border-blue-400"
+                                aria-label="Buscar matrícula"
+                            />
+                            <select
+                                id="renglon-aeronave"
+                                value={aeronaveElegida === null ? '' : String(aeronaveElegida.aeronave_id)}
+                                onChange={e => {
+                                    setAeronaveElegida(aeronaves.find(a => String(a.aeronave_id) === e.target.value) ?? null);
+                                    limpiarError('aeronave_id');
+                                }}
+                                className={campoConError(!!errores.aeronave_id)}
+                                aria-invalid={errores.aeronave_id ? true : undefined}
+                            >
+                                <option value="">Elige la aeronave…</option>
+                                {aeronaves.map(a => (
+                                    <option key={a.aeronave_id} value={a.aeronave_id}>
+                                        {a.matricula ?? `Aeronave ${a.aeronave_id}`}
+                                    </option>
+                                ))}
+                            </select>
+                            {buscandoAeronave && <p className="mt-1 text-[10px] font-bold text-slate-400 italic">Buscando…</p>}
+                            {errores.aeronave_id && <p className={errorStyle}>{errores.aeronave_id}</p>}
+                        </div>
+                    )}
 
                     <div>
                         <label htmlFor="renglon-cantidad" className={labelStyle}>
