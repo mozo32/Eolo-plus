@@ -433,12 +433,14 @@ test('la cantidad y el precio los pone la remision, no lo que mande el cliente',
         ->and((float) $renglon->precio_unitario)->toBe(31.25);
 });
 
-test('el margen y el ajuste del catalogo no tocan el precio que viene de la remision', function () {
+test('el margen, el ajuste y el de-tercero del catalogo no tocan el renglon que viene de la remision', function () {
     // El precio de este renglon es el de la remision. Si el alta a mano heredara el margen del
-    // catalogo, la misma remision costaria distinto segun entrara sola (margen 0) o a mano.
+    // catalogo, la misma remision costaria distinto segun entrara sola (margen 0) o a mano; y
+    // heredar «de tercero» con margen 0 grabaria la combinacion que el catalogo rechaza.
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $servicio = servicioDeCombustible();
-    $servicio->update(['margen' => 10, 'ajuste_precio' => FactServicio::AJUSTE_MAS_5]);
+    // De tercero con margen > 0 es la unica combinacion que el catalogo permite para un servicio de tercero.
+    $servicio->update(['es_de_tercero' => true, 'margen' => 10, 'ajuste_precio' => FactServicio::AJUSTE_MAS_5]);
     $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
     $remision = remisionDe($prefactura, '2026-10-20', '10:00:00', ['total_litros' => 1000, 'precio' => 20]);
 
@@ -450,7 +452,8 @@ test('el margen y el ajuste del catalogo no tocan el precio que viene de la remi
 
     $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
 
-    expect((float) $renglon->margen)->toBe(0.0)
+    expect($renglon->es_de_tercero)->toBeFalse()
+        ->and((float) $renglon->margen)->toBe(0.0)
         ->and($renglon->ajuste_precio)->toBe(FactServicio::AJUSTE_NINGUNO)
         ->and($renglon->importe())->toBe('20000.00');
 });

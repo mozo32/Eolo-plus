@@ -93,7 +93,7 @@ class PrefacturaRenglonController extends Controller
                 // El precio del ajeno sale de la tarifa de la aeronave, no del catálogo, así que los
                 // ajustes del catálogo (margen, ajuste de precio, tercero) no le aplican: es lo mismo
                 // que hace CargosEstancia con los cargos propios, que escriben false, 0 y «ninguno».
-                'es_de_tercero' => $ajena === null ? $servicio->es_de_tercero : false,
+                'es_de_tercero' => $ajena === null && $remision === null ? $servicio->es_de_tercero : false,
                 'margen' => $ajena === null && $remision === null ? $servicio->margen : 0,
                 'ajuste_precio' => $ajena === null && $remision === null ? $servicio->ajuste_precio : FactServicio::AJUSTE_NINGUNO,
                 'concepto' => $ajena === null ? $servicio->concepto : null,

@@ -163,6 +163,7 @@ test('cada ruta de escritura de prefacturas lleva su subdepartamento', function 
         'DELETE api/facturacion/prefacturas/{id}/renglones/{renglon}' => 'subdep:factPrefacturas',
         'PATCH api/facturacion/prefacturas/{id}/renglones/{renglon}/cortesia' => 'subdep:factPrefacturas',
         'PATCH api/facturacion/prefacturas/{id}/renglones/{renglon}/grupo' => 'subdep:factPrefacturas',
+        'POST api/facturacion/prefacturas/{id}/remisiones/sincronizar' => 'subdep:factPrefacturas',
         'PATCH api/facturacion/prefacturas/{id}/estancia' => 'subdep:factPrefacturas',
         'PATCH api/facturacion/prefacturas/{id}/internacional' => 'subdep:factPrefacturas',
         'PATCH api/facturacion/prefacturas/{id}/origen-internacional' => 'subdep:factPrefacturas',
