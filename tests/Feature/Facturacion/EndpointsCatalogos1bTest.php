@@ -519,9 +519,62 @@ test('quien tiene un subdepartamento de facturacion no puede escribir en los otr
     $this->postJson('/api/facturacion/proveedores', ['nombre' => 'EOLO'])->assertForbidden();
 });
 
+/*
+ * EL ALTA DE CLIENTES ES LA UNICA ESCRITURA DE 1b CON DOS PUERTAS.
+ *
+ * Quien captura prefacturas necesita dar de alta al cliente que tiene enfrente sin salir de la
+ * pantalla, asi que `POST /clientes` acepta `factClientes` O `factPrefacturas`. Es la unica
+ * concesion: editar, desactivar y reactivar siguen siendo solo de quien administra el catalogo,
+ * porque tocar un cliente que ya existe afecta a prefacturas de otros.
+ */
+
+test('quien captura prefacturas puede dar de alta un cliente sin administrar el catalogo', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson('/api/facturacion/clientes', clienteValido())
+        ->assertCreated()
+        ->assertJsonPath('cliente.nombre', 'Aerolíneas de Prueba');
+
+    expect(FactCliente::count())->toBe(1);
+});
+
+test('quien captura prefacturas NO puede editar ni dar de baja un cliente', function () {
+    // La regresion que importa: abrir el alta no puede abrir el resto del catalogo.
+    $cliente = FactCliente::create(clienteValido(['nombre' => 'Ya existe']));
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->putJson("/api/facturacion/clientes/{$cliente->id}", clienteValido(['nombre' => 'Renombrado']))->assertForbidden();
+    $this->patchJson("/api/facturacion/clientes/{$cliente->id}/desactivar")->assertForbidden();
+    $this->patchJson("/api/facturacion/clientes/{$cliente->id}/reactivar")->assertForbidden();
+
+    expect($cliente->fresh()->nombre)->toBe('Ya existe')
+        ->and($cliente->fresh()->status)->toBe('A');
+});
+
+test('la segunda puerta del alta de clientes es solo para factPrefacturas, no para cualquiera', function () {
+    // Que el middleware acepte varios nombres no puede degenerar en «vale cualquier
+    // subdepartamento»: quien administra otro catalogo sigue fuera.
+    $this->actingAs(usuarioConSubdepartamento('factServicios', 'Facturacion'));
+
+    $this->postJson('/api/facturacion/clientes', clienteValido())->assertForbidden();
+
+    expect(FactCliente::count())->toBe(0);
+});
+
+test('abrir el alta de clientes no abre el alta de los otros catalogos', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson('/api/facturacion/servicios', servicioValido())->assertForbidden();
+    $this->postJson('/api/facturacion/formas-pago', ['nombre' => 'Efectivo'])->assertForbidden();
+    $this->postJson('/api/facturacion/proveedores', ['nombre' => 'EOLO'])->assertForbidden();
+    $this->postJson('/api/facturacion/categorias-servicio', ['nombre' => 'Categoria'])->assertForbidden();
+});
+
 test('cada ruta de escritura de 1b lleva su subdepartamento', function () {
     $esperado = [
-        'POST api/facturacion/clientes' => 'subdep:factClientes',
+        // La unica con dos: ver el bloque de arriba.
+        'POST api/facturacion/clientes' => 'subdep:factClientes,factPrefacturas',
         'PUT api/facturacion/clientes/{id}' => 'subdep:factClientes',
         'PATCH api/facturacion/clientes/{id}/desactivar' => 'subdep:factClientes',
         'PATCH api/facturacion/clientes/{id}/reactivar' => 'subdep:factClientes',

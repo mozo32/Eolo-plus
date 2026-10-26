@@ -1,9 +1,21 @@
-import { obtenerClientesApi, type Cliente } from '@/stores/apiFacturacionCatalogos';
+import { apiClientes, obtenerClientesApi, type Cliente, type DatosCliente } from '@/stores/apiFacturacionCatalogos';
+import { Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { campoConError, errorStyle } from './estilos';
+import ModalCliente from './ModalCliente';
 
 const ESPERA_MS = 300;
 const MAXIMO_RESULTADOS = 20;
+
+/**
+ * Lo tecleado parece un RFC, para decidir en qué campo del alta ponerlo.
+ *
+ * El RFC mexicano son 12 dígitos y letras para persona moral y 13 para física, pero aquí NO se
+ * valida: solo se adivina dónde cae mejor lo escrito. Un falso positivo no rompe nada —el usuario
+ * ve el campo lleno y lo corrige—, así que la regla se queda en algo tosco a propósito: sin
+ * espacios, de 10 a 13 caracteres y solo letras y dígitos.
+ */
+const pareceRfc = (texto: string): boolean => /^[A-Za-zÑñ&0-9]{10,13}$/.test(texto.trim());
 
 interface Props {
     id: string;
@@ -27,6 +39,22 @@ export default function SelectorCliente({ id, valor, nombreActual, onChange, dis
     const [resultados, setResultados] = useState<Cliente[]>([]);
     const [errorBusqueda, setErrorBusqueda] = useState<string | null>(null);
     const [buscando, setBuscando] = useState(false);
+    const [dandoDeAlta, setDandoDeAlta] = useState(false);
+
+    /**
+     * Da de alta el cliente y lo deja elegido en la prefactura.
+     *
+     * No llama a `setBusqueda`: el recién creado se añade a mano a los resultados para que el
+     * combo pueda mostrarlo ya, sin esperar a que el servidor lo devuelva en otra búsqueda.
+     * Si el servidor rechaza, el error sube al modal, que lo pinta campo por campo.
+     */
+    const guardarNuevo = async (datos: DatosCliente) => {
+        const { registro } = await apiClientes.crear(datos);
+
+        setResultados(previos => (previos.some(c => c.id === registro.id) ? previos : [registro, ...previos]));
+        onChange({ id: registro.id, nombre: registro.nombre });
+        setDandoDeAlta(false);
+    };
 
     useEffect(() => {
         let vigente = true;
@@ -60,15 +88,25 @@ export default function SelectorCliente({ id, valor, nombreActual, onChange, dis
     return (
         <div className="space-y-2">
             {!disabled && (
-                <input
-                    type="text"
-                    value={busqueda}
-                    onChange={e => setBusqueda(e.target.value)}
-                    placeholder="Buscar cliente por nombre o RFC…"
-                    autoComplete="off"
-                    className="w-full text-[11px] border border-slate-200 p-2 rounded bg-white outline-none focus:border-blue-400"
-                    aria-label="Buscar cliente"
-                />
+                <div className="flex items-center gap-2">
+                    <input
+                        type="text"
+                        value={busqueda}
+                        onChange={e => setBusqueda(e.target.value)}
+                        placeholder="Buscar cliente por nombre o RFC…"
+                        autoComplete="off"
+                        className="flex-1 text-[11px] border border-slate-200 p-2 rounded bg-white outline-none focus:border-blue-400"
+                        aria-label="Buscar cliente"
+                    />
+                    <button
+                        type="button"
+                        onClick={() => setDandoDeAlta(true)}
+                        title="Dar de alta un cliente nuevo sin salir de la prefactura"
+                        className="shrink-0 flex items-center gap-1 text-[11px] font-bold text-blue-700 border border-blue-200 bg-blue-50 px-2 py-2 rounded hover:bg-blue-100"
+                    >
+                        <Plus size={12} /> Nuevo
+                    </button>
+                </div>
             )}
 
             <select
@@ -96,6 +134,15 @@ export default function SelectorCliente({ id, valor, nombreActual, onChange, dis
                 <p className="text-[10px] font-bold text-slate-400 italic">Se muestran los primeros {MAXIMO_RESULTADOS}; escribe más para acotar.</p>
             )}
             {!disabled && !buscando && !errorBusqueda && busqueda !== '' && resultados.length === 0 && <p className="text-[10px] font-bold text-slate-400 italic">Ningún cliente activo coincide.</p>}
+
+            {dandoDeAlta && (
+                <ModalCliente
+                    cliente={null}
+                    valoresIniciales={pareceRfc(busqueda) ? { rfc: busqueda.trim() } : { nombre: busqueda.trim() }}
+                    onCerrar={() => setDandoDeAlta(false)}
+                    onGuardar={guardarNuevo}
+                />
+            )}
         </div>
     );
 }

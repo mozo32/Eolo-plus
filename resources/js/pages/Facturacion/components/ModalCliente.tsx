@@ -13,6 +13,11 @@ interface Props {
     onCerrar: () => void;
     /** Guarda. Debe lanzar el ErrorApi si el servidor rechaza; el modal muestra los errores por campo. */
     onGuardar: (datos: DatosCliente) => Promise<void>;
+    /**
+     * Valores de arranque para el alta, para no hacer teclear dos veces lo que ya se escribió
+     * en otra pantalla. Se ignora al editar: ahí mandan los datos del cliente.
+     */
+    valoresIniciales?: Partial<DatosCliente>;
 }
 
 type Campo = keyof DatosCliente;
@@ -30,12 +35,15 @@ const aValorOpcional = (texto: string): string | null => (texto.trim() === '' ? 
  * se valida el formato del correo: lo hace el servidor y su mensaje se muestra
  * debajo del campo.
  */
-export default function ModalCliente({ cliente, onCerrar, onGuardar }: Props) {
+export default function ModalCliente({ cliente, onCerrar, onGuardar, valoresIniciales }: Props) {
+    // Al editar mandan los datos del cliente; en el alta, lo que traiga quien abrió el modal.
+    const arranque = cliente ?? valoresIniciales ?? null;
+
     const inicial: Record<Campo, string> = {
-        nombre: aTexto(cliente?.nombre),
-        rfc: aTexto(cliente?.rfc),
-        correo: aTexto(cliente?.correo),
-        telefono: aTexto(cliente?.telefono),
+        nombre: aTexto(arranque?.nombre),
+        rfc: aTexto(arranque?.rfc),
+        correo: aTexto(arranque?.correo),
+        telefono: aTexto(arranque?.telefono),
     };
 
     const [valores, setValores] = useState<Record<Campo, string>>(inicial);

@@ -412,8 +412,14 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(functio
         Route::put('/aeronaves/{id}', [AeronaveFacturacionController::class, 'update'])->whereNumber('id');
     });
 
+    // El alta lleva DOS subdepartamentos a propósito: quien captura una prefactura necesita dar
+    // de alta al cliente que tiene enfrente sin salir de la pantalla. Es la única concesión;
+    // editar y dar de baja siguen abajo, reservados a quien administra el catálogo, porque tocar
+    // un cliente que ya existe afecta a prefacturas de otros.
+    Route::post('/clientes', [ClienteController::class, 'store'])
+        ->middleware('subdep:factClientes,factPrefacturas');
+
     Route::middleware('subdep:factClientes')->group(function () {
-        Route::post('/clientes', [ClienteController::class, 'store']);
         Route::put('/clientes/{id}', [ClienteController::class, 'update'])->whereNumber('id');
         Route::patch('/clientes/{id}/desactivar', [ClienteController::class, 'desactivar'])->whereNumber('id');
         Route::patch('/clientes/{id}/reactivar', [ClienteController::class, 'reactivar'])->whereNumber('id');
