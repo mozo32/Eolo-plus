@@ -281,3 +281,96 @@ test('el buscador no marca como tomada por otra la que ya esta en ESTA prefactur
         ->and(RemisionesFacturables::paraElegir($matricula, $prefactura->id)->first()->tomada_por)
         ->toBeNull();
 });
+
+// ---------------------------------------------------------------------------
+// El endpoint que sincroniza
+// ---------------------------------------------------------------------------
+
+test('sincronizar agrega las remisiones de la ventana con el precio de la remision', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00', ['precio' => 30.5, 'total_litros' => 1200]);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
+        ->assertOk()
+        ->assertJsonPath('agregados', 1);
+
+    $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
+
+    expect((float) $renglon->precio_unitario)->toBe(30.5)
+        ->and($renglon->cantidad)->toBe(1200)
+        ->and($renglon->remision_combustible_id)->toBe($remision->id)
+        ->and($renglon->nombre_servicio)->toBe('Combustible JET A-1 — '.$remision->folio)
+        ->and($renglon->concepto)->toBe(FactServicio::CONCEPTO_COMBUSTIBLE);
+});
+
+test('DEFECTO que este trabajo evita: sincronizar dos veces no duplica nada', function () {
+    // Es la prueba que define el endpoint. Si `candidatas()` dejara de excluir lo ya cobrado,
+    // cada carga de la pantalla anadiria el combustible otra vez.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    remisionDe($prefactura, '2026-10-20', '10:00:00');
+
+    foreach ([1, 2, 3] as $vuelta) {
+        $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")->assertOk();
+    }
+
+    expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(1);
+});
+
+test('el renglon de combustible impide pagar con AVCARD', function () {
+    // El concepto se conserva justamente para esto: `PagosPrefactura` lo consulta.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    remisionDe($prefactura, '2026-10-20', '10:00:00');
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")->assertOk();
+
+    expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)
+        ->where('concepto', FactServicio::CONCEPTO_COMBUSTIBLE)->exists())->toBeTrue();
+});
+
+test('sincronizar reporta los renglones que quedaron fuera de la ventana, sin quitarlos', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 23:00:00');
+    $tarde = remisionDe($prefactura, '2026-10-20', '20:00:00');
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
+        ->assertOk()->assertJsonPath('agregados', 1);
+
+    // La salida se corrige a una hora anterior: la remision de las 20:00 queda fuera.
+    $prefactura->update(['salida_at' => '2026-10-20 18:00:00']);
+
+    $respuesta = $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")->assertOk();
+
+    expect($respuesta->json('agregados'))->toBe(0)
+        ->and($respuesta->json('fuera_de_ventana.0.folio'))->toBe($tarde->folio)
+        ->and(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(1);
+});
+
+test('una prefactura cerrada no recibe renglones de sincronizar', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    remisionDe($prefactura, '2026-10-20', '10:00:00');
+    cerrarConSello($prefactura, '0.00', '0.00', '0.00');
+
+    // 409 `ya_cerrada`: el mismo rechazo que `store()`, que viene del trait compartido.
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
+        ->assertConflict()
+        ->assertJsonPath('codigo', 'ya_cerrada');
+
+    expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
+});
+
+test('sincronizar exige el subdepartamento', function () {
+    $this->actingAs(usuarioSinAcceso());
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
+        ->assertForbidden();
+});

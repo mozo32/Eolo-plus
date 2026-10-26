@@ -10,10 +10,13 @@ use App\Models\Bitacora;
 use App\Models\FactAeronave;
 use App\Models\FactPrefactura;
 use App\Models\FactServicio;
+use App\Models\Remision;
 use App\Services\CargosEstancia;
+use App\Services\RemisionesFacturables;
 use App\Services\ServicioDeEstanciaNoDisponibleException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -102,6 +105,114 @@ class PrefacturaRenglonController extends Controller
             'message' => 'Renglón agregado.',
             'renglon_id' => $renglon->id,
         ], 201);
+    }
+
+    /**
+     * Trae a la prefactura las remisiones de combustible de su matrícula que caen en su estancia.
+     *
+     * Es IDEMPOTENTE: una remisión ya cobrada aquí está tomada por su propio renglón, así que
+     * `candidatas()` no la vuelve a devolver. Llamarlo diez veces deja el mismo resultado que
+     * llamarlo una, y por eso el editor puede llamarlo en cada carga sin pensarlo.
+     *
+     * Solo AÑADE. Las remisiones que quedan fuera de la ventana tras acotarla se reportan para
+     * que la pantalla avise, pero el renglón no se toca: nada desaparece solo de un documento
+     * de cobro.
+     */
+    public function sincronizarRemisiones(Request $request, int $id): JsonResponse
+    {
+        $prefactura = FactPrefactura::findOrFail($id);
+
+        if ($respuesta = $this->rechazoRapido($prefactura)) {
+            return $respuesta;
+        }
+
+        $servicio = FactServicio::where('concepto', FactServicio::CONCEPTO_COMBUSTIBLE)->first();
+
+        if ($servicio === null) {
+            return response()->json([
+                'message' => 'No hay servicio de combustible en el catálogo, así que no hay con qué cobrarlo.',
+            ], 422);
+        }
+
+        return DB::transaction(function () use ($id, $servicio, $request) {
+            $actual = $this->bloquear($id);
+
+            if ($respuesta = $this->rechazarSiDescartada($actual)) {
+                return $respuesta;
+            }
+
+            $orden = (int) $actual->renglones()->reorder()->max('orden');
+            $agregados = 0;
+
+            foreach (RemisionesFacturables::candidatas($actual) as $remision) {
+                $actual->renglones()->create([
+                    'servicio_id' => $servicio->id,
+                    'remision_combustible_id' => $remision->id,
+                    'nombre_servicio' => "{$servicio->nombre} — {$remision->folio}",
+                    'precio_unitario' => $remision->precio,
+                    'cantidad' => (int) $remision->total_litros,
+                    'es_de_tercero' => false,
+                    'margen' => 0,
+                    'ajuste_precio' => FactServicio::AJUSTE_NINGUNO,
+                    'concepto' => FactServicio::CONCEPTO_COMBUSTIBLE,
+                    'orden' => ++$orden,
+                ]);
+
+                $agregados++;
+            }
+
+            if ($agregados > 0) {
+                Bitacora::log(
+                    modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
+                    accion: Bitacora::ACCION_CREAR,
+                    descripcion: "Se trajeron {$agregados} remisiones de combustible a la prefactura {$actual->id}.",
+                    usuarioId: $request->user()->id,
+                    registroId: $actual->id,
+                );
+            }
+
+            return response()->json([
+                'agregados' => $agregados,
+                'fuera_de_ventana' => $this->remisionesFueraDeVentana($actual),
+            ]);
+        });
+    }
+
+    /**
+     * Los renglones de remisión de esta prefactura cuya remisión ya no cae en su ventana.
+     *
+     * Solo para avisar. Pasa cuando la salida se corrige a una hora anterior a una carga que ya
+     * estaba cobrada.
+     *
+     * @return array<int, array{renglon_id: int, folio: string}>
+     */
+    private function remisionesFueraDeVentana(FactPrefactura $prefactura): array
+    {
+        $renglones = $prefactura->renglones()->whereNotNull('remision_combustible_id')->get();
+
+        if ($renglones->isEmpty()) {
+            return [];
+        }
+
+        // Una sola consulta para todas: buscarlas de una en una dentro del filtro seria N+1.
+        $remisiones = Remision::whereKey($renglones->pluck('remision_combustible_id'))->get()->keyBy('id');
+
+        $inicio = Carbon::parse($prefactura->llegada_at);
+        $fin = $prefactura->salida_at ? Carbon::parse($prefactura->salida_at) : now();
+
+        return $renglones
+            ->filter(function ($renglon) use ($remisiones, $inicio, $fin) {
+                $remision = $remisiones->get($renglon->remision_combustible_id);
+
+                return $remision !== null
+                    && ! RemisionesFacturables::momentoDe($remision)->betweenIncluded($inicio, $fin);
+            })
+            ->map(fn ($renglon) => [
+                'renglon_id' => $renglon->id,
+                'folio' => $remisiones->get($renglon->remision_combustible_id)->folio,
+            ])
+            ->values()
+            ->all();
     }
 
     public function destroy(Request $request, int $id, int $renglon): JsonResponse
