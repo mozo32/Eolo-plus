@@ -666,3 +666,36 @@ test('CRITICO C-1: cobrar con AvCard y que el combustible entre solo despues NO 
     expect($prefactura->folio)->toBeNull()
         ->and($prefactura->estado)->toBe(FactPrefactura::ESTADO_BORRADOR);
 });
+
+// ---------------------------------------------------------------------------
+// I-2: el servicio de combustible dado de baja
+// ---------------------------------------------------------------------------
+
+test('IMPORTANTE I-2: sincronizar NO cobra con un servicio de combustible dado de baja', function () {
+    // Dar de baja el servicio es la unica palanca del usuario para decir «deja de cobrar
+    // combustible desde aqui». La via manual ya lo respetaba (422); la automatica lo ignoraba
+    // y creaba el renglon igual. La sincronizacion no se inventa un renglon: se niega y lo dice.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible()->update(['status' => FactServicio::STATUS_INACTIVO]);
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    remisionDe($prefactura, '2026-10-20', '10:00:00');
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'sin_servicio_de_combustible');
+
+    expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
+});
+
+test('el catalogo no puede tener dos servicios de combustible, asi que no hay cual elegir', function () {
+    // La revision apuntaba que `first()` sin orden elegiria uno al azar si hubiera dos. No
+    // puede haberlos: `fact_servicios.concepto` es UNIQUE desde su migracion. Esta prueba fija
+    // ese invariante, que es lo que permite seguir usando `first()` y no un `orderBy`.
+    servicioDeCombustible();
+
+    expect(fn () => FactServicio::create([
+        'nombre' => 'Combustible JET A-1 (otro)',
+        'precio_unitario' => 25.9940,
+        'concepto' => FactServicio::CONCEPTO_COMBUSTIBLE,
+    ]))->toThrow(Illuminate\Database\UniqueConstraintViolationException::class);
+});

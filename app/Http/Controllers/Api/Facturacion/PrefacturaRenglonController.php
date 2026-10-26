@@ -176,11 +176,20 @@ class PrefacturaRenglonController extends Controller
             return $respuesta;
         }
 
-        $servicio = FactServicio::where('concepto', FactServicio::CONCEPTO_COMBUSTIBLE)->first();
+        // `activos()`, igual que `CargosEstancia` en sus tres sitios y que el paquete
+        // internacional: un servicio dado de baja no se sigue cobrando. Dar de baja el
+        // combustible es la única palanca del usuario para decir «deja de cobrarlo desde
+        // aquí», y la vía manual ya la respeta (`StoreRenglonRequest` exige `status` A).
+        // `concepto` es UNIQUE en `fact_servicios`, así que `first()` no elige entre dos.
+        $servicio = FactServicio::porConcepto(FactServicio::CONCEPTO_COMBUSTIBLE)->activos()->first();
 
+        // Sin servicio activo no hay con qué cobrar, y la sincronización NO se inventa un
+        // renglón: se niega y lo dice. Callarse y devolver `agregados: 0` dejaría al operador
+        // creyendo que la estancia no tenía combustible.
         if ($servicio === null) {
             return response()->json([
-                'message' => 'No hay servicio de combustible en el catálogo, así que no hay con qué cobrarlo.',
+                'message' => 'No hay un servicio de combustible activo en el catálogo, así que no hay con qué cobrarlo. Reactívalo desde el catálogo de servicios si el combustible se debe seguir cobrando.',
+                'codigo' => 'sin_servicio_de_combustible',
             ], 422);
         }
 
