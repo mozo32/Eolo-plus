@@ -25,7 +25,7 @@ const ESPERA_REMISION_MS = 300;
 /** Los litros de una remisión llegan como texto ("2650.00"): "2,650". */
 const formatearLitros = (litros: string): string => Number(litros).toLocaleString('es-MX', { maximumFractionDigits: 2 });
 
-/** La opción del menú: «EOLO-9397 — 20/10/2026 10:00 — 2,650 L a $25.99», más lo que impide o advierte. */
+/** La opción del menú: «EOLO-9397 — 20/10/2026 10:00 — 2,650 L a $25.994», más lo que impide o advierte. */
 function etiquetaDeRemision(remision: RemisionFacturable): string {
     const hora = remision.hora_inicial === null ? '' : ` ${remision.hora_inicial.slice(0, 5)}`;
     // El precio de la remisión es de 4 decimales y así se cobra: a 2, 2,650 L a «$21.53» no daría el total que se ve.
