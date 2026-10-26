@@ -270,7 +270,7 @@ test('el buscador NO marca como tomada la que usaba una prefactura DESCARTADA', 
         ->toBeNull();
 });
 
-test('el buscador no marca como tomada por otra la que ya esta en ESTA prefactura', function () {
+test('el buscador marca la que ya esta en ESTA prefactura como tal, no como libre', function () {
     $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
     $remision = remisionDe($prefactura, '2026-10-20', '10:00:00');
     renglonDeRemision($prefactura, $remision);
@@ -279,7 +279,7 @@ test('el buscador no marca como tomada por otra la que ya esta en ESTA prefactur
     expect(RemisionesFacturables::paraElegir($matricula)->first()->tomada_por)
         ->toBe("borrador #{$prefactura->id}")
         ->and(RemisionesFacturables::paraElegir($matricula, $prefactura->id)->first()->tomada_por)
-        ->toBeNull();
+        ->toBe(RemisionesFacturables::YA_EN_ESTE_DOCUMENTO);
 });
 
 // ---------------------------------------------------------------------------
@@ -480,4 +480,82 @@ test('el servicio de combustible SIN remision se sigue agregando como siempre', 
     expect($renglon->remision_combustible_id)->toBeNull()
         ->and($renglon->cantidad)->toBe(500)
         ->and((float) $renglon->precio_unitario)->toBe(25.994);
+});
+
+test('el buscador no presenta como libre la remision que ya esta en este documento', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00');
+    renglonDeRemision($prefactura, $remision);
+
+    $respuesta = $this->getJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones")->assertOk();
+
+    expect(collect($respuesta->json('remisiones'))->firstWhere('id', $remision->id)['tomada_por'])
+        ->toBe('ya está en este documento');
+});
+
+test('la misma remision no se cobra dos veces en el mismo documento', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00');
+    renglonDeRemision($prefactura, $remision);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'remision_combustible_id' => $remision->id,
+    ])->assertStatus(422)->assertJsonValidationErrors(['remision_combustible_id']);
+
+    expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(1);
+});
+
+test('una remision dada de baja no se puede agregar a mano', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00', ['status' => 'N']);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'remision_combustible_id' => $remision->id,
+    ])->assertStatus(422)->assertJsonValidationErrors(['remision_combustible_id']);
+
+    expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
+});
+
+test('un q[] malformado en el buscador no tumba nada', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+
+    $this->getJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones?q[]=x")
+        ->assertOk()
+        ->assertJsonStructure(['remisiones']);
+});
+
+test('aeronave_id y remision_combustible_id juntos nunca dan un renglon', function () {
+    // Cada campo exige un servicio distinto y un servicio no puede ser las dos cosas.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $combustible = servicioDeCombustible();
+    $transito = FactServicio::create([
+        'nombre' => 'Transito 2h',
+        'precio_unitario' => 99,
+        'concepto' => FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H,
+    ]);
+    $normal = FactServicio::create(['nombre' => 'Remolque', 'precio_unitario' => 867.87]);
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00');
+    $otra = Aeronave::create(['matricula' => matriculaDePrueba()]);
+
+    foreach ([$combustible, $transito, $normal] as $servicio) {
+        $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+            'servicio_id' => $servicio->id,
+            'cantidad' => 1,
+            'aeronave_id' => $otra->id,
+            'remision_combustible_id' => $remision->id,
+        ])->assertStatus(422);
+    }
+
+    expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
 });

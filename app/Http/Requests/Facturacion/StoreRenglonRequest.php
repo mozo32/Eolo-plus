@@ -21,7 +21,7 @@ class StoreRenglonRequest extends FormRequest
             ],
             'cantidad' => ['required', 'integer', 'min:1', 'max:9999'],
             'aeronave_id' => ['bail', 'nullable', 'integer', Rule::exists('aeronaves', 'id'), $this->soloParaTransito(...)],
-            'remision_combustible_id' => ['bail', 'nullable', 'integer', Rule::exists('remisiones', 'id'), $this->soloParaCombustible(...)],
+            'remision_combustible_id' => ['bail', 'nullable', 'integer', Rule::exists('remisiones', 'id')->where('status', 'A'), $this->soloParaCombustible(...)],
             'proveedor_id' => ['nullable', 'integer', Rule::exists('fact_proveedores', 'id')->where('status', 'A')],
             'remision' => ['nullable', 'string', 'max:255'],
         ];
@@ -110,7 +110,7 @@ class StoreRenglonRequest extends FormRequest
             'aeronave_id.integer' => 'La matrícula no es válida.',
             'aeronave_id.exists' => 'Esa matrícula no está en el sistema.',
             'remision_combustible_id.integer' => 'La remisión no es válida.',
-            'remision_combustible_id.exists' => 'Esa remisión no está en el sistema.',
+            'remision_combustible_id.exists' => 'Esa remisión no existe o está dada de baja.',
             'proveedor_id.integer' => 'El proveedor no es válido.',
             'proveedor_id.exists' => 'El proveedor no existe o está dado de baja.',
             'remision.string' => 'La remisión debe ser texto.',

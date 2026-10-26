@@ -73,6 +73,15 @@ class PrefacturaRenglonController extends Controller
                 return $respuesta;
             }
 
+            // Tomada por OTRO documento se puede elegir a mano; repetida en ESTE, no. Se mira
+            // aquí, con el candado puesto, para que dos altas simultáneas no la cobren dos veces.
+            if ($remision !== null && $actual->renglones()->where('remision_combustible_id', $remision->id)->exists()) {
+                return response()->json([
+                    'message' => 'Esa remisión ya está cobrada en este documento.',
+                    'errors' => ['remision_combustible_id' => ['Esa remisión ya está cobrada en este documento.']],
+                ], 422);
+            }
+
             // El renglón CONGELA lo que determina su importe: si el catálogo cambia
             // mañana, este documento no se mueve.
             $renglon = $actual->renglones()->create([
@@ -120,7 +129,8 @@ class PrefacturaRenglonController extends Controller
     public function remisiones(Request $request, int $id): JsonResponse
     {
         $prefactura = FactPrefactura::findOrFail($id);
-        $matricula = trim((string) $request->query('q', ''));
+        $q = $request->query('q', '');
+        $matricula = is_string($q) ? trim($q) : '';
 
         if ($matricula === '') {
             $matricula = (string) $prefactura->aeronave?->matricula;
