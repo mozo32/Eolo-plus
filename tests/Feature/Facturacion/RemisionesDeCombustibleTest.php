@@ -699,3 +699,58 @@ test('el catalogo no puede tener dos servicios de combustible, asi que no hay cu
         'concepto' => FactServicio::CONCEPTO_COMBUSTIBLE,
     ]))->toThrow(Illuminate\Database\UniqueConstraintViolationException::class);
 });
+
+// ---------------------------------------------------------------------------
+// I-3: el alta a mano queda atada a la matricula de la prefactura
+// ---------------------------------------------------------------------------
+
+test('IMPORTANTE I-3: el alta a mano rechaza una remision de OTRA matricula', function () {
+    // El buscador del modal arranca con la matricula de la prefactura, pero es un input
+    // editable: tecleando otra salen sus remisiones y el alta las aceptaba. Se le cobraria al
+    // cliente de este documento el combustible de otra aeronave, con su folio ajeno impreso.
+    // La via automatica ya esta atada a la matricula; la manual debe estarlo igual.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $ajena = remisionDe($prefactura, '2026-10-20', '10:00:00', ['matricula' => 'XB-OTRA']);
+
+    $respuesta = $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'remision_combustible_id' => $ajena->id,
+    ])->assertStatus(422)->assertJsonValidationErrors(['remision_combustible_id']);
+
+    expect($respuesta->json('errors.remision_combustible_id.0'))->toContain('XB-OTRA')
+        ->and($respuesta->json('errors.remision_combustible_id.0'))->toContain($prefactura->aeronave->matricula)
+        ->and(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
+});
+
+test('la matricula de la remision se compara normalizada, como en la via automatica', function () {
+    // Rampa teclea la matricula a mano: minusculas y espacios de sobra no son otra aeronave.
+    // `deLaMatricula()` ya compara con `upper(trim(...))`; el alta a mano usa lo mismo.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00', [
+        'matricula' => '  '.mb_strtolower($prefactura->aeronave->matricula).'  ',
+    ]);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'remision_combustible_id' => $remision->id,
+    ])->assertCreated();
+
+    expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole()->remision_combustible_id)->toBe($remision->id);
+});
+
+test('el buscador SIGUE ofreciendo las remisiones de otra matricula: atar el alta no es capar el buscador', function () {
+    // El buscador es texto libre a proposito. Lo que cambia es que el alta ya no las acepta.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $ajena = remisionDe($prefactura, '2026-10-20', '10:00:00', ['matricula' => 'XB-OTRA']);
+
+    $respuesta = $this->getJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones?q=XB-OTRA")->assertOk();
+
+    expect(collect($respuesta->json('remisiones'))->pluck('id')->all())->toContain($ajena->id);
+});

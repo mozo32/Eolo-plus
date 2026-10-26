@@ -104,12 +104,25 @@ final class RemisionesFacturables
             });
     }
 
+    /**
+     * La matrícula como se compara: Rampa la teclea a mano, así que minúsculas y espacios de
+     * sobra no son otra aeronave.
+     *
+     * Vive aquí porque la comparan DOS vías y tienen que coincidir: `deLaMatricula()`, que es
+     * la automática, y `StoreRenglonRequest`, que ata el alta a mano a la matrícula de la
+     * prefactura. Una de las dos normalizando distinto sería la divergencia de vuelta.
+     */
+    public static function normalizarMatricula(?string $matricula): string
+    {
+        return mb_strtoupper(trim((string) $matricula));
+    }
+
     /** @return Builder<Remision> */
     private static function deLaMatricula(string $matricula): Builder
     {
         return Remision::query()
             ->where('status', 'A')
-            ->whereRaw('upper(trim(matricula)) = ?', [mb_strtoupper(trim($matricula))]);
+            ->whereRaw('upper(trim(matricula)) = ?', [self::normalizarMatricula($matricula)]);
     }
 
     /**

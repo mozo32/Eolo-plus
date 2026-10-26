@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\Facturacion;
 
+use App\Models\FactPrefactura;
 use App\Models\FactServicio;
+use App\Services\RemisionesFacturables;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -78,7 +80,19 @@ class StoreRenglonRequest extends FormRequest
         }
     }
 
-    /** La remisión solo tiene sentido en el servicio de combustible, y solo si tiene precio. */
+    /**
+     * La remisión solo tiene sentido en el servicio de combustible, solo si tiene precio y
+     * solo si es de LA MATRÍCULA de esta prefactura.
+     *
+     * Lo de la matrícula: la vía automática está atada a ella (`deLaMatricula()`), y el alta a
+     * mano no lo estaba. El buscador del modal arranca con la matrícula de la prefactura pero
+     * es un campo editable, así que tecleando otra salían sus remisiones y el alta las
+     * aceptaba: se le cobraba al cliente de este documento el combustible de otra aeronave,
+     * con su folio ajeno impreso en el renglón. Cobrar el combustible de otra aeronave sería
+     * una funcionalidad deliberada —como ya lo es el tránsito ajeno, que tiene su propio campo
+     * de matrícula— y no un agujero. El buscador SIGUE ofreciéndolas: lo que no se puede es
+     * darlas de alta.
+     */
     private function soloParaCombustible(string $atributo, mixed $valor, \Closure $fallar): void
     {
         $esCombustible = FactServicio::query()
@@ -92,8 +106,30 @@ class StoreRenglonRequest extends FormRequest
             return;
         }
 
-        if (\App\Models\Remision::whereKey($valor)->whereNull('precio')->exists()) {
+        $remision = \App\Models\Remision::find($valor);
+
+        if ($remision === null) {
+            return;
+        }
+
+        if ($remision->precio === null) {
             $fallar('Esa remisión no tiene precio registrado, así que no hay nada que cobrar. Captúralo en Rampa primero.');
+
+            return;
+        }
+
+        $dePrefactura = FactPrefactura::with('aeronave')->find($this->route('id'))?->aeronave?->matricula;
+
+        // Sin prefactura o sin matrícula no hay nada contra qué contrastar: el controlador ya
+        // devuelve 404 si la prefactura no existe, y el rechazo no se inventa una comparación.
+        if ($dePrefactura === null) {
+            return;
+        }
+
+        $deRemision = RemisionesFacturables::normalizarMatricula($remision->matricula);
+
+        if ($deRemision !== RemisionesFacturables::normalizarMatricula($dePrefactura)) {
+            $fallar("Esa remisión es de {$remision->matricula} y esta prefactura es de {$dePrefactura}: el combustible de otra aeronave no se cobra aquí. Si la matrícula se capturó mal en Rampa, corrígela allí.");
         }
     }
 
