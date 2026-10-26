@@ -403,11 +403,14 @@ class PagosPrefactura
         }
 
         if ($forma->concepto === FactFormaPago::CONCEPTO_AVCARD) {
-            // El combustible se reconoce por concepto: `id_servicio = 7` es del viejo.
-            if ($prefactura->renglones()->where('concepto', FactServicio::CONCEPTO_COMBUSTIBLE)->exists()) {
+            // La regla vive en `ReglaAvcardSinCombustible` porque el CIERRE la comprueba
+            // también: aquí el combustible ya está y llega el pago; allí el pago ya estaba y
+            // el combustible llegó después. El combustible se reconoce por concepto:
+            // `id_servicio = 7` es del viejo.
+            if (ReglaAvcardSinCombustible::tieneCombustible($prefactura)) {
                 throw new PagoNoPermitidoException(
                     "{$forma->nombre} no se puede usar en una prefactura que tiene combustible.",
-                    'avcard_con_combustible',
+                    ReglaAvcardSinCombustible::CODIGO,
                 );
             }
 

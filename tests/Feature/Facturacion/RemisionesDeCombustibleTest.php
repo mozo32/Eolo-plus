@@ -626,3 +626,43 @@ test('aeronave_id y remision_combustible_id juntos nunca dan un renglon', functi
 
     expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
 });
+
+// ---------------------------------------------------------------------------
+// C-1: el combustible que entra solo y un pago AvCard ya registrado
+// ---------------------------------------------------------------------------
+
+test('CRITICO C-1: cobrar con AvCard y que el combustible entre solo despues NO deja cerrar el documento', function () {
+    // La secuencia entera, sin que nadie haga nada deliberado: se cobra con AvCard mientras la
+    // prefactura todavia no tiene combustible (la regla lo permite), Rampa captura la remision,
+    // el operador recarga la pantalla y el renglon entra solo. Antes de este arreglo el
+    // documento se cerraba y consumia folio en el estado que el sistema prohibe.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $prefactura->update(['cliente_id' => App\Models\FactCliente::create(['nombre' => 'Cliente '.uniqid()])->id]);
+    renglonDe($prefactura, 500.0, 1);
+    $formas = formasDePago();
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/pagos", [
+        'forma_pago_id' => $formas[App\Models\FactFormaPago::CONCEPTO_AVCARD]->id,
+        'monto' => '100.00',
+    ])->assertCreated();
+
+    remisionDe($prefactura, '2026-10-20', '10:00:00');
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
+        ->assertOk()
+        ->assertJsonPath('agregados', 1);
+
+    $respuesta = $this->patchJson("/api/facturacion/prefacturas/{$prefactura->id}/cerrar", ['confirmar_sin_cobro' => true])
+        ->assertStatus(422)
+        ->assertJsonPath('codigo', 'avcard_con_combustible');
+
+    // El mensaje dice QUE pasa y QUE puede hacer el operador, no solo que no se puede.
+    expect($respuesta->json('message'))->toContain('AvCard')
+        ->and($respuesta->json('message'))->toContain('combustible');
+
+    $prefactura = $prefactura->fresh();
+    expect($prefactura->folio)->toBeNull()
+        ->and($prefactura->estado)->toBe(FactPrefactura::ESTADO_BORRADOR);
+});

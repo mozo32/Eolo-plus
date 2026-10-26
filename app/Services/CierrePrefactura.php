@@ -47,6 +47,7 @@ class CierrePrefactura
      *
      * @throws PrefacturaSinCobroException si los pagos no cubren el total y no se confirmó, o si se confirmó otra cifra que la del faltante real.
      * @throws TotalesNoCalculablesException si la tasa de IVA o un renglón no se reconocen.
+     * @throws AvcardConCombustibleException si lleva combustible y un pago con AvCard activo.
      */
     public function cerrar(FactPrefactura $prefactura, int $userId, bool $confirmarSinCobro = false, ?string $faltanteConfirmado = null): FactPrefactura
     {
@@ -80,6 +81,8 @@ class CierrePrefactura
             if ($prefactura->renglones()->count() === 0) {
                 throw new PrefacturaIncompletaException('La prefactura no tiene ningún renglón.');
             }
+
+            $this->exigirQueNoLleveAvcardYCombustible($prefactura);
 
             // Los totales se leen ANTES de consumir el folio y de cambiar el estado:
             // si la tasa de IVA es ilegible esto lanza y el folio no se gasta. Se usan
@@ -195,6 +198,37 @@ class CierrePrefactura
 
             return $cerrada;
         });
+    }
+
+    /**
+     * La regla `avcard_con_combustible`, comprobada OTRA VEZ al cerrar.
+     *
+     * `PagosPrefactura` la comprueba al registrar el pago, pero el combustible puede llegar
+     * DESPUÉS y solo: la sincronización de remisiones lo trae al abrir la pantalla. El cierre
+     * es la puerta por la que sale un documento emitido, y un folio no se des-consume, así que
+     * la regla se vuelve a mirar aquí. Va antes de `siguienteFolio()`, como todo lo que aborta.
+     *
+     * No es una copia de la del pago: las dos llaman a `ReglaAvcardSinCombustible`.
+     *
+     * @throws AvcardConCombustibleException
+     */
+    private function exigirQueNoLleveAvcardYCombustible(FactPrefactura $prefactura): void
+    {
+        if (! ReglaAvcardSinCombustible::tieneCombustible($prefactura)) {
+            return;
+        }
+
+        $pago = ReglaAvcardSinCombustible::pagoAvcard($prefactura);
+
+        if ($pago === null) {
+            return;
+        }
+
+        $nombre = $pago->formaPago?->nombre ?? 'AvCard';
+
+        throw new AvcardConCombustibleException(
+            "Esta prefactura tiene combustible y un pago con {$nombre}, y las dos cosas no van en el mismo documento: {$nombre} liquida el combustible por su cuenta, así que cobrarlo aquí sería cobrarlo dos veces. Quita el pago con {$nombre} y cóbralo de otra forma, o quita los renglones de combustible; después vuelve a cerrar."
+        );
     }
 
     /**

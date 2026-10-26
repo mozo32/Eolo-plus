@@ -242,3 +242,76 @@ test('una instancia vieja de un borrador descartado por otra sesion tampoco gast
         ->toThrow(PrefacturaDescartadaException::class)
         ->and(FactConfiguracion::valor('prefactura_folio_siguiente'))->toBe('10000');
 });
+
+// ---------------------------------------------------------------------------
+// La regla AvCard + combustible, comprobada tambien AL CERRAR
+// ---------------------------------------------------------------------------
+
+/** Un renglon de combustible, reconocible por su CONCEPTO, que es por donde lo mira la regla. */
+function conRenglonDeCombustible(FactPrefactura $p): void
+{
+    $servicio = App\Models\FactServicio::create([
+        'nombre' => 'Combustible JET A-1',
+        'precio_unitario' => 500.0,
+        'concepto' => App\Models\FactServicio::CONCEPTO_COMBUSTIBLE,
+    ]);
+
+    $p->renglones()->create([
+        'servicio_id' => $servicio->id,
+        'nombre_servicio' => $servicio->nombre,
+        'precio_unitario' => 500.0,
+        'cantidad' => 1,
+        'es_de_tercero' => false,
+        'margen' => 0,
+        'ajuste_precio' => 'ninguno',
+        'concepto' => App\Models\FactServicio::CONCEPTO_COMBUSTIBLE,
+        'orden' => 9,
+    ]);
+}
+
+function formaAvcard(): App\Models\FactFormaPago
+{
+    return App\Models\FactFormaPago::firstOrCreate(
+        ['nombre' => 'AvCard by WFS'],
+        ['concepto' => App\Models\FactFormaPago::CONCEPTO_AVCARD],
+    );
+}
+
+test('CRITICO C-1: no se cierra una prefactura con combustible y un pago AvCard, y no consume folio', function () {
+    // El pago entra cuando todavia no hay combustible (la regla lo permite) y el combustible
+    // llega despues solo. Si el cierre no vuelve a mirar, el documento sale emitido en el
+    // estado exacto que el sistema prohibe, y AvCard ya liquido ese combustible por su cuenta.
+    [$p, $usuario] = prefacturaCompleta();
+    pagoDe($p, formaAvcard(), '100.00');
+    conRenglonDeCombustible($p);
+
+    expect(fn () => app(CierrePrefactura::class)->cerrar($p->fresh(), $usuario->id, confirmarSinCobro: true))
+        ->toThrow(App\Services\AvcardConCombustibleException::class);
+
+    $p = $p->fresh();
+    expect($p->estado)->toBe(FactPrefactura::ESTADO_BORRADOR)
+        ->and($p->folio)->toBeNull()
+        ->and($p->subtotal_sellado)->toBeNull()
+        ->and(FactConfiguracion::valor('prefactura_folio_siguiente'))->toBe('10000');
+});
+
+test('un pago AvCard DADO DE BAJA no impide cerrar una prefactura con combustible', function () {
+    // La baja de un pago es logica: `pagos()` ya filtra por status, y la regla del cierre se
+    // apoya en esa relacion y no en la tabla cruda. Quitar el pago es justamente la salida que
+    // el mensaje le ofrece al operador.
+    [$p, $usuario] = prefacturaCompleta();
+    $pago = pagoDe($p, formaAvcard(), '100.00');
+    conRenglonDeCombustible($p);
+    $pago->update(['status' => App\Models\FactPrefacturaPago::STATUS_INACTIVO]);
+
+    $cerrada = app(CierrePrefactura::class)->cerrar($p->fresh(), $usuario->id, confirmarSinCobro: true);
+
+    expect($cerrada->folio)->toBe(10000);
+});
+
+test('sin combustible, un pago AvCard cierra como siempre', function () {
+    [$p, $usuario] = prefacturaCompleta();
+    pagoDe($p, formaAvcard(), '116.00');
+
+    expect(app(CierrePrefactura::class)->cerrar($p->fresh(), $usuario->id)->folio)->toBe(10000);
+});

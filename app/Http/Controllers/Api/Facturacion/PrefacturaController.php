@@ -16,6 +16,7 @@ use App\Models\FactPrefacturaRenglon;
 use App\Models\FactPrefacturaVersion;
 use App\Models\FactServicio;
 use App\Models\OperacionDiaria;
+use App\Services\AvcardConCombustibleException;
 use App\Services\CalculadoraEstancia;
 use App\Services\CargosEstancia;
 use App\Services\CierrePrefactura;
@@ -426,6 +427,14 @@ class PrefacturaController extends Controller
             return response()->json(['message' => $e->getMessage(), 'codigo' => 'ya_descartada'], 409);
         } catch (PrefacturaIncompletaException $e) {
             return response()->json(['message' => $e->getMessage(), 'codigo' => 'incompleta'], 422);
+        } catch (AvcardConCombustibleException $e) {
+            // La misma regla que `PagosPrefactura` aplica al cobrar, y el mismo codigo: el
+            // combustible pudo entrar solo DESPUES del pago. Nada quedo escrito y el folio no
+            // se consumio; el mensaje dice las dos salidas que tiene el operador.
+            return response()->json([
+                'message' => $e->getMessage(),
+                'codigo' => AvcardConCombustibleException::CODIGO,
+            ], 422);
         } catch (PrefacturaSinCobroException $e) {
             // No es un fallo: es la confirmación que falta. Nada quedó escrito y el folio
             // no se consumió; la pantalla vuelve a llamar con `confirmar_sin_cobro`.
