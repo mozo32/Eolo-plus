@@ -1,7 +1,6 @@
 import {
     ErrorApi,
     FILTROS_AERONAVES_VACIOS,
-    YA_EN_ESTE_DOCUMENTO,
     apiPrefacturas,
     apiProveedores,
     apiServicios,
@@ -23,20 +22,18 @@ const ESPERA_AERONAVE_MS = 300;
 const MAXIMO_AERONAVES = 20;
 const ESPERA_REMISION_MS = 300;
 
-/** La remisión que ya está en ESTA prefactura no se puede elegir otra vez: el servidor lo rechaza con 422. */
-const yaEstaEnEsteDocumento = (remision: RemisionFacturable): boolean => remision.tomada_por === YA_EN_ESTE_DOCUMENTO;
-
 /** Los litros de una remisión llegan como texto ("2650.00"): "2,650". */
 const formatearLitros = (litros: string): string => Number(litros).toLocaleString('es-MX', { maximumFractionDigits: 2 });
 
 /** La opción del menú: «EOLO-9397 — 20/10/2026 10:00 — 2,650 L a $25.99», más lo que impide o advierte. */
 function etiquetaDeRemision(remision: RemisionFacturable): string {
     const hora = remision.hora_inicial === null ? '' : ` ${remision.hora_inicial.slice(0, 5)}`;
-    const precio = remision.precio === null ? '' : ` a ${formatearMonto(remision.precio)}`;
+    // El precio de la remisión es de 4 decimales y así se cobra: a 2, 2,650 L a «$21.53» no daría el total que se ve.
+    const precio = remision.precio === null ? '' : ` a ${formatearMonto(remision.precio, 4)}`;
     let etiqueta = `${remision.folio} — ${fechaMexico(remision.fecha)}${hora} — ${formatearLitros(remision.total_litros)} L${precio}`;
 
-    // «ya está en este documento» es la frase entera, no un folio: no lleva «ya facturada en» delante.
-    if (yaEstaEnEsteDocumento(remision)) etiqueta += ` · ${YA_EN_ESTE_DOCUMENTO}`;
+    // Ya en este documento no es de otro: no lleva «ya facturada en» delante. Lo dice el servidor con un booleano.
+    if (remision.en_este_documento) etiqueta += ' · ya está en este documento';
     else if (remision.tomada_por !== null) etiqueta += ` · ya facturada en ${remision.tomada_por}`;
 
     if (remision.sin_precio) etiqueta += ' · sin precio';
@@ -481,6 +478,10 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
                                 type="text"
                                 value={busquedaRemision}
                                 onChange={e => setBusquedaRemision(e.target.value)}
+                                // Enter en una caja de búsqueda busca (ya lo hace solo al teclear): no envía el formulario ni da de alta un renglón.
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') e.preventDefault();
+                                }}
                                 placeholder="Buscar matrícula…"
                                 autoComplete="off"
                                 className="mb-2 w-full text-[11px] border border-slate-200 p-2 rounded bg-white outline-none focus:border-blue-400"
@@ -499,7 +500,7 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
                             >
                                 <option value="">Sin remisión (cobrar a mano)</option>
                                 {opcionesRemision.map(r => (
-                                    <option key={r.id} value={r.id} disabled={r.sin_precio || yaEstaEnEsteDocumento(r)}>
+                                    <option key={r.id} value={r.id} disabled={r.sin_precio || r.en_este_documento}>
                                         {etiquetaDeRemision(r)}
                                     </option>
                                 ))}
@@ -587,7 +588,9 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
                         <p className="mt-1 text-[10px] font-bold text-slate-500 italic">
                             {vistaPrevia && 'problema' in vistaPrevia
                                 ? vistaPrevia.problema
-                                : servicio
+                                : servicio && esCombustible && remisionElegida !== null
+                                  ? 'Es una vista previa con los litros y el precio de la remisión, sin margen ni ajuste; el sistema calcula la cifra que cobra al agregarlo.'
+                                  : servicio
                                   ? 'Es una vista previa con el precio, el margen y el ajuste del servicio; el sistema calcula la cifra que cobra al agregarlo.'
                                   : 'Elige un servicio y una cantidad para ver el importe.'}
                         </p>

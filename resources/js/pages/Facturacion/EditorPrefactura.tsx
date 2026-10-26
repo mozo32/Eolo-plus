@@ -19,6 +19,12 @@ import SelectorCliente from './components/SelectorCliente';
 const TEXTO_MAX = 120;
 const MENSAJE_HORA_24 = 'La hora va en formato de 24 horas, de 00:00 a 23:59 (por ejemplo, 14:30).';
 
+/**
+ * La sincronización automática de remisiones solo corre en un borrador activo. Una reabierta es un documento ya emitido que alguien abrió
+ * para corregir algo concreto: no se le traen renglones solos (el servidor tampoco lo hace); las remisiones se eligen a mano en el modal.
+ */
+const sincronizaSola = (p: Prefactura): boolean => p.estado === 'borrador' && p.status !== 'N';
+
 /** Lo mismo que acepta el servidor para la etiqueta de un grupo. */
 const GRUPO_MAX = 60;
 
@@ -369,10 +375,10 @@ export default function EditorPrefactura({ id }: Props) {
         }
     }, [id, cargar]);
 
-    // Una sola vez por prefactura y solo si se puede editar: en una cerrada o descartada el servidor ni siquiera la admite.
+    // Una sola vez por prefactura y solo en un borrador activo: ni una cerrada, ni una descartada, ni una reabierta.
     const sincronizadaRef = useRef<number | null>(null);
     const prefacturaId = prefactura?.id ?? null;
-    const sePuedeSincronizar = prefactura !== null && prefactura.estado !== 'cerrada' && prefactura.status !== 'N';
+    const sePuedeSincronizar = prefactura !== null && sincronizaSola(prefactura);
 
     useEffect(() => {
         if (prefacturaId === null || !sePuedeSincronizar || sincronizadaRef.current === prefacturaId) return;
@@ -566,7 +572,7 @@ export default function EditorPrefactura({ id }: Props) {
             setForm(formularioDe(guardada));
 
             // La ventana de la estancia cambió con la salida: pueden entrar cargas nuevas, o quedar fuera alguna ya cobrada.
-            const cambioLaSalida = guardada.salida_at !== salidaAnterior;
+            const cambioLaSalida = guardada.salida_at !== salidaAnterior && sincronizaSola(guardada);
 
             if (avisoDeEstancia !== null) {
                 // Al guardar la salida el servidor recalcula la estancia y puede dejarla sin cobrar (Guarda, sin ficha, tarifa nula) o perder una
