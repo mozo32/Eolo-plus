@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\FactPrefactura;
 use App\Models\Remision;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -106,13 +107,24 @@ final class RemisionesFacturables
             ->whereRaw('upper(trim(matricula)) = ?', [mb_strtoupper(trim($matricula))]);
     }
 
-    private static function yaCobradaEnUnaPrefacturaActiva(\Illuminate\Database\Query\Builder $consulta): void
+    /**
+     * LA mitad 2 de la regla de «tomada»: los renglones (alias `r`) que viven en una prefactura
+     * ACTIVA (alias `p`). Es el único sitio donde está escrito el `join` y el `p.status = 'A'`;
+     * `candidatas()` y `quienLaTiene()` parten los dos de aquí, de modo que no se puede quitar
+     * el filtro en uno y dejarlo en el otro.
+     */
+    private static function renglonesEnPrefacturaActiva(QueryBuilder $consulta): QueryBuilder
     {
-        $consulta->select(DB::raw(1))
+        return $consulta
             ->from('fact_prefactura_renglones as r')
             ->join('fact_prefacturas as p', 'p.id', '=', 'r.prefactura_id')
-            ->whereColumn('r.remision_combustible_id', 'remisiones.id')
             ->where('p.status', 'A');
+    }
+
+    private static function yaCobradaEnUnaPrefacturaActiva(QueryBuilder $consulta): void
+    {
+        self::renglonesEnPrefacturaActiva($consulta->select(DB::raw(1)))
+            ->whereColumn('r.remision_combustible_id', 'remisiones.id');
     }
 
     /** El documento que ya la tiene, o null si está libre. */
@@ -122,10 +134,8 @@ final class RemisionesFacturables
             return $remision->folio_orden_venta ?: 'otro documento';
         }
 
-        $renglon = DB::table('fact_prefactura_renglones as r')
-            ->join('fact_prefacturas as p', 'p.id', '=', 'r.prefactura_id')
+        $renglon = self::renglonesEnPrefacturaActiva(DB::query())
             ->where('r.remision_combustible_id', $remision->id)
-            ->where('p.status', 'A')
             ->when($excluyePrefacturaId !== null, fn ($q) => $q->where('p.id', '<>', $excluyePrefacturaId))
             ->select('p.id', 'p.folio')
             ->first();

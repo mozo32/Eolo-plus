@@ -99,8 +99,12 @@ test('una remision de la matricula dentro de la ventana es candidata', function 
 
 test('sin salida la ventana llega hasta ahora', function () {
     // Es el caso normal: 16 de 27 prefacturas no tienen salida cuando se capturan.
+    // El reloj se fija: con la hora real, entre las 00:00 y la 01:00 «hace una hora» cae en el
+    // dia anterior pero con la fecha de hoy, o sea en el futuro, y la prueba fallaria sola.
+    $this->travelTo('2026-10-21 12:00:00');
+
     $prefactura = prefacturaConMatricula(now()->subDay()->format('Y-m-d H:i:s'));
-    $remision = remisionDe($prefactura, now()->format('Y-m-d'), now()->subHour()->format('H:i:s'));
+    $remision = remisionDe($prefactura, '2026-10-21', '11:00:00');
 
     expect(RemisionesFacturables::candidatas($prefactura)->pluck('id')->all())->toBe([$remision->id]);
 });
@@ -229,4 +233,51 @@ test('el buscador NO acota por ventana: devuelve todas las de la matricula', fun
     remisionDe($prefactura, '2026-12-31', '10:00:00');
 
     expect(RemisionesFacturables::paraElegir($prefactura->aeronave->matricula))->toHaveCount(2);
+});
+
+test('el buscador dice quien la tiene: el folio, o borrador #id si aun no lo tiene', function () {
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $enBorrador = remisionDe($prefactura, '2026-10-20', '09:00:00');
+    $conFolio = remisionDe($prefactura, '2026-10-20', '10:00:00');
+
+    $dueña = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $dueñaConFolio = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    renglonDeRemision($dueña, $enBorrador);
+    renglonDeRemision($dueñaConFolio, $conFolio);
+    // El folio se asigna al cerrar, y una cerrada ya no admite renglones: se pone despues.
+    $dueñaConFolio->update(['folio' => 'FAC-0042']);
+
+    $lista = RemisionesFacturables::paraElegir($prefactura->aeronave->matricula)->keyBy('id');
+
+    expect($lista->get($enBorrador->id)->tomada_por)->toBe("borrador #{$dueña->id}")
+        ->and($lista->get($conFolio->id)->tomada_por)->toBe('FAC-0042');
+});
+
+test('el buscador NO marca como tomada la que usaba una prefactura DESCARTADA', function () {
+    // Es la misma regla que fija «DESCARTAR la prefactura...» para candidatas(), pero por el
+    // camino del buscador: si este camino mirara solo el renglon, el modal mostraria como
+    // tomada una remision que la sincronizacion si agregaria.
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00');
+    renglonDeRemision($prefactura, $remision);
+
+    expect(RemisionesFacturables::paraElegir($prefactura->aeronave->matricula)->first()->tomada_por)
+        ->toBe("borrador #{$prefactura->id}");
+
+    $prefactura->update(['status' => FactPrefactura::STATUS_INACTIVO]);
+
+    expect(RemisionesFacturables::paraElegir($prefactura->aeronave->matricula)->first()->tomada_por)
+        ->toBeNull();
+});
+
+test('el buscador no marca como tomada por otra la que ya esta en ESTA prefactura', function () {
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00');
+    renglonDeRemision($prefactura, $remision);
+    $matricula = $prefactura->aeronave->matricula;
+
+    expect(RemisionesFacturables::paraElegir($matricula)->first()->tomada_por)
+        ->toBe("borrador #{$prefactura->id}")
+        ->and(RemisionesFacturables::paraElegir($matricula, $prefactura->id)->first()->tomada_por)
+        ->toBeNull();
 });
