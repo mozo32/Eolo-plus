@@ -374,3 +374,110 @@ test('sincronizar exige el subdepartamento', function () {
     $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
         ->assertForbidden();
 });
+
+// ---------------------------------------------------------------------------
+// Elegir una remision a mano
+// ---------------------------------------------------------------------------
+
+test('el buscador del modal devuelve las remisiones de la matricula con sus marcas', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $libre = remisionDe($prefactura, '2026-10-20', '09:00:00');
+    $deRampa = remisionDe($prefactura, '2026-10-20', '11:00:00', ['status_prefactura' => true, 'folio_orden_venta' => 'OV-123']);
+
+    $respuesta = $this->getJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones?q=".$prefactura->aeronave->matricula)
+        ->assertOk();
+
+    $porId = collect($respuesta->json('remisiones'))->keyBy('id');
+
+    expect($porId->get($libre->id)['tomada_por'])->toBeNull()
+        ->and($porId->get($deRampa->id)['tomada_por'])->toBe('OV-123');
+});
+
+test('se puede agregar a mano una remision YA tomada, que es lo decidido', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00', ['status_prefactura' => true, 'folio_orden_venta' => 'OV-123']);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'remision_combustible_id' => $remision->id,
+    ])->assertCreated();
+
+    $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
+
+    expect($renglon->remision_combustible_id)->toBe($remision->id)
+        ->and((float) $renglon->precio_unitario)->toBe(25.994)
+        ->and($renglon->cantidad)->toBe(2650);
+});
+
+test('la cantidad y el precio los pone la remision, no lo que mande el cliente', function () {
+    // Si el cliente pudiera fijar la cantidad, un error de tecleo cobraria litros que no se
+    // cargaron. Los litros son un hecho de la remision.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00', ['total_litros' => 777, 'precio' => 31.25]);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'remision_combustible_id' => $remision->id,
+    ])->assertCreated();
+
+    $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
+
+    expect($renglon->cantidad)->toBe(777)
+        ->and((float) $renglon->precio_unitario)->toBe(31.25);
+});
+
+test('no se puede agregar una remision sin precio', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00', ['precio' => null]);
+
+    $respuesta = $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'remision_combustible_id' => $remision->id,
+    ])->assertStatus(422);
+
+    expect($respuesta->json('errors.remision_combustible_id.0'))->toContain('precio')
+        ->and(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
+});
+
+test('remision_combustible_id en un servicio que no es combustible se rechaza', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00');
+    $normal = FactServicio::create(['nombre' => 'Remolque', 'precio_unitario' => 867.87]);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $normal->id,
+        'cantidad' => 1,
+        'remision_combustible_id' => $remision->id,
+    ])->assertStatus(422)->assertJsonValidationErrors(['remision_combustible_id']);
+});
+
+test('el servicio de combustible SIN remision se sigue agregando como siempre', function () {
+    // No regresion: el combustible tambien se puede cobrar a mano sin remision, al precio del
+    // catalogo, como antes de este trabajo.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 500,
+    ])->assertCreated();
+
+    $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
+
+    expect($renglon->remision_combustible_id)->toBeNull()
+        ->and($renglon->cantidad)->toBe(500)
+        ->and((float) $renglon->precio_unitario)->toBe(25.994);
+});

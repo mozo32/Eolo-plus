@@ -376,6 +376,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(functio
     Route::get('/prefacturas', [PrefacturaController::class, 'index']);
     Route::get('/prefacturas/llegadas-sin-facturar', [PrefacturaController::class, 'llegadasSinFacturar']);
     Route::get('/prefacturas/llegadas-pendientes', [PrefacturaController::class, 'llegadasPendientes']);
+    Route::get('/prefacturas/{id}/remisiones', [PrefacturaRenglonController::class, 'remisiones'])->whereNumber('id');
     Route::get('/prefacturas/{id}/estancia-sugerida', [PrefacturaController::class, 'estanciaSugerida'])->whereNumber('id');
     Route::get('/prefacturas/{id}', [PrefacturaController::class, 'show'])->whereNumber('id');
 

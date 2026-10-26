@@ -21,6 +21,7 @@ class StoreRenglonRequest extends FormRequest
             ],
             'cantidad' => ['required', 'integer', 'min:1', 'max:9999'],
             'aeronave_id' => ['bail', 'nullable', 'integer', Rule::exists('aeronaves', 'id'), $this->soloParaTransito(...)],
+            'remision_combustible_id' => ['bail', 'nullable', 'integer', Rule::exists('remisiones', 'id'), $this->soloParaCombustible(...)],
             'proveedor_id' => ['nullable', 'integer', Rule::exists('fact_proveedores', 'id')->where('status', 'A')],
             'remision' => ['nullable', 'string', 'max:255'],
         ];
@@ -77,6 +78,25 @@ class StoreRenglonRequest extends FormRequest
         }
     }
 
+    /** La remisión solo tiene sentido en el servicio de combustible, y solo si tiene precio. */
+    private function soloParaCombustible(string $atributo, mixed $valor, \Closure $fallar): void
+    {
+        $esCombustible = FactServicio::query()
+            ->whereKey($this->input('servicio_id'))
+            ->where('concepto', FactServicio::CONCEPTO_COMBUSTIBLE)
+            ->exists();
+
+        if (! $esCombustible) {
+            $fallar('La remisión solo se indica al cobrar combustible.');
+
+            return;
+        }
+
+        if (\App\Models\Remision::whereKey($valor)->whereNull('precio')->exists()) {
+            $fallar('Esa remisión no tiene precio registrado, así que no hay nada que cobrar. Captúralo en Rampa primero.');
+        }
+    }
+
     public function messages(): array
     {
         return [
@@ -89,6 +109,8 @@ class StoreRenglonRequest extends FormRequest
             'cantidad.max' => 'La cantidad no puede pasar de 9,999.',
             'aeronave_id.integer' => 'La matrícula no es válida.',
             'aeronave_id.exists' => 'Esa matrícula no está en el sistema.',
+            'remision_combustible_id.integer' => 'La remisión no es válida.',
+            'remision_combustible_id.exists' => 'Esa remisión no está en el sistema.',
             'proveedor_id.integer' => 'El proveedor no es válido.',
             'proveedor_id.exists' => 'El proveedor no existe o está dado de baja.',
             'remision.string' => 'La remisión debe ser texto.',

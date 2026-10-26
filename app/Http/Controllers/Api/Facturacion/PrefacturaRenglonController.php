@@ -58,7 +58,15 @@ class PrefacturaRenglonController extends Controller
             }
         }
 
-        $renglon = DB::transaction(function () use ($request, $id, $servicio, $ajena) {
+        // El combustible nacido de una remisión toma de ella su precio y sus litros: el precio
+        // del catálogo es el vigente, y una carga de hace un mes no se recobra al de hoy.
+        $remision = null;
+
+        if ($request->validated()['remision_combustible_id'] ?? null) {
+            $remision = Remision::findOrFail($request->validated()['remision_combustible_id']);
+        }
+
+        $renglon = DB::transaction(function () use ($request, $id, $servicio, $ajena, $remision) {
             $actual = $this->bloquear($id);
 
             if ($respuesta = $this->rechazarSiDescartada($actual)) {
@@ -69,9 +77,10 @@ class PrefacturaRenglonController extends Controller
             // mañana, este documento no se mueve.
             $renglon = $actual->renglones()->create([
                 'servicio_id' => $servicio->id,
-                'nombre_servicio' => $ajena === null ? $servicio->nombre : $ajena['nombre'],
-                'precio_unitario' => $ajena === null ? $servicio->precio_unitario : $ajena['precio'],
-                'cantidad' => $request->validated()['cantidad'],
+                'nombre_servicio' => $remision !== null ? "{$servicio->nombre} — {$remision->folio}" : ($ajena === null ? $servicio->nombre : $ajena['nombre']),
+                'precio_unitario' => $remision !== null ? $remision->precio : ($ajena === null ? $servicio->precio_unitario : $ajena['precio']),
+                'cantidad' => $remision !== null ? (int) $remision->total_litros : $request->validated()['cantidad'],
+                'remision_combustible_id' => $remision?->id,
                 // El precio del ajeno sale de la tarifa de la aeronave, no del catálogo, así que los
                 // ajustes del catálogo (margen, ajuste de precio, tercero) no le aplican: es lo mismo
                 // que hace CargosEstancia con los cargos propios, que escriben false, 0 y «ninguno».
@@ -105,6 +114,36 @@ class PrefacturaRenglonController extends Controller
             'message' => 'Renglón agregado.',
             'renglon_id' => $renglon->id,
         ], 201);
+    }
+
+    /** Las remisiones de una matrícula para el buscador del modal, con sus marcas. */
+    public function remisiones(Request $request, int $id): JsonResponse
+    {
+        $prefactura = FactPrefactura::findOrFail($id);
+        $matricula = trim((string) $request->query('q', ''));
+
+        if ($matricula === '') {
+            $matricula = (string) $prefactura->aeronave?->matricula;
+        }
+
+        if ($matricula === '') {
+            return response()->json(['remisiones' => []]);
+        }
+
+        $remisiones = RemisionesFacturables::paraElegir($matricula, $prefactura->id)
+            ->map(fn (Remision $r) => [
+                'id' => $r->id,
+                'folio' => $r->folio,
+                'fecha' => $r->fecha,
+                'hora_inicial' => $r->hora_inicial,
+                'total_litros' => $r->total_litros,
+                'precio' => $r->precio,
+                'tomada_por' => $r->tomada_por,
+                'sin_precio' => $r->sin_precio,
+            ])
+            ->all();
+
+        return response()->json(['remisiones' => $remisiones]);
     }
 
     /**
