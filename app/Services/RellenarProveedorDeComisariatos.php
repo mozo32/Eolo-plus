@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Rellena `servicio_comisariatos.fact_servicio_id` en las filas anteriores a la lista de proveedores.
@@ -29,6 +30,12 @@ final class RellenarProveedorDeComisariatos
             $servicioId = DB::table('fact_servicios')->where('nombre', $nombreDelServicio)->value('id');
 
             if ($servicioId === null) {
+                // Nada que rellenar no es lo mismo que "el catálogo no está": lo segundo se dice.
+                Log::warning(
+                    "RellenarProveedorDeComisariatos: no existe el servicio '{$nombreDelServicio}' en fact_servicios; "
+                    . 'por eso no rellenó el proveedor de los comisariatos cuyo texto nombra a ese proveedor.'
+                );
+
                 continue;
             }
 

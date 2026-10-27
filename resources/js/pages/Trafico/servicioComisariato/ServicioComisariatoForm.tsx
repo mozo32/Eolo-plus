@@ -3,7 +3,8 @@ import { useState, useEffect } from "react";
 import {
     guardarServicioComisariatoApi,
     actualizarServicioComisariatoApi,
-    obtenerProveedoresComisariato,
+    obtenerProveedoresComisariatoConEstado,
+    type EstadoProveedoresComisariato,
     type ProveedorComisariato,
 } from "@/stores/apiServicioComisariato";
 import Swal from "sweetalert2";
@@ -93,12 +94,14 @@ export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Pro
     const { min, max } = useVentanaDeFecha("comisariato.entrega", isEdit ? data?.fecha_entrega : undefined);
     const [form, setForm] = useState(() => getInitialForm(data));
     const [proveedores, setProveedores] = useState<ProveedorComisariato[]>([]);
+    const [estadoLista, setEstadoLista] = useState<EstadoProveedoresComisariato>("disponibles");
     const [listaCargada, setListaCargada] = useState(false);
 
     useEffect(() => {
-        obtenerProveedoresComisariato()
-            .then((lista) => {
+        obtenerProveedoresComisariatoConEstado()
+            .then(({ lista, estado }) => {
                 setProveedores(lista);
+                setEstadoLista(estado);
                 setListaCargada(true);
             })
             .catch((error: any) => {
@@ -221,8 +224,9 @@ export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Pro
                             <label className={labelStyle}>Proveedor</label>
                             {listaCargada && proveedores.length === 0 && !proveedorGuardado ? (
                                 <p className="text-xs text-amber-700">
-                                    No hay proveedores de comisariato activos en el catálogo. Pide que
-                                    reactiven uno en Facturación → Servicios antes de capturar.
+                                    {estadoLista === "todos-de-baja"
+                                        ? "Todos los proveedores de comisariato del catálogo están dados de baja. Pide que reactiven uno en Facturación → Servicios antes de capturar."
+                                        : "No hay ningún proveedor de comisariato configurado en el catálogo. Pide que den de alta los servicios de la categoría Comisariatos en Facturación → Servicios antes de capturar."}
                                 </p>
                             ) : (
                                 <select

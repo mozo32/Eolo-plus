@@ -6,6 +6,7 @@ use App\Models\ServicioComisariato;
 use App\Models\User;
 use App\Services\RellenarProveedorDeComisariatos;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Log;
 
 /** La categoría a la que pertenecen los cinco proveedores de comisariato. */
 function categoriaComisariatos(): FactCategoriaServicio
@@ -94,6 +95,25 @@ test('el relleno no pisa un proveedor ya elegido a mano', function () {
     expect($elegidoAMano->fresh()->fact_servicio_id)->toBe($manny->id);
 });
 
+test('el relleno deja constancia en el log cuando no encuentra el servicio, y no rellena ni revienta', function () {
+    Log::spy();
+
+    $manny = servicioComisariato('Comisariato_Manny');
+    $deComexa = comisariatoDe(['catering' => 'Comexa']);
+    $deManny = comisariatoDe(['catering' => 'Mannys']);
+
+    (new RellenarProveedorDeComisariatos)();
+
+    // Lo que no se encuentra se dice: nombre buscado y consecuencia.
+    Log::shouldHaveReceived('warning')->withArgs(fn ($mensaje) => str_contains($mensaje, 'Comisariato_Comexa')
+        && str_contains($mensaje, 'no rellen'))->once();
+    // Y el que sí existe no genera aviso.
+    Log::shouldNotHaveReceived('warning', [Mockery::on(fn ($m) => str_contains($m, 'Comisariato_Manny')), Mockery::any()]);
+
+    expect($deComexa->fresh()->fact_servicio_id)->toBeNull()
+        ->and($deManny->fresh()->fact_servicio_id)->toBe($manny->id);
+});
+
 test('un servicio que ya identifico un comisariato no se puede borrar', function () {
     $servicio = servicioComisariato('Comisariato_Comexa');
     comisariatoDe(['fact_servicio_id' => $servicio->id]);
@@ -127,6 +147,60 @@ test('la lista de proveedores trae solo los servicios activos de la categoria Co
     expect($respuesta->json())->toHaveCount(1)
         ->and($respuesta->json('0.id'))->toBe($comexa->id)
         ->and($respuesta->json('0.nombre'))->toBe('Comisariato_Comexa');
+});
+
+test('la lista dice que no hay ningun proveedor configurado, distinto de que esten de baja', function () {
+    $this->actingAs(User::factory()->create());
+
+    $respuesta = $this->getJson('/api/ServicioComisariato/proveedores');
+
+    $respuesta->assertOk();
+    expect($respuesta->json())->toBe([])
+        ->and($respuesta->headers->get('X-Proveedores-Catalogo'))->toBe('sin-configurar');
+});
+
+test('la lista dice que los proveedores existen pero estan todos de baja', function () {
+    servicioComisariato('Comisariato_Comexa', 'N');
+    servicioComisariato('Comisariato_Manny', 'N');
+
+    $this->actingAs(User::factory()->create());
+
+    $respuesta = $this->getJson('/api/ServicioComisariato/proveedores');
+
+    $respuesta->assertOk();
+    expect($respuesta->json())->toBe([])
+        ->and($respuesta->headers->get('X-Proveedores-Catalogo'))->toBe('todos-de-baja');
+});
+
+test('la lista con proveedores activos los declara disponibles', function () {
+    servicioComisariato('Comisariato_Comexa');
+    servicioComisariato('Comisariato_Manny', 'N');
+
+    $this->actingAs(User::factory()->create());
+
+    $respuesta = $this->getJson('/api/ServicioComisariato/proveedores');
+
+    expect($respuesta->json())->toHaveCount(1)
+        ->and($respuesta->headers->get('X-Proveedores-Catalogo'))->toBe('disponibles');
+});
+
+test('un servicio de otra categoria no cuenta como proveedor configurado', function () {
+    $otraCategoria = FactCategoriaServicio::create(['nombre' => 'Combustible & Servicios', 'status' => 'A']);
+    FactServicio::create([
+        'categoria_servicio_id' => $otraCategoria->id,
+        'nombre' => 'Combustible JET A-1',
+        'precio_unitario' => 25.99,
+        'es_de_tercero' => false,
+        'margen' => 0,
+        'ajuste_precio' => FactServicio::AJUSTE_NINGUNO,
+        'status' => 'A',
+    ]);
+
+    $this->actingAs(User::factory()->create());
+
+    $respuesta = $this->getJson('/api/ServicioComisariato/proveedores');
+
+    expect($respuesta->headers->get('X-Proveedores-Catalogo'))->toBe('sin-configurar');
 });
 
 test('la lista NO filtra el margen ni el precio a Trafico', function () {

@@ -114,13 +114,24 @@ class ServicioComisariatoController extends Controller
      */
     public function proveedores()
     {
-        return response()->json(
-            FactServicio::query()
-                ->whereHas('categoria', fn ($q) => $q->where('nombre', 'Comisariatos'))
-                ->where('status', 'A')
-                ->orderBy('nombre')
-                ->get(['id', 'nombre'])
-        );
+        $delCatalogo = fn () => FactServicio::query()
+            ->whereHas('categoria', fn ($q) => $q->where('nombre', 'Comisariatos'));
+
+        $activos = $delCatalogo()
+            ->where('status', 'A')
+            ->orderBy('nombre')
+            ->get(['id', 'nombre']);
+
+        // El cuerpo sigue siendo la lista plana de siempre. Cuando viene vacía, la pantalla necesita
+        // saber por qué: "no hay ninguno" (hay que crearlos) no es "están todos de baja" (hay que
+        // reactivar uno), y mandar a reactivar lo que nunca existió es un diagnóstico falso.
+        $estado = match (true) {
+            $activos->isNotEmpty() => 'disponibles',
+            $delCatalogo()->exists() => 'todos-de-baja',
+            default => 'sin-configurar',
+        };
+
+        return response()->json($activos)->header('X-Proveedores-Catalogo', $estado);
     }
 
     public function show(ServicioComisariato $servicioComisariato)

@@ -38,7 +38,16 @@ export type FilaServicioComisariato = {
     [campo: string]: any;
 };
 
-export async function obtenerProveedoresComisariato(): Promise<ProveedorComisariato[]> {
+/**
+ * Por qué la lista de proveedores puede venir vacía: no hay ninguno configurado en el catálogo
+ * (hay que crearlos) o los hay pero están todos de baja (hay que reactivar uno).
+ */
+export type EstadoProveedoresComisariato = 'disponibles' | 'todos-de-baja' | 'sin-configurar';
+
+export async function obtenerProveedoresComisariatoConEstado(): Promise<{
+    lista: ProveedorComisariato[];
+    estado: EstadoProveedoresComisariato;
+}> {
     const res = await fetch('/api/ServicioComisariato/proveedores', {
         headers: { Accept: 'application/json' },
         credentials: 'same-origin',
@@ -50,7 +59,17 @@ export async function obtenerProveedoresComisariato(): Promise<ProveedorComisari
         throw new Error('No se pudo cargar la lista de proveedores');
     }
 
-    return data;
+    const cabecera = res.headers.get('X-Proveedores-Catalogo');
+    const estado: EstadoProveedoresComisariato =
+        cabecera === 'todos-de-baja' || cabecera === 'sin-configurar'
+            ? cabecera
+            : 'disponibles';
+
+    return { lista: data, estado };
+}
+
+export async function obtenerProveedoresComisariato(): Promise<ProveedorComisariato[]> {
+    return (await obtenerProveedoresComisariatoConEstado()).lista;
 }
 
 export async function fetchServicioComisariato(params: {
