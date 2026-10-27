@@ -93,10 +93,14 @@ export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Pro
     const { min, max } = useVentanaDeFecha("comisariato.entrega", isEdit ? data?.fecha_entrega : undefined);
     const [form, setForm] = useState(() => getInitialForm(data));
     const [proveedores, setProveedores] = useState<ProveedorComisariato[]>([]);
+    const [listaCargada, setListaCargada] = useState(false);
 
     useEffect(() => {
         obtenerProveedoresComisariato()
-            .then(setProveedores)
+            .then((lista) => {
+                setProveedores(lista);
+                setListaCargada(true);
+            })
             .catch((error: any) => {
                 Swal.fire({
                     icon: "error",
@@ -109,6 +113,13 @@ export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Pro
     useEffect(() => {
         setForm(getInitialForm(isEdit ? data : undefined));
     }, [data, isEdit]);
+
+    // La lista solo trae proveedores activos, pero el servidor deja conservar el que la ficha ya
+    // tenía aunque se haya dado de baja. Se muestra como opción para que el desplegable no mienta.
+    const proveedorGuardado: ProveedorComisariato | null =
+        isEdit && data?.fact_servicio ? data.fact_servicio : null;
+    const guardadoFueraDeLista =
+        proveedorGuardado !== null && !proveedores.some((p) => p.id === proveedorGuardado.id);
 
     const updateField = (key: string, value: any, forceUpper: boolean = false) => {
         const finalValue = forceUpper && typeof value === "string" ? value.toUpperCase() : value;
@@ -208,7 +219,7 @@ export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Pro
 
                         <div>
                             <label className={labelStyle}>Proveedor</label>
-                            {proveedores.length === 0 ? (
+                            {listaCargada && proveedores.length === 0 && !proveedorGuardado ? (
                                 <p className="text-xs text-amber-700">
                                     No hay proveedores de comisariato activos en el catálogo. Pide que
                                     reactiven uno en Facturación → Servicios antes de capturar.
@@ -220,6 +231,11 @@ export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Pro
                                     onChange={(e) => updateField("proveedorId", e.target.value)}
                                 >
                                     <option value="">Elige un proveedor…</option>
+                                    {guardadoFueraDeLista && proveedorGuardado && (
+                                        <option value={String(proveedorGuardado.id)}>
+                                            {proveedorGuardado.nombre} (dado de baja; es el que tiene la ficha)
+                                        </option>
+                                    )}
                                     {proveedores.map((p) => (
                                         <option key={p.id} value={String(p.id)}>
                                             {p.nombre}

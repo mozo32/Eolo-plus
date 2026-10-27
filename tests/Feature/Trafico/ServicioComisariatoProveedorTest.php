@@ -454,7 +454,8 @@ test('un proveedor que no es sin ni un numero no trae ninguna fila', function (s
 })->with([
     '1abc' => ['1abc'],
     'texto' => ['abc'],
-    'un numero seguido de texto, que MySQL leeria como ese numero' => ['1 OR 1=1'],
+    // MySQL leeria esto como 1 si se pasara tal cual a la comparacion; esta prueba no corre en MySQL.
+    'un id que no es un numero' => ['1 OR 1=1'],
 ]);
 
 test('el filtro de catering ya no acota la tabla', function () {
@@ -475,8 +476,11 @@ test('la tabla trae el nombre del proveedor para pintarlo', function () {
 
     $this->actingAs(User::factory()->create());
 
-    expect($this->getJson('/api/ServicioComisariato')->assertOk()->json('data.0.fact_servicio.nombre'))
-        ->toBe('Comisariato_Comexa');
+    $proveedor = $this->getJson('/api/ServicioComisariato')->assertOk()->json('data.0.fact_servicio');
+
+    // Solo id y nombre: el precio, el margen y el ajuste del servicio son asunto de facturacion.
+    expect($proveedor['nombre'])->toBe('Comisariato_Comexa')
+        ->and(array_keys($proveedor))->toBe(['id', 'nombre']);
 });
 
 test('el detalle trae el nombre del proveedor para el PDF', function () {
@@ -485,6 +489,9 @@ test('el detalle trae el nombre del proveedor para el PDF', function () {
 
     $this->actingAs(User::factory()->create());
 
-    expect($this->getJson("/api/ServicioComisariato/{$comisariato->id}")->assertOk()->json('fact_servicio.nombre'))
-        ->toBe('Comisariato_Comexa');
+    $proveedor = $this->getJson("/api/ServicioComisariato/{$comisariato->id}")->assertOk()->json('fact_servicio');
+
+    // Solo id y nombre: el precio, el margen y el ajuste del servicio son asunto de facturacion.
+    expect($proveedor['nombre'])->toBe('Comisariato_Comexa')
+        ->and(array_keys($proveedor))->toBe(['id', 'nombre']);
 });
