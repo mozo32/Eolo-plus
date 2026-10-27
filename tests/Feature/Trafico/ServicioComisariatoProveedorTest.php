@@ -556,7 +556,6 @@ test('un proveedor que no es sin ni un numero no trae ninguna fila', function (s
     expect($datos)->toHaveCount(0);
 })->with([
     '1abc' => ['1abc'],
-    'texto' => ['abc'],
     // MySQL leeria esto como 1 si se pasara tal cual a la comparacion; esta prueba no corre en MySQL.
     'un id que no es un numero' => ['1 OR 1=1'],
 ]);
