@@ -95,15 +95,25 @@ test('la exclusion es unica por la pareja de prefactura y comisariato', function
     ]))->toThrow(Illuminate\Database\QueryException::class);
 });
 
-test('comisariatoPara no crea proveedor ni usuario de mas cuando se los das', function () {
+test('comisariatoPara no crea un proveedor de mas cuando se le da el suyo', function () {
     $proveedor = proveedorComisariato('Comisariato_Otro');
+
+    comisariatoPara('XA-UNO', '2026-10-20', '10:00', ['fact_servicio_id' => $proveedor->id]);
+
+    expect(FactServicio::count())->toBe(1);
+});
+
+test('comisariatoPara no crea un usuario de mas cuando se le da el suyo', function () {
     $usuario = User::factory()->create();
 
-    comisariatoPara('XA-UNO', '2026-10-20', '10:00', [
-        'fact_servicio_id' => $proveedor->id,
-        'user_id' => $usuario->id,
-    ]);
+    comisariatoPara('XA-UNO', '2026-10-20', '10:00', ['user_id' => $usuario->id]);
 
-    expect(FactServicio::count())->toBe(1)
-        ->and(User::count())->toBe(1);
+    expect(User::count())->toBe(1);
+});
+
+test('comisariatoPara respeta un fact_servicio_id nulo explicito y no inventa proveedor', function () {
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-20', '10:00', ['fact_servicio_id' => null]);
+
+    expect(FactServicio::count())->toBe(0);
+    expect($comisariato->fresh()->fact_servicio_id)->toBeNull();
 });
