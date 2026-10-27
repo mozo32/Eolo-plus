@@ -103,3 +103,46 @@ test('un servicio que ya identifico un comisariato no se puede borrar', function
     expect(FactServicio::find($servicio->id))->not->toBeNull()
         ->and(ServicioComisariato::where('fact_servicio_id', $servicio->id)->count())->toBe(1);
 });
+
+test('la lista de proveedores trae solo los servicios activos de la categoria Comisariatos', function () {
+    $comexa = servicioComisariato('Comisariato_Comexa');
+    servicioComisariato('Comisariato_Avemex', 'N');
+
+    $otraCategoria = FactCategoriaServicio::create(['nombre' => 'Combustible & Servicios', 'status' => 'A']);
+    FactServicio::create([
+        'categoria_servicio_id' => $otraCategoria->id,
+        'nombre' => 'Combustible JET A-1',
+        'precio_unitario' => 25.99,
+        'es_de_tercero' => false,
+        'margen' => 0,
+        'ajuste_precio' => FactServicio::AJUSTE_NINGUNO,
+        'status' => 'A',
+    ]);
+
+    $this->actingAs(User::factory()->create());
+
+    $respuesta = $this->getJson('/api/ServicioComisariato/proveedores');
+
+    $respuesta->assertOk();
+    expect($respuesta->json())->toHaveCount(1)
+        ->and($respuesta->json('0.id'))->toBe($comexa->id)
+        ->and($respuesta->json('0.nombre'))->toBe('Comisariato_Comexa');
+});
+
+test('la lista NO filtra el margen ni el precio a Trafico', function () {
+    servicioComisariato('Comisariato_Manny');
+
+    $this->actingAs(User::factory()->create());
+
+    $respuesta = $this->getJson('/api/ServicioComisariato/proveedores');
+    $respuesta->assertOk();
+
+    $claves = array_keys($respuesta->json('0'));
+
+    // Parece de más hasta que alguien añade un campo al recurso y filtra el margen sin querer.
+    expect($claves)->toBe(['id', 'nombre']);
+});
+
+test('la lista de proveedores exige haber iniciado sesion', function () {
+    $this->getJson('/api/ServicioComisariato/proveedores')->assertUnauthorized();
+});

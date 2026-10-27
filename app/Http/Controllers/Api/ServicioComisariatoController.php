@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Models\FactServicio;
 use App\Models\ServicioComisariato;
 use App\Services\CatalogoAeronaves;
 use App\Rules\DentroDeLaVentana;
@@ -104,6 +105,25 @@ class ServicioComisariatoController extends Controller
                 ->paginate($perPage)
         );
     }
+    /**
+     * Los proveedores entre los que elige Tráfico al capturar.
+     *
+     * Del otro lado son servicios del catálogo de facturación, y lo que llevan dentro —precio,
+     * margen, ajuste— es asunto de facturación: aquí se devuelve SOLO id y nombre. Un usuario de
+     * Tráfico no tiene por qué ver cuánto se le carga encima a lo que entregó un proveedor, y así
+     * tampoco hace falta darle permiso sobre el catálogo.
+     */
+    public function proveedores()
+    {
+        return response()->json(
+            FactServicio::query()
+                ->whereHas('categoria', fn ($q) => $q->where('nombre', 'Comisariatos'))
+                ->where('status', 'A')
+                ->orderBy('nombre')
+                ->get(['id', 'nombre'])
+        );
+    }
+
     public function show(ServicioComisariato $servicioComisariato)
     {
 
