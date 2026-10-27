@@ -884,3 +884,58 @@ test('quitar un renglon SIN remision no apunta ninguna exclusion', function () {
 
     expect(App\Models\FactPrefacturaRemisionExcluida::count())->toBe(0);
 });
+
+test('sin candidatas, un servicio de combustible dado de baja no interrumpe nada', function () {
+    // El 422 es para cuando SE PIERDE algo: habia litros que cobrar y no hay con que. Si esta
+    // prefactura no tiene ninguna remision que traer, la falta del servicio no la afecta, y un
+    // aviso que salta cuando no se ha perdido nada es el que la gente aprende a cerrar sin
+    // leer. Responde con normalidad.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible()->update(['status' => FactServicio::STATUS_INACTIVO]);
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
+        ->assertOk()
+        ->assertJsonPath('agregados', 0)
+        ->assertJsonPath('fuera_de_ventana', []);
+
+    expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
+});
+
+test('las guardas van ANTES que la del servicio: una cerrada sin servicio activo sigue dando 409 ya_cerrada', function () {
+    // Mover la comprobacion del servicio detras de las candidatas no puede colarla por delante
+    // de cerrada, descartada ni reabierta: esas rechazan antes que nada.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible()->update(['status' => FactServicio::STATUS_INACTIVO]);
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    remisionDe($prefactura, '2026-10-20', '10:00:00');
+    cerrarConSello($prefactura, '0.00', '0.00', '0.00');
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
+        ->assertConflict()
+        ->assertJsonPath('codigo', 'ya_cerrada');
+});
+
+test('una REABIERTA sin servicio activo sigue dando 409 reabierta, no el 422 del servicio', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible()->update(['status' => FactServicio::STATUS_INACTIVO]);
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    remisionDe($prefactura, '2026-10-20', '10:00:00');
+    $prefactura->update(['estado' => FactPrefactura::ESTADO_REABIERTA, 'folio' => 10002]);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
+        ->assertConflict()
+        ->assertJsonPath('codigo', 'reabierta');
+});
+
+test('un borrador DESCARTADO sin servicio activo sigue dando 409 ya_descartada', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible()->update(['status' => FactServicio::STATUS_INACTIVO]);
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    remisionDe($prefactura, '2026-10-20', '10:00:00');
+    $prefactura->update(['status' => FactPrefactura::STATUS_INACTIVO]);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
+        ->assertConflict()
+        ->assertJsonPath('codigo', 'ya_descartada');
+});

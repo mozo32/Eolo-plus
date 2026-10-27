@@ -172,7 +172,12 @@ class PrefacturaRenglonController extends Controller
      *
      * Solo AÑADE. Las remisiones que quedan fuera de la ventana tras acotarla se reportan para
      * que la pantalla avise, pero el renglón no se toca: nada desaparece solo de un documento
-     * de cobro.
+     * de cobro. Tampoco trae las que el operador quitó a mano de ESTA prefactura: eso lo
+     * resuelve `candidatas()` con la tabla de exclusiones.
+     *
+     * Si falta el servicio de combustible activo responde 422 SOLO cuando había candidatas que
+     * traer, que es cuando de verdad se pierde algo; sin candidatas la falta no afecta a este
+     * documento y la respuesta es la normal.
      */
     public function sincronizarRemisiones(Request $request, int $id): JsonResponse
     {
@@ -182,34 +187,44 @@ class PrefacturaRenglonController extends Controller
             return $respuesta;
         }
 
-        // `activos()`, igual que `CargosEstancia` en sus tres sitios y que el paquete
-        // internacional: un servicio dado de baja no se sigue cobrando. Dar de baja el
-        // combustible es la única palanca del usuario para decir «deja de cobrarlo desde
-        // aquí», y la vía manual ya la respeta (`StoreRenglonRequest` exige `status` A).
-        // `concepto` es UNIQUE en `fact_servicios`, así que `first()` no elige entre dos.
-        $servicio = FactServicio::porConcepto(FactServicio::CONCEPTO_COMBUSTIBLE)->activos()->first();
-
-        // Sin servicio activo no hay con qué cobrar, y la sincronización NO se inventa un
-        // renglón: se niega y lo dice. Callarse y devolver `agregados: 0` dejaría al operador
-        // creyendo que la estancia no tenía combustible.
-        if ($servicio === null) {
-            return response()->json([
-                'message' => 'No hay un servicio de combustible activo en el catálogo, así que no hay con qué cobrarlo. Reactívalo desde el catálogo de servicios si el combustible se debe seguir cobrando.',
-                'codigo' => 'sin_servicio_de_combustible',
-            ], 422);
-        }
-
-        return DB::transaction(function () use ($id, $servicio, $request) {
+        return DB::transaction(function () use ($id, $request) {
             $actual = $this->bloquear($id);
 
             if ($respuesta = $this->rechazarSiDescartada($actual) ?? $this->rechazarSincronizarSiReabierta($actual)) {
                 return $respuesta;
             }
 
+            // Las candidatas se leen ANTES que el servicio, porque son ellas las que deciden
+            // si la falta del servicio es un fallo. Dentro del candado, como los inserts.
+            $candidatas = RemisionesFacturables::candidatas($actual);
+
+            // `activos()`, igual que `CargosEstancia` en sus tres sitios y que el paquete
+            // internacional: un servicio dado de baja no se sigue cobrando. Dar de baja el
+            // combustible es la única palanca del usuario para decir «deja de cobrarlo desde
+            // aquí», y la vía manual ya la respeta (`StoreRenglonRequest` exige `status` A).
+            // `concepto` es UNIQUE en `fact_servicios`, así que `first()` no elige entre dos.
+            $servicio = FactServicio::porConcepto(FactServicio::CONCEPTO_COMBUSTIBLE)->activos()->first();
+
+            // Sin servicio activo la sincronización NO se inventa un renglón. Pero el aviso es
+            // solo cuando SE PIERDE algo: había litros que cobrar y no hay con qué. Si no hay
+            // ninguna candidata, la falta del servicio no afecta a este documento y no se dejó
+            // de hacer nada, así que la respuesta es la normal con `agregados: 0`. Un aviso que
+            // salta cuando no se ha perdido nada es el que se aprende a cerrar sin leer, y
+            // entonces se cierra también el que sí importa.
+            if ($servicio === null && $candidatas->isNotEmpty()) {
+                return response()->json([
+                    'message' => 'No hay un servicio de combustible activo en el catálogo, así que no hay con qué cobrarlo. Reactívalo desde el catálogo de servicios si el combustible se debe seguir cobrando.',
+                    'codigo' => 'sin_servicio_de_combustible',
+                ], 422);
+            }
+
             $orden = (int) $actual->renglones()->reorder()->max('orden');
             $agregados = 0;
 
-            foreach (RemisionesFacturables::candidatas($actual) as $remision) {
+            // Si se llega aquí con `$servicio` nulo es porque no hay ninguna candidata, así
+            // que este bucle no corre ni una vuelta: el único camino que usa `$servicio` exige
+            // que lo haya.
+            foreach ($candidatas as $remision) {
                 $actual->renglones()->create([
                     'servicio_id' => $servicio->id,
                     'remision_combustible_id' => $remision->id,
