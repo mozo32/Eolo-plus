@@ -86,9 +86,16 @@ ambos extremos incluidos. Si la estancia sigue abierta —sin salida
 registrada—, hasta ahora.
 
 El momento del comisariato se compone de `fecha_entrega` (columna `date`) y
-`hora_entrega` (columna `time`). **Esto es más limpio que en remisiones**,
-donde la consulta tuvo que partirse entre SQL y PHP para esquivar funciones que
-sqlite no tiene; aquí las dos columnas son del tipo que dicen ser.
+`hora_entrega` (columna `time`). **La consulta se parte igual que en
+remisiones**: el filtro por día en SQL y la hora exacta en PHP. Al escribir
+esta spec afirmé que aquí sería más limpio porque las columnas son del tipo que
+dicen ser; es falso, y lo corrijo. Combinar fecha y hora en SQL sigue pidiendo
+funciones distintas en MySQL y en sqlite, así que la partición hace falta por
+el mismo motivo que allí.
+
+Un detalle que sí cambia: el modelo castea `hora_entrega` como `datetime:H:i`,
+así que al leerla en PHP llega como una fecha-hora con el día de HOY. Hay que
+tomar solo su parte horaria y montarla sobre `fecha_entrega`.
 
 ## Qué entra solo
 
