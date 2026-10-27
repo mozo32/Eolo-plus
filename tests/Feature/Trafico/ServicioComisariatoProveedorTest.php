@@ -114,6 +114,35 @@ test('el relleno deja constancia en el log cuando no encuentra el servicio, y no
         ->and($deManny->fresh()->fact_servicio_id)->toBe($manny->id);
 });
 
+test('el relleno deja en nulo la fila cuyo texto casa con mas de un proveedor', function () {
+    $comexa = servicioComisariato('Comisariato_Comexa');
+    $manny = servicioComisariato('Comisariato_Manny');
+
+    $ambigua = comisariatoDe(['catering' => 'Manny (sustituye a Comexa)']);
+    $ambiguaAlReves = comisariatoDe(['catering' => 'COMEXA / mannys']);
+    $deComexa = comisariatoDe(['catering' => 'Comexa']);
+    $deMannysCatering = comisariatoDe(['catering' => 'Mannys Catering']);
+
+    (new RellenarProveedorDeComisariatos)();
+
+    expect($ambigua->fresh()->fact_servicio_id)->toBeNull()
+        ->and($ambiguaAlReves->fresh()->fact_servicio_id)->toBeNull()
+        ->and($deComexa->fresh()->fact_servicio_id)->toBe($comexa->id)
+        ->and($deMannysCatering->fresh()->fact_servicio_id)->toBe($manny->id);
+});
+
+test('la fila ambigua tambien se queda en nulo si uno de los dos servicios no existe', function () {
+    $manny = servicioComisariato('Comisariato_Manny');
+
+    $ambigua = comisariatoDe(['catering' => 'Manny (sustituye a Comexa)']);
+    $deManny = comisariatoDe(['catering' => 'Manny']);
+
+    (new RellenarProveedorDeComisariatos)();
+
+    expect($ambigua->fresh()->fact_servicio_id)->toBeNull()
+        ->and($deManny->fresh()->fact_servicio_id)->toBe($manny->id);
+});
+
 test('un servicio que ya identifico un comisariato no se puede borrar', function () {
     $servicio = servicioComisariato('Comisariato_Comexa');
     comisariatoDe(['fact_servicio_id' => $servicio->id]);
