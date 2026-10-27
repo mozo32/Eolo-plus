@@ -102,7 +102,7 @@ function aeronaveEnHangar(string $matricula): void
     ]);
 }
 
-test('capturar con una matricula nueva la agrega al catalogo local desde los cinco controladores', function () {
+test('capturar con una matricula nueva la agrega al catalogo local desde los cuatro controladores', function () {
     $this->actingAs(User::factory()->create());
 
     // Operaciones Diarias: crea el tipo, la aeronave y su satélite.
@@ -125,7 +125,10 @@ test('capturar con una matricula nueva la agrega al catalogo local desde los cin
 
     expect(Aeronave::where('matricula', 'XA-CSAE')->first()->tipoAeronave->nombre)->toBe('Cessna 208');
 
-    // Servicio de Comisariato: la matrícula es opcional; sin ella no se da de alta nada.
+    // Servicio de Comisariato YA NO esta en esta lista, y es deliberado: su matricula se elige
+    // de las aeronaves ya registradas, asi que rechaza lo que no conoce en vez de darlo de alta.
+    // De ese alta automatica salieron matriculas duplicadas que son la misma aeronave con otra
+    // grafia. Lo comprueba `ServicioComisariatoProveedorTest`; aqui se fija que no vuelva.
     $this->postJson('/api/ServicioComisariato', [
         'proveedorId' => proveedorDeComisariatoDelAlta(),
         'fechaEntrega' => '2026-09-28',
@@ -133,18 +136,9 @@ test('capturar con una matricula nueva la agrega al catalogo local desde los cin
         'matricula' => 'XA-COMI',
         'subtotal' => 100,
         'total' => 116,
-    ])->assertCreated();
+    ])->assertStatus(422);
 
-    $this->postJson('/api/ServicioComisariato', [
-        'proveedorId' => proveedorDeComisariatoDelAlta(),
-        'fechaEntrega' => '2026-09-28',
-        'horaEntrega' => '11:00',
-        'subtotal' => 100,
-        'total' => 116,
-    ])->assertCreated();
-
-    expect(Aeronave::where('matricula', 'XA-COMI')->first()->facturacion)->not->toBeNull()
-        ->and(Aeronave::whereNull('matricula')->orWhere('matricula', '')->count())->toBe(0);
+    expect(Aeronave::where('matricula', 'XA-COMI')->exists())->toBeFalse();
 
     // WalkAround: el tipo capturado queda ligado a la aeronave nueva.
     capturarWalkAround('XA-WALK', 'Bell 206')->assertCreated();
@@ -164,9 +158,10 @@ test('capturar con una matricula nueva la agrega al catalogo local desde los cin
         ->and($pernocta->tipo_cliente)->toBe('')
         ->and($pernocta->categoria)->toBe('');
 
-    // Todas quedaron en el mismo catálogo, una fila por matrícula.
-    expect(Aeronave::count())->toBe(5)
-        ->and(FactAeronave::count())->toBe(5);
+    // Todas quedaron en el mismo catálogo, una fila por matrícula. Son cuatro, no cinco:
+    // Comisariato ya no da de alta ninguna.
+    expect(Aeronave::count())->toBe(4)
+        ->and(FactAeronave::count())->toBe(4);
 });
 
 test('capturar dos operaciones de la misma matricula no la duplica', function () {
@@ -272,15 +267,10 @@ test('una aeronave que ya tiene tipo lo conserva aunque llegue otro', function (
 test('un walkaround de una aeronave sin tipo le completa el tipo y guarda su id real', function () {
     $this->actingAs(User::factory()->create());
 
-    // Alta previa por Comisariato, que no conoce el tipo.
-    $this->postJson('/api/ServicioComisariato', [
-        'proveedorId' => proveedorDeComisariatoDelAlta(),
-        'fechaEntrega' => '2026-09-28',
-        'horaEntrega' => '10:00',
-        'matricula' => 'XA-SINTIPO',
-        'subtotal' => 100,
-        'total' => 116,
-    ])->assertCreated();
+    // Alta previa sin tipo. Antes se hacia capturando un Comisariato, que daba de alta la
+    // matricula sin conocer el tipo; ahora Comisariato no crea aeronaves, asi que se usa
+    // directamente el servicio que el llamaba por dentro. Lo que mide esta prueba no cambia.
+    app(CatalogoAeronaves::class)->buscarOCrear('XA-SINTIPO');
 
     expect(Aeronave::where('matricula', 'XA-SINTIPO')->first()->aeronave_id)->toBeNull();
 

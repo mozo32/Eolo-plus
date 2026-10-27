@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Aeronave;
 use App\Models\FactCategoriaServicio;
 use App\Models\FactServicio;
 use App\Models\ServicioComisariato;
@@ -283,6 +284,8 @@ test('la lista de proveedores exige haber iniciado sesion', function () {
 
 test('el alta guarda el proveedor elegido y ya no escribe catering', function () {
     $servicio = servicioComisariato('Comisariato_Comexa');
+    // La matricula se elige de la lista, asi que tiene que estar dada de alta para poder enviarla.
+    Aeronave::create(['matricula' => 'XA-ABC']);
     $this->actingAs(User::factory()->create());
 
     $this->postJson('/api/ServicioComisariato', [
@@ -627,4 +630,63 @@ test('el detalle trae el nombre del proveedor para el PDF', function () {
     // Solo id y nombre: el precio, el margen y el ajuste del servicio son asunto de facturacion.
     expect($proveedor['nombre'])->toBe('Comisariato_Comexa')
         ->and(array_keys($proveedor))->toBe(['id', 'nombre']);
+});
+
+/** El cuerpo minimo de un alta valida, al que cada prueba le cambia lo que quiere ejercer. */
+function altaDeComisariato(array $cambios = []): array
+{
+    return array_merge([
+        'proveedorId' => servicioComisariato('Comisariato_Comexa')->id,
+        'fechaEntrega' => now()->toDateString(),
+        'horaEntrega' => '10:00',
+        'subtotal' => 520,
+        'total' => 520,
+    ], $cambios);
+}
+
+test('el alta rechaza una matricula que no esta en el catalogo de aeronaves', function () {
+    $this->actingAs(User::factory()->create());
+
+    $this->postJson('/api/ServicioComisariato', altaDeComisariato(['matricula' => 'XA-FANTASMA']))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('matricula');
+
+    // Y lo que mas importa: no la ha dado de alta por el camino.
+    expect(Aeronave::where('matricula', 'XA-FANTASMA')->exists())->toBeFalse();
+});
+
+test('el alta acepta una matricula registrada y no crea ninguna aeronave', function () {
+    Aeronave::create(['matricula' => 'XA-REAL']);
+    $antes = Aeronave::count();
+
+    $this->actingAs(User::factory()->create());
+
+    $this->postJson('/api/ServicioComisariato', altaDeComisariato(['matricula' => 'XA-REAL']))
+        ->assertCreated();
+
+    expect(ServicioComisariato::latest('id')->first()->matricula)->toBe('XA-REAL')
+        ->and(Aeronave::count())->toBe($antes);
+});
+
+test('la edicion rechaza una matricula que no esta en el catalogo de aeronaves', function () {
+    Aeronave::create(['matricula' => 'XA-REAL']);
+    $comexa = servicioComisariato('Comisariato_Comexa');
+    $ficha = comisariatoDe([
+        'fact_servicio_id' => $comexa->id,
+        'matricula' => 'XA-REAL',
+        'fecha_entrega' => now()->toDateString(),
+    ]);
+
+    $this->actingAs(User::factory()->create());
+
+    $this->putJson("/api/ServicioComisariato/{$ficha->id}", [
+        'proveedorId' => $comexa->id,
+        'fechaEntrega' => $ficha->fecha_entrega->toDateString(),
+        'horaEntrega' => '10:00',
+        'matricula' => 'XA-FANTASMA',
+        'subtotal' => 520,
+        'total' => 520,
+    ])->assertStatus(422)->assertJsonValidationErrors('matricula');
+
+    expect($ficha->fresh()->matricula)->toBe('XA-REAL');
 });

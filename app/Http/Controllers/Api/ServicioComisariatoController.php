@@ -8,23 +8,14 @@ use App\Http\Requests\Trafico\UpdateServicioComisariatoRequest;
 use Illuminate\Http\Request;
 use App\Models\FactServicio;
 use App\Models\ServicioComisariato;
-use App\Services\CatalogoAeronaves;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class ServicioComisariatoController extends Controller
 {
-    public function __construct(private readonly CatalogoAeronaves $catalogo) {}
-
     public function store(StoreServicioComisariatoRequest $request)
     {
         $validated = $request->validated();
-
-        // La matrícula es opcional. El resultado de la búsqueda nunca se usó:
-        // solo importa que la aeronave quede dada de alta en el catálogo.
-        if (filled($validated['matricula'] ?? null)) {
-            $this->catalogo->buscarOCrear($validated['matricula']);
-        }
 
         $servicio = ServicioComisariato::create([
             'user_id'        => Auth::id(),

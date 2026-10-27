@@ -7,6 +7,7 @@ import {
     type EstadoProveedoresComisariato,
     type ProveedorComisariato,
 } from "@/stores/apiServicioComisariato";
+import InputMatricula from "@/pages/InputMatricula";
 import Swal from "sweetalert2";
 import { Package } from "lucide-react";
 import { useVentanaDeFecha } from "@/lib/ventanasDeFecha";
@@ -253,12 +254,17 @@ export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Pro
                         </div>
 
                         <div>
-                            <label className={labelStyle}>Matrícula</label>
-                            <input
-                                className={`${inputStyle} text-blue-800`}
+                            {/*
+                              * Se elige de las aeronaves ya registradas, no se teclea libre: el
+                              * servidor rechaza una matrícula que no esté dada de alta. Antes el
+                              * alta la creaba con lo que se escribiera, y de ahí salieron
+                              * matrículas duplicadas que son la misma aeronave con otra grafía.
+                              */}
+                            <InputMatricula
+                                label="Matrícula"
                                 value={form.matricula}
-                                onChange={(e) => updateField("matricula", e.target.value, true)}
-                                placeholder="XA-XXX"
+                                onSelect={(matricula) => updateField("matricula", matricula, true)}
+                                onBlur={(matricula) => updateField("matricula", matricula, true)}
                             />
                         </div>
 

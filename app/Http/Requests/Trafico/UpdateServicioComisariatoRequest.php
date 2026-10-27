@@ -7,6 +7,7 @@ use App\Rules\DentroDeLaVentana;
 use App\Rules\ProveedorDeComisariato;
 use App\Support\VentanasDeFecha;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateServicioComisariatoRequest extends FormRequest
 {
@@ -17,7 +18,10 @@ class UpdateServicioComisariatoRequest extends FormRequest
             'formaPago' => ['nullable', 'string', 'max:100'],
             'fechaEntrega' => $this->reglasDeLaFecha(),
             'horaEntrega' => ['required', 'date_format:H:i'],
-            'matricula' => ['nullable', 'string', 'max:50'],
+            // La matricula se elige de la lista de aeronaves registradas: el alta ya no las crea.
+            // Antes, el controlador llamaba a `buscarOCrear()` con lo que se tecleara, y de ahi
+            // salieron matriculas duplicadas que son la misma aeronave con otra grafia.
+            'matricula' => ['nullable', 'string', 'max:50', Rule::exists('aeronaves', 'matricula')],
             'detalle' => ['nullable', 'string'],
             'solicitadoPor' => ['nullable', 'string', 'max:150'],
             'atendio' => ['nullable', 'string', 'max:150'],
@@ -52,6 +56,7 @@ class UpdateServicioComisariatoRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'matricula.exists' => 'Esa matricula no esta registrada. Da de alta la aeronave antes de capturar el comisariato.',
             'proveedorId.required' => 'Elige el proveedor del comisariato.',
             'proveedorId.integer' => 'El proveedor no es válido.',
             'fechaEntrega.required' => 'La fecha de entrega es obligatoria.',

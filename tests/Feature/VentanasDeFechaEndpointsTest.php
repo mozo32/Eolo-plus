@@ -2,6 +2,7 @@
 
 use App\Http\Requests\OperacionProgramada\StoreOperacionProgramadaRequest;
 use App\Http\Requests\OperacionProgramada\UpdateOperacionProgramadaRequest;
+use App\Models\Aeronave;
 use App\Models\ChecklistTurno;
 use App\Models\ControlMedicamento;
 use App\Models\Departamento;
@@ -863,6 +864,10 @@ function proveedorDeComisariatoId(): int
 /** @return array<string, mixed> */
 function cargaDeComisariato(mixed $fechaEntrega, string $detalle = 'Detalle uno'): array
 {
+    // La matricula se elige de las aeronaves registradas; estas pruebas miden la FECHA, asi que
+    // basta con que exista. Antes el alta la creaba sola y no hacia falta darla de alta aqui.
+    Aeronave::firstOrCreate(['matricula' => 'XA-COM']);
+
     return [
         'proveedorId' => proveedorDeComisariatoId(),
         'detalle' => $detalle,
