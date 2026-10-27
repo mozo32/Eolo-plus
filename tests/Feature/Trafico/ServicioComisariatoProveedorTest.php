@@ -428,3 +428,43 @@ test('el buscador general sigue encontrando el texto viejo de catering', functio
 
     expect($datos)->toHaveCount(1)->and($datos[0]['matricula'])->toBe('XA-VIEJA');
 });
+
+test('la tabla trata SIN igual que sin, sin distinguir mayusculas', function () {
+    $comexa = servicioComisariato('Comisariato_Comexa');
+    comisariatoDe(['fact_servicio_id' => $comexa->id, 'matricula' => 'XA-UNO']);
+    comisariatoDe(['matricula' => 'XA-VIEJA', 'catering' => 'fd']);
+
+    $this->actingAs(User::factory()->create());
+
+    $datos = $this->getJson('/api/ServicioComisariato?proveedorId=SIN')->assertOk()->json('data');
+
+    expect($datos)->toHaveCount(1)->and($datos[0]['matricula'])->toBe('XA-VIEJA');
+});
+
+test('un proveedor que no es sin ni un numero no trae ninguna fila', function (string $valor) {
+    $comexa = servicioComisariato('Comisariato_Comexa');
+    comisariatoDe(['fact_servicio_id' => $comexa->id, 'matricula' => 'XA-UNO']);
+    comisariatoDe(['matricula' => 'XA-VIEJA', 'catering' => 'fd']);
+
+    $this->actingAs(User::factory()->create());
+
+    $datos = $this->getJson('/api/ServicioComisariato?proveedorId=' . rawurlencode($valor))->assertOk()->json('data');
+
+    expect($datos)->toHaveCount(0);
+})->with([
+    '1abc' => ['1abc'],
+    'texto' => ['abc'],
+    'inyeccion' => ['1 OR 1=1'],
+]);
+
+test('el filtro de catering ya no acota la tabla', function () {
+    $comexa = servicioComisariato('Comisariato_Comexa');
+    comisariatoDe(['fact_servicio_id' => $comexa->id, 'matricula' => 'XA-UNO', 'catering' => 'Comexa']);
+    comisariatoDe(['matricula' => 'XA-VIEJA', 'catering' => 'fd']);
+
+    $this->actingAs(User::factory()->create());
+
+    $datos = $this->getJson('/api/ServicioComisariato?catering=Comexa')->assertOk()->json('data');
+
+    expect($datos)->toHaveCount(2);
+});
