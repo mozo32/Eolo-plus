@@ -233,7 +233,10 @@ export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Pro
                                     <option value="">Elige un proveedor…</option>
                                     {guardadoFueraDeLista && proveedorGuardado && (
                                         <option value={String(proveedorGuardado.id)}>
-                                            {proveedorGuardado.nombre} (dado de baja; es el que tiene la ficha)
+                                            {/* Sin la lista cargada no se sabe si está de baja: la leyenda sería falsa. */}
+                                            {listaCargada
+                                                ? `${proveedorGuardado.nombre} (dado de baja; es el que tiene la ficha)`
+                                                : proveedorGuardado.nombre}
                                         </option>
                                     )}
                                     {proveedores.map((p) => (
