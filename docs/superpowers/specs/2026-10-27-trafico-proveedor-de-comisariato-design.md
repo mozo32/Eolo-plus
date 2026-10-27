@@ -88,6 +88,12 @@ texto viejo cuando no, de modo que ninguna fila pierde lo que decía.
 
 El relleno empareja por texto (contiene «comexa» o «manny», sin distinguir
 mayúsculas). Lo que no empareja se queda en nulo: adivinar ahí sería inventar.
+**Si el texto de una fila casa con más de un proveedor** (por ejemplo «Manny
+(sustituye a Comexa)»), también se queda en nulo: nulo es visible —el filtro
+«Sin proveedor» la encuentra—, mientras que apuntar al equivocado cobra con otro
+margen sin que se note. Y si el servicio buscado no existe en la base, el relleno
+no rompe la migración pero **lo deja escrito en el log** con el nombre que
+buscaba.
 
 **Fuera de este trabajo:** tirar la columna `catering`. Es una decisión aparte,
 que se podrá tomar cuando lleve meses sin escribirse.
@@ -100,10 +106,28 @@ que se podrá tomar cuando lleve meses sin escribirse.
 Se llama «proveedores» porque es lo que son para quien captura en Tráfico,
 aunque del otro lado sean servicios del catálogo.
 
-No se expone el catálogo entero. El margen y el precio son asunto de
-facturación, y un usuario de Tráfico no tiene por qué ver cuánto se carga
-encima de lo que entregó un proveedor. Esto además evita tener que darle a
-Tráfico permiso sobre el catálogo de facturación.
+**Este endpoint** no expone el catálogo entero ni sus precios o márgenes: el
+margen y el precio son asunto de facturación, y quien captura en Tráfico no
+necesita verlos para elegir proveedor. Eso es lo único que se garantiza, y es
+una propiedad **de este endpoint**, no del sistema.
+
+**Limitación conocida.** Existe otra puerta que sí los expone:
+`GET /api/facturacion/servicios` (`routes/api.php:373`) está abierta a
+cualquier usuario con sesión —las consultas de facturación son abiertas a
+cualquier usuario autenticado— y devuelve los modelos enteros, con
+`precio_unitario`, `margen`, `ajuste_precio`, `es_de_tercero` y `concepto`. Un
+usuario de Tráfico puede llamarla. Es preexistente y de facturación, y este
+trabajo no la toca: restringirla podría romper pantallas de facturación. Por
+eso el endpoint nuevo es defensa en profundidad de la pantalla de Tráfico, **no
+una frontera** entre Tráfico y Facturación. Si esa frontera se quiere de
+verdad, es una decisión aparte sobre la ruta de facturación.
+
+**Cuando la lista viene vacía**, el cuerpo sigue siendo el array plano, y la
+respuesta lleva la cabecera `X-Proveedores-Catalogo` con el motivo:
+`sin-configurar` (no existe ningún servicio de la categoría: hay que crearlos),
+`todos-de-baja` (existen pero ninguno está activo: hay que reactivar uno) o
+`disponibles`. La pantalla dice el que toca; no se meten campos nuevos dentro de
+los objetos `{id, nombre}`.
 
 El grupo de rutas `ServicioComisariato` usa hoy solo `auth:sanctum`, sin
 middleware de subdepartamento, al contrario que las de facturación. El endpoint
