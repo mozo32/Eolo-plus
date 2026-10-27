@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Services\RenglonDePrefacturaCerradaException;
 use App\Support\ImporteServicio;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class FactPrefacturaRenglon extends Model
 {
@@ -12,7 +13,7 @@ class FactPrefacturaRenglon extends Model
 
     protected $fillable = [
         'prefactura_id', 'servicio_id', 'nombre_servicio', 'precio_unitario', 'cantidad',
-        'es_de_tercero', 'margen', 'ajuste_precio', 'concepto', 'proveedor_id', 'remision', 'orden', 'es_cortesia', 'grupo', 'remision_combustible_id',
+        'es_de_tercero', 'margen', 'ajuste_precio', 'concepto', 'proveedor_id', 'remision', 'orden', 'es_cortesia', 'grupo', 'remision_combustible_id', 'servicio_comisariato_id',
     ];
 
     protected $casts = [
@@ -65,6 +66,12 @@ class FactPrefacturaRenglon extends Model
     public function prefactura()
     {
         return $this->belongsTo(FactPrefactura::class, 'prefactura_id');
+    }
+
+    /** El comisariato que originó este renglón, si nació de uno. */
+    public function servicioComisariato(): BelongsTo
+    {
+        return $this->belongsTo(ServicioComisariato::class, 'servicio_comisariato_id');
     }
 
     public function servicio()
