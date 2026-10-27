@@ -807,24 +807,21 @@ test('el alta A MANO de la misma remision revoca la exclusion', function () {
         ->where('remision_id', $remision->id)->exists())->toBeFalse();
 });
 
-test('quitar dos veces la misma remision no revienta por el unico de la tabla', function () {
-    // Se excluye, se vuelve a dar de alta a mano (revoca) y se vuelve a quitar: la segunda
-    // exclusion es la misma decision y la tabla tiene un unico por la pareja.
-    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
-    $servicio = servicioDeCombustible();
+test('excluir dos veces seguidas la misma remision deja UNA fila: es la misma decision', function () {
+    // La version anterior de esta prueba daba de alta y quitaba dos veces por HTTP, y era
+    // vacua: el alta REVOCA, asi que la segunda exclusion caia sobre tabla vacia y el unico de
+    // la tabla no se tocaba nunca (sobrevivia a cambiar `firstOrCreate()` por `create()`).
+    //
+    // Se llama al servicio dos veces SEGUIDAS, sin revocacion en medio, que es lo unico que
+    // ejerce de verdad el `firstOrCreate()`. Por HTTP ese camino no se alcanza —haria falta
+    // que la prefactura tuviera dos renglones con la misma remision, y `store()` y
+    // `candidatas()` lo impiden bajo el candado—, pero la defensa esta puesta y esto la fija.
     $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
     $remision = remisionDe($prefactura, '2026-10-20', '10:00:00');
+    $usuario = App\Models\User::factory()->create();
 
-    foreach ([1, 2] as $vuelta) {
-        $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
-            'servicio_id' => $servicio->id,
-            'cantidad' => 1,
-            'remision_combustible_id' => $remision->id,
-        ])->assertCreated();
-
-        $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
-        $this->deleteJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones/{$renglon->id}")->assertOk();
-    }
+    RemisionesFacturables::excluir($prefactura, $remision->id, $usuario->id);
+    RemisionesFacturables::excluir($prefactura, $remision->id, $usuario->id);
 
     expect(App\Models\FactPrefacturaRemisionExcluida::where('prefactura_id', $prefactura->id)
         ->where('remision_id', $remision->id)->count())->toBe(1);
@@ -938,4 +935,104 @@ test('un borrador DESCARTADO sin servicio activo sigue dando 409 ya_descartada',
     $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
         ->assertConflict()
         ->assertJsonPath('codigo', 'ya_descartada');
+});
+
+// ---------------------------------------------------------------------------
+// N-1: el guion. La misma aeronave escrita con un guion de mas o de menos
+// ---------------------------------------------------------------------------
+
+/** Una prefactura cuya aeronave lleva EXACTAMENTE esta matricula. */
+function prefacturaDeMatriculaExacta(string $matricula): FactPrefactura
+{
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $prefactura->aeronave->update(['matricula' => $matricula]);
+
+    return $prefactura->fresh();
+}
+
+test('N-1: el alta a mano acepta una remision cuya matricula solo difiere en el guion', function () {
+    // En `eolo_plus` hay seis parejas de la MISMA aeronave escrita con otro guion, con filas
+    // distintas en `aeronaves`; la peor es XA-VIZ / XAVIZ, con 38 remisiones y 28 con precio.
+    // La via automatica nunca las trajo, asi que el alta a mano era el unico rescate de esa
+    // carga con SU precio. Atarla a la matricula lo cerro: esto lo vuelve a abrir.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+    $prefactura = prefacturaDeMatriculaExacta('XAVIZ');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00', ['matricula' => 'XA-VIZ']);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'remision_combustible_id' => $remision->id,
+    ])->assertCreated();
+
+    $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
+
+    // Con SU precio y SUS litros, que es justo lo que se perdia por el rodeo del renglon suelto.
+    expect($renglon->remision_combustible_id)->toBe($remision->id)
+        ->and((float) $renglon->precio_unitario)->toBe(25.994)
+        ->and($renglon->cantidad)->toBe(2650);
+});
+
+test('N-1 al reves: una remision SIN guion en una prefactura CON guion tambien se acepta', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+    $prefactura = prefacturaDeMatriculaExacta('XA-VIZ');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00', ['matricula' => 'XAVIZ']);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'remision_combustible_id' => $remision->id,
+    ])->assertCreated();
+
+    expect(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole()->remision_combustible_id)
+        ->toBe($remision->id);
+});
+
+test('N-1: el doble guion de la base tambien cuenta como la misma aeronave', function () {
+    // Las parejas reales son de ese tipo: `XA--JMB` / `XA-JMB`, `XA--DJT` / `XA-DJT`...
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+    $prefactura = prefacturaDeMatriculaExacta('XA--JMB');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00', ['matricula' => 'XA-JMB']);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'remision_combustible_id' => $remision->id,
+    ])->assertCreated();
+});
+
+test('N-1 no abre la puerta: una matricula de VERDAD distinta sigue dando 422', function () {
+    // El guion es la unica tolerancia que se anade. Dos aeronaves distintas siguen siendo dos.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+    $prefactura = prefacturaDeMatriculaExacta('XA-ABC');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00', ['matricula' => 'XA-XYZ']);
+
+    $respuesta = $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        'cantidad' => 1,
+        'remision_combustible_id' => $remision->id,
+    ])->assertStatus(422)->assertJsonValidationErrors(['remision_combustible_id']);
+
+    expect($respuesta->json('errors.remision_combustible_id.0'))->toContain('XA-XYZ')
+        ->and(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(0);
+});
+
+test('N-1: la via AUTOMATICA no se mueve, el guion sigue separando', function () {
+    // La tolerancia es SOLO del alta a mano. `candidatas()` no puede empezar a traer sola el
+    // combustible de XA-VIZ a las prefacturas de XAVIZ: son dos filas distintas en `aeronaves`
+    // y eso es un cambio con dinero detras, no un retoque de validacion.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible();
+    $prefactura = prefacturaDeMatriculaExacta('XAVIZ');
+    remisionDe($prefactura, '2026-10-20', '10:00:00', ['matricula' => 'XA-VIZ']);
+
+    expect(RemisionesFacturables::candidatas($prefactura)->all())->toBe([]);
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
+        ->assertOk()
+        ->assertJsonPath('agregados', 0);
 });

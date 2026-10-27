@@ -92,6 +92,8 @@ class StoreRenglonRequest extends FormRequest
      * una funcionalidad deliberada —como ya lo es el tránsito ajeno, que tiene su propio campo
      * de matrícula— y no un agujero. El buscador SIGUE ofreciéndolas: lo que no se puede es
      * darlas de alta.
+     *
+     * La comparación de la matrícula tolera el guion, y solo aquí: ver `esLaMismaAeronave()`.
      */
     private function soloParaCombustible(string $atributo, mixed $valor, \Closure $fallar): void
     {
@@ -126,11 +128,47 @@ class StoreRenglonRequest extends FormRequest
             return;
         }
 
-        $deRemision = RemisionesFacturables::normalizarMatricula($remision->matricula);
-
-        if ($deRemision !== RemisionesFacturables::normalizarMatricula($dePrefactura)) {
+        if (! $this->esLaMismaAeronave($remision->matricula, $dePrefactura)) {
             $fallar("Esa remisión es de {$remision->matricula} y esta prefactura es de {$dePrefactura}: el combustible de otra aeronave no se cobra aquí. Si la matrícula se capturó mal en Rampa, corrígela allí.");
         }
+    }
+
+    /**
+     * Si las dos matrículas son la misma aeronave, tolerando el guion.
+     *
+     * `normalizarMatricula()` iguala mayúsculas y espacios de los extremos, y con eso bastaba
+     * para lo que la revisión pedía. Pero en `eolo_plus` hay SEIS parejas que son la misma
+     * aeronave escrita con otro guion, cada grafía con su propia fila en `aeronaves`: la peor
+     * es `XA-VIZ` / `XAVIZ`, con 38 remisiones y 28 de ellas con precio; también
+     * `XA--JMB` / `XA-JMB`, `XA--DJT` / `XA-DJT`, `XA--MHA` / `XA-MHA`, `XA--ZZZ` / `XA-ZZZ` y
+     * `YV-2770` / `YV2770`. La vía automática nunca las trajo, así que el alta a mano era el
+     * ÚNICO modo de cobrar esa carga con SU precio y SUS litros; atar el alta a la matrícula
+     * sin mirar el guion lo cerró, y el rodeo que quedaba —un renglón de combustible suelto—
+     * cobra al precio de HOY del catálogo y deja la remisión sin marcar, que es justamente la
+     * contabilidad manual que este trabajo existe para quitar.
+     *
+     * La tolerancia vive AQUÍ y no en `normalizarMatricula()` a propósito: esa la usa
+     * `deLaMatricula()`, o sea la vía AUTOMÁTICA, que empezaría a arrastrar sola el combustible
+     * de `XA-VIZ` a las prefacturas de `XAVIZ`. Son dos filas distintas en `aeronaves` y puede
+     * que estén así por una razón: es una decisión con dinero detrás, no un retoque de
+     * validación. Aquí hay un humano eligiendo una remisión concreta en el buscador.
+     */
+    private function esLaMismaAeronave(?string $deRemision, ?string $dePrefactura): bool
+    {
+        $remision = RemisionesFacturables::normalizarMatricula($deRemision);
+        $prefactura = RemisionesFacturables::normalizarMatricula($dePrefactura);
+
+        if ($remision === $prefactura) {
+            return true;
+        }
+
+        return $this->sinGuionesNiEspacios($remision) === $this->sinGuionesNiEspacios($prefactura);
+    }
+
+    /** La matrícula reducida a letras y dígitos: `XA--VIZ`, `XA-VIZ` y `XA VIZ` dan `XAVIZ`. */
+    private function sinGuionesNiEspacios(string $matricula): string
+    {
+        return (string) preg_replace('/[\s-]+/u', '', $matricula);
     }
 
     public function messages(): array
