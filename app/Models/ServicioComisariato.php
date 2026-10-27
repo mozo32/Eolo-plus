@@ -15,6 +15,7 @@ class ServicioComisariato extends Model
     protected $fillable = [
         'user_id',
         'catering',
+        'fact_servicio_id',
         'forma_pago',
         'fecha_entrega',
         'hora_entrega',
@@ -43,5 +44,11 @@ class ServicioComisariato extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** El servicio del catálogo con el que se cobrará este comisariato. Nulo en las filas anteriores a la lista. */
+    public function factServicio(): BelongsTo
+    {
+        return $this->belongsTo(FactServicio::class, 'fact_servicio_id');
     }
 }
