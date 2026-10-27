@@ -36,7 +36,8 @@ return new class extends Migration
             $table->timestamps();
 
             // Una sola exclusión por pareja: quitar y volver a quitar es la misma decisión.
-            $table->unique(['prefactura_id', 'remision_id']);
+            // Nombre explícito: el automático pasa de 64 caracteres y MySQL lo rechaza.
+            $table->unique(['prefactura_id', 'remision_id'], 'fact_prefactura_remision_excluida_unique');
         });
     }
 
