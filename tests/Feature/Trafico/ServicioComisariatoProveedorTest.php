@@ -146,3 +146,109 @@ test('la lista NO filtra el margen ni el precio a Trafico', function () {
 test('la lista de proveedores exige haber iniciado sesion', function () {
     $this->getJson('/api/ServicioComisariato/proveedores')->assertUnauthorized();
 });
+
+test('el alta guarda el proveedor elegido y ya no escribe catering', function () {
+    $servicio = servicioComisariato('Comisariato_Comexa');
+    $this->actingAs(User::factory()->create());
+
+    $this->postJson('/api/ServicioComisariato', [
+        'proveedorId' => $servicio->id,
+        'formaPago' => 'Cargo a la matrícula',
+        'fechaEntrega' => now()->toDateString(),
+        'horaEntrega' => '07:00',
+        'matricula' => 'XA-ABC',
+        'detalle' => 'Salmón y ensalada cesar',
+        'solicitadoPor' => 'Capitán',
+        'atendio' => 'Mostrador',
+        'subtotal' => 520,
+        'total' => 520,
+    ])->assertCreated();
+
+    $guardado = ServicioComisariato::latest('id')->first();
+
+    expect($guardado->fact_servicio_id)->toBe($servicio->id)
+        ->and($guardado->catering)->toBeNull();
+});
+
+test('el alta rechaza un servicio que no es de la categoria Comisariatos', function () {
+    $otraCategoria = FactCategoriaServicio::create(['nombre' => 'Tránsitos', 'status' => 'A']);
+    $ajeno = FactServicio::create([
+        'categoria_servicio_id' => $otraCategoria->id,
+        'nombre' => 'Transito 12 horas',
+        'precio_unitario' => 99,
+        'es_de_tercero' => false,
+        'margen' => 0,
+        'ajuste_precio' => FactServicio::AJUSTE_NINGUNO,
+        'status' => 'A',
+    ]);
+
+    $this->actingAs(User::factory()->create());
+
+    $this->postJson('/api/ServicioComisariato', [
+        'proveedorId' => $ajeno->id,
+        'fechaEntrega' => now()->toDateString(),
+        'horaEntrega' => '07:00',
+        'subtotal' => 520,
+        'total' => 520,
+    ])->assertStatus(422)->assertJsonValidationErrors('proveedorId');
+});
+
+test('el alta rechaza un proveedor dado de baja', function () {
+    $baja = servicioComisariato('Comisariato_Avemex', 'N');
+    $this->actingAs(User::factory()->create());
+
+    $this->postJson('/api/ServicioComisariato', [
+        'proveedorId' => $baja->id,
+        'fechaEntrega' => now()->toDateString(),
+        'horaEntrega' => '07:00',
+        'subtotal' => 520,
+        'total' => 520,
+    ])->assertStatus(422)->assertJsonValidationErrors('proveedorId');
+});
+
+test('el alta exige elegir proveedor', function () {
+    $this->actingAs(User::factory()->create());
+
+    $this->postJson('/api/ServicioComisariato', [
+        'fechaEntrega' => now()->toDateString(),
+        'horaEntrega' => '07:00',
+        'subtotal' => 520,
+        'total' => 520,
+    ])->assertStatus(422)->assertJsonValidationErrors('proveedorId');
+});
+
+test('la edicion cambia el proveedor', function () {
+    $comexa = servicioComisariato('Comisariato_Comexa');
+    $manny = servicioComisariato('Comisariato_Manny');
+    $comisariato = comisariatoDe(['fact_servicio_id' => $comexa->id, 'fecha_entrega' => now()->toDateString()]);
+
+    $this->actingAs(User::factory()->create());
+
+    $this->putJson("/api/ServicioComisariato/{$comisariato->id}", [
+        'proveedorId' => $manny->id,
+        'fechaEntrega' => $comisariato->fecha_entrega->toDateString(),
+        'horaEntrega' => '07:00',
+        'subtotal' => 520,
+        'total' => 520,
+    ])->assertOk();
+
+    expect($comisariato->fresh()->fact_servicio_id)->toBe($manny->id);
+});
+
+test('una ficha con la fecha ya fuera de ventana se sigue pudiendo corregir', function () {
+    // Es la razón de ser de la condición: la ventana solo se exige cuando la fecha CAMBIA.
+    $comexa = servicioComisariato('Comisariato_Comexa');
+    $vieja = comisariatoDe(['fact_servicio_id' => $comexa->id, 'fecha_entrega' => '2020-01-01']);
+
+    $this->actingAs(User::factory()->create());
+
+    $this->putJson("/api/ServicioComisariato/{$vieja->id}", [
+        'proveedorId' => $comexa->id,
+        'fechaEntrega' => '2020-01-01',
+        'horaEntrega' => '09:30',
+        'subtotal' => 700,
+        'total' => 700,
+    ])->assertOk();
+
+    expect($vieja->fresh()->hora_entrega->format('H:i'))->toBe('09:30');
+});

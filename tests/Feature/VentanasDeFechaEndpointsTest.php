@@ -6,6 +6,8 @@ use App\Models\ChecklistTurno;
 use App\Models\ControlMedicamento;
 use App\Models\Departamento;
 use App\Models\EntregaTurnoR;
+use App\Models\FactCategoriaServicio;
+use App\Models\FactServicio;
 use App\Models\EstacionamientoSubterraneo;
 use App\Models\MovimientoCSAE;
 use App\Models\OperacionDiaria;
@@ -841,11 +843,29 @@ it('CHALECOS ALTA: lo que la regla deja pasar queda guardado dentro de la ventan
 // (el campo se llama `fechaEntrega`, no `fecha`)
 // ---------------------------------------------------------------------------
 
+/**
+ * El alta y la edicion exigen elegir un proveedor activo de la categoria Comisariatos; estas
+ * pruebas miden la fecha, asi que basta con uno cualquiera.
+ */
+function proveedorDeComisariatoId(): int
+{
+    $categoria = FactCategoriaServicio::firstOrCreate(['nombre' => 'Comisariatos'], ['status' => 'A']);
+
+    return FactServicio::firstOrCreate(['categoria_servicio_id' => $categoria->id, 'nombre' => 'Comisariato_Comexa'], [
+        'precio_unitario' => 0,
+        'es_de_tercero' => false,
+        'margen' => 0,
+        'ajuste_precio' => FactServicio::AJUSTE_NINGUNO,
+        'status' => 'A',
+    ])->id;
+}
+
 /** @return array<string, mixed> */
-function cargaDeComisariato(mixed $fechaEntrega, string $catering = 'Catering Uno'): array
+function cargaDeComisariato(mixed $fechaEntrega, string $detalle = 'Detalle uno'): array
 {
     return [
-        'catering' => $catering,
+        'proveedorId' => proveedorDeComisariatoId(),
+        'detalle' => $detalle,
         'fechaEntrega' => $fechaEntrega,
         'horaEntrega' => '10:30',
         'matricula' => 'XA-COM',
@@ -858,7 +878,7 @@ function comisariatoParaEditar(string $fecha): ServicioComisariato
 {
     return ServicioComisariato::create([
         'user_id' => User::factory()->create()->id,
-        'catering' => 'Original',
+        'detalle' => 'Original',
         'fecha_entrega' => $fecha,
         'hora_entrega' => '10:30',
         'matricula' => 'XA-COM',
@@ -929,7 +949,7 @@ it('COMISARIATO edicion: rechaza con 422 y no modifica la fecha de una edicion f
     ['min' => $min, 'max' => $max] = fechasDelMensaje('comisariato.entrega');
     expect(mensajeDeFecha($respuesta, 'fechaEntrega'))->toContain($min)->toContain($max);
     expect($servicio->fresh()->fecha_entrega->toDateString())->toBe($original);
-    expect($servicio->fresh()->catering)->toBe('Original');
+    expect($servicio->fresh()->detalle)->toBe('Original');
 })->with([
     'futuro' => [1],
     'antigua' => [-4],
@@ -942,7 +962,7 @@ it('COMISARIATO edicion: deja corregir otros campos de un registro antiguo si no
 
     $this->putJson("/api/ServicioComisariato/{$servicio->id}", cargaDeComisariato($antigua, 'Corregido'))->assertOk();
 
-    expect($servicio->fresh()->catering)->toBe('Corregido');
+    expect($servicio->fresh()->detalle)->toBe('Corregido');
     expect($servicio->fresh()->fecha_entrega->toDateString())->toBe($antigua);
 });
 
@@ -994,7 +1014,7 @@ it('COMISARIATO edicion: reenviar la misma fecha en otro formato cuenta como sin
 
     $this->putJson("/api/ServicioComisariato/{$servicio->id}", cargaDeComisariato(str_replace('{dia}', $antigua, $formato), 'Corregido'))->assertOk();
 
-    expect($servicio->fresh()->catering)->toBe('Corregido');
+    expect($servicio->fresh()->detalle)->toBe('Corregido');
     expect($servicio->fresh()->fecha_entrega->toDateString())->toBe($antigua);
 })->with([
     'con hora' => ['{dia} 00:00:00'],

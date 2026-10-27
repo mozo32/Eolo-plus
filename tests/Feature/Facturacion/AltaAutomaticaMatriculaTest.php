@@ -3,6 +3,8 @@
 
 use App\Models\Aeronave;
 use App\Models\FactAeronave;
+use App\Models\FactCategoriaServicio;
+use App\Models\FactServicio;
 use App\Models\OperacionDiaria;
 use App\Models\PernoctaDia;
 use App\Models\TipoAeronave;
@@ -23,6 +25,20 @@ beforeEach(fn () => test()->travelTo('2026-09-29'));
  * Cinco controladores daban de alta matrículas en la base de Prefacturas
  * cuando no existían. Ahora lo hacen en el catálogo local por un solo camino.
  */
+
+/** El alta de Comisariato exige un proveedor activo de su categoria; aqui no importa cual. */
+function proveedorDeComisariatoDelAlta(): int
+{
+    $categoria = FactCategoriaServicio::firstOrCreate(['nombre' => 'Comisariatos'], ['status' => 'A']);
+
+    return FactServicio::firstOrCreate(['categoria_servicio_id' => $categoria->id, 'nombre' => 'Comisariato_Comexa'], [
+        'precio_unitario' => 0,
+        'es_de_tercero' => false,
+        'margen' => 0,
+        'ajuste_precio' => FactServicio::AJUSTE_NINGUNO,
+        'status' => 'A',
+    ])->id;
+}
 
 function capturarOperacionDiaria(string $matricula, string $equipo, string $movimiento = 'Llegada')
 {
@@ -111,6 +127,7 @@ test('capturar con una matricula nueva la agrega al catalogo local desde los cin
 
     // Servicio de Comisariato: la matrícula es opcional; sin ella no se da de alta nada.
     $this->postJson('/api/ServicioComisariato', [
+        'proveedorId' => proveedorDeComisariatoDelAlta(),
         'fechaEntrega' => '2026-09-28',
         'horaEntrega' => '10:00',
         'matricula' => 'XA-COMI',
@@ -119,6 +136,7 @@ test('capturar con una matricula nueva la agrega al catalogo local desde los cin
     ])->assertCreated();
 
     $this->postJson('/api/ServicioComisariato', [
+        'proveedorId' => proveedorDeComisariatoDelAlta(),
         'fechaEntrega' => '2026-09-28',
         'horaEntrega' => '11:00',
         'subtotal' => 100,
@@ -256,6 +274,7 @@ test('un walkaround de una aeronave sin tipo le completa el tipo y guarda su id 
 
     // Alta previa por Comisariato, que no conoce el tipo.
     $this->postJson('/api/ServicioComisariato', [
+        'proveedorId' => proveedorDeComisariatoDelAlta(),
         'fechaEntrega' => '2026-09-28',
         'horaEntrega' => '10:00',
         'matricula' => 'XA-SINTIPO',

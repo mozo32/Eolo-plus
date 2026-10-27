@@ -3,12 +3,12 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Trafico\StoreServicioComisariatoRequest;
+use App\Http\Requests\Trafico\UpdateServicioComisariatoRequest;
 use Illuminate\Http\Request;
 use App\Models\FactServicio;
 use App\Models\ServicioComisariato;
 use App\Services\CatalogoAeronaves;
-use App\Rules\DentroDeLaVentana;
-use App\Support\VentanasDeFecha;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -17,20 +17,10 @@ class ServicioComisariatoController extends Controller
 {
     public function __construct(private readonly CatalogoAeronaves $catalogo) {}
 
-    public function store(Request $request)
+    public function store(StoreServicioComisariatoRequest $request)
     {
-        $validated = $request->validate([
-            'catering'       => ['nullable', 'string', 'max:150'],
-            'formaPago'      => ['nullable', 'string', 'max:100'],
-            'fechaEntrega'   => ['required', 'date', new DentroDeLaVentana('comisariato.entrega')],
-            'horaEntrega'    => ['required', 'date_format:H:i'],
-            'matricula'      => ['nullable', 'string', 'max:50'],
-            'detalle'        => ['nullable', 'string'],
-            'solicitadoPor'  => ['nullable', 'string', 'max:150'],
-            'atendio'        => ['nullable', 'string', 'max:150'],
-            'subtotal'       => ['required', 'numeric', 'min:0'],
-            'total'          => ['required', 'numeric', 'min:0'],
-        ]);
+        $validated = $request->validated();
+
         // La matrícula es opcional. El resultado de la búsqueda nunca se usó:
         // solo importa que la aeronave quede dada de alta en el catálogo.
         if (filled($validated['matricula'] ?? null)) {
@@ -39,7 +29,7 @@ class ServicioComisariatoController extends Controller
 
         $servicio = ServicioComisariato::create([
             'user_id'        => Auth::id(),
-            'catering'       => $validated['catering'] ?? null,
+            'fact_servicio_id' => $validated['proveedorId'],
             'forma_pago'     => $validated['formaPago'] ?? null,
             'fecha_entrega'  => $validated['fechaEntrega'],
             'hora_entrega'   => $validated['horaEntrega'],
@@ -129,29 +119,16 @@ class ServicioComisariatoController extends Controller
 
         return response()->json($servicioComisariato);
     }
-    public function update(Request $request, ServicioComisariato $servicioComisariato)
+    public function update(UpdateServicioComisariatoRequest $request, ServicioComisariato $servicioComisariato)
     {
         DB::beginTransaction();
 
         try {
-            $this->validarFechaSiCambia($request, $servicioComisariato);
-
-            $validated = $request->validate([
-                'catering'       => ['nullable', 'string', 'max:150'],
-                'formaPago'      => ['nullable', 'string', 'max:100'],
-                'fechaEntrega'   => ['required', 'date'],
-                'horaEntrega'    => ['required', 'date_format:H:i'],
-                'matricula'      => ['nullable', 'string', 'max:50'],
-                'detalle'        => ['nullable', 'string'],
-                'solicitadoPor'  => ['nullable', 'string', 'max:150'],
-                'atendio'        => ['nullable', 'string', 'max:150'],
-                'subtotal'       => ['required', 'numeric', 'min:0'],
-                'total'          => ['required', 'numeric', 'min:0'],
-            ]);
+            $validated = $request->validated();
 
             $servicioComisariato->update([
                 'user_id'        => Auth::id(),
-                'catering'       => $validated['catering'] ?? null,
+                'fact_servicio_id' => $validated['proveedorId'],
                 'forma_pago'     => $validated['formaPago'] ?? null,
                 'fecha_entrega'  => $validated['fechaEntrega'],
                 'hora_entrega'   => $validated['horaEntrega'],
@@ -185,26 +162,6 @@ class ServicioComisariatoController extends Controller
             ], 500);
         }
     }
-    /**
-     * Una edición solo juzga la fecha de entrega cuando CAMBIA.
-     *
-     * Un servicio guardado con una fecha que ya quedó fuera de la ventana conserva esa fecha
-     * intacta; exigirle la ventana bloquearía cualquier corrección del resto del registro. Lo
-     * que la ventana impide es poner una fecha fuera de ella.
-     */
-    private function validarFechaSiCambia(Request $request, ServicioComisariato $servicio): void
-    {
-        $recibidaComoDia = VentanasDeFecha::diaQueGuardaElModelo($request->input('fechaEntrega'));
-
-        if ($recibidaComoDia !== null && $recibidaComoDia === $servicio->fecha_entrega?->toDateString()) {
-            return;
-        }
-
-        $request->validate([
-            'fechaEntrega' => ['required', 'date', new DentroDeLaVentana('comisariato.entrega')],
-        ]);
-    }
-
     public function eliminar($id)
     {
         try {
