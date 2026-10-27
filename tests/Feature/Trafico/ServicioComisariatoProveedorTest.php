@@ -454,7 +454,7 @@ test('un proveedor que no es sin ni un numero no trae ninguna fila', function (s
 })->with([
     '1abc' => ['1abc'],
     'texto' => ['abc'],
-    'inyeccion' => ['1 OR 1=1'],
+    'un numero seguido de texto, que MySQL leeria como ese numero' => ['1 OR 1=1'],
 ]);
 
 test('el filtro de catering ya no acota la tabla', function () {
@@ -467,4 +467,24 @@ test('el filtro de catering ya no acota la tabla', function () {
     $datos = $this->getJson('/api/ServicioComisariato?catering=Comexa')->assertOk()->json('data');
 
     expect($datos)->toHaveCount(2);
+});
+
+test('la tabla trae el nombre del proveedor para pintarlo', function () {
+    $comexa = servicioComisariato('Comisariato_Comexa');
+    comisariatoDe(['fact_servicio_id' => $comexa->id]);
+
+    $this->actingAs(User::factory()->create());
+
+    expect($this->getJson('/api/ServicioComisariato')->assertOk()->json('data.0.fact_servicio.nombre'))
+        ->toBe('Comisariato_Comexa');
+});
+
+test('el detalle trae el nombre del proveedor para el PDF', function () {
+    $comexa = servicioComisariato('Comisariato_Comexa');
+    $comisariato = comisariatoDe(['fact_servicio_id' => $comexa->id]);
+
+    $this->actingAs(User::factory()->create());
+
+    expect($this->getJson("/api/ServicioComisariato/{$comisariato->id}")->assertOk()->json('fact_servicio.nombre'))
+        ->toBe('Comisariato_Comexa');
 });

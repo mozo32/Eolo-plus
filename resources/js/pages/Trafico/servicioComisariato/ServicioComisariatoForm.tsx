@@ -1,6 +1,11 @@
 import { validarServicioComisariato } from "./validacion";
 import { useState, useEffect } from "react";
-import { guardarServicioComisariatoApi, actualizarServicioComisariatoApi } from "@/stores/apiServicioComisariato";
+import {
+    guardarServicioComisariatoApi,
+    actualizarServicioComisariatoApi,
+    obtenerProveedoresComisariato,
+    type ProveedorComisariato,
+} from "@/stores/apiServicioComisariato";
 import Swal from "sweetalert2";
 import { Package } from "lucide-react";
 import { useVentanaDeFecha } from "@/lib/ventanasDeFecha";
@@ -70,7 +75,7 @@ const normalizarHora24 = (value: string) => {
 };
 
 const getInitialForm = (data?: any) => ({
-    catering: data?.catering ?? "",
+    proveedorId: data?.fact_servicio_id ? String(data.fact_servicio_id) : "",
     formaPago: data?.forma_pago ?? "",
     fechaEntrega: data?.fecha_entrega
         ? data.fecha_entrega.split("T")[0]
@@ -87,6 +92,19 @@ const getInitialForm = (data?: any) => ({
 export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Props) {
     const { min, max } = useVentanaDeFecha("comisariato.entrega", isEdit ? data?.fecha_entrega : undefined);
     const [form, setForm] = useState(() => getInitialForm(data));
+    const [proveedores, setProveedores] = useState<ProveedorComisariato[]>([]);
+
+    useEffect(() => {
+        obtenerProveedoresComisariato()
+            .then(setProveedores)
+            .catch((error: any) => {
+                Swal.fire({
+                    icon: "error",
+                    title: "Error",
+                    text: error?.message || "No se pudo cargar la lista de proveedores",
+                });
+            });
+    }, []);
 
     useEffect(() => {
         setForm(getInitialForm(isEdit ? data : undefined));
@@ -134,8 +152,11 @@ export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Pro
         try {
             Swal.fire({ title: "Procesando...", didOpen: () => Swal.showLoading() });
 
+            const { proveedorId, ...resto } = form;
+
             const payload = {
-                ...form,
+                ...resto,
+                proveedorId: Number(proveedorId),
                 subtotal: limpiarMonto(form.subtotal),
                 total: limpiarMonto(form.total),
                 horaEntrega: normalizarHora24(form.horaEntrega),
@@ -186,13 +207,26 @@ export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Pro
                         <h4 className={sectionTitle}>Datos del servicio</h4>
 
                         <div>
-                            <label className={labelStyle}>Catering</label>
-                            <input
-                                className={inputStyle}
-                                value={form.catering}
-                                onChange={(e) => updateField("catering", e.target.value)}
-                                placeholder="Proveedor"
-                            />
+                            <label className={labelStyle}>Proveedor</label>
+                            {proveedores.length === 0 ? (
+                                <p className="text-xs text-amber-700">
+                                    No hay proveedores de comisariato activos en el catálogo. Pide que
+                                    reactiven uno en Facturación → Servicios antes de capturar.
+                                </p>
+                            ) : (
+                                <select
+                                    className={inputStyle}
+                                    value={form.proveedorId}
+                                    onChange={(e) => updateField("proveedorId", e.target.value)}
+                                >
+                                    <option value="">Elige un proveedor…</option>
+                                    {proveedores.map((p) => (
+                                        <option key={p.id} value={String(p.id)}>
+                                            {p.nombre}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
                         </div>
 
                         <div>

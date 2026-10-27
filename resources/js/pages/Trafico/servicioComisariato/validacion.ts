@@ -1,5 +1,5 @@
 type ServicioComisariatoForm = {
-    catering: string;
+    proveedorId: string;
     formaPago: string;
     fechaEntrega: string;
     horaEntrega: string;
@@ -25,7 +25,7 @@ export function validarServicioComisariato(form: ServicioComisariatoForm) {
     const subtotal = toNumber(form.subtotal);
     const total = toNumber(form.total);
 
-    if (!form.catering.trim()) errores.push("Catering es obligatorio");
+    if (!form.proveedorId) errores.push("Proveedor es obligatorio");
     if (!form.formaPago.trim()) errores.push("Forma de pago es obligatoria");
     if (!form.fechaEntrega) errores.push("Fecha de entrega es obligatoria");
     if (!form.horaEntrega) errores.push("Hora de entrega es obligatoria");

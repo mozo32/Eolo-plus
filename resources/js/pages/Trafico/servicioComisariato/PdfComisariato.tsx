@@ -79,7 +79,7 @@ function ComisariatoPdfDoc({ data }: { data: any }) {
                 <Text style={styles.sectionTitle}>Información General</Text>
                 <View style={styles.infoGrid}>
                     <View style={styles.infoItem}><Text style={styles.infoLabel}>Matrícula</Text><Text style={styles.infoValue}>{data.matricula}</Text></View>
-                    <View style={styles.infoItem}><Text style={styles.infoLabel}>Catering</Text><Text style={styles.infoValue}>{data.catering}</Text></View>
+                    <View style={styles.infoItem}><Text style={styles.infoLabel}>Proveedor</Text><Text style={styles.infoValue}>{data.fact_servicio?.nombre ?? data.catering ?? ""}</Text></View>
                     <View style={[styles.infoItem, { borderRightWidth: 0 }]}><Text style={styles.infoLabel}>Forma de Pago</Text><Text style={styles.infoValue}>{data.forma_pago}</Text></View>
                     <View style={styles.infoItem}><Text style={styles.infoLabel}>Hora Entrega</Text><Text style={styles.infoValue}>{data.hora_entrega} hrs</Text></View>
                     <View style={styles.infoItem}><Text style={styles.infoLabel}>Solicitado Por</Text><Text style={styles.infoValue}>{data.solicitado_por}</Text></View>

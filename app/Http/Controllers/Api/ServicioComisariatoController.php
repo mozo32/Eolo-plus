@@ -47,6 +47,7 @@ class ServicioComisariatoController extends Controller
     public function index(Request $request)
     {
         $query = ServicioComisariato::query()
+            ->with('factServicio:id,nombre')
             ->where('status', 'A');
 
         if ($request->filled('id')) {
@@ -125,7 +126,7 @@ class ServicioComisariatoController extends Controller
     public function show(ServicioComisariato $servicioComisariato)
     {
 
-        return response()->json($servicioComisariato);
+        return response()->json($servicioComisariato->load('factServicio:id,nombre'));
     }
     public function update(UpdateServicioComisariatoRequest $request, ServicioComisariato $servicioComisariato)
     {

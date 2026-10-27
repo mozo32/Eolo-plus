@@ -3,7 +3,14 @@ import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import ServicioComisariatoForm from './servicioComisariato/ServicioComisariatoForm';
 import { useState, useEffect, useCallback } from 'react';
-import { fetchServicioComisariato, fetchShowServicioComisariato, eliminar } from '@/stores/apiServicioComisariato';
+import {
+    fetchServicioComisariato,
+    fetchShowServicioComisariato,
+    eliminar,
+    obtenerProveedoresComisariato,
+    type ProveedorComisariato,
+    type FilaServicioComisariato,
+} from '@/stores/apiServicioComisariato';
 import {
     Plus,
     ChevronLeft,
@@ -29,7 +36,7 @@ type FiltrosComisariato = {
     fechaInicio: string;
     fechaFin: string;
     periodo: PeriodoFiltro;
-    catering: string;
+    proveedorId: string;
     matricula: string;
     forma_pago: string;
 };
@@ -39,7 +46,7 @@ const filtrosIniciales = (): FiltrosComisariato => ({
     fechaInicio: '',
     fechaFin: '',
     periodo: 'todos',
-    catering: '',
+    proveedorId: '',
     matricula: '',
     forma_pago: '',
 });
@@ -48,7 +55,7 @@ export default function ServicioComisariato() {
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
     const [meta, setMeta] = useState<any>(null);
-    const [data, setData] = useState<any[]>([]);
+    const [data, setData] = useState<FilaServicioComisariato[]>([]);
     const [showForm, setShowForm] = useState(false);
     const [isEdit, setIsEdit] = useState(false);
     const [detalle, setDetalle] = useState<any>(null);
@@ -57,6 +64,7 @@ export default function ServicioComisariato() {
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
     const [filtros, setFiltros] = useState<FiltrosComisariato>(() => filtrosIniciales());
     const [filtrosEdicion, setFiltrosEdicion] = useState<FiltrosComisariato>(() => filtrosIniciales());
+    const [proveedores, setProveedores] = useState<ProveedorComisariato[]>([]);
 
     const formatFecha = (fecha?: string | null) => {
         if (!fecha) return "—";
@@ -216,7 +224,7 @@ export default function ServicioComisariato() {
                 fechaInicio: filtros.fechaInicio,
                 fechaFin: filtros.fechaFin,
                 periodo: filtros.periodo,
-                catering: filtros.catering,
+                proveedorId: filtros.proveedorId,
                 matricula: filtros.matricula,
                 forma_pago: filtros.forma_pago,
             };
@@ -286,6 +294,10 @@ export default function ServicioComisariato() {
 
     const handlePdfDone = useCallback(() => {
         setPdfId(null);
+    }, []);
+
+    useEffect(() => {
+        obtenerProveedoresComisariato().then(setProveedores).catch(console.error);
     }, []);
 
     useEffect(() => {
@@ -400,13 +412,19 @@ export default function ServicioComisariato() {
                                         </td>
 
                                         <td className="px-2 py-2 border-b border-slate-200">
-                                            <input
-                                                type="text"
-                                                placeholder="Buscar catering..."
+                                            <select
                                                 className="w-full text-[10px] border border-slate-200 p-1.5 rounded bg-white outline-none focus:border-blue-400 uppercase text-center"
-                                                value={filtros.catering}
-                                                onChange={(e) => actualizarFiltro('catering', e.target.value.toUpperCase())}
-                                            />
+                                                value={filtros.proveedorId}
+                                                onChange={(e) => actualizarFiltro('proveedorId', e.target.value)}
+                                            >
+                                                <option value="">Todos</option>
+                                                <option value="sin">Sin proveedor</option>
+                                                {proveedores.map((p) => (
+                                                    <option key={p.id} value={String(p.id)}>
+                                                        {p.nombre}
+                                                    </option>
+                                                ))}
+                                            </select>
                                         </td>
 
                                         <td className="px-2 py-2 border-b border-slate-200">
@@ -479,7 +497,7 @@ export default function ServicioComisariato() {
                                                 <td className="px-6 py-4 text-center">
                                                     <div className="flex flex-col">
                                                         <span className="text-[11px] font-bold text-slate-600 uppercase italic">
-                                                            {row.catering || "S/N"}
+                                                            {row.fact_servicio?.nombre ?? row.catering ?? "S/N"}
                                                         </span>
                                                         <span className="text-[9px] text-slate-400 uppercase tracking-wider">
                                                             Servicio de Comisariato

@@ -27,6 +27,32 @@ export async function guardarServicioComisariatoApi(form: any) {
     return data;
 }
 
+export type ProveedorComisariato = { id: number; nombre: string };
+
+/** La fila que devuelve el índice: `fact_servicio` es el proveedor elegido del catálogo; `catering` es el texto de las filas viejas. */
+export type FilaServicioComisariato = {
+    id: number;
+    catering?: string | null;
+    fact_servicio_id?: number | null;
+    fact_servicio?: { id: number; nombre: string } | null;
+    [campo: string]: any;
+};
+
+export async function obtenerProveedoresComisariato(): Promise<ProveedorComisariato[]> {
+    const res = await fetch('/api/ServicioComisariato/proveedores', {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+    });
+
+    const data = await res.json().catch(() => []);
+
+    if (!res.ok) {
+        throw new Error('No se pudo cargar la lista de proveedores');
+    }
+
+    return data;
+}
+
 export async function fetchServicioComisariato(params: {
     page?: number;
     search?: string;
@@ -35,7 +61,7 @@ export async function fetchServicioComisariato(params: {
     fechaInicio?: string;
     fechaFin?: string;
     periodo?: string;
-    catering?: string;
+    proveedorId?: string;
     matricula?: string;
     forma_pago?: string;
 }) {
