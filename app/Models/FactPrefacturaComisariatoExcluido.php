@@ -7,8 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * La decisión del operador de que ESTE comisariato no va en ESTA prefactura.
  *
- * La consulta `ComisariatosFacturables::candidatas()`, que es lo que la sincronización trae
- * sola; el buscador manual NO la consulta, porque excluirlo del automático no es prohibirlo.
+ * La sincronización automática de la prefactura la consultará para no volver a traer un
+ * comisariato quitado a mano (`ComisariatosFacturables::candidatas()`, que llega en una tarea
+ * posterior y todavía no existe). El buscador manual NO la consultará: excluirlo del
+ * automático no es prohibirlo.
  */
 class FactPrefacturaComisariatoExcluido extends Model
 {

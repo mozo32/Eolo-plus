@@ -24,15 +24,20 @@ function proveedorComisariato(string $nombre = 'Comisariato_Manny', float $marge
     ]);
 }
 
-/** Un comisariato entregado. Solo `user_id`, `fecha_entrega` y `hora_entrega` son obligatorios. */
+/**
+ * Un comisariato entregado. Solo `user_id`, `fecha_entrega` y `hora_entrega` son obligatorios.
+ *
+ * El proveedor y el usuario por omisión se crean SOLO si `$cambios` no trae los suyos: si no,
+ * cada llamada dejaria filas que nadie pidio y las pruebas que cuentan servicios fallarian.
+ */
 function comisariatoPara(string $matricula, string $fecha, string $hora, array $cambios = []): ServicioComisariato
 {
     return ServicioComisariato::create(array_merge([
-        'user_id' => User::factory()->create()->id,
+        'user_id' => array_key_exists('user_id', $cambios) ? null : User::factory()->create()->id,
         'matricula' => $matricula,
         'fecha_entrega' => $fecha,
         'hora_entrega' => $hora,
-        'fact_servicio_id' => proveedorComisariato()->id,
+        'fact_servicio_id' => array_key_exists('fact_servicio_id', $cambios) ? null : proveedorComisariato()->id,
         'forma_pago' => 'Cargo a la matrícula',
         'subtotal' => 1000,
         'total' => 1160,
@@ -88,4 +93,17 @@ test('la exclusion es unica por la pareja de prefactura y comisariato', function
         'servicio_comisariato_id' => $comisariato->id,
         'user_id' => $usuario->id,
     ]))->toThrow(Illuminate\Database\QueryException::class);
+});
+
+test('comisariatoPara no crea proveedor ni usuario de mas cuando se los das', function () {
+    $proveedor = proveedorComisariato('Comisariato_Otro');
+    $usuario = User::factory()->create();
+
+    comisariatoPara('XA-UNO', '2026-10-20', '10:00', [
+        'fact_servicio_id' => $proveedor->id,
+        'user_id' => $usuario->id,
+    ]);
+
+    expect(FactServicio::count())->toBe(1)
+        ->and(User::count())->toBe(1);
 });
