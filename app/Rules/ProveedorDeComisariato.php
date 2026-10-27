@@ -34,7 +34,7 @@ class ProveedorDeComisariato implements ValidationRule
             return;
         }
 
-        if ($servicio->categoria?->nombre !== 'Comisariatos') {
+        if (mb_strtolower((string) $servicio->categoria?->nombre) !== 'comisariatos') {
             $fail('Ese proveedor no es de comisariato.');
 
             return;

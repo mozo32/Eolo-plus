@@ -331,3 +331,65 @@ test('una ficha cuyo proveedor se dio de baja se sigue pudiendo corregir reenvia
     expect($comisariato->fresh()->hora_entrega->format('H:i'))->toBe('09:30')
         ->and($comisariato->fresh()->fact_servicio_id)->toBe($baja->id);
 });
+
+test('la edicion no relaja la categoria ni para el proveedor que la ficha ya tenia', function (string $status) {
+    // Un servicio que estaba en Comisariatos y se movio de categoria despues de usarse en fichas.
+    $servicio = servicioComisariato('Comisariato_Comexa', $status);
+    $comisariato = comisariatoDe(['fact_servicio_id' => $servicio->id, 'fecha_entrega' => now()->toDateString()]);
+    $servicio->update(['categoria_servicio_id' => FactCategoriaServicio::create(['nombre' => 'Tránsitos', 'status' => 'A'])->id]);
+
+    $this->actingAs(User::factory()->create());
+
+    $this->putJson("/api/ServicioComisariato/{$comisariato->id}", [
+        'proveedorId' => $servicio->id,
+        'fechaEntrega' => $comisariato->fecha_entrega->toDateString(),
+        'horaEntrega' => '09:30',
+        'subtotal' => 700,
+        'total' => 700,
+    ])->assertStatus(422)->assertJsonValidationErrors('proveedorId');
+
+    expect($comisariato->fresh()->hora_entrega->format('H:i'))->toBe('07:00');
+})->with([
+    'activo' => ['A'],
+    'de baja' => ['N'],
+]);
+
+test('una ficha vieja sin proveedor no puede estrenar uno dado de baja', function () {
+    $baja = servicioComisariato('Comisariato_Avemex', 'N');
+    $vieja = comisariatoDe(['fecha_entrega' => now()->toDateString()]);
+
+    $this->actingAs(User::factory()->create());
+
+    $this->putJson("/api/ServicioComisariato/{$vieja->id}", [
+        'proveedorId' => $baja->id,
+        'fechaEntrega' => $vieja->fecha_entrega->toDateString(),
+        'horaEntrega' => '07:00',
+        'subtotal' => 520,
+        'total' => 520,
+    ])->assertStatus(422)->assertJsonValidationErrors('proveedorId');
+
+    expect($vieja->fresh()->fact_servicio_id)->toBeNull();
+});
+
+test('el nombre de la categoria se compara sin distinguir mayusculas, como en la lista de proveedores', function () {
+    $categoria = FactCategoriaServicio::create(['nombre' => 'COMISARIATOS', 'status' => 'A']);
+    $servicio = FactServicio::create([
+        'categoria_servicio_id' => $categoria->id,
+        'nombre' => 'Comisariato_Comexa',
+        'precio_unitario' => 0,
+        'es_de_tercero' => false,
+        'margen' => 0,
+        'ajuste_precio' => FactServicio::AJUSTE_NINGUNO,
+        'status' => 'A',
+    ]);
+
+    $this->actingAs(User::factory()->create());
+
+    $this->postJson('/api/ServicioComisariato', [
+        'proveedorId' => $servicio->id,
+        'fechaEntrega' => now()->toDateString(),
+        'horaEntrega' => '07:00',
+        'subtotal' => 520,
+        'total' => 520,
+    ])->assertCreated();
+});
