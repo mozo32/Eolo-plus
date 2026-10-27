@@ -66,8 +66,11 @@ class ServicioComisariatoController extends Controller
             });
         }
 
-        if ($request->filled('catering')) {
-            $query->where('catering', 'like', '%' . trim($request->catering) . '%');
+        // `sin` son las filas anteriores a la lista de proveedores, que quedaron sin elegir.
+        if ($request->filled('proveedorId')) {
+            $request->proveedorId === 'sin'
+                ? $query->whereNull('fact_servicio_id')
+                : $query->where('fact_servicio_id', $request->proveedorId);
         }
 
         if ($request->filled('matricula')) {

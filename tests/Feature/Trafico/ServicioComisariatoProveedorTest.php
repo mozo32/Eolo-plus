@@ -393,3 +393,38 @@ test('el nombre de la categoria se compara sin distinguir mayusculas, como en la
         'total' => 520,
     ])->assertCreated();
 });
+
+test('la tabla se filtra por proveedor', function () {
+    $comexa = servicioComisariato('Comisariato_Comexa');
+    $manny = servicioComisariato('Comisariato_Manny');
+    comisariatoDe(['fact_servicio_id' => $comexa->id, 'matricula' => 'XA-UNO']);
+    comisariatoDe(['fact_servicio_id' => $manny->id, 'matricula' => 'XA-DOS']);
+
+    $this->actingAs(User::factory()->create());
+
+    $datos = $this->getJson("/api/ServicioComisariato?proveedorId={$comexa->id}")->assertOk()->json('data');
+
+    expect($datos)->toHaveCount(1)->and($datos[0]['matricula'])->toBe('XA-UNO');
+});
+
+test('la tabla encuentra las que se quedaron sin proveedor', function () {
+    $comexa = servicioComisariato('Comisariato_Comexa');
+    comisariatoDe(['fact_servicio_id' => $comexa->id, 'matricula' => 'XA-UNO']);
+    comisariatoDe(['matricula' => 'XA-VIEJA', 'catering' => 'fd']);
+
+    $this->actingAs(User::factory()->create());
+
+    $datos = $this->getJson('/api/ServicioComisariato?proveedorId=sin')->assertOk()->json('data');
+
+    expect($datos)->toHaveCount(1)->and($datos[0]['matricula'])->toBe('XA-VIEJA');
+});
+
+test('el buscador general sigue encontrando el texto viejo de catering', function () {
+    comisariatoDe(['matricula' => 'XA-VIEJA', 'catering' => 'Mannys Catering']);
+
+    $this->actingAs(User::factory()->create());
+
+    $datos = $this->getJson('/api/ServicioComisariato?search=Mannys')->assertOk()->json('data');
+
+    expect($datos)->toHaveCount(1)->and($datos[0]['matricula'])->toBe('XA-VIEJA');
+});
