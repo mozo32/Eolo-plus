@@ -2,20 +2,18 @@
 
 namespace App\Http\Requests\Trafico;
 
-use App\Models\FactCategoriaServicio;
-use App\Models\FactServicio;
 use App\Models\ServicioComisariato;
 use App\Rules\DentroDeLaVentana;
+use App\Rules\ProveedorDeComisariato;
 use App\Support\VentanasDeFecha;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class UpdateServicioComisariatoRequest extends FormRequest
 {
     public function rules(): array
     {
         return [
-            'proveedorId' => ['bail', 'required', 'integer', Rule::exists('fact_servicios', 'id')->where('status', 'A'), $this->esProveedorDeComisariato(...)],
+            'proveedorId' => ['bail', 'required', 'integer', new ProveedorDeComisariato($this->route('servicioComisariato')?->fact_servicio_id)],
             'formaPago' => ['nullable', 'string', 'max:100'],
             'fechaEntrega' => $this->reglasDeLaFecha(),
             'horaEntrega' => ['required', 'date_format:H:i'],
@@ -51,30 +49,11 @@ class UpdateServicioComisariatoRequest extends FormRequest
             : ['required', 'date', new DentroDeLaVentana('comisariato.entrega')];
     }
 
-    /**
-     * Que el servicio exista no basta: tiene que ser de la categoría Comisariatos.
-     *
-     * Sin esta comprobación, el id de Combustible o de un Tránsito pasaría, y el comisariato
-     * acabaría cobrándose como otra cosa, con el margen y el ajuste de otro servicio.
-     */
-    protected function esProveedorDeComisariato(string $atributo, mixed $valor, \Closure $fallar): void
-    {
-        $esDeComisariato = FactServicio::query()
-            ->whereKey($valor)
-            ->whereIn('categoria_servicio_id', FactCategoriaServicio::where('nombre', 'Comisariatos')->select('id'))
-            ->exists();
-
-        if (! $esDeComisariato) {
-            $fallar('Ese proveedor no es de comisariato.');
-        }
-    }
-
     public function messages(): array
     {
         return [
             'proveedorId.required' => 'Elige el proveedor del comisariato.',
             'proveedorId.integer' => 'El proveedor no es válido.',
-            'proveedorId.exists' => 'Ese proveedor no existe o está dado de baja.',
             'fechaEntrega.required' => 'La fecha de entrega es obligatoria.',
             'horaEntrega.required' => 'La hora de entrega es obligatoria.',
             'horaEntrega.date_format' => 'La hora de entrega va en formato de 24 horas, HH:MM.',

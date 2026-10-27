@@ -11,7 +11,6 @@ use App\Models\ServicioComisariato;
 use App\Services\CatalogoAeronaves;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 class ServicioComisariatoController extends Controller
 {
@@ -149,10 +148,6 @@ class ServicioComisariatoController extends Controller
                 'data' => $servicioComisariato,
             ]);
 
-        } catch (ValidationException $e) {
-            DB::rollBack();
-
-            throw $e;
         } catch (\Throwable $e) {
             DB::rollBack();
 

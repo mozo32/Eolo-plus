@@ -252,3 +252,82 @@ test('una ficha con la fecha ya fuera de ventana se sigue pudiendo corregir', fu
 
     expect($vieja->fresh()->hora_entrega->format('H:i'))->toBe('09:30');
 });
+
+test('la edicion rechaza un servicio que no es de la categoria Comisariatos', function () {
+    $comexa = servicioComisariato('Comisariato_Comexa');
+    $comisariato = comisariatoDe(['fact_servicio_id' => $comexa->id, 'fecha_entrega' => now()->toDateString()]);
+
+    $otraCategoria = FactCategoriaServicio::create(['nombre' => 'Combustible & Servicios', 'status' => 'A']);
+    $ajeno = FactServicio::create([
+        'categoria_servicio_id' => $otraCategoria->id,
+        'nombre' => 'Combustible JET A-1',
+        'precio_unitario' => 25.99,
+        'es_de_tercero' => false,
+        'margen' => 0,
+        'ajuste_precio' => FactServicio::AJUSTE_NINGUNO,
+        'status' => 'A',
+    ]);
+
+    $this->actingAs(User::factory()->create());
+
+    $this->putJson("/api/ServicioComisariato/{$comisariato->id}", [
+        'proveedorId' => $ajeno->id,
+        'fechaEntrega' => $comisariato->fecha_entrega->toDateString(),
+        'horaEntrega' => '07:00',
+        'subtotal' => 520,
+        'total' => 520,
+    ])->assertStatus(422)->assertJsonValidationErrors('proveedorId');
+
+    expect($comisariato->fresh()->fact_servicio_id)->toBe($comexa->id);
+});
+
+test('la edicion exige elegir proveedor', function () {
+    $comexa = servicioComisariato('Comisariato_Comexa');
+    $comisariato = comisariatoDe(['fact_servicio_id' => $comexa->id, 'fecha_entrega' => now()->toDateString()]);
+
+    $this->actingAs(User::factory()->create());
+
+    $this->putJson("/api/ServicioComisariato/{$comisariato->id}", [
+        'fechaEntrega' => $comisariato->fecha_entrega->toDateString(),
+        'horaEntrega' => '07:00',
+        'subtotal' => 520,
+        'total' => 520,
+    ])->assertStatus(422)->assertJsonValidationErrors('proveedorId');
+});
+
+test('la edicion no deja cambiar a un proveedor dado de baja', function () {
+    $comexa = servicioComisariato('Comisariato_Comexa');
+    $baja = servicioComisariato('Comisariato_Avemex', 'N');
+    $comisariato = comisariatoDe(['fact_servicio_id' => $comexa->id, 'fecha_entrega' => now()->toDateString()]);
+
+    $this->actingAs(User::factory()->create());
+
+    $this->putJson("/api/ServicioComisariato/{$comisariato->id}", [
+        'proveedorId' => $baja->id,
+        'fechaEntrega' => $comisariato->fecha_entrega->toDateString(),
+        'horaEntrega' => '07:00',
+        'subtotal' => 520,
+        'total' => 520,
+    ])->assertStatus(422)->assertJsonValidationErrors('proveedorId');
+
+    expect($comisariato->fresh()->fact_servicio_id)->toBe($comexa->id);
+});
+
+test('una ficha cuyo proveedor se dio de baja se sigue pudiendo corregir reenviando el mismo', function () {
+    // Igual que la fecha: lo que se impide es PONER un proveedor de baja, no conservar el que ya tenia.
+    $baja = servicioComisariato('Comisariato_Avemex', 'N');
+    $comisariato = comisariatoDe(['fact_servicio_id' => $baja->id, 'fecha_entrega' => now()->toDateString()]);
+
+    $this->actingAs(User::factory()->create());
+
+    $this->putJson("/api/ServicioComisariato/{$comisariato->id}", [
+        'proveedorId' => $baja->id,
+        'fechaEntrega' => $comisariato->fecha_entrega->toDateString(),
+        'horaEntrega' => '09:30',
+        'subtotal' => 700,
+        'total' => 700,
+    ])->assertOk();
+
+    expect($comisariato->fresh()->hora_entrega->format('H:i'))->toBe('09:30')
+        ->and($comisariato->fresh()->fact_servicio_id)->toBe($baja->id);
+});
