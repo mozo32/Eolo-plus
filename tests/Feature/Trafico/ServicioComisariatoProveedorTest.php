@@ -162,6 +162,17 @@ test('la fila ambigua se queda en nulo aunque solo exista el servicio del primer
         ->and($deComexa->fresh()->fact_servicio_id)->toBe($comexa->id);
 });
 
+test('el relleno no avisa de un servicio ausente si ninguna fila nombra a ese proveedor', function () {
+    Log::spy();
+
+    comisariatoDe(['catering' => 'fd']);
+    comisariatoDe(['catering' => null]);
+
+    (new RellenarProveedorDeComisariatos)();
+
+    Log::shouldNotHaveReceived('warning');
+});
+
 test('un servicio que ya identifico un comisariato no se puede borrar', function () {
     $servicio = servicioComisariato('Comisariato_Comexa');
     comisariatoDe(['fact_servicio_id' => $servicio->id]);

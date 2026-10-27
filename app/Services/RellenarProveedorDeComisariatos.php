@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Log;
  * proveedor. Empareja por texto, sin distinguir mayúsculas. Lo que no empareja, o empareja con más
  * de un proveedor, se queda en nulo: adivinar ahí sería inventar. No pisa un proveedor ya elegido.
  * Si el servicio no existe en esta base —una instalación nueva, o las pruebas— no se rompe, pero
- * lo deja escrito en el log.
+ * lo deja escrito en el log cuando hay filas que nombran a ese proveedor.
  *
  * Usa el query builder y no los modelos a propósito: la invoca una migración, que tiene que seguir
  * funcionando aunque los modelos cambien.
@@ -47,11 +47,17 @@ final class RellenarProveedorDeComisariatos
             $servicioId = DB::table('fact_servicios')->where('nombre', $nombreDelServicio)->value('id');
 
             if ($servicioId === null) {
-                // Nada que rellenar no es lo mismo que "el catálogo no está": lo segundo se dice.
-                Log::warning(
-                    "RellenarProveedorDeComisariatos: no existe el servicio '{$nombreDelServicio}' en fact_servicios; "
-                    . 'por eso no rellenó el proveedor de los comisariatos cuyo texto nombra a ese proveedor.'
-                );
+                // Solo se avisa si hay filas que lo nombran: sin ellas no se dejó de rellenar nada.
+                $filasQueLoNombran = collect($fragmentosPorFila)
+                    ->filter(fn (array $fragmentos) => in_array($fragmento, $fragmentos, true))
+                    ->count();
+
+                if ($filasQueLoNombran > 0) {
+                    Log::warning(
+                        "RellenarProveedorDeComisariatos: no existe el servicio '{$nombreDelServicio}' en fact_servicios; "
+                        . "por eso no rellenó el proveedor de {$filasQueLoNombran} comisariato(s) cuyo texto nombra a ese proveedor."
+                    );
+                }
 
                 continue;
             }
