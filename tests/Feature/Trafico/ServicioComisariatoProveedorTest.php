@@ -5,6 +5,7 @@ use App\Models\FactServicio;
 use App\Models\ServicioComisariato;
 use App\Models\User;
 use App\Services\RellenarProveedorDeComisariatos;
+use Illuminate\Database\QueryException;
 
 /** La categoría a la que pertenecen los cinco proveedores de comisariato. */
 function categoriaComisariatos(): FactCategoriaServicio
@@ -58,20 +59,28 @@ test('el relleno empareja los comisariatos viejos por el nombre del proveedor y 
     $manny = servicioComisariato('Comisariato_Manny');
 
     $deComexa = comisariatoDe(['catering' => 'Comexa']);
+    $deComexaEnMayusculas = comisariatoDe(['catering' => 'COMEXA']);
     $deMannys = comisariatoDe(['catering' => 'Mannys']);
     $deManny = comisariatoDe(['catering' => 'Manny']);
     $deMannysCatering = comisariatoDe(['catering' => 'Mannys Catering']);
+    $deMannysEnMinusculas = comisariatoDe(['catering' => 'mannys catering']);
     $deOtro = comisariatoDe(['catering' => 'fd']);
     $sinTexto = comisariatoDe(['catering' => null]);
+    $comparteLetras = comisariatoDe(['catering' => 'Avemex']);
+    $contieneXa = comisariatoDe(['catering' => 'Taxa Aérea']);
 
     (new RellenarProveedorDeComisariatos)();
 
     expect($deComexa->fresh()->fact_servicio_id)->toBe($comexa->id)
+        ->and($deComexaEnMayusculas->fresh()->fact_servicio_id)->toBe($comexa->id)
         ->and($deMannys->fresh()->fact_servicio_id)->toBe($manny->id)
         ->and($deManny->fresh()->fact_servicio_id)->toBe($manny->id)
         ->and($deMannysCatering->fresh()->fact_servicio_id)->toBe($manny->id)
+        ->and($deMannysEnMinusculas->fresh()->fact_servicio_id)->toBe($manny->id)
         ->and($deOtro->fresh()->fact_servicio_id)->toBeNull()
-        ->and($sinTexto->fresh()->fact_servicio_id)->toBeNull();
+        ->and($sinTexto->fresh()->fact_servicio_id)->toBeNull()
+        ->and($comparteLetras->fresh()->fact_servicio_id)->toBeNull()
+        ->and($contieneXa->fresh()->fact_servicio_id)->toBeNull();
 });
 
 test('el relleno no pisa un proveedor ya elegido a mano', function () {
@@ -85,12 +94,12 @@ test('el relleno no pisa un proveedor ya elegido a mano', function () {
     expect($elegidoAMano->fresh()->fact_servicio_id)->toBe($manny->id);
 });
 
-test('el relleno no revienta ni cambia nada cuando los servicios no existen en la base', function () {
-    $deComexa = comisariatoDe(['catering' => 'Comexa']);
-    $deManny = comisariatoDe(['catering' => 'Manny']);
+test('un servicio que ya identifico un comisariato no se puede borrar', function () {
+    $servicio = servicioComisariato('Comisariato_Comexa');
+    comisariatoDe(['fact_servicio_id' => $servicio->id]);
 
-    (new RellenarProveedorDeComisariatos)();
+    expect(fn () => $servicio->delete())->toThrow(QueryException::class);
 
-    expect($deComexa->fresh()->fact_servicio_id)->toBeNull()
-        ->and($deManny->fresh()->fact_servicio_id)->toBeNull();
+    expect(FactServicio::find($servicio->id))->not->toBeNull()
+        ->and(ServicioComisariato::where('fact_servicio_id', $servicio->id)->count())->toBe(1);
 });
