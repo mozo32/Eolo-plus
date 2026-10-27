@@ -122,12 +122,14 @@ eso el endpoint nuevo es defensa en profundidad de la pantalla de Tráfico, **no
 una frontera** entre Tráfico y Facturación. Si esa frontera se quiere de
 verdad, es una decisión aparte sobre la ruta de facturación.
 
-**Cuando la lista viene vacía**, el cuerpo sigue siendo el array plano, y la
-respuesta lleva la cabecera `X-Proveedores-Catalogo` con el motivo:
+**Cuando la lista viene vacía**, la pantalla necesita saber por qué. La
+respuesta es una envoltura, `{ proveedores: [...], estado }` —cada elemento de
+`proveedores` sigue siendo exactamente `{id, nombre}`—, y `estado` es
 `sin-configurar` (no existe ningún servicio de la categoría: hay que crearlos),
 `todos-de-baja` (existen pero ninguno está activo: hay que reactivar uno) o
-`disponibles`. La pantalla dice el que toca; no se meten campos nuevos dentro de
-los objetos `{id, nombre}`.
+`disponibles`. Va en el cuerpo y no en una cabecera porque una cabecera se puede
+perder por el camino y el cliente caería en el diagnóstico falso. La pantalla
+dice el que toca; no se meten campos nuevos dentro de los objetos `{id, nombre}`.
 
 El grupo de rutas `ServicioComisariato` usa hoy solo `auth:sanctum`, sin
 middleware de subdepartamento, al contrario que las de facturación. El endpoint

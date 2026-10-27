@@ -115,6 +115,8 @@ test('el relleno deja constancia en el log cuando no encuentra el servicio, y no
 });
 
 test('el relleno deja en nulo la fila cuyo texto casa con mas de un proveedor', function () {
+    Log::spy();
+
     $comexa = servicioComisariato('Comisariato_Comexa');
     $manny = servicioComisariato('Comisariato_Manny');
 
@@ -132,6 +134,8 @@ test('el relleno deja en nulo la fila cuyo texto casa con mas de un proveedor', 
 });
 
 test('la fila ambigua tambien se queda en nulo si uno de los dos servicios no existe', function () {
+    Log::spy();
+
     $manny = servicioComisariato('Comisariato_Manny');
 
     $ambigua = comisariatoDe(['catering' => 'Manny (sustituye a Comexa)']);
@@ -141,6 +145,21 @@ test('la fila ambigua tambien se queda en nulo si uno de los dos servicios no ex
 
     expect($ambigua->fresh()->fact_servicio_id)->toBeNull()
         ->and($deManny->fresh()->fact_servicio_id)->toBe($manny->id);
+});
+
+test('la fila ambigua se queda en nulo aunque solo exista el servicio del primer proveedor del texto', function () {
+    Log::spy();
+
+    // Sin la regla de ambiguedad, "gana el primero": esta fila acabaria en Comexa (0 % de margen).
+    $comexa = servicioComisariato('Comisariato_Comexa');
+
+    $ambigua = comisariatoDe(['catering' => 'Manny (sustituye a Comexa)']);
+    $deComexa = comisariatoDe(['catering' => 'Comexa']);
+
+    (new RellenarProveedorDeComisariatos)();
+
+    expect($ambigua->fresh()->fact_servicio_id)->toBeNull()
+        ->and($deComexa->fresh()->fact_servicio_id)->toBe($comexa->id);
 });
 
 test('un servicio que ya identifico un comisariato no se puede borrar', function () {
@@ -173,9 +192,9 @@ test('la lista de proveedores trae solo los servicios activos de la categoria Co
     $respuesta = $this->getJson('/api/ServicioComisariato/proveedores');
 
     $respuesta->assertOk();
-    expect($respuesta->json())->toHaveCount(1)
-        ->and($respuesta->json('0.id'))->toBe($comexa->id)
-        ->and($respuesta->json('0.nombre'))->toBe('Comisariato_Comexa');
+    expect($respuesta->json('proveedores'))->toHaveCount(1)
+        ->and($respuesta->json('proveedores.0.id'))->toBe($comexa->id)
+        ->and($respuesta->json('proveedores.0.nombre'))->toBe('Comisariato_Comexa');
 });
 
 test('la lista dice que no hay ningun proveedor configurado, distinto de que esten de baja', function () {
@@ -184,8 +203,8 @@ test('la lista dice que no hay ningun proveedor configurado, distinto de que est
     $respuesta = $this->getJson('/api/ServicioComisariato/proveedores');
 
     $respuesta->assertOk();
-    expect($respuesta->json())->toBe([])
-        ->and($respuesta->headers->get('X-Proveedores-Catalogo'))->toBe('sin-configurar');
+    expect($respuesta->json('proveedores'))->toBe([])
+        ->and($respuesta->json('estado'))->toBe('sin-configurar');
 });
 
 test('la lista dice que los proveedores existen pero estan todos de baja', function () {
@@ -197,8 +216,8 @@ test('la lista dice que los proveedores existen pero estan todos de baja', funct
     $respuesta = $this->getJson('/api/ServicioComisariato/proveedores');
 
     $respuesta->assertOk();
-    expect($respuesta->json())->toBe([])
-        ->and($respuesta->headers->get('X-Proveedores-Catalogo'))->toBe('todos-de-baja');
+    expect($respuesta->json('proveedores'))->toBe([])
+        ->and($respuesta->json('estado'))->toBe('todos-de-baja');
 });
 
 test('la lista con proveedores activos los declara disponibles', function () {
@@ -209,8 +228,8 @@ test('la lista con proveedores activos los declara disponibles', function () {
 
     $respuesta = $this->getJson('/api/ServicioComisariato/proveedores');
 
-    expect($respuesta->json())->toHaveCount(1)
-        ->and($respuesta->headers->get('X-Proveedores-Catalogo'))->toBe('disponibles');
+    expect($respuesta->json('proveedores'))->toHaveCount(1)
+        ->and($respuesta->json('estado'))->toBe('disponibles');
 });
 
 test('un servicio de otra categoria no cuenta como proveedor configurado', function () {
@@ -229,7 +248,7 @@ test('un servicio de otra categoria no cuenta como proveedor configurado', funct
 
     $respuesta = $this->getJson('/api/ServicioComisariato/proveedores');
 
-    expect($respuesta->headers->get('X-Proveedores-Catalogo'))->toBe('sin-configurar');
+    expect($respuesta->json('estado'))->toBe('sin-configurar');
 });
 
 test('la lista NO filtra el margen ni el precio a Trafico', function () {
@@ -240,10 +259,11 @@ test('la lista NO filtra el margen ni el precio a Trafico', function () {
     $respuesta = $this->getJson('/api/ServicioComisariato/proveedores');
     $respuesta->assertOk();
 
-    $claves = array_keys($respuesta->json('0'));
+    $claves = array_keys($respuesta->json('proveedores.0'));
 
     // Parece de más hasta que alguien añade un campo al recurso y filtra el margen sin querer.
-    expect($claves)->toBe(['id', 'nombre']);
+    expect($claves)->toBe(['id', 'nombre'])
+        ->and(array_keys($respuesta->json()))->toBe(['proveedores', 'estado']);
 });
 
 test('la lista de proveedores exige haber iniciado sesion', function () {

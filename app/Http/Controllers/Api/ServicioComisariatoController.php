@@ -108,9 +108,12 @@ class ServicioComisariatoController extends Controller
      * Los proveedores entre los que elige Tráfico al capturar.
      *
      * Del otro lado son servicios del catálogo de facturación, y lo que llevan dentro —precio,
-     * margen, ajuste— es asunto de facturación: aquí se devuelve SOLO id y nombre. Un usuario de
-     * Tráfico no tiene por qué ver cuánto se le carga encima a lo que entregó un proveedor, y así
-     * tampoco hace falta darle permiso sobre el catálogo.
+     * margen, ajuste— es asunto de facturación: este endpoint devuelve SOLO id y nombre. Eso es una
+     * propiedad de este endpoint, no del sistema: `GET /api/facturacion/servicios` está abierta a
+     * cualquier usuario con sesión y sí devuelve precio, margen y ajuste (ver la spec, "La lista").
+     *
+     * Responde `{ proveedores: [{id, nombre}], estado }`, con estado `disponibles`, `todos-de-baja`
+     * o `sin-configurar`, para que la pantalla diga por qué la lista viene vacía.
      */
     public function proveedores()
     {
@@ -122,16 +125,16 @@ class ServicioComisariatoController extends Controller
             ->orderBy('nombre')
             ->get(['id', 'nombre']);
 
-        // El cuerpo sigue siendo la lista plana de siempre. Cuando viene vacía, la pantalla necesita
-        // saber por qué: "no hay ninguno" (hay que crearlos) no es "están todos de baja" (hay que
-        // reactivar uno), y mandar a reactivar lo que nunca existió es un diagnóstico falso.
+        // Cuando la lista viene vacía, la pantalla necesita saber por qué: "no hay ninguno" (hay que
+        // crearlos) no es "están todos de baja" (hay que reactivar uno), y mandar a reactivar lo que
+        // nunca existió es un diagnóstico falso.
         $estado = match (true) {
             $activos->isNotEmpty() => 'disponibles',
             $delCatalogo()->exists() => 'todos-de-baja',
             default => 'sin-configurar',
         };
 
-        return response()->json($activos)->header('X-Proveedores-Catalogo', $estado);
+        return response()->json(['proveedores' => $activos, 'estado' => $estado]);
     }
 
     public function show(ServicioComisariato $servicioComisariato)

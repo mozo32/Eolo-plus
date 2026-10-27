@@ -53,19 +53,15 @@ export async function obtenerProveedoresComisariatoConEstado(): Promise<{
         credentials: 'same-origin',
     });
 
-    const data = await res.json().catch(() => []);
+    const data = await res.json().catch(() => null);
 
-    if (!res.ok) {
+    // Una respuesta sin la forma esperada es un error, no una lista vacía: leerla como "no hay
+    // ninguno" sería justo el diagnóstico falso que el estado existe para evitar.
+    if (!res.ok || !Array.isArray(data?.proveedores) || typeof data?.estado !== 'string') {
         throw new Error('No se pudo cargar la lista de proveedores');
     }
 
-    const cabecera = res.headers.get('X-Proveedores-Catalogo');
-    const estado: EstadoProveedoresComisariato =
-        cabecera === 'todos-de-baja' || cabecera === 'sin-configurar'
-            ? cabecera
-            : 'disponibles';
-
-    return { lista: data, estado };
+    return { lista: data.proveedores, estado: data.estado };
 }
 
 export async function obtenerProveedoresComisariato(): Promise<ProveedorComisariato[]> {
