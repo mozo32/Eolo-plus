@@ -34,8 +34,18 @@ export const normalizarBusqueda = (texto: string): string =>
         .trim()
         .toLowerCase();
 
-/** "$1,234.50", o "—" si no hay importe. Cero se muestra como "$0.00". */
-export function formatearMonto(valor: Monto, decimalesMax = 2): string {
+/**
+ * "$1,234.50", o "—" si no hay importe. Cero se muestra como "$0.00".
+ *
+ * Hasta CUATRO decimales, que son los que de verdad guarda el servidor en un precio unitario
+ * (`decimal(10,4)` en `fact_servicios` y en `fact_prefactura_renglones`): con el tope en dos,
+ * un precio de combustible de 25.9940 se enseñaba como 25.99 y no cuadraba con el catálogo.
+ *
+ * El mínimo sigue en dos, así que esto NO pone ceros de adorno: un importe de dos decimales se
+ * ve igual que antes. Y no cambia lo que se cobra: el importe lo redondea a dos
+ * `App\Support\ImporteServicio` y los totales se suman con `bcadd(..., 2)`.
+ */
+export function formatearMonto(valor: Monto, decimalesMax = 4): string {
     if (valor === null || valor === undefined || valor === '') return '—';
 
     const numero = Number(valor);

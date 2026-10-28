@@ -17,9 +17,9 @@ use App\Services\ComisariatosFacturables;
 use App\Services\RemisionesFacturables;
 use App\Services\RenglonDeComisariato;
 use App\Services\ServicioDeEstanciaNoDisponibleException;
+use App\Support\VentanaDeEstancia;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -422,7 +422,8 @@ class PrefacturaRenglonController extends Controller
      * Los renglones de remisión de esta prefactura cuya remisión ya no cae en su ventana.
      *
      * Solo para avisar. Pasa cuando la salida se corrige a una hora anterior a una carga que ya
-     * estaba cobrada.
+     * estaba cobrada. Lee la MISMA `VentanaDeEstancia` que `RemisionesFacturables`: con su
+     * propia copia de la regla avisó de renglones que para la sincronización seguían dentro.
      *
      * @return array<int, array{renglon_id: int, folio: string}>
      */
@@ -437,15 +438,19 @@ class PrefacturaRenglonController extends Controller
         // Una sola consulta para todas: buscarlas de una en una dentro del filtro seria N+1.
         $remisiones = Remision::whereKey($renglones->pluck('remision_combustible_id'))->get()->keyBy('id');
 
-        $inicio = Carbon::parse($prefactura->llegada_at);
-        $fin = $prefactura->salida_at ? Carbon::parse($prefactura->salida_at) : now();
+        $ventana = VentanaDeEstancia::de($prefactura->llegada_at, $prefactura->salida_at);
+
+        // Sin ventana posible no hay de qué avisar: `candidatas()` no trae nada tampoco.
+        if ($ventana === null) {
+            return [];
+        }
 
         return $renglones
-            ->filter(function ($renglon) use ($remisiones, $inicio, $fin) {
+            ->filter(function ($renglon) use ($remisiones, $ventana) {
                 $remision = $remisiones->get($renglon->remision_combustible_id);
 
                 return $remision !== null
-                    && ! RemisionesFacturables::momentoDe($remision)->betweenIncluded($inicio, $fin);
+                    && ! $ventana->contiene(RemisionesFacturables::momentoDe($remision));
             })
             ->map(fn ($renglon) => [
                 'renglon_id' => $renglon->id,

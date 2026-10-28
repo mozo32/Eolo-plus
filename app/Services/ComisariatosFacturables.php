@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\FactPrefactura;
 use App\Models\FactPrefacturaComisariatoExcluido;
 use App\Models\ServicioComisariato;
+use App\Support\VentanaDeEstancia;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Carbon;
@@ -32,8 +33,9 @@ final class ComisariatosFacturables
     /**
      * Los comisariatos LIBRES de la matrícula de la prefactura dentro de su estancia.
      *
-     * Es lo que la sincronización agrega. La ventana va de `llegada_at` al `salida_at` si lo
-     * hay y a `now()` si no: al capturar la prefactura casi nunca hay salida todavía.
+     * Es lo que la sincronización agrega. La ventana la decide `VentanaDeEstancia`: empieza en
+     * `llegada_at` y termina en `salida_at` si lo hay; si no lo hay —el caso normal al capturar
+     * la prefactura— la estancia sigue abierta y NO tiene tope.
      *
      * Trae cada comisariato con su proveedor ya cargado (`with('factServicio')`): quien arma el renglón
      * lo lee, y cargarlo aquí evita una consulta por comisariato sin que el llamador tenga que
@@ -54,10 +56,9 @@ final class ComisariatosFacturables
             return collect();
         }
 
-        $inicio = Carbon::parse($prefactura->llegada_at);
-        $fin = $prefactura->salida_at ? Carbon::parse($prefactura->salida_at) : now();
+        $ventana = VentanaDeEstancia::de($prefactura->llegada_at, $prefactura->salida_at);
 
-        if ($fin->lessThan($inicio)) {
+        if ($ventana === null) {
             return collect();
         }
 
@@ -65,7 +66,9 @@ final class ComisariatosFacturables
         // mismo motivo: combinar fecha y hora en SQL pediría `timestamp()` o `CONCAT()`, que son
         // de MySQL y que sqlite —donde corren las pruebas— no tiene.
         //
-        // El día final va como «menor que el día SIGUIENTE» y no como `whereBetween`: el modelo
+        // El tope por día solo se pone si la estancia está cerrada: abierta no tiene ninguno.
+        //
+        // Cuando lo hay va como «menor que el día SIGUIENTE» y no como `whereBetween`: el modelo
         // castea `fecha_entrega` como `date`, y Eloquent la guarda con su formato de fecha-hora
         // (`2026-10-21 00:00:00`) en sqlite. Comparada como texto contra `2026-10-21`, esa fila
         // queda FUERA del último día. En MySQL la columna `date` la trunca y no se notaría;
@@ -73,15 +76,18 @@ final class ComisariatosFacturables
         return self::deLaMatricula($matricula)
             ->with('factServicio')
             ->whereNotNull('fact_servicio_id')
-            ->where('fecha_entrega', '>=', $inicio->toDateString())
-            ->where('fecha_entrega', '<', $fin->copy()->addDay()->toDateString())
+            ->where('fecha_entrega', '>=', $ventana->diaInicial())
+            ->when(
+                $ventana->diaSiguienteAlFinal(),
+                fn (Builder $consulta, string $dia) => $consulta->where('fecha_entrega', '<', $dia),
+            )
             ->whereNotExists(self::yaCobradoEnUnaPrefacturaActiva(...))
             ->whereNotExists(fn (QueryBuilder $consulta) => self::excluidoAMano($consulta, $prefactura->id))
             ->orderBy('fecha_entrega')
             ->orderBy('hora_entrega')
             ->orderBy('id')
             ->get()
-            ->filter(fn (ServicioComisariato $c) => self::momentoDe($c)->betweenIncluded($inicio, $fin))
+            ->filter(fn (ServicioComisariato $c) => $ventana->contiene(self::momentoDe($c)))
             ->values();
     }
 

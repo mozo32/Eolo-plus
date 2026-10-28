@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\FactPrefactura;
 use App\Models\FactPrefacturaRemisionExcluida;
 use App\Models\Remision;
+use App\Support\VentanaDeEstancia;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Carbon;
@@ -34,8 +35,9 @@ final class RemisionesFacturables
     /**
      * Las remisiones LIBRES de la matrícula de la prefactura dentro de su estancia.
      *
-     * Es lo que la sincronización agrega. La ventana va de `llegada_at` al `salida_at` si lo
-     * hay y a `now()` si no: al capturar la prefactura casi nunca hay salida todavía.
+     * Es lo que la sincronización agrega. La ventana la decide `VentanaDeEstancia`: empieza en
+     * `llegada_at` y termina en `salida_at` si lo hay; si no lo hay —el caso normal al capturar
+     * la prefactura— la estancia sigue abierta y NO tiene tope.
      *
      * @return Collection<int, Remision>
      */
@@ -47,10 +49,9 @@ final class RemisionesFacturables
             return collect();
         }
 
-        $inicio = Carbon::parse($prefactura->llegada_at);
-        $fin = $prefactura->salida_at ? Carbon::parse($prefactura->salida_at) : now();
+        $ventana = VentanaDeEstancia::de($prefactura->llegada_at, $prefactura->salida_at);
 
-        if ($fin->lessThan($inicio)) {
+        if ($ventana === null) {
             return collect();
         }
 
@@ -58,9 +59,12 @@ final class RemisionesFacturables
         // pediría `timestamp()`, que es de MySQL y que sqlite —donde corren las pruebas— no
         // tiene; y el resto de facturación no usa SQL crudo en ningún sitio. Con 330 remisiones
         // y 93 matrículas, lo que llega a PHP tras el filtro por día son unas pocas filas.
+        //
+        // El tope por día solo se pone si la estancia está cerrada: abierta no tiene ninguno.
         return self::deLaMatricula($matricula)
             ->whereNotNull('precio')
-            ->whereBetween('fecha', [$inicio->toDateString(), $fin->toDateString()])
+            ->where('fecha', '>=', $ventana->diaInicial())
+            ->when($ventana->diaFinal(), fn (Builder $consulta, string $dia) => $consulta->where('fecha', '<=', $dia))
             ->where('status_prefactura', false)
             ->whereNotExists(self::yaCobradaEnUnaPrefacturaActiva(...))
             ->whereNotExists(fn (QueryBuilder $consulta) => self::excluidaAMano($consulta, $prefactura->id))
@@ -68,7 +72,7 @@ final class RemisionesFacturables
             ->orderBy('hora_inicial')
             ->orderBy('id')
             ->get()
-            ->filter(fn (Remision $r) => self::momentoDe($r)->betweenIncluded($inicio, $fin))
+            ->filter(fn (Remision $r) => $ventana->contiene(self::momentoDe($r)))
             ->values();
     }
 

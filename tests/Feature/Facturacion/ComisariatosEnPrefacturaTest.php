@@ -142,14 +142,27 @@ test('los bordes de la ventana entran, el minuto de fuera no', function () {
         ->toBe([$justoAlLlegar->id, $justoAlSalir->id]);
 });
 
-test('una estancia sin salida llega hasta ahora', function () {
+test('una estancia sin salida NO tiene tope: entra tambien lo capturado con hora futura', function () {
+    // Antes el tope era `now()`, y eso escondia un caso real: Trafico captura un servicio a las
+    // 18:00 cuando el reloj aun va por la mañana, y no aparecia en la prefactura hasta que
+    // pasaban las 18:00. Mientras la estancia siga abierta no hay tope; lo cierra la salida.
     $ayer = comisariatoPara('XA-UNO', now()->subDay()->toDateString(), '10:00');
-    comisariatoPara('XA-UNO', now()->addDay()->toDateString(), '10:00');
+    $manana = comisariatoPara('XA-UNO', now()->addDay()->toDateString(), '10:00');
 
     $prefactura = prefacturaDe('XA-UNO', now()->subDays(2)->toDateTimeString());
 
     expect(App\Services\ComisariatosFacturables::candidatas($prefactura)->pluck('id')->all())
-        ->toBe([$ayer->id]);
+        ->toBe([$ayer->id, $manana->id]);
+});
+
+test('registrar la salida SI pone tope: lo entregado despues deja de entrar', function () {
+    $dentro = comisariatoPara('XA-UNO', now()->subDay()->toDateString(), '10:00');
+    comisariatoPara('XA-UNO', now()->addDay()->toDateString(), '10:00');
+
+    $prefactura = prefacturaDe('XA-UNO', now()->subDays(2)->toDateTimeString(), now()->toDateTimeString());
+
+    expect(App\Services\ComisariatosFacturables::candidatas($prefactura)->pluck('id')->all())
+        ->toBe([$dentro->id]);
 });
 
 test('un comisariato sin proveedor no se puede cobrar y no es candidato', function () {

@@ -97,16 +97,30 @@ test('una remision de la matricula dentro de la ventana es candidata', function 
     expect(RemisionesFacturables::candidatas($prefactura)->pluck('id')->all())->toBe([$remision->id]);
 });
 
-test('sin salida la ventana llega hasta ahora', function () {
+test('sin salida la ventana NO tiene tope: entra tambien lo capturado con hora futura', function () {
     // Es el caso normal: 16 de 27 prefacturas no tienen salida cuando se capturan.
-    // El reloj se fija: con la hora real, entre las 00:00 y la 01:00 «hace una hora» cae en el
-    // dia anterior pero con la fecha de hoy, o sea en el futuro, y la prueba fallaria sola.
+    // El reloj se fija para que «futuro» signifique algo: las 18:00 son futuro a las 12:00.
     $this->travelTo('2026-10-21 12:00:00');
 
     $prefactura = prefacturaConMatricula(now()->subDay()->format('Y-m-d H:i:s'));
-    $remision = remisionDe($prefactura, '2026-10-21', '11:00:00');
+    $pasada = remisionDe($prefactura, '2026-10-21', '11:00:00');
+    $futura = remisionDe($prefactura, '2026-10-21', '18:00:00');
+    $delMesSiguiente = remisionDe($prefactura, '2026-11-21', '09:00:00');
 
-    expect(RemisionesFacturables::candidatas($prefactura)->pluck('id')->all())->toBe([$remision->id]);
+    // Las tres entran, incluida la del mes siguiente: mientras la estancia este abierta no hay
+    // tope. Es el coste conocido de la regla, y se quita a mano si se tecleo por error.
+    expect(RemisionesFacturables::candidatas($prefactura)->pluck('id')->all())
+        ->toBe([$pasada->id, $futura->id, $delMesSiguiente->id]);
+});
+
+test('registrar la salida SI pone tope: lo despachado despues deja de entrar', function () {
+    $this->travelTo('2026-10-21 12:00:00');
+
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-21 12:00:00');
+    $dentro = remisionDe($prefactura, '2026-10-21', '11:00:00');
+    remisionDe($prefactura, '2026-10-21', '18:00:00');
+
+    expect(RemisionesFacturables::candidatas($prefactura)->pluck('id')->all())->toBe([$dentro->id]);
 });
 
 test('no son candidatas las de otra matricula, ni las de antes de la llegada, ni las de despues de la salida', function () {
@@ -354,6 +368,22 @@ test('sincronizar reporta los renglones que quedaron fuera de la ventana, sin qu
     expect($respuesta->json('agregados'))->toBe(0)
         ->and($respuesta->json('fuera_de_ventana.0.folio'))->toBe($tarde->folio)
         ->and(FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->count())->toBe(1);
+});
+
+test('con la estancia abierta, una remision de hora futura se agrega y NO se avisa fuera de ventana', function () {
+    // El aviso de «fuera de ventana» del controlador llevaba su propia copia de la regla. Con
+    // el tope en `now()` avisaba de que un renglon se habia salido de una ventana que para
+    // `RemisionesFacturables` seguia conteniendolo.
+    $this->travelTo('2026-10-21 12:00:00');
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-21 08:00:00');
+    remisionDe($prefactura, '2026-10-21', '18:00:00');
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/remisiones/sincronizar")
+        ->assertOk()
+        ->assertJsonPath('agregados', 1)
+        ->assertJsonPath('fuera_de_ventana', []);
 });
 
 test('una prefactura cerrada no recibe renglones de sincronizar', function () {
