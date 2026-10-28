@@ -106,6 +106,10 @@ final class ComisariatosFacturables
      * No acota por ventana a propósito: el buscador manual es justo para los casos que la
      * automática no cubre.
      *
+     * Trae el proveedor de cada comisariato con `with('factServicio')` DENTRO, igual que
+     * `candidatas()`: el llamador no carga nada por fuera. Un `->load()` de quien llama es la forma
+     * que ya reventó una vez, cuando una salida temprana devolvió un `collect()` pelado.
+     *
      * `$excluyePrefacturaId` es la prefactura que se está editando: un comisariato que ya tiene
      * renglón ahí sale con `en_este_documento` en verdadero y sin `tomado_por`, no como libre:
      * `tomado_por` es solo de quién lo tiene OTRO documento.
@@ -115,6 +119,7 @@ final class ComisariatosFacturables
     public static function paraElegir(string $matricula, ?int $excluyePrefacturaId = null): Collection
     {
         return self::deLaMatricula($matricula)
+            ->with('factServicio')
             ->orderByDesc('fecha_entrega')
             ->orderByDesc('hora_entrega')
             ->orderByDesc('id')
@@ -131,9 +136,10 @@ final class ComisariatosFacturables
      * La matrícula como se compara: Tráfico la teclea a mano, así que minúsculas y espacios de
      * sobra no son otra aeronave.
      *
-     * Vive aquí porque la comparan DOS vías y tienen que coincidir: `deLaMatricula()`, que es
-     * la automática, y la validación del alta a mano, que ata el renglón a la matrícula de la
-     * prefactura. Una de las dos normalizando distinto sería la divergencia de vuelta.
+     * La usa `deLaMatricula()`, o sea la vía AUTOMÁTICA y el buscador, que emparejan por texto
+     * exacto (lo aceptó el usuario). El alta a mano NO se limita a esto: `StoreRenglonRequest`
+     * tolera además guiones y espacios interiores, y aflojar ESTA función arrastraría comisariatos
+     * de una grafía a prefacturas de otra, que es una decisión con dinero detrás.
      */
     public static function normalizarMatricula(?string $matricula): string
     {
@@ -213,9 +219,10 @@ final class ComisariatosFacturables
     /**
      * Si el comisariato ya tiene renglón en la prefactura que se está editando.
      *
-     * Hay tres estados y no dos: libre, tomado por OTRO documento (que se puede elegir a mano
-     * para rescatarlo) y ya en ESTE documento, que no se puede repetir porque sería cobrar dos
-     * veces la misma entrega. Por eso la propia prefactura no se excluye: se nombra aparte,
+     * Hay tres estados y no dos: libre, tomado por OTRO documento y ya en ESTE documento. Ni el
+     * segundo ni el tercero se pueden elegir: los dos son cobrar dos veces la misma entrega (a
+     * diferencia de remisiones, donde «tomada» puede ser una marca a mano sin renglón detrás y
+     * por eso se puede rescatar). Por eso la propia prefactura no se excluye: se nombra aparte,
      * con un booleano y no con una frase que la pantalla compare.
      */
     private static function estaEnEsteDocumento(ServicioComisariato $comisariato, ?int $enPrefacturaId): bool
@@ -227,7 +234,7 @@ final class ComisariatosFacturables
     }
 
     /** El documento que ya lo tiene (otro, o este si se llama sin excluirlo), o null si está libre. */
-    private static function quienLoTiene(ServicioComisariato $comisariato): ?string
+    public static function quienLoTiene(ServicioComisariato $comisariato): ?string
     {
         $renglon = self::renglonesEnPrefacturaActiva(DB::query())
             ->where('r.servicio_comisariato_id', $comisariato->id)

@@ -93,12 +93,23 @@ class PrefacturaRenglonController extends Controller
                 ], 422);
             }
 
-            // Igual que la remisión: tomado por OTRO documento se puede elegir a mano, repetido en
-            // ESTE no, y se mira con el candado puesto.
+            // Repetido en ESTE documento no, y se mira con el candado puesto.
             if ($comisariato !== null && $actual->renglones()->where('servicio_comisariato_id', $comisariato->id)->exists()) {
                 return response()->json([
                     'message' => 'Ese comisariato ya está cobrado en este documento.',
                     'errors' => ['servicio_comisariato_id' => ['Ese comisariato ya está cobrado en este documento.']],
+                ], 422);
+            }
+
+            // Tomado por OTRO documento tampoco, y aquí NO como en remisiones: allí «tomada» puede ser una
+            // marca puesta a mano sin renglón detrás, y elegirla la rescata. Aquí «tomado» es siempre un
+            // renglón vivo en una prefactura activa, o sea dinero ya cobrándose.
+            if ($comisariato !== null && ($otro = ComisariatosFacturables::quienLoTiene($comisariato)) !== null) {
+                $mensaje = "Ese comisariato ya está cobrado en {$otro}. Quítalo de allí primero si hay que moverlo a este documento.";
+
+                return response()->json([
+                    'message' => $mensaje,
+                    'errors' => ['servicio_comisariato_id' => [$mensaje]],
                 ], 422);
             }
 
@@ -192,7 +203,6 @@ class PrefacturaRenglonController extends Controller
         }
 
         $comisariatos = ComisariatosFacturables::paraElegir($matricula, $prefactura->id)
-            ->load('factServicio')
             ->map(fn (ServicioComisariato $c) => [
                 'id' => $c->id,
                 'fecha_entrega' => $c->fecha_entrega?->toDateString(),
@@ -352,14 +362,14 @@ class PrefacturaRenglonController extends Controller
     {
         $prefactura = FactPrefactura::findOrFail($id);
 
-        if ($respuesta = $this->rechazoRapido($prefactura) ?? $this->rechazarSincronizarSiReabierta($prefactura)) {
+        if ($respuesta = $this->rechazoRapido($prefactura) ?? $this->rechazarSincronizarSiReabierta($prefactura, 'comisariatos')) {
             return $respuesta;
         }
 
         return DB::transaction(function () use ($id, $request) {
             $actual = $this->bloquear($id);
 
-            if ($respuesta = $this->rechazarSiDescartada($actual) ?? $this->rechazarSincronizarSiReabierta($actual)) {
+            if ($respuesta = $this->rechazarSiDescartada($actual) ?? $this->rechazarSincronizarSiReabierta($actual, 'comisariatos')) {
                 return $respuesta;
             }
 
@@ -394,14 +404,16 @@ class PrefacturaRenglonController extends Controller
      * quien lo reabrió. La sincronización automática no la toca; el alta a mano SÍ funciona en
      * ella, que es como se corrige a propósito.
      */
-    private function rechazarSincronizarSiReabierta(FactPrefactura $prefactura): ?JsonResponse
+    private function rechazarSincronizarSiReabierta(FactPrefactura $prefactura, string $que = 'remisiones'): ?JsonResponse
     {
         if (! $prefactura->estaReabierta()) {
             return null;
         }
 
         return response()->json([
-            'message' => 'Esta prefactura está reabierta: no se le traen remisiones solas. Elige las que correspondan desde «Agregar servicio».',
+            'message' => 'Esta prefactura está reabierta: '.($que === 'comisariatos'
+                ? 'no se le traen comisariatos solos. Elige los que correspondan'
+                : 'no se le traen remisiones solas. Elige las que correspondan').' desde «Agregar servicio».',
             'codigo' => 'reabierta',
         ], 409);
     }

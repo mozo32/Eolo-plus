@@ -51,7 +51,7 @@ function etiquetaDeComisariato(comisariato: ComisariatoFacturable): string {
 
     // Ya en este documento no es de otro: lo dice el servidor con un booleano, nunca el texto de `tomado_por`.
     if (comisariato.en_este_documento) etiqueta += ' · ya está en este documento';
-    // Tomado por OTRO documento solo se marca: elegirlo está permitido, para rescatar una marca puesta por error.
+    // Tomado por OTRO documento se marca Y se deshabilita (ver `disabled` del menú): a diferencia de las remisiones, aquí «tomado» siempre es un renglón vivo, o sea dinero ya cobrándose.
     else if (comisariato.tomado_por !== null) etiqueta += ` · ya facturado en ${comisariato.tomado_por}`;
 
     if (comisariato.sin_proveedor) etiqueta += ' · sin proveedor';
@@ -617,8 +617,8 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
                             >
                                 <option value="">Sin comisariato (cobrar a mano)</option>
                                 {opcionesComisariato.map(c => (
-                                    // Solo se deshabilita lo que el servidor rechaza: repetido en ESTE documento (booleano, no el texto de `tomado_por`) o sin proveedor.
-                                    <option key={c.id} value={c.id} disabled={c.en_este_documento || c.sin_proveedor}>
+                                    // Se deshabilita lo que el servidor rechaza: repetido en ESTE documento (booleano), tomado por OTRO (`tomado_por` no nulo: aquí es siempre un renglón vivo, no una marca a mano que rescatar como en remisiones) o sin proveedor. La etiqueta sigue diciendo quién lo tiene.
+                                    <option key={c.id} value={c.id} disabled={c.en_este_documento || c.tomado_por !== null || c.sin_proveedor}>
                                         {etiquetaDeComisariato(c)}
                                     </option>
                                 ))}

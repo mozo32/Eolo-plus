@@ -38,8 +38,11 @@ class StoreRenglonRequest extends FormRequest
      * Sin proveedor no hay servicio con el que armar el renglón (`servicio_id` es NOT NULL). Lo
      * de la matrícula es lo que ata el alta a mano a la misma regla que la automática: el
      * buscador es un campo editable y, sin esto, tecleando otra matrícula se le cobraría a este
-     * cliente el comisariato de otra aeronave. Se compara con `normalizarMatricula()`, la misma
-     * que usa la vía automática: que las dos vías comparen igual es lo que evita que diverjan.
+     * cliente el comisariato de otra aeronave. Se compara con `esLaMismaAeronave()`, la misma
+     * tolerancia del guion y los espacios que usa el alta a mano de remisiones, y NO con el
+     * `normalizarMatricula()` a secas de la vía automática: ver el docblock de aquel método, cuyo
+     * argumento aplica aquí palabra por palabra (un comisariato de `XA AMI` no tendría ninguna vía
+     * de cobro). La vía automática sigue emparejando por texto exacto, por decisión aceptada.
      */
     private function soloSiPuedeCobrarse(string $atributo, mixed $valor, \Closure $fallar): void
     {
@@ -65,7 +68,7 @@ class StoreRenglonRequest extends FormRequest
         $dePrefactura = $prefactura->aeronave?->matricula;
 
         if ($dePrefactura === null
-            || ComisariatosFacturables::normalizarMatricula($comisariato->matricula) !== ComisariatosFacturables::normalizarMatricula($dePrefactura)) {
+            || ! $this->esLaMismaAeronave($comisariato->matricula, $dePrefactura)) {
             $fallar("Ese comisariato es de {$comisariato->matricula} y esta prefactura es de ".($dePrefactura ?? 'una aeronave sin matrícula').': el comisariato de otra aeronave no se cobra aquí.');
         }
     }
@@ -193,6 +196,9 @@ class StoreRenglonRequest extends FormRequest
      * de `XA-VIZ` a las prefacturas de `XAVIZ`. Son dos filas distintas en `aeronaves` y puede
      * que estén así por una razón: es una decisión con dinero detrás, no un retoque de
      * validación. Aquí hay un humano eligiendo una remisión concreta en el buscador.
+     *
+     * La comparan las dos altas a mano, la de remisiones (`$deRemision`) y la de comisariatos, que
+     * llega con la matrícula del comisariato en ese mismo primer parámetro.
      */
     private function esLaMismaAeronave(?string $deRemision, ?string $dePrefactura): bool
     {
