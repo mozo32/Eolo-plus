@@ -113,3 +113,27 @@ test('sin precio el alta sigue funcionando', function () {
 
     altaDeRenglon(prefacturaBorrador(), servicioSimple())->assertCreated();
 });
+
+test('un precio que llega como arreglo da 422 por campo, no un 500', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    altaDeRenglon(prefacturaBorrador(), servicioSimple(), ['precio_unitario' => [1]])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('precio_unitario');
+});
+
+test('un precio con exactamente cuatro decimales significativos se acepta', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    altaDeRenglon(prefacturaBorrador(), servicioSimple(), ['precio_unitario' => '25.9940'])
+        ->assertCreated();
+    altaDeRenglon(prefacturaBorrador(), servicioSimple(), ['precio_unitario' => '0.0001'])
+        ->assertCreated();
+});
+
+test('el tope de la columna se acepta: 999999.9999 es el mayor precio valido', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    altaDeRenglon(prefacturaBorrador(), servicioSimple(), ['precio_unitario' => '999999.9999'])
+        ->assertCreated();
+});

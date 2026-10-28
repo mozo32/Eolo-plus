@@ -24,7 +24,7 @@ class StoreRenglonRequest extends FormRequest
                 $this->noEsServicioDeEstancia(...),
             ],
             'cantidad' => ['required', 'integer', 'min:1', 'max:9999'],
-            'precio_unitario' => ['nullable', 'numeric', 'min:0', 'max:999999.9999', $this->hasta4Decimales(...)],
+            'precio_unitario' => ['bail', 'nullable', 'numeric', 'min:0', 'max:999999.9999', $this->hasta4Decimales(...)],
             'aeronave_id' => ['bail', 'nullable', 'integer', Rule::exists('aeronaves', 'id'), $this->soloParaTransito(...)],
             'remision_combustible_id' => ['bail', 'nullable', 'integer', Rule::exists('remisiones', 'id')->where('status', 'A'), $this->soloParaCombustible(...)],
             'servicio_comisariato_id' => ['bail', 'nullable', 'integer', Rule::exists('servicio_comisariatos', 'id')->where('status', 'A'), $this->soloSiPuedeCobrarse(...)],
