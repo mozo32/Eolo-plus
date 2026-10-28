@@ -1456,6 +1456,11 @@ export default function EditorPrefactura({ id }: Props) {
                                                             REVISAR: IMPORTE 0
                                                         </span>
                                                     )}
+                                                    {renglon.precio_capturado && (
+                                                        <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black text-amber-700" title="El precio de este renglón se tecleó al agregarlo: no salió del catálogo ni del registro del que nació.">
+                                                            PRECIO A MANO
+                                                        </span>
+                                                    )}
                                                     {renglon.grupo !== null && (
                                                         <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-[9px] font-black text-indigo-700" title={`Grupo «${renglon.grupo}»: en el documento los renglones con esta etiqueta salen juntos, en una sola fila.`}>
                                                             {renglon.grupo}
