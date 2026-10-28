@@ -747,3 +747,85 @@ test('el buscador marca lo tomado, lo propio, lo que no tiene proveedor y lo que
         ->and($porId[$deOtro->id]['en_este_documento'])->toBeFalse()
         ->and($porId[$deOtro->id]['tomado_por'])->toBe("borrador #{$otra->id}");
 });
+
+test('dos altas simultaneas del mismo comisariato no lo cobran dos veces: el chequeo va bajo el candado', function () {
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-20', '10:00');
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    // Se simula al rival que llega JUSTO cuando la peticion toma el candado: su renglon se inserta
+    // en la lectura de `bloquear()`, que es la unica hecha dentro de la transaccion de la peticion
+    // (nivel mayor que el inicial). Insertarlo antes lo veria tambien un chequeo situado fuera de
+    // la transaccion, y la prueba no distinguiria las dos posiciones. Se identifica por el nivel y
+    // no contando lecturas, porque cuantas haga el FormRequest no es cosa de esta prueba.
+    $nivelInicial = Illuminate\Support\Facades\DB::transactionLevel();
+    $rivalInsertado = false;
+
+    Illuminate\Support\Facades\Event::listen(
+        'eloquent.retrieved: '.FactPrefactura::class,
+        function () use (&$rivalInsertado, $nivelInicial, $prefactura, $comisariato) {
+            if ($rivalInsertado || Illuminate\Support\Facades\DB::transactionLevel() <= $nivelInicial) {
+                return;
+            }
+
+            $rivalInsertado = true;
+
+            $prefactura->renglones()->create(
+                App\Services\RenglonDeComisariato::atributos($comisariato->load('factServicio'), 1),
+            );
+        },
+    );
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $comisariato->fact_servicio_id,
+        'cantidad' => 1,
+        'servicio_comisariato_id' => $comisariato->id,
+    ])->assertStatus(422)->assertJsonValidationErrors('servicio_comisariato_id');
+
+    expect($rivalInsertado)->toBeTrue()
+        ->and($prefactura->renglones()->count())->toBe(1);
+});
+
+test('el alta a mano de un comisariato toma el servicio del comisariato aunque llegue otro servicio_id', function () {
+    $proveedor = proveedorComisariato('Comisariato_Manny', 50, FactServicio::AJUSTE_MAS_5);
+    $otro = proveedorComisariato('Comisariato_Comexa', 0);
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-20', '10:00', ['fact_servicio_id' => $proveedor->id]);
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    // Deliberado: el renglon sale entero de datos del servidor, asi que un `servicio_id` distinto
+    // no mueve dinero. Rechazarlo solo cazaria errores del front a cambio de un 422 irrelevante.
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $otro->id,
+        'cantidad' => 1,
+        'servicio_comisariato_id' => $comisariato->id,
+    ])->assertCreated();
+
+    $renglon = $prefactura->renglones()->sole();
+
+    expect($renglon->servicio_id)->toBe($proveedor->id)
+        ->and($renglon->nombre_servicio)->toBe('Comisariato_Manny')
+        ->and((float) $renglon->margen)->toBe(50.0);
+});
+
+test('el buscador devuelve los valores del comisariato: el subtotal, no el total, y fecha y hora en su formato', function () {
+    $proveedor = proveedorComisariato('Comisariato_Manny');
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-20', '10:30', [
+        'fact_servicio_id' => $proveedor->id,
+        'subtotal' => 1000,
+        'total' => 1160,
+    ]);
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $fila = $this->getJson("/api/facturacion/prefacturas/{$prefactura->id}/comisariatos")->assertOk()->json(0);
+
+    expect($fila['id'])->toBe($comisariato->id)
+        ->and($fila['subtotal'])->toBe('1000.00')
+        ->and($fila['fecha_entrega'])->toBe('2026-10-20')
+        ->and($fila['hora_entrega'])->toBe('10:30')
+        ->and($fila['proveedor'])->toBe('Comisariato_Manny');
+});
