@@ -1,0 +1,48 @@
+<?php
+
+use App\Models\FactPrefacturaRenglon;
+use Illuminate\Support\Facades\Schema;
+
+/*
+ * `precio_capturado` marca el renglon cuyo precio alguien tecleo al agregarlo, en vez de
+ * heredarlo del catalogo, de la remision, del comisariato o de la tarifa de la aeronave.
+ *
+ * Hasta este trabajo el navegador no mandaba ninguna cifra de dinero, asi que la columna nace
+ * en falso y eso es la verdad de los 117 renglones que ya existen.
+ */
+
+test('un renglon nace con precio_capturado en falso', function () {
+    $renglon = renglonDe(prefacturaBorrador(), 100.0, 1);
+
+    expect($renglon->fresh()->precio_capturado)->toBeFalse();
+});
+
+test('precio_capturado es asignable y castea a booleano', function () {
+    $renglon = renglonDe(prefacturaBorrador(), 100.0, 1);
+
+    $renglon->update(['precio_capturado' => 1]);
+
+    expect($renglon->fresh()->precio_capturado)->toBeTrue();
+});
+
+test('la ficha de la prefactura expone precio_capturado en cada renglon', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = prefacturaBorrador();
+    $renglon = renglonDe($prefactura, 100.0, 1);
+    $renglon->update(['precio_capturado' => true]);
+
+    $this->getJson("/api/facturacion/prefacturas/{$prefactura->id}")
+        ->assertOk()
+        ->assertJsonPath('prefactura.renglones.0.precio_capturado', true);
+});
+
+test('ningun indice de la tabla de renglones pasa de 64 caracteres', function () {
+    // MySQL rechaza un identificador de mas de 64; sqlite no tiene ese limite, asi que una
+    // migracion puede pasar en verde aqui y fallar entera contra la base real. Ya paso con
+    // `fact_prefactura_remisiones_excluidas`, cuyo indice automatico salia de 69.
+    expect(Schema::getIndexes('fact_prefactura_renglones'))->not->toBeEmpty();
+
+    foreach (Schema::getIndexes('fact_prefactura_renglones') as $indice) {
+        expect(strlen((string) $indice['name']))->toBeLessThanOrEqual(64);
+    }
+});

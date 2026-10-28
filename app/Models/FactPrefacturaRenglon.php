@@ -13,7 +13,7 @@ class FactPrefacturaRenglon extends Model
 
     protected $fillable = [
         'prefactura_id', 'servicio_id', 'nombre_servicio', 'precio_unitario', 'cantidad',
-        'es_de_tercero', 'margen', 'ajuste_precio', 'concepto', 'proveedor_id', 'remision', 'orden', 'es_cortesia', 'grupo', 'remision_combustible_id', 'servicio_comisariato_id',
+        'es_de_tercero', 'margen', 'ajuste_precio', 'concepto', 'proveedor_id', 'remision', 'orden', 'es_cortesia', 'grupo', 'remision_combustible_id', 'servicio_comisariato_id', 'precio_capturado',
     ];
 
     protected $casts = [
@@ -22,6 +22,7 @@ class FactPrefacturaRenglon extends Model
         'es_de_tercero' => 'boolean',
         'cantidad' => 'integer',
         'es_cortesia' => 'boolean',
+        'precio_capturado' => 'boolean',
     ];
 
     protected $appends = ['importe'];

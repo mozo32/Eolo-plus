@@ -726,6 +726,10 @@ class PrefacturaController extends Controller
                 'servicio_id' => $r->servicio_id,
                 'nombre_servicio' => $r->nombre_servicio,
                 'precio_unitario' => (string) $r->precio_unitario,
+                // El precio NO salió del catálogo ni del registro de origen: alguien lo tecleó
+                // al agregar el renglón. La pantalla lo marca, porque quien revisa el documento
+                // tiene que poder ver qué cifra no vino de un catálogo.
+                'precio_capturado' => $r->precio_capturado,
                 'cantidad' => $r->cantidad,
                 'margen' => (string) $r->margen,
                 'ajuste_precio' => $r->ajuste_precio,

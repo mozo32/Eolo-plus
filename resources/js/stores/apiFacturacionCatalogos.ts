@@ -487,6 +487,8 @@ export interface RenglonPrefactura {
     servicio_id: number;
     nombre_servicio: string;
     precio_unitario: string;
+    /** El precio se tecleó al agregar el renglón: no salió del catálogo ni del registro del que nació. */
+    precio_capturado: boolean;
     cantidad: number;
     margen: string;
     ajuste_precio: AjustePrecio;
