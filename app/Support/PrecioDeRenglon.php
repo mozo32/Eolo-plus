@@ -21,6 +21,8 @@ namespace App\Support;
 final class PrecioDeRenglon
 {
     /**
+     * Quien llama entrega `null` o un número (o una cadena numérica ya validada por `StoreRenglonRequest`). No se valida aquí: una cadena vacía o un texto no numérico pasarían por `(float)` y darían `0.0000` en silencio, pero lanzar en esta capa añadiría un error 500 que la petición no debe producir.
+     *
      * @param  string|float|null  $pedido  Lo que llegó en la petición, o null si no llegó nada.
      * @param  string|float  $delRegistro  El precio que aplicaría sin él: el del catálogo, el de
      *                                     la remisión, el subtotal del comisariato o la tarifa
