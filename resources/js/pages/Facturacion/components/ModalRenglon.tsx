@@ -293,7 +293,8 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
         return () => {
             vigente = false;
         };
-    }, [esComisariato, prefacturaId]);
+        // `servicioId`: entre los cinco proveedores de la categoría `esComisariato` sigue en true, y sin esto la lista (y un error previo) no se pedirían de nuevo.
+    }, [esComisariato, servicioId, prefacturaId]);
 
     /** La tarifa EFECTIVA del tramo —propia o heredada de la categoría—, ya resuelta por el servidor. */
     const tarifaDelTramo = (aeronave: AeronaveFacturable, concepto: string | null | undefined): string | null =>
@@ -346,10 +347,12 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
         limpiarError('remision_combustible_id');
     };
 
-    /** Al cambiar de servicio el comisariato elegido deja de aplicar. */
+    /**
+     * Al cambiar de servicio el comisariato elegido deja de aplicar. La lista NO se vacía aquí: es de la matrícula de la prefactura, no del
+     * servicio, y la recarga el efecto de arriba (depende del servicio) sin dejar un hueco que diga «no tiene comisariatos» siendo falso.
+     */
     const limpiarComisariato = () => {
         setComisariatoElegido(null);
-        setComisariatos([]);
         setErrorComisariato(null);
         limpiarError('servicio_comisariato_id');
     };

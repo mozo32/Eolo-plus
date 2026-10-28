@@ -365,7 +365,7 @@ export default function EditorPrefactura({ id }: Props) {
      * Trae las remisiones de combustible de la estancia (el servidor es idempotente: llamarla de más no duplica nada) y recarga los
      * renglones. Un fallo aquí no es un fallo de la pantalla: se avisa y lo demás sigue como estaba.
      */
-    const sincronizarRemisiones = useCallback(async () => {
+    const sincronizarRemisiones = useCallback(async (): Promise<boolean> => {
         try {
             const resultado = await apiPrefacturas.sincronizarRemisiones(id);
             setRemisionesFuera(resultado.fuera_de_ventana);
@@ -374,10 +374,18 @@ export default function EditorPrefactura({ id }: Props) {
             if (resultado.agregados > 0) {
                 toast.fire({ icon: 'success', titleText: resultado.agregados === 1 ? 'Se trajo 1 remisión de combustible.' : `Se trajeron ${resultado.agregados} remisiones de combustible.` });
             }
+
+            return true;
         } catch (e) {
             toast.fire({ icon: 'warning', titleText: `No se pudieron traer las remisiones de combustible. ${mensajeDeError(e)}`, timer: 8000 });
             // Un 409 dice que la ficha en pantalla ya no es la del servidor (se cerró o se descartó): se refresca.
-            if (e instanceof ErrorApi && e.status === 409) await cargar();
+            if (e instanceof ErrorApi && e.status === 409) {
+                await cargar();
+
+                return false;
+            }
+
+            return true;
         }
     }, [id, cargar]);
 
@@ -387,9 +395,10 @@ export default function EditorPrefactura({ id }: Props) {
     const sincronizarComisariatos = useCallback(async () => {
         try {
             const resultado = await apiPrefacturas.sincronizarComisariatos(id);
-            await cargar();
 
+            // Sin nada que traer no hay nada que recargar: esto corre en cada apertura de una prefactura.
             if (resultado.agregados > 0) {
+                await cargar();
                 toast.fire({ icon: 'success', titleText: resultado.agregados === 1 ? 'Se trajo 1 comisariato.' : `Se trajeron ${resultado.agregados} comisariatos.` });
             }
         } catch (e) {
@@ -399,10 +408,13 @@ export default function EditorPrefactura({ id }: Props) {
         }
     }, [id, cargar]);
 
-    /** Una detrás de otra: dos recargas de la ficha a la vez solo se pisarían. */
+    /**
+     * Una detrás de otra: dos recargas de la ficha a la vez solo se pisarían. Si la de remisiones dice que el documento ya no admite
+     * sincronizar (409: se cerró, se descartó o se reabrió desde otra pestaña), la segunda no se lanza: saldría el mismo 409 y un aviso doble.
+     * Cualquier otro fallo de remisiones (p. ej. falta el servicio de combustible) no impide traer los comisariatos, que son independientes.
+     */
     const sincronizarSolos = useCallback(async () => {
-        await sincronizarRemisiones();
-        await sincronizarComisariatos();
+        if (await sincronizarRemisiones()) await sincronizarComisariatos();
     }, [sincronizarRemisiones, sincronizarComisariatos]);
 
     // Una sola vez por prefactura y solo en un borrador activo: ni una cerrada, ni una descartada, ni una reabierta.
@@ -620,7 +632,7 @@ export default function EditorPrefactura({ id }: Props) {
             }
 
             toast.fire({ icon: 'success', titleText: 'Encabezado guardado.' });
-            // Después del aviso de guardado: si trae remisiones, su aviso es el que queda a la vista.
+            // Después del aviso de guardado: si trae remisiones o comisariatos, sus avisos se apilan tras el de «Encabezado guardado».
             if (cambioLaSalida) await sincronizarSolos();
         } catch (e) {
             const delCampo = e instanceof ErrorApi && e.codigo === null ? Object.entries(e.errors).filter(([campo]) => CAMPOS_DEL_ENCABEZADO.includes(campo as CampoEncabezado)) : [];
