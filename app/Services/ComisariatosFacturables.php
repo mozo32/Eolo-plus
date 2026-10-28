@@ -35,6 +35,10 @@ final class ComisariatosFacturables
      * Es lo que la sincronización agrega. La ventana va de `llegada_at` al `salida_at` si lo
      * hay y a `now()` si no: al capturar la prefactura casi nunca hay salida todavía.
      *
+     * Trae cada comisariato con su proveedor ya cargado (`with('factServicio')`): quien arma el renglón
+     * lo lee, y cargarlo aquí evita una consulta por comisariato sin que el llamador tenga que
+     * suponer qué tipo de colección le llega en las salidas tempranas.
+     *
      * Excluye los que no tienen proveedor: `fact_prefactura_renglones.servicio_id` es NOT NULL,
      * así que sin servicio no hay renglón posible. NO excluye los de importe 0: esos entran y
      * la pantalla los marca, porque pueden ser una cortesía o un importe que falta por
@@ -67,6 +71,7 @@ final class ComisariatosFacturables
         // queda FUERA del último día. En MySQL la columna `date` la trunca y no se notaría;
         // así el filtro es correcto en las dos.
         return self::deLaMatricula($matricula)
+            ->with('factServicio')
             ->whereNotNull('fact_servicio_id')
             ->where('fecha_entrega', '>=', $inicio->toDateString())
             ->where('fecha_entrega', '<', $fin->copy()->addDay()->toDateString())

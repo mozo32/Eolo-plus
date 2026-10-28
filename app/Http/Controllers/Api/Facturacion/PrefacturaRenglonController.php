@@ -286,9 +286,7 @@ class PrefacturaRenglonController extends Controller
                 return $respuesta;
             }
 
-            // Una sola consulta para los proveedores de todas: leer `factServicio` de uno en uno
-            // dentro del bucle seria N+1.
-            $candidatas = ComisariatosFacturables::candidatas($actual)->load('factServicio');
+            $candidatas = ComisariatosFacturables::candidatas($actual);
 
             $orden = (int) $actual->renglones()->reorder()->max('orden');
             $agregados = 0;

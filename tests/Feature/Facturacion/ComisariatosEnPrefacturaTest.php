@@ -359,11 +359,15 @@ test('una salida anterior a la llegada no trae nada: la ventana no se da la vuel
 });
 
 test('el renglon de un comisariato toma el margen y el ajuste DEL SERVICIO, no ceros', function () {
+    // Un proveedor de relleno ANTES, para que el id del proveedor y el del comisariato difieran:
+    // si valen los dos 1, confundir uno con otro no lo nota ninguna asercion.
+    proveedorComisariato('Comisariato_Relleno');
     $proveedor = proveedorComisariato('Comisariato_Manny', 50, FactServicio::AJUSTE_MAS_5);
     $comisariato = comisariatoPara('XA-UNO', '2026-10-20', '10:00', [
         'fact_servicio_id' => $proveedor->id,
         'subtotal' => 1000,
     ]);
+    expect($proveedor->id)->not->toBe($comisariato->id);
     $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
 
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
@@ -380,12 +384,15 @@ test('el renglon de un comisariato toma el margen y el ajuste DEL SERVICIO, no c
         ->and($renglon->es_de_tercero)->toBeTrue()
         ->and((float) $renglon->precio_unitario)->toBe(1000.0)
         ->and($renglon->cantidad)->toBe(1)
-        ->and($renglon->servicio_comisariato_id)->toBe($comisariato->id);
+        ->and($renglon->servicio_comisariato_id)->toBe($comisariato->id)
+        ->and($renglon->servicio_id)->toBe($proveedor->id);
 });
 
 test('un proveedor al 0 por ciento (Comexa) no lleva margen ni es de tercero', function () {
+    proveedorComisariato('Comisariato_Relleno');
     $comexa = proveedorComisariato('Comisariato_Comexa', 0);
-    comisariatoPara('XA-UNO', '2026-10-20', '10:00', ['fact_servicio_id' => $comexa->id]);
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-20', '10:00', ['fact_servicio_id' => $comexa->id]);
+    expect($comexa->id)->not->toBe($comisariato->id);
     $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
 
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
@@ -484,3 +491,51 @@ test('sin el permiso de prefacturas no se sincroniza', function () {
 
     expect($prefactura->renglones()->count())->toBe(0);
 });
+
+test('una prefactura sin llegada sincroniza con normalidad y no trae nada', function () {
+    // `llegada_at` es nullable y la pantalla sincroniza en cada carga: un 500 aqui se veria cada
+    // vez que alguien abriera el documento. `candidatas()` devuelve una coleccion pelada en esta
+    // salida temprana, asi que lo que se haga con ella no puede suponer un Eloquent\Collection.
+    comisariatoPara('XA-UNO', '2026-10-20', '10:00');
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+    $prefactura->update(['llegada_at' => null]);
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/comisariatos/sincronizar")
+        ->assertOk()
+        ->assertJsonPath('agregados', 0);
+
+    expect($prefactura->renglones()->count())->toBe(0);
+});
+
+test('si otra sesion cambia la prefactura entre el chequeo rapido y el candado, el candado rechaza', function (array $cambio, int $estatus, string $codigo) {
+    comisariatoPara('XA-UNO', '2026-10-20', '10:00');
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    // La PRIMERA lectura (la del `findOrFail`, que pasa el chequeo rapido) ve el borrador tal cual;
+    // justo despues otra sesion lo cambia por debajo, y la SEGUNDA lectura (la de `bloquear()`,
+    // ya dentro de la transaccion) ve el estado nuevo. Es la carrera que el candado existe para cerrar.
+    $lecturas = 0;
+    Illuminate\Support\Facades\Event::listen(
+        'eloquent.retrieved: '.FactPrefactura::class,
+        function () use (&$lecturas, $prefactura, $cambio) {
+            if (++$lecturas === 1) {
+                Illuminate\Support\Facades\DB::table('fact_prefacturas')->where('id', $prefactura->id)->update($cambio);
+            }
+        },
+    );
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/comisariatos/sincronizar")
+        ->assertStatus($estatus)
+        ->assertJsonPath('codigo', $codigo);
+
+    expect($lecturas)->toBeGreaterThanOrEqual(2)
+        ->and($prefactura->renglones()->count())->toBe(0);
+})->with([
+    'descartada' => [['status' => 'N'], 409, 'ya_descartada'],
+    'reabierta' => [['estado' => FactPrefactura::ESTADO_REABIERTA], 409, 'reabierta'],
+    'cerrada' => [['estado' => FactPrefactura::ESTADO_CERRADA], 409, 'ya_cerrada'],
+]);
