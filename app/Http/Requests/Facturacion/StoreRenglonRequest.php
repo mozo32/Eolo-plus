@@ -4,6 +4,8 @@ namespace App\Http\Requests\Facturacion;
 
 use App\Models\FactPrefactura;
 use App\Models\FactServicio;
+use App\Models\ServicioComisariato;
+use App\Services\ComisariatosFacturables;
 use App\Services\RemisionesFacturables;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -24,9 +26,48 @@ class StoreRenglonRequest extends FormRequest
             'cantidad' => ['required', 'integer', 'min:1', 'max:9999'],
             'aeronave_id' => ['bail', 'nullable', 'integer', Rule::exists('aeronaves', 'id'), $this->soloParaTransito(...)],
             'remision_combustible_id' => ['bail', 'nullable', 'integer', Rule::exists('remisiones', 'id')->where('status', 'A'), $this->soloParaCombustible(...)],
+            'servicio_comisariato_id' => ['bail', 'nullable', 'integer', Rule::exists('servicio_comisariatos', 'id')->where('status', 'A'), $this->soloSiPuedeCobrarse(...)],
             'proveedor_id' => ['nullable', 'integer', Rule::exists('fact_proveedores', 'id')->where('status', 'A')],
             'remision' => ['nullable', 'string', 'max:255'],
         ];
+    }
+
+    /**
+     * El comisariato tiene que tener proveedor y ser de LA MATRÍCULA de esta prefactura.
+     *
+     * Sin proveedor no hay servicio con el que armar el renglón (`servicio_id` es NOT NULL). Lo
+     * de la matrícula es lo que ata el alta a mano a la misma regla que la automática: el
+     * buscador es un campo editable y, sin esto, tecleando otra matrícula se le cobraría a este
+     * cliente el comisariato de otra aeronave. Se compara con `normalizarMatricula()`, la misma
+     * que usa la vía automática: que las dos vías comparen igual es lo que evita que diverjan.
+     */
+    private function soloSiPuedeCobrarse(string $atributo, mixed $valor, \Closure $fallar): void
+    {
+        $comisariato = ServicioComisariato::find($valor);
+
+        if ($comisariato === null) {
+            return;
+        }
+
+        if ($comisariato->fact_servicio_id === null) {
+            $fallar('Ese comisariato no tiene proveedor asignado, así que no hay servicio con el que cobrarlo. Asígnaselo en Tráfico primero.');
+
+            return;
+        }
+
+        $prefactura = FactPrefactura::with('aeronave')->find($this->route('id'));
+
+        // Sin prefactura el controlador ya devuelve 404; no se inventa una comparación.
+        if ($prefactura === null) {
+            return;
+        }
+
+        $dePrefactura = $prefactura->aeronave?->matricula;
+
+        if ($dePrefactura === null
+            || ComisariatosFacturables::normalizarMatricula($comisariato->matricula) !== ComisariatosFacturables::normalizarMatricula($dePrefactura)) {
+            $fallar("Ese comisariato es de {$comisariato->matricula} y esta prefactura es de ".($dePrefactura ?? 'una aeronave sin matrícula').': el comisariato de otra aeronave no se cobra aquí.');
+        }
     }
 
     /** Los tres tramos de tránsito, que SÍ se pueden cobrar a nombre de otra aeronave. */
@@ -185,6 +226,8 @@ class StoreRenglonRequest extends FormRequest
             'aeronave_id.exists' => 'Esa matrícula no está en el sistema.',
             'remision_combustible_id.integer' => 'La remisión no es válida.',
             'remision_combustible_id.exists' => 'Esa remisión no existe o está dada de baja.',
+            'servicio_comisariato_id.integer' => 'El comisariato no es válido.',
+            'servicio_comisariato_id.exists' => 'Ese comisariato no existe o está dado de baja.',
             'proveedor_id.integer' => 'El proveedor no es válido.',
             'proveedor_id.exists' => 'El proveedor no existe o está dado de baja.',
             'remision.string' => 'La remisión debe ser texto.',

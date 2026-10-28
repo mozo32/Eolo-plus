@@ -11,6 +11,7 @@ use App\Models\FactAeronave;
 use App\Models\FactPrefactura;
 use App\Models\FactServicio;
 use App\Models\Remision;
+use App\Models\ServicioComisariato;
 use App\Services\CargosEstancia;
 use App\Services\ComisariatosFacturables;
 use App\Services\RemisionesFacturables;
@@ -68,7 +69,15 @@ class PrefacturaRenglonController extends Controller
             $remision = Remision::findOrFail($request->validated()['remision_combustible_id']);
         }
 
-        $renglon = DB::transaction(function () use ($request, $id, $servicio, $ajena, $remision) {
+        // El comisariato elegido a mano: su renglón lo arma `RenglonDeComisariato`, el mismo sitio
+        // que usa la vía automática, y no este método.
+        $comisariato = null;
+
+        if ($request->validated()['servicio_comisariato_id'] ?? null) {
+            $comisariato = ServicioComisariato::with('factServicio')->findOrFail($request->validated()['servicio_comisariato_id']);
+        }
+
+        $renglon = DB::transaction(function () use ($request, $id, $servicio, $ajena, $remision, $comisariato) {
             $actual = $this->bloquear($id);
 
             if ($respuesta = $this->rechazarSiDescartada($actual)) {
@@ -82,6 +91,36 @@ class PrefacturaRenglonController extends Controller
                     'message' => 'Esa remisión ya está cobrada en este documento.',
                     'errors' => ['remision_combustible_id' => ['Esa remisión ya está cobrada en este documento.']],
                 ], 422);
+            }
+
+            // Igual que la remisión: tomado por OTRO documento se puede elegir a mano, repetido en
+            // ESTE no, y se mira con el candado puesto.
+            if ($comisariato !== null && $actual->renglones()->where('servicio_comisariato_id', $comisariato->id)->exists()) {
+                return response()->json([
+                    'message' => 'Ese comisariato ya está cobrado en este documento.',
+                    'errors' => ['servicio_comisariato_id' => ['Ese comisariato ya está cobrado en este documento.']],
+                ], 422);
+            }
+
+            if ($comisariato !== null) {
+                // `reorder()`: la relación trae ORDER BY, que un agregado no admite en MySQL estricto.
+                $renglon = $actual->renglones()->create(
+                    RenglonDeComisariato::atributos($comisariato, (int) $actual->renglones()->reorder()->max('orden') + 1),
+                );
+
+                // Ponerlo a propósito revoca el «este no entra» de una baja anterior.
+                ComisariatosFacturables::revocarExclusion($actual, $comisariato->id);
+
+                Bitacora::log(
+                    modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
+                    accion: Bitacora::ACCION_CREAR,
+                    descripcion: "Se agregó el servicio {$renglon->nombre_servicio} a la prefactura {$actual->id} por {$renglon->importe()}.",
+                    usuarioId: $request->user()->id,
+                    registroId: $actual->id,
+                    datosNuevos: ['renglon_id' => $renglon->id, 'importe' => $renglon->importe()],
+                );
+
+                return $renglon;
             }
 
             // El renglón CONGELA lo que determina su importe: si el catálogo cambia
@@ -131,6 +170,44 @@ class PrefacturaRenglonController extends Controller
             'message' => 'Renglón agregado.',
             'renglon_id' => $renglon->id,
         ], 201);
+    }
+
+    /**
+     * Los comisariatos de la matrícula de la prefactura para el buscador del modal, con sus marcas.
+     *
+     * Hermano de `remisiones()`. No acota por ventana a propósito: es para los que la
+     * sincronización automática no cubre.
+     *
+     * @return JsonResponse lista de objetos con `id`, `fecha_entrega`, `hora_entrega`, `subtotal`,
+     *                      `forma_pago`, `proveedor`, `tomado_por`, `en_este_documento`,
+     *                      `sin_proveedor` y `sin_importe`
+     */
+    public function comisariatos(int $id): JsonResponse
+    {
+        $prefactura = FactPrefactura::findOrFail($id);
+        $matricula = (string) $prefactura->aeronave?->matricula;
+
+        if ($matricula === '') {
+            return response()->json([]);
+        }
+
+        $comisariatos = ComisariatosFacturables::paraElegir($matricula, $prefactura->id)
+            ->load('factServicio')
+            ->map(fn (ServicioComisariato $c) => [
+                'id' => $c->id,
+                'fecha_entrega' => $c->fecha_entrega?->toDateString(),
+                'hora_entrega' => $c->hora_entrega?->format('H:i'),
+                'subtotal' => $c->subtotal,
+                'forma_pago' => $c->forma_pago,
+                'proveedor' => $c->factServicio?->nombre,
+                'tomado_por' => $c->tomado_por,
+                'en_este_documento' => $c->en_este_documento,
+                'sin_proveedor' => $c->sin_proveedor,
+                'sin_importe' => $c->sin_importe,
+            ])
+            ->all();
+
+        return response()->json($comisariatos);
     }
 
     /** Las remisiones de una matrícula para el buscador del modal, con sus marcas. */
@@ -385,6 +462,7 @@ class PrefacturaRenglonController extends Controller
             $fila = $actual->renglones()->whereKey($renglon)->firstOrFail();
             $nombre = $fila->nombre_servicio;
             $remisionId = $fila->remision_combustible_id;
+            $comisariatoId = $fila->servicio_comisariato_id;
             $fila->delete();
 
             // Quitar el renglón LIBERA la remisión, y la pantalla sincroniza en cada carga: sin
@@ -394,15 +472,23 @@ class PrefacturaRenglonController extends Controller
                 RemisionesFacturables::excluir($actual, $remisionId, $request->user()->id);
             }
 
+            // Lo mismo con el comisariato: quitar el renglón lo libera y la pantalla sincroniza en
+            // cada carga. Se revoca dándolo de alta a mano otra vez en esta misma prefactura.
+            if ($comisariatoId !== null) {
+                ComisariatosFacturables::excluir($actual, $comisariatoId, $request->user()->id);
+            }
+
             Bitacora::log(
                 modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
                 accion: Bitacora::ACCION_ELIMINAR,
                 descripcion: "Se quitó el servicio {$nombre} de la prefactura {$actual->id}."
-                    .($remisionId === null ? '' : ' Esa remisión ya no se traerá sola a este documento.'),
+                    .($remisionId === null ? '' : ' Esa remisión ya no se traerá sola a este documento.')
+                    .($comisariatoId === null ? '' : ' Ese comisariato ya no se traerá solo a este documento.'),
                 usuarioId: $request->user()->id,
                 registroId: $actual->id,
                 datosAnteriores: ['renglon_id' => $renglon, 'nombre_servicio' => $nombre]
-                    + ($remisionId === null ? [] : ['remision_combustible_id' => $remisionId]),
+                    + ($remisionId === null ? [] : ['remision_combustible_id' => $remisionId])
+                    + ($comisariatoId === null ? [] : ['servicio_comisariato_id' => $comisariatoId]),
             );
 
             return null;

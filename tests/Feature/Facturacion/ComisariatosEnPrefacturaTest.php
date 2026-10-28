@@ -539,3 +539,211 @@ test('si otra sesion cambia la prefactura entre el chequeo rapido y el candado, 
     'reabierta' => [['estado' => FactPrefactura::ESTADO_REABIERTA], 409, 'reabierta'],
     'cerrada' => [['estado' => FactPrefactura::ESTADO_CERRADA], 409, 'ya_cerrada'],
 ]);
+
+test('el alta a mano guarda el comisariato elegido con el margen de su servicio', function () {
+    $proveedor = proveedorComisariato('Comisariato_Manny', 50, FactServicio::AJUSTE_MAS_5);
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-20', '10:00', ['fact_servicio_id' => $proveedor->id]);
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $proveedor->id,
+        'cantidad' => 1,
+        'servicio_comisariato_id' => $comisariato->id,
+    ])->assertCreated();
+
+    $renglon = $prefactura->renglones()->sole();
+
+    // Identico a lo que habria puesto la via automatica: un solo sitio lo decide.
+    expect($renglon->servicio_comisariato_id)->toBe($comisariato->id)
+        ->and((float) $renglon->margen)->toBe(50.0)
+        ->and($renglon->ajuste_precio)->toBe(FactServicio::AJUSTE_MAS_5);
+});
+
+test('el alta a mano rechaza un comisariato de OTRA matricula', function () {
+    $ajeno = comisariatoPara('XA-OTRA', '2026-10-20', '10:00');
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $ajeno->fact_servicio_id,
+        'cantidad' => 1,
+        'servicio_comisariato_id' => $ajeno->id,
+    ])->assertStatus(422)->assertJsonValidationErrors('servicio_comisariato_id');
+});
+
+test('el alta a mano rechaza un comisariato sin proveedor', function () {
+    $sinProveedor = comisariatoPara('XA-UNO', '2026-10-20', '10:00', ['fact_servicio_id' => null]);
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+    $otroServicio = proveedorComisariato('Comisariato_Comexa', 0);
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $otroServicio->id,
+        'cantidad' => 1,
+        'servicio_comisariato_id' => $sinProveedor->id,
+    ])->assertStatus(422)->assertJsonValidationErrors('servicio_comisariato_id');
+});
+
+test('el mismo comisariato no se cobra dos veces en el mismo documento', function () {
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-20', '10:00');
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $carga = [
+        'servicio_id' => $comisariato->fact_servicio_id,
+        'cantidad' => 1,
+        'servicio_comisariato_id' => $comisariato->id,
+    ];
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", $carga)->assertCreated();
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", $carga)->assertStatus(422);
+
+    expect($prefactura->renglones()->count())->toBe(1);
+});
+
+test('quitar un renglon de comisariato lo excluye, y volver a ponerlo a mano revoca la exclusion', function () {
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-20', '10:00');
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $sincronizar = "/api/facturacion/prefacturas/{$prefactura->id}/comisariatos/sincronizar";
+    $this->postJson($sincronizar)->assertOk()->assertJsonPath('agregados', 1);
+
+    $renglon = $prefactura->renglones()->sole();
+    $this->deleteJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones/{$renglon->id}")->assertOk();
+
+    // No vuelve solo.
+    $this->postJson($sincronizar)->assertOk()->assertJsonPath('agregados', 0);
+
+    // Pero a mano si, y eso revoca la exclusion.
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $comisariato->fact_servicio_id,
+        'cantidad' => 1,
+        'servicio_comisariato_id' => $comisariato->id,
+    ])->assertCreated();
+
+    expect(App\Models\FactPrefacturaComisariatoExcluido::count())->toBe(0);
+});
+
+test('el buscador devuelve los comisariatos de la matricula con sus marcas', function () {
+    comisariatoPara('XA-UNO', '2026-10-20', '10:00', ['forma_pago' => 'Efectivo']);
+    comisariatoPara('XA-OTRA', '2026-10-20', '10:00');
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $datos = $this->getJson("/api/facturacion/prefacturas/{$prefactura->id}/comisariatos")
+        ->assertOk()
+        ->json();
+
+    expect($datos)->toHaveCount(1)
+        ->and(array_keys($datos[0]))->toBe([
+            'id', 'fecha_entrega', 'hora_entrega', 'subtotal', 'forma_pago',
+            'proveedor', 'tomado_por', 'en_este_documento', 'sin_proveedor', 'sin_importe',
+        ])
+        ->and($datos[0]['forma_pago'])->toBe('Efectivo');
+});
+
+test('el alta a mano compara la matricula igual que la via automatica: sin mayusculas ni espacios de sobra', function () {
+    $comisariato = comisariatoPara(' xa-uno ', '2026-10-20', '10:00');
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $comisariato->fact_servicio_id,
+        'cantidad' => 1,
+        'servicio_comisariato_id' => $comisariato->id,
+    ])->assertCreated();
+});
+
+test('el alta a mano rechaza un comisariato dado de baja', function () {
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-20', '10:00', ['status' => 'I']);
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $comisariato->fact_servicio_id,
+        'cantidad' => 1,
+        'servicio_comisariato_id' => $comisariato->id,
+    ])->assertStatus(422)->assertJsonValidationErrors('servicio_comisariato_id');
+
+    expect($prefactura->renglones()->count())->toBe(0);
+});
+
+test('un comisariato tomado por OTRO documento se puede elegir a mano', function () {
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-20', '10:00');
+    $otra = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $carga = [
+        'servicio_id' => $comisariato->fact_servicio_id,
+        'cantidad' => 1,
+        'servicio_comisariato_id' => $comisariato->id,
+    ];
+
+    $this->postJson("/api/facturacion/prefacturas/{$otra->id}/renglones", $carga)->assertCreated();
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", $carga)->assertCreated();
+
+    expect($prefactura->renglones()->count())->toBe(1);
+});
+
+test('el alta a mano pone el importe del comisariato y lo ordena al final', function () {
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-20', '10:00', ['subtotal' => 1234.5]);
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+    $prefactura->renglones()->create([
+        'servicio_id' => $comisariato->fact_servicio_id,
+        'nombre_servicio' => 'Previo',
+        'precio_unitario' => 1,
+        'cantidad' => 1,
+        'orden' => 7,
+    ]);
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $comisariato->fact_servicio_id,
+        'cantidad' => 5,
+        'servicio_comisariato_id' => $comisariato->id,
+    ])->assertCreated();
+
+    $renglon = $prefactura->renglones()->where('servicio_comisariato_id', $comisariato->id)->sole();
+
+    // La cantidad que mande la peticion no cuenta: un comisariato es una entrega.
+    expect((float) $renglon->precio_unitario)->toBe(1234.5)
+        ->and($renglon->cantidad)->toBe(1)
+        ->and($renglon->orden)->toBe(8);
+});
+
+test('el buscador marca lo tomado, lo propio, lo que no tiene proveedor y lo que no tiene importe', function () {
+    $proveedor = proveedorComisariato('Comisariato_Manny');
+    $libre = comisariatoPara('XA-UNO', '2026-10-20', '10:00', ['fact_servicio_id' => $proveedor->id]);
+    $sinProveedor = comisariatoPara('XA-UNO', '2026-10-20', '11:00', ['fact_servicio_id' => null]);
+    $sinImporte = comisariatoPara('XA-UNO', '2026-10-20', '12:00', ['fact_servicio_id' => $proveedor->id, 'subtotal' => 0]);
+    $propio = comisariatoPara('XA-UNO', '2026-10-20', '13:00', ['fact_servicio_id' => $proveedor->id]);
+    $deOtro = comisariatoPara('XA-UNO', '2026-10-20', '14:00', ['fact_servicio_id' => $proveedor->id]);
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+    $otra = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", ['servicio_id' => $proveedor->id, 'cantidad' => 1, 'servicio_comisariato_id' => $propio->id])->assertCreated();
+    $this->postJson("/api/facturacion/prefacturas/{$otra->id}/renglones", ['servicio_id' => $proveedor->id, 'cantidad' => 1, 'servicio_comisariato_id' => $deOtro->id])->assertCreated();
+
+    $porId = collect($this->getJson("/api/facturacion/prefacturas/{$prefactura->id}/comisariatos")->assertOk()->json())->keyBy('id');
+
+    expect($porId[$libre->id])->toMatchArray(['proveedor' => 'Comisariato_Manny', 'tomado_por' => null, 'en_este_documento' => false, 'sin_proveedor' => false, 'sin_importe' => false])
+        ->and($porId[$sinProveedor->id])->toMatchArray(['proveedor' => null, 'sin_proveedor' => true])
+        ->and($porId[$sinImporte->id]['sin_importe'])->toBeTrue()
+        ->and($porId[$propio->id])->toMatchArray(['en_este_documento' => true, 'tomado_por' => null])
+        ->and($porId[$deOtro->id]['en_este_documento'])->toBeFalse()
+        ->and($porId[$deOtro->id]['tomado_por'])->toBe("borrador #{$otra->id}");
+});
