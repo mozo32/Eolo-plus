@@ -116,7 +116,7 @@ class PrefacturaRenglonController extends Controller
             }
 
             if ($comisariato !== null) {
-                $precioDelRegistro = $comisariato->subtotal;
+                $precioDelRegistro = RenglonDeComisariato::precioHeredado($comisariato);
                 // `reorder()`: la relación trae ORDER BY, que un agregado no admite en MySQL estricto.
                 $renglon = $actual->renglones()->create(
                     RenglonDeComisariato::atributos(

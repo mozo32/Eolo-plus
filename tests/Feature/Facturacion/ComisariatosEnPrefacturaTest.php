@@ -1035,3 +1035,31 @@ test('el alta a mano de un comisariato acepta otro precio y lo marca', function 
     expect($atributos['precio_unitario'])->toBe('900.0000')
         ->and($atributos['precio_capturado'])->toBeTrue();
 });
+
+test('el alta a mano de un comisariato con precio tecleado lo cobra, lo marca y deja rastro, sin tocar margen ni ajuste', function () {
+    $proveedor = proveedorComisariato('Comisariato_Manny', 50, FactServicio::AJUSTE_MAS_5);
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-21', '10:00', ['fact_servicio_id' => $proveedor->id, 'subtotal' => 777]);
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-22 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $proveedor->id,
+        'cantidad' => 1,
+        'servicio_comisariato_id' => $comisariato->id,
+        'precio_unitario' => '900',
+    ])->assertCreated();
+
+    $renglon = $prefactura->renglones()->sole();
+
+    // Es el unico caso donde un precio tecleado convive con un margen distinto de cero: el
+    // margen y el ajuste siguen siendo los del proveedor, no se ponen a cero con el precio.
+    expect((string) $renglon->precio_unitario)->toBe('900.0000')
+        ->and($renglon->precio_capturado)->toBeTrue()
+        ->and((string) $renglon->margen)->toBe('50.00')
+        ->and($renglon->ajuste_precio)->toBe(FactServicio::AJUSTE_MAS_5)
+        ->and($renglon->es_de_tercero)->toBeTrue()
+        ->and($renglon->cantidad)->toBe(1)
+        ->and(App\Models\Bitacora::latest('id')->first()->descripcion)
+        ->toContain('Precio capturado a mano: 900.0000 en vez de 777.0000.');
+});

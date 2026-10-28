@@ -21,6 +21,19 @@ use App\Support\PrecioDeRenglon;
 final class RenglonDeComisariato
 {
     /**
+     * El precio que un comisariato aporta al renglón cuando nadie teclea otro: su subtotal.
+     *
+     * Existe para que «cuál es el precio heredado de un comisariato» se decida en UN solo sitio.
+     * `atributos()` lo compara con el tecleado para saber si el renglón queda marcado, y el
+     * controlador lo cita en la bitácora; si cada uno leyera `subtotal` por su cuenta, un cambio
+     * de referencia aquí haría que la bitácora dijera una cifra distinta de la que se comparó.
+     */
+    public static function precioHeredado(ServicioComisariato $comisariato): string|float
+    {
+        return $comisariato->subtotal;
+    }
+
+    /**
      * @param  string|float|null  $precioPedido  El precio tecleado en el alta a mano, o null. La
      *                                           vía AUTOMÁTICA no pasa ninguno: sigue cobrando
      *                                           el subtotal del comisariato, que es su contrato.
@@ -29,7 +42,7 @@ final class RenglonDeComisariato
     public static function atributos(ServicioComisariato $comisariato, int $orden, string|float|null $precioPedido = null): array
     {
         $servicio = $comisariato->factServicio;
-        $precio = PrecioDeRenglon::resolver($precioPedido, $comisariato->subtotal);
+        $precio = PrecioDeRenglon::resolver($precioPedido, self::precioHeredado($comisariato));
 
         return [
             'servicio_id' => $servicio->id,

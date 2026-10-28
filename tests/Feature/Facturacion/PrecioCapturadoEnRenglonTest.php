@@ -104,8 +104,17 @@ test('los ceros de relleno no cuentan como decimales', function () {
 test('un precio de cero se acepta: cero es una tarifa, no un campo vacio', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
 
-    altaDeRenglon(prefacturaBorrador(), servicioSimple(), ['precio_unitario' => '0'])
+    $prefactura = prefacturaBorrador();
+
+    altaDeRenglon($prefactura, servicioSimple(500.0), ['precio_unitario' => '0'])
         ->assertCreated();
+
+    // Un cero tecleado NO es «no se tecleo nada»: si se tomara por ausencia se cobraria el
+    // catalogo, que es justo el error que esta regla existe para evitar.
+    $renglon = $prefactura->renglones()->sole();
+
+    expect((string) $renglon->precio_unitario)->toBe('0.0000')
+        ->and($renglon->precio_capturado)->toBeTrue();
 });
 
 test('sin precio el alta sigue funcionando', function () {
@@ -205,11 +214,13 @@ test('la bitacora dice con que precio se cobro y cual habria sido', function () 
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
     $prefactura = prefacturaBorrador();
 
-    altaDeRenglon($prefactura, servicioSimple(500.0), ['precio_unitario' => '1050'])->assertCreated();
+    // El del catalogo pasa de mil a proposito: el formato de la cifra que se cita NO debe meter
+    // separadores de miles («1,500.0000»).
+    altaDeRenglon($prefactura, servicioSimple(1500.0), ['precio_unitario' => '1050'])->assertCreated();
 
+    // La frase entera: fija cual es el precio cobrado y cual el que habria sido.
     expect(App\Models\Bitacora::latest('id')->first()->descripcion)
-        ->toContain('1050.0000')
-        ->toContain('500.0000');
+        ->toContain('Precio capturado a mano: 1050.0000 en vez de 1500.0000.');
 });
 
 test('sin precio capturado la bitacora no habla de precios tecleados', function () {
