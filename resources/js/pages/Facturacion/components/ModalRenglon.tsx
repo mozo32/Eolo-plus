@@ -325,10 +325,15 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
 
     // Al cambiar de servicio, de remisión, de comisariato o de aeronave, el precio heredado cambia y
     // el campo vuelve a precargarse: si no, quedaría el de la elección anterior y se cobraría eso.
+    // No basta con depender del valor: dos elecciones distintas pueden heredar EXACTAMENTE el mismo
+    // precio (dos remisiones del día, dos proveedores de comisariato, dos aeronaves de la misma
+    // categoría, dos servicios iguales) y el valor no cambiaría, así que el efecto no se dispararía y
+    // el campo se quedaría con el precio tecleado para la elección anterior. Por eso dependen también
+    // de la identidad de cada elección.
     useEffect(() => {
         setPrecio(precioHeredado === null ? '' : sinCerosFinales(precioHeredado));
         setErrores(previos => (previos.precio_unitario ? { ...previos, precio_unitario: undefined } : previos));
-    }, [precioHeredado]);
+    }, [precioHeredado, servicioId, remisionElegida?.id, comisariatoElegido?.id, aeronaveElegida?.aeronave_id]);
 
     /** Lo tecleado, solo si es un importe válido. Es lo que se manda y con lo que se calcula la vista previa. */
     const precioTecleado = validarMonto(precio, OPCIONES_PRECIO) === null ? parsearMonto(precio) : null;
@@ -336,7 +341,8 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
 
     // Vista previa: un ajuste desconocido lanza (a propósito: cobrar sin ajuste en silencio sería peor), y aquí se dice.
     let vistaPrevia: { importe: number } | { problema: string } | null = null;
-    if (servicio && pideMatricula && aeronaveElegida !== null && precioHeredado === null && precioEfectivo === null) {
+    // Sin tarifa el servidor rechaza antes de mirar el precio tecleado, así que teclear uno no puede hacer desaparecer este aviso.
+    if (servicio && pideMatricula && aeronaveElegida !== null && precioHeredado === null) {
         vistaPrevia = { problema: 'Esta aeronave no tiene tarifa para ese tramo, ni propia ni por su categoría: no hay precio que cobrar.' };
     } else if (servicio && esComisariato && comisariatoElegido !== null) {
         // El importe y el margen son los del comisariato y su proveedor, que este menú no trae: la cifra la calcula el servidor al agregarlo.
