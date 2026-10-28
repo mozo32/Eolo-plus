@@ -632,7 +632,7 @@ export default function EditorPrefactura({ id }: Props) {
             }
 
             toast.fire({ icon: 'success', titleText: 'Encabezado guardado.' });
-            // Después del aviso de guardado: si trae remisiones o comisariatos, sus avisos se apilan tras el de «Encabezado guardado».
+            // Los avisos se REEMPLAZAN (el toast de SweetAlert2 destruye el anterior al mostrar el siguiente): queda a la vista el último disparado, el de comisariatos si trajo algo y, si no, el de remisiones; el de «Encabezado guardado» solo si no trajo nada.
             if (cambioLaSalida) await sincronizarSolos();
         } catch (e) {
             const delCampo = e instanceof ErrorApi && e.codigo === null ? Object.entries(e.errors).filter(([campo]) => CAMPOS_DEL_ENCABEZADO.includes(campo as CampoEncabezado)) : [];
