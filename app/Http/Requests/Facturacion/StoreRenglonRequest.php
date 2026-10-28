@@ -40,8 +40,8 @@ class StoreRenglonRequest extends FormRequest
      * buscador es un campo editable y, sin esto, tecleando otra matrícula se le cobraría a este
      * cliente el comisariato de otra aeronave. Se compara con `esLaMismaAeronave()`, la misma
      * tolerancia del guion y los espacios que usa el alta a mano de remisiones, y NO con el
-     * `normalizarMatricula()` a secas de la vía automática: ver el docblock de aquel método, cuyo
-     * argumento aplica aquí palabra por palabra (un comisariato de `XA AMI` no tendría ninguna vía
+     * `normalizarMatricula()` a secas de la vía automática: ver el docblock de `esLaMismaAeronave()`,
+     * más abajo en este fichero, cuyo argumento aplica aquí palabra por palabra (un comisariato de `XA AMI` no tendría ninguna vía
      * de cobro). La vía automática sigue emparejando por texto exacto, por decisión aceptada.
      */
     private function soloSiPuedeCobrarse(string $atributo, mixed $valor, \Closure $fallar): void

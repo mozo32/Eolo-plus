@@ -138,8 +138,12 @@ final class ComisariatosFacturables
      *
      * La usa `deLaMatricula()`, o sea la vía AUTOMÁTICA y el buscador, que emparejan por texto
      * exacto (lo aceptó el usuario). El alta a mano NO se limita a esto: `StoreRenglonRequest`
-     * tolera además guiones y espacios interiores, y aflojar ESTA función arrastraría comisariatos
-     * de una grafía a prefacturas de otra, que es una decisión con dinero detrás.
+     * tolera además guiones y espacios interiores. La comparación de la vía automática tiene DOS
+     * lados: esta función (el parámetro) y el `upper(trim(matricula))` del SQL de `deLaMatricula()`.
+     * Aflojar solo uno NO ensancha el emparejamiento, lo rompe: el parámetro pasaría a `XAAMI` y la
+     * columna seguiría siendo `XA-AMI`, y la sincronización dejaría de traer toda matrícula con
+     * guion. Arrastrar comisariatos de una grafía a prefacturas de otra exige cambiar los dos
+     * lados, y eso es una decisión con dinero detrás que no debe tomarse de pasada.
      */
     public static function normalizarMatricula(?string $matricula): string
     {

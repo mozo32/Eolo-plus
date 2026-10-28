@@ -446,7 +446,7 @@ export type ComisariatoFacturable = {
     subtotal: string;
     forma_pago: string | null;
     proveedor: string | null;
-    /** El OTRO documento que ya lo tiene, o null si está libre (o si es de esta misma prefactura: ver `en_este_documento`). Solo marca: elegirlo está permitido. */
+    /** El OTRO documento que ya lo tiene, o null si está libre (o si es de esta misma prefactura: ver `en_este_documento`). Se marca Y NO se puede elegir (el servidor lo rechaza con 422). Difiere de remisiones a propósito: allí «tomada» tiene dos fuentes y una puede estar marcada sin renglón detrás, que es el caso que vale rescatar; aquí hay una sola fuente, así que `tomado_por` no nulo siempre es dinero ya cobrándose. */
     tomado_por: string | null;
     /** Ya tiene renglón en ESTA prefactura: no se puede elegir otra vez (el servidor lo rechaza con 422). */
     en_este_documento: boolean;
