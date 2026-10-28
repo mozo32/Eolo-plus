@@ -133,7 +133,8 @@ test('trae los comisariatos de la matricula dentro de la ventana', function () {
 test('los bordes de la ventana entran, el minuto de fuera no', function () {
     $justoAlLlegar = comisariatoPara('XA-UNO', '2026-10-20', '08:00');
     $justoAlSalir = comisariatoPara('XA-UNO', '2026-10-21', '08:00');
-    comisariatoPara('XA-UNO', '2026-10-21', '08:01');
+    comisariatoPara('XA-UNO', '2026-10-21', '08:01');         // un minuto despues de salir
+    comisariatoPara('XA-UNO', '2026-10-20', '07:59');         // un minuto antes de llegar, el MISMO dia
 
     $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
 
@@ -249,8 +250,12 @@ test('el buscador trae todos los de la matricula, marcados', function () {
     expect($porId)->toHaveCount(4)
         ->and($porId[$libre->id]->tomado_por)->toBeNull()
         ->and($porId[$libre->id]->en_este_documento)->toBeFalse()
+        ->and($porId[$libre->id]->sin_proveedor)->toBeFalse()
+        ->and($porId[$libre->id]->sin_importe)->toBeFalse()
         ->and($porId[$sinProveedor->id]->sin_proveedor)->toBeTrue()
+        ->and($porId[$sinProveedor->id]->sin_importe)->toBeFalse()
         ->and($porId[$sinImporte->id]->sin_importe)->toBeTrue()
+        ->and($porId[$sinImporte->id]->sin_proveedor)->toBeFalse()
         ->and($porId[$enEste->id]->en_este_documento)->toBeTrue()
         ->and($porId[$enEste->id]->tomado_por)->toBeNull();
 });
@@ -291,4 +296,64 @@ test('un comisariato cancelado no es candidato ni sale en el buscador', function
 
     expect(App\Services\ComisariatosFacturables::candidatas($prefactura)->pluck('id')->all())->toBe([$vigente->id])
         ->and(App\Services\ComisariatosFacturables::paraElegir('XA-UNO', $prefactura->id)->pluck('id')->all())->toBe([$vigente->id]);
+});
+
+test('la exclusion es de ESTA prefactura: otro documento de la misma matricula lo sigue trayendo', function () {
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-20', '10:00');
+    $prefacturaA = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+    $prefacturaB = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+    $usuario = User::factory()->create();
+
+    App\Services\ComisariatosFacturables::excluir($prefacturaA, $comisariato->id, $usuario->id);
+
+    expect(App\Services\ComisariatosFacturables::candidatas($prefacturaA))->toBeEmpty()
+        ->and(App\Services\ComisariatosFacturables::candidatas($prefacturaB)->pluck('id')->all())
+        ->toBe([$comisariato->id]);
+});
+
+test('revocar la exclusion de una prefactura no toca la que otra prefactura tiene del mismo comisariato', function () {
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-20', '10:00');
+    $prefacturaA = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+    $prefacturaB = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+    $usuario = User::factory()->create();
+
+    App\Services\ComisariatosFacturables::excluir($prefacturaA, $comisariato->id, $usuario->id);
+    App\Services\ComisariatosFacturables::excluir($prefacturaB, $comisariato->id, $usuario->id);
+
+    App\Services\ComisariatosFacturables::revocarExclusion($prefacturaA, $comisariato->id);
+
+    expect(App\Services\ComisariatosFacturables::candidatas($prefacturaA)->pluck('id')->all())->toBe([$comisariato->id])
+        ->and(App\Services\ComisariatosFacturables::candidatas($prefacturaB))->toBeEmpty();
+});
+
+test('las candidatas salen ordenadas por momento, no por orden de captura', function () {
+    // Los ids van a proposito DESORDENADOS respecto al momento: si no, un `orderBy` ausente
+    // pasaria por casualidad porque la base devuelve por id.
+    $tardeDelPrimerDia = comisariatoPara('XA-UNO', '2026-10-20', '15:00');
+    $segundoDia = comisariatoPara('XA-UNO', '2026-10-21', '08:00');
+    $tempranoDelPrimerDia = comisariatoPara('XA-UNO', '2026-10-20', '09:00');
+
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    expect(App\Services\ComisariatosFacturables::candidatas($prefactura)->pluck('id')->all())
+        ->toBe([$tempranoDelPrimerDia->id, $tardeDelPrimerDia->id, $segundoDia->id]);
+});
+
+test('el buscador saca primero el mas reciente', function () {
+    $tardeDelPrimerDia = comisariatoPara('XA-UNO', '2026-10-20', '15:00');
+    $segundoDia = comisariatoPara('XA-UNO', '2026-10-21', '08:00');
+    $tempranoDelPrimerDia = comisariatoPara('XA-UNO', '2026-10-20', '09:00');
+
+    expect(App\Services\ComisariatosFacturables::paraElegir('XA-UNO')->pluck('id')->all())
+        ->toBe([$segundoDia->id, $tardeDelPrimerDia->id, $tempranoDelPrimerDia->id]);
+});
+
+test('una salida anterior a la llegada no trae nada: la ventana no se da la vuelta', function () {
+    // `Carbon::betweenIncluded` intercambia los extremos si van al reves, asi que sin el guard
+    // de `candidatas()` esta ventana invertida devolveria lo que cae ENTRE las 08:00 y las 10:00.
+    comisariatoPara('XA-UNO', '2026-10-20', '09:00');
+
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 10:00:00', '2026-10-20 08:00:00');
+
+    expect(App\Services\ComisariatosFacturables::candidatas($prefactura))->toBeEmpty();
 });
