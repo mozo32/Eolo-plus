@@ -120,8 +120,16 @@ apunta la exclusión; el alta manual del mismo comisariato la revoca.
   buscador marcado «sin proveedor» y no se puede elegir, para que quien factura
   vea que existe y pueda ir a arreglarlo en Tráfico.
 - **Ya cobrado en otro documento.** Aparece marcado con el documento que lo
-  tiene. Igual que en remisiones, se puede elegir a propósito para rescatar una
-  marca puesta por error.
+  tiene y **deshabilitado**; el servidor también lo rechaza (422). Para moverlo
+  se quita primero del otro documento y entonces queda libre.
+  *Corrección de revisión:* esta spec decía que, «igual que en remisiones», se
+  podía elegir a propósito para rescatar una marca puesta por error. Fue un
+  error de la spec: se copió del módulo hermano sin comprobar que el caso
+  existiera aquí. En remisiones «tomada» tiene dos fuentes y una
+  (`status_prefactura = 1`, puesta a mano desde Rampa) puede no tener renglón
+  detrás, y eso sí vale rescatarlo. En comisariatos hay una sola fuente (un
+  renglón vivo en una prefactura activa), así que no hay marca que rescatar:
+  elegirlo es cobrar dos veces la misma entrega.
 - **Ya en este documento.** Aparece marcado y **deshabilitado**: repetirlo en
   el mismo documento no tiene ningún caso legítimo.
 

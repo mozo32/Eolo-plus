@@ -1036,7 +1036,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 **LEE PRIMERO cómo lo hace el combustible en esos dos ficheros.** Esta tarea es su calco: el buscador de remisiones dentro del modal y el disparo de la sincronización al cargar el editor. Las diferencias:
 
 1. El buscador aparece al elegir la categoría **Comisariatos** y su servicio.
-2. Las marcas son otras: `sin_proveedor` y `sin_importe` en vez de `sin_precio`. Las de `tomado_por` y `en_este_documento` funcionan igual — **`en_este_documento` deshabilita la opción**, y `tomado_por` solo la marca, porque elegir uno tomado por OTRO documento está permitido a propósito.
+2. Las marcas son otras: `sin_proveedor` y `sin_importe` en vez de `sin_precio`. Las de `tomado_por` y `en_este_documento` funcionan igual — **`en_este_documento` deshabilita la opción**, y `tomado_por` la deshabilita también (y la marca, para que se vea quién lo tiene). *Corrección de revisión:* este plan decía que `tomado_por` «solo la marca, porque elegir uno tomado por OTRO documento está permitido a propósito». Fue un error heredado de la spec, que lo copió del módulo de remisiones: allí «tomada» tiene dos fuentes y una puede estar marcada sin renglón detrás (el caso que vale rescatar); aquí hay una sola, así que `tomado_por` no nulo siempre es dinero ya cobrándose, y el servidor lo rechaza con 422.
 3. **En la tabla de renglones, un renglón de comisariato muestra su forma de pago** tal como está escrita en el registro de Tráfico. Sirve para que quien factura vea de un vistazo cuál quitar, sin que el sistema finja interpretar un campo que nadie ha normalizado.
 4. **Los de importe 0 se marcan para revisar**, derivando la marca del propio importe, sin columna nueva.
 
