@@ -24,6 +24,7 @@ class StoreRenglonRequest extends FormRequest
                 $this->noEsServicioDeEstancia(...),
             ],
             'cantidad' => ['required', 'integer', 'min:1', 'max:9999'],
+            'precio_unitario' => ['nullable', 'numeric', 'min:0', 'max:999999.9999', $this->hasta4Decimales(...)],
             'aeronave_id' => ['bail', 'nullable', 'integer', Rule::exists('aeronaves', 'id'), $this->soloParaTransito(...)],
             'remision_combustible_id' => ['bail', 'nullable', 'integer', Rule::exists('remisiones', 'id')->where('status', 'A'), $this->soloParaCombustible(...)],
             'servicio_comisariato_id' => ['bail', 'nullable', 'integer', Rule::exists('servicio_comisariatos', 'id')->where('status', 'A'), $this->soloSiPuedeCobrarse(...)],
@@ -70,6 +71,26 @@ class StoreRenglonRequest extends FormRequest
         if ($dePrefactura === null
             || ! $this->esLaMismaAeronave($comisariato->matricula, $dePrefactura)) {
             $fallar("Ese comisariato es de {$comisariato->matricula} y esta prefactura es de ".($dePrefactura ?? 'una aeronave sin matrícula').': el comisariato de otra aeronave no se cobra aquí.');
+        }
+    }
+
+    /**
+     * `fact_prefactura_renglones.precio_unitario` es `decimal(10,4)`: un quinto decimal se
+     * perdería al escribir y el renglón cobraría algo distinto de lo que se tecleó, en silencio.
+     *
+     * Los ceros de relleno no cuentan: `25.99400000` es el mismo precio de cuatro decimales, y
+     * rechazarlo sería un rechazo sin motivo para quien escribe con el teclado numérico.
+     */
+    private function hasta4Decimales(string $atributo, mixed $valor, \Closure $fallar): void
+    {
+        $texto = (string) $valor;
+
+        if (! str_contains($texto, '.')) {
+            return;
+        }
+
+        if (strlen(rtrim(substr($texto, strpos($texto, '.') + 1), '0')) > 4) {
+            $fallar('El precio unitario admite máximo 4 decimales.');
         }
     }
 
@@ -228,6 +249,9 @@ class StoreRenglonRequest extends FormRequest
             'cantidad.integer' => 'La cantidad debe ser un número entero.',
             'cantidad.min' => 'La cantidad debe ser al menos 1.',
             'cantidad.max' => 'La cantidad no puede pasar de 9,999.',
+            'precio_unitario.numeric' => 'El precio unitario debe ser un importe numérico, sin signos ni comas.',
+            'precio_unitario.min' => 'El precio unitario no puede ser negativo.',
+            'precio_unitario.max' => 'El precio unitario es demasiado grande.',
             'aeronave_id.integer' => 'La matrícula no es válida.',
             'aeronave_id.exists' => 'Esa matrícula no está en el sistema.',
             'remision_combustible_id.integer' => 'La remisión no es válida.',

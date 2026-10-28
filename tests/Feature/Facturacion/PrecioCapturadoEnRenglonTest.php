@@ -46,3 +46,70 @@ test('ningun indice de la tabla de renglones pasa de 64 caracteres', function ()
         expect(strlen((string) $indice['name']))->toBeLessThanOrEqual(64);
     }
 });
+
+// ---------------------------------------------------------------------------
+// La validacion del precio que llega
+// ---------------------------------------------------------------------------
+
+/** Un servicio normal del catalogo, sin margen ni ajuste. */
+function servicioSimple(float $precio = 500.0): App\Models\FactServicio
+{
+    return App\Models\FactServicio::create([
+        'nombre' => 'Servicio '.uniqid(),
+        'precio_unitario' => $precio,
+        'status' => 'A',
+    ]);
+}
+
+/** Agrega un renglon por el endpoint, con el precio indicado si se da. */
+function altaDeRenglon(App\Models\FactPrefactura $p, App\Models\FactServicio $s, array $extra = []): Illuminate\Testing\TestResponse
+{
+    return test()->postJson("/api/facturacion/prefacturas/{$p->id}/renglones", array_merge([
+        'servicio_id' => $s->id,
+        'cantidad' => 1,
+    ], $extra));
+}
+
+test('un precio negativo se rechaza', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    altaDeRenglon(prefacturaBorrador(), servicioSimple(), ['precio_unitario' => '-1'])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('precio_unitario');
+});
+
+test('un precio por encima del maximo de la columna se rechaza', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    altaDeRenglon(prefacturaBorrador(), servicioSimple(), ['precio_unitario' => '1000000'])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('precio_unitario');
+});
+
+test('un precio con cinco decimales se rechaza: el quinto se perderia al escribirlo', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    altaDeRenglon(prefacturaBorrador(), servicioSimple(), ['precio_unitario' => '25.99401'])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('precio_unitario');
+});
+
+test('los ceros de relleno no cuentan como decimales', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    altaDeRenglon(prefacturaBorrador(), servicioSimple(), ['precio_unitario' => '25.99400000'])
+        ->assertCreated();
+});
+
+test('un precio de cero se acepta: cero es una tarifa, no un campo vacio', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    altaDeRenglon(prefacturaBorrador(), servicioSimple(), ['precio_unitario' => '0'])
+        ->assertCreated();
+});
+
+test('sin precio el alta sigue funcionando', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    altaDeRenglon(prefacturaBorrador(), servicioSimple())->assertCreated();
+});
