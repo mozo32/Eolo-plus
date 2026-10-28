@@ -1093,6 +1093,28 @@ test('un transito de otra aeronave se cobra con la tarifa de ESA aeronave, no co
     'pernocta' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA, 9000.00, 'Transito 24 hrs - pernocta'],
 ]);
 
+test('en un transito ajeno el precio tecleado gana a la tarifa de la aeronave, y se marca', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = conEstancia();
+    $ajena = aeronaveAjena();
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => servicioDeTransito(FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H)->id,
+        'cantidad' => 1,
+        'aeronave_id' => $ajena->id,
+        'precio_unitario' => '3500',
+    ])->assertCreated();
+
+    $renglon = FactPrefacturaRenglon::where('prefactura_id', $prefactura->id)->sole();
+
+    // La tarifa de 2 h de `aeronaveAjena()` es 3000.00: 3500 es otro precio y se marca.
+    expect((string) $renglon->precio_unitario)->toBe('3500.0000')
+        ->and($renglon->precio_capturado)->toBeTrue()
+        // Sigue sin concepto, que es lo que lo hace sobrevivir a «Estancia y ajustes».
+        ->and($renglon->concepto)->toBeNull()
+        ->and((string) $renglon->margen)->toBe('0.00');
+});
+
 test('DEFECTO que este trabajo evita: «Estancia y ajustes» NO borra ni duplica el transito ajeno', function () {
     // Es la prueba que define el trabajo. El renglon ajeno no lleva concepto de estancia, y
     // `quitarEstancia()` borra por concepto: por eso sobrevive. Los cargos propios SI se

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ServicioComisariato;
+use App\Support\PrecioDeRenglon;
 
 /**
  * Qué lleva un renglón nacido de un comisariato. EL ÚNICO SITIO donde se decide.
@@ -19,16 +20,23 @@ use App\Models\ServicioComisariato;
  */
 final class RenglonDeComisariato
 {
-    /** @return array<string, mixed> */
-    public static function atributos(ServicioComisariato $comisariato, int $orden): array
+    /**
+     * @param  string|float|null  $precioPedido  El precio tecleado en el alta a mano, o null. La
+     *                                           vía AUTOMÁTICA no pasa ninguno: sigue cobrando
+     *                                           el subtotal del comisariato, que es su contrato.
+     * @return array<string, mixed>
+     */
+    public static function atributos(ServicioComisariato $comisariato, int $orden, string|float|null $precioPedido = null): array
     {
         $servicio = $comisariato->factServicio;
+        $precio = PrecioDeRenglon::resolver($precioPedido, $comisariato->subtotal);
 
         return [
             'servicio_id' => $servicio->id,
             'servicio_comisariato_id' => $comisariato->id,
             'nombre_servicio' => $servicio->nombre,
-            'precio_unitario' => $comisariato->subtotal,
+            'precio_unitario' => $precio['precio'],
+            'precio_capturado' => $precio['capturado'],
             'cantidad' => 1,
             'es_de_tercero' => $servicio->es_de_tercero,
             'margen' => $servicio->margen,

@@ -137,3 +137,96 @@ test('el tope de la columna se acepta: 999999.9999 es el mayor precio valido', f
     altaDeRenglon(prefacturaBorrador(), servicioSimple(), ['precio_unitario' => '999999.9999'])
         ->assertCreated();
 });
+
+// ---------------------------------------------------------------------------
+// El precio que llega se aplica, y solo el precio
+// ---------------------------------------------------------------------------
+
+test('con precio tecleado el renglon lo guarda y el importe lo sigue', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = prefacturaBorrador();
+
+    altaDeRenglon($prefactura, servicioSimple(500.0), ['precio_unitario' => '1050', 'cantidad' => 2])
+        ->assertCreated();
+
+    $renglon = $prefactura->renglones()->sole();
+
+    expect((string) $renglon->precio_unitario)->toBe('1050.0000')
+        ->and($renglon->precio_capturado)->toBeTrue()
+        ->and($renglon->importe())->toBe('2100.00');
+});
+
+test('teclear el mismo precio del catalogo NO marca el renglon', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = prefacturaBorrador();
+
+    altaDeRenglon($prefactura, servicioSimple(500.0), ['precio_unitario' => '500'])->assertCreated();
+
+    expect($prefactura->renglones()->sole()->precio_capturado)->toBeFalse();
+});
+
+test('el precio tecleado NO mueve el margen, el ajuste, el tercero ni el concepto', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = prefacturaBorrador();
+    $servicio = App\Models\FactServicio::create([
+        'nombre' => 'Servicio '.uniqid(),
+        'precio_unitario' => 500.0,
+        'es_de_tercero' => true,
+        'margen' => 50,
+        'ajuste_precio' => App\Models\FactServicio::AJUSTE_MAS_5,
+        'status' => 'A',
+    ]);
+
+    altaDeRenglon($prefactura, $servicio, ['precio_unitario' => '1000'])->assertCreated();
+
+    $renglon = $prefactura->renglones()->sole();
+
+    expect($renglon->es_de_tercero)->toBeTrue()
+        ->and((string) $renglon->margen)->toBe('50.00')
+        ->and($renglon->ajuste_precio)->toBe(App\Models\FactServicio::AJUSTE_MAS_5);
+});
+
+test('el alta sin precio produce exactamente el renglon de siempre', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = prefacturaBorrador();
+    $servicio = servicioSimple(500.0);
+
+    altaDeRenglon($prefactura, $servicio, ['cantidad' => 3])->assertCreated();
+
+    $renglon = $prefactura->renglones()->sole();
+
+    expect((string) $renglon->precio_unitario)->toBe('500.0000')
+        ->and($renglon->precio_capturado)->toBeFalse()
+        ->and($renglon->cantidad)->toBe(3)
+        ->and($renglon->importe())->toBe('1500.00');
+});
+
+test('la bitacora dice con que precio se cobro y cual habria sido', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = prefacturaBorrador();
+
+    altaDeRenglon($prefactura, servicioSimple(500.0), ['precio_unitario' => '1050'])->assertCreated();
+
+    expect(App\Models\Bitacora::latest('id')->first()->descripcion)
+        ->toContain('1050.0000')
+        ->toContain('500.0000');
+});
+
+test('sin precio capturado la bitacora no habla de precios tecleados', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    altaDeRenglon(prefacturaBorrador(), servicioSimple(500.0))->assertCreated();
+
+    expect(App\Models\Bitacora::latest('id')->first()->descripcion)
+        ->not->toContain('capturado');
+});
+
+test('teclear un precio NO cambia el del catalogo', function () {
+    // Decision 5 de la spec. El renglon congela su precio; el catalogo se edita en su pantalla.
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioSimple(500.0);
+
+    altaDeRenglon(prefacturaBorrador(), $servicio, ['precio_unitario' => '1050'])->assertCreated();
+
+    expect((string) $servicio->fresh()->precio_unitario)->toBe('500.0000');
+});

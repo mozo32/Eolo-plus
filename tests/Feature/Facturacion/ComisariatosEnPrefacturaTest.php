@@ -1017,3 +1017,21 @@ test('paraElegir trae el proveedor de cada comisariato ya cargado, venga la list
         ->and($vacia)->toBeInstanceOf(Illuminate\Database\Eloquent\Collection::class)
         ->and($vacia)->toBeEmpty();
 });
+
+test('la via AUTOMATICA sigue tomando el subtotal del comisariato', function () {
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-21', '10:00', ['subtotal' => 777]);
+
+    $atributos = App\Services\RenglonDeComisariato::atributos($comisariato->fresh('factServicio'), 1);
+
+    expect($atributos['precio_unitario'])->toBe('777.0000')
+        ->and($atributos['precio_capturado'])->toBeFalse();
+});
+
+test('el alta a mano de un comisariato acepta otro precio y lo marca', function () {
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-21', '10:00', ['subtotal' => 777]);
+
+    $atributos = App\Services\RenglonDeComisariato::atributos($comisariato->fresh('factServicio'), 1, '900');
+
+    expect($atributos['precio_unitario'])->toBe('900.0000')
+        ->and($atributos['precio_capturado'])->toBeTrue();
+});

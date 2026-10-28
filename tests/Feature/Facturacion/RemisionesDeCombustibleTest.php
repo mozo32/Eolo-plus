@@ -1066,3 +1066,27 @@ test('N-1: la via AUTOMATICA no se mueve, el guion sigue separando', function ()
         ->assertOk()
         ->assertJsonPath('agregados', 0);
 });
+
+test('con precio tecleado la remision cobra ese precio, pero la cantidad sigue siendo sus litros', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $servicio = servicioDeCombustible();
+    $prefactura = prefacturaConMatricula('2026-10-20 08:00:00', '2026-10-20 18:00:00');
+    $remision = remisionDe($prefactura, '2026-10-20', '10:00:00');
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/renglones", [
+        'servicio_id' => $servicio->id,
+        // La cantidad que se manda es mentira a proposito: en combustible la pone la remision.
+        'cantidad' => 1,
+        'remision_combustible_id' => $remision->id,
+        'precio_unitario' => '30',
+    ])->assertCreated();
+
+    $renglon = $prefactura->renglones()->sole();
+
+    expect((string) $renglon->precio_unitario)->toBe('30.0000')
+        ->and($renglon->precio_capturado)->toBeTrue()
+        ->and($renglon->cantidad)->toBe((int) $remision->total_litros)
+        // El margen y el ajuste siguen en cero y «ninguno», como en toda remision.
+        ->and((string) $renglon->margen)->toBe('0.00')
+        ->and($renglon->ajuste_precio)->toBe(FactServicio::AJUSTE_NINGUNO);
+});

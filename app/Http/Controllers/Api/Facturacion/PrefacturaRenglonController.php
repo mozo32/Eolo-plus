@@ -9,6 +9,7 @@ use App\Models\Aeronave;
 use App\Models\Bitacora;
 use App\Models\FactAeronave;
 use App\Models\FactPrefactura;
+use App\Models\FactPrefacturaRenglon;
 use App\Models\FactServicio;
 use App\Models\Remision;
 use App\Models\ServicioComisariato;
@@ -17,6 +18,7 @@ use App\Services\ComisariatosFacturables;
 use App\Services\RemisionesFacturables;
 use App\Services\RenglonDeComisariato;
 use App\Services\ServicioDeEstanciaNoDisponibleException;
+use App\Support\PrecioDeRenglon;
 use App\Support\VentanaDeEstancia;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -114,9 +116,14 @@ class PrefacturaRenglonController extends Controller
             }
 
             if ($comisariato !== null) {
+                $precioDelRegistro = $comisariato->subtotal;
                 // `reorder()`: la relación trae ORDER BY, que un agregado no admite en MySQL estricto.
                 $renglon = $actual->renglones()->create(
-                    RenglonDeComisariato::atributos($comisariato, (int) $actual->renglones()->reorder()->max('orden') + 1),
+                    RenglonDeComisariato::atributos(
+                        $comisariato,
+                        (int) $actual->renglones()->reorder()->max('orden') + 1,
+                        $request->validated()['precio_unitario'] ?? null,
+                    ),
                 );
 
                 // Ponerlo a propósito revoca el «este no entra» de una baja anterior.
@@ -125,7 +132,7 @@ class PrefacturaRenglonController extends Controller
                 Bitacora::log(
                     modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
                     accion: Bitacora::ACCION_CREAR,
-                    descripcion: "Se agregó el servicio {$renglon->nombre_servicio} a la prefactura {$actual->id} por {$renglon->importe()}.",
+                    descripcion: "Se agregó el servicio {$renglon->nombre_servicio} a la prefactura {$actual->id} por {$renglon->importe()}.".$this->avisoDePrecioCapturado($renglon, $precioDelRegistro),
                     usuarioId: $request->user()->id,
                     registroId: $actual->id,
                     datosNuevos: ['renglon_id' => $renglon->id, 'importe' => $renglon->importe()],
@@ -134,12 +141,21 @@ class PrefacturaRenglonController extends Controller
                 return $renglon;
             }
 
+            // El precio sale del registro que corresponda —la remisión, la tarifa de la aeronave
+            // o el catálogo— salvo que la petición traiga uno tecleado. `PrecioDeRenglon` decide
+            // cuál se guarda y si cuenta como capturado a mano, en un solo sitio para las dos
+            // vías. Lo tecleado sustituye SOLO al precio: margen, ajuste, tercero, concepto y
+            // cantidad siguen su propia regla, justo debajo.
+            $precioDelRegistro = $remision !== null ? $remision->precio : ($ajena === null ? $servicio->precio_unitario : $ajena['precio']);
+            $precio = PrecioDeRenglon::resolver($request->validated()['precio_unitario'] ?? null, $precioDelRegistro);
+
             // El renglón CONGELA lo que determina su importe: si el catálogo cambia
             // mañana, este documento no se mueve.
             $renglon = $actual->renglones()->create([
                 'servicio_id' => $servicio->id,
                 'nombre_servicio' => $remision !== null ? "{$servicio->nombre} — {$remision->folio}" : ($ajena === null ? $servicio->nombre : $ajena['nombre']),
-                'precio_unitario' => $remision !== null ? $remision->precio : ($ajena === null ? $servicio->precio_unitario : $ajena['precio']),
+                'precio_unitario' => $precio['precio'],
+                'precio_capturado' => $precio['capturado'],
                 'cantidad' => $remision !== null ? (int) $remision->total_litros : $request->validated()['cantidad'],
                 'remision_combustible_id' => $remision?->id,
                 // El precio del ajeno sale de la tarifa de la aeronave, no del catálogo, así que los
@@ -164,7 +180,7 @@ class PrefacturaRenglonController extends Controller
             Bitacora::log(
                 modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
                 accion: Bitacora::ACCION_CREAR,
-                descripcion: "Se agregó el servicio {$renglon->nombre_servicio} a la prefactura {$actual->id} por {$renglon->importe()}.",
+                descripcion: "Se agregó el servicio {$renglon->nombre_servicio} a la prefactura {$actual->id} por {$renglon->importe()}.".$this->avisoDePrecioCapturado($renglon, $precioDelRegistro),
                 usuarioId: $request->user()->id,
                 registroId: $actual->id,
                 datosNuevos: ['renglon_id' => $renglon->id, 'importe' => $renglon->importe()],
@@ -416,6 +432,23 @@ class PrefacturaRenglonController extends Controller
                 : 'no se le traen remisiones solas. Elige las que correspondan').' desde «Agregar servicio».',
             'codigo' => 'reabierta',
         ], 409);
+    }
+
+    /**
+     * La frase que añade a la bitácora el precio que se cobró y el que habría aplicado.
+     *
+     * Vacía cuando el precio se heredó, que es el caso normal. Sin esta línea, un precio tecleado
+     * sería un cambio de dinero sin rastro: el renglón puede quedar con un precio que ya no
+     * coincide con la remisión o el comisariato del que nació, y ese registro sigue marcado como
+     * cobrado.
+     */
+    private function avisoDePrecioCapturado(FactPrefacturaRenglon $renglon, string|float $precioDelRegistro): string
+    {
+        if (! $renglon->precio_capturado) {
+            return '';
+        }
+
+        return " Precio capturado a mano: {$renglon->precio_unitario} en vez de ".number_format((float) $precioDelRegistro, 4, '.', '').'.';
     }
 
     /**
