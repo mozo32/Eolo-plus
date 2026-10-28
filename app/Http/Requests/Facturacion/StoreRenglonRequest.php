@@ -80,10 +80,21 @@ class StoreRenglonRequest extends FormRequest
      *
      * Los ceros de relleno no cuentan: `25.99400000` es el mismo precio de cuatro decimales, y
      * rechazarlo sería un rechazo sin motivo para quien escribe con el teclado numérico.
+     *
+     * La notación científica se rechaza antes de contar: `numeric` la acepta y `1.0E-5` no tiene
+     * punto con cuatro decimales a la vista, pero vale 0.00001 y se guardaría como `0.0000`, o
+     * sea que cobraría cero en silencio. La pantalla no puede mandarla; el endpoint sí la recibe
+     * de cualquier cliente autenticado.
      */
     private function hasta4Decimales(string $atributo, mixed $valor, \Closure $fallar): void
     {
         $texto = (string) $valor;
+
+        if (stripos($texto, 'e') !== false) {
+            $fallar('El precio unitario debe escribirse con dígitos y un punto decimal, sin notación científica.');
+
+            return;
+        }
 
         if (! str_contains($texto, '.')) {
             return;

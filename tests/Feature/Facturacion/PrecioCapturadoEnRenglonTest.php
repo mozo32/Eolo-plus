@@ -123,6 +123,29 @@ test('sin precio el alta sigue funcionando', function () {
     altaDeRenglon(prefacturaBorrador(), servicioSimple())->assertCreated();
 });
 
+test('un precio en notacion cientifica se rechaza: se guardaria como cero', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    foreach (['1.0E-5', '1e-5', '5E2'] as $precio) {
+        altaDeRenglon(prefacturaBorrador(), servicioSimple(), ['precio_unitario' => $precio])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('precio_unitario');
+    }
+});
+
+test('un precio null explicito es lo mismo que omitirlo: cobra el del catalogo', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+    $prefactura = prefacturaBorrador();
+
+    // La pantalla manda null cuando el campo de precio no se toco: es el camino normal de produccion.
+    altaDeRenglon($prefactura, servicioSimple(500.0), ['precio_unitario' => null])->assertCreated();
+
+    $renglon = $prefactura->renglones()->sole();
+
+    expect((string) $renglon->precio_unitario)->toBe('500.0000')
+        ->and($renglon->precio_capturado)->toBeFalse();
+});
+
 test('un precio que llega como arreglo da 422 por campo, no un 500', function () {
     $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
 

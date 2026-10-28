@@ -40,6 +40,16 @@ test('una salida anterior a la llegada no es ventana', function () {
     expect(VentanaDeEstancia::de('2026-10-20 18:00:00', '2026-10-20 08:00:00'))->toBeNull();
 });
 
+test('una llegada y una salida en el mismo minuto sí dan ventana, y contiene ese instante', function () {
+    // La captura es con granularidad HH:MM: una escala corta puede caer entera en un minuto, y sin
+    // ventana no se le podría facturar ningún combustible ni comisariato.
+    $ventana = VentanaDeEstancia::de('2026-10-20 08:00:00', '2026-10-20 08:00:00');
+
+    expect($ventana)->not->toBeNull()
+        ->and($ventana->contiene(Carbon::parse('2026-10-20 08:00:00')))->toBeTrue()
+        ->and($ventana->contiene(Carbon::parse('2026-10-20 08:00:01')))->toBeFalse();
+});
+
 test('los dias que la consulta necesita salen de la propia ventana', function () {
     $conSalida = VentanaDeEstancia::de('2026-10-20 08:00:00', '2026-10-22 18:00:00');
 

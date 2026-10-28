@@ -138,6 +138,10 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
     const [servicioId, setServicioId] = useState('');
     const [cantidad, setCantidad] = useState('1');
     const [precio, setPrecio] = useState('');
+    // Si el usuario tecleó en el campo de precio. Existe porque mandar de vuelta el valor heredado haría
+    // que el servidor marcara como capturado a mano un precio que nadie tecleó, y cobraría el que el
+    // modal leyó al abrirse en vez del vigente. Sin tocar el campo se manda null y el servidor decide.
+    const [precioTocado, setPrecioTocado] = useState(false);
     const [proveedorId, setProveedorId] = useState('');
     const [remision, setRemision] = useState('');
 
@@ -332,6 +336,7 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
     // de la identidad de cada elección.
     useEffect(() => {
         setPrecio(precioHeredado === null ? '' : sinCerosFinales(precioHeredado));
+        setPrecioTocado(false);
         setErrores(previos => (previos.precio_unitario ? { ...previos, precio_unitario: undefined } : previos));
     }, [precioHeredado, servicioId, remisionElegida?.id, comisariatoElegido?.id, aeronaveElegida?.aeronave_id]);
 
@@ -433,7 +438,7 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
             await onGuardar({
                 servicio_id: Number(servicioId),
                 cantidad: cantidadAEnviar,
-                precio_unitario: precioTecleado,
+                precio_unitario: precioTocado ? precioTecleado : null,
                 proveedor_id: proveedorId === '' ? null : Number(proveedorId),
                 remision: remision.trim() === '' ? null : remision.trim(),
                 aeronave_id: pideMatricula ? (aeronaveElegida?.aeronave_id ?? null) : null,
@@ -680,6 +685,7 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
                             value={precio}
                             onChange={e => {
                                 setPrecio(e.target.value);
+                                setPrecioTocado(true);
                                 limpiarError('precio_unitario');
                             }}
                             className={campoConError(!!errores.precio_unitario)}

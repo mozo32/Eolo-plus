@@ -19,7 +19,19 @@ use Illuminate\Support\Carbon;
  *
  * El coste de esa regla, que es conocido: mientras la estancia esté abierta entra CUALQUIER
  * servicio de esa matrícula, por lejana que sea su fecha, incluido uno teclado por error para
- * el mes que viene. Se ve en la prefactura y se puede quitar a mano.
+ * el mes que viene. Se ve en la prefactura y se puede quitar a mano. Tiene tres consecuencias
+ * que conviene no olvidar:
+ *
+ * 1. Pasa solo, al abrir la pantalla: `EditorPrefactura` dispara la sincronización de remisiones
+ *    y de comisariatos al abrir cualquier borrador activo, así que un servicio teclado por error
+ *    para el mes que viene se convierte en renglón sin que nadie lo elija.
+ * 2. Bloquea el cobro en el documento correcto: mientras ese renglón viva, la remisión o el
+ *    comisariato cuentan como tomados y no se pueden cobrar en la prefactura a la que de verdad
+ *    pertenecen hasta que alguien borre el renglón. No es un doble cobro, es un cobro en el
+ *    documento equivocado.
+ * 3. El aviso de «fuera de ventana» ya no puede avisar de esto:
+ *    `PrefacturaRenglonController::remisionesFueraDeVentana()` compara contra esta misma ventana,
+ *    así que con la estancia abierta nada cae fuera por arriba y ese aviso solo mira hacia atrás.
  *
  * Existe para que la regla esté en UN solo sitio. Estaba copiada en tres —las dos
  * `*Facturables` y el aviso de «fuera de ventana» del controlador— y tres copias de la misma
@@ -64,12 +76,6 @@ final class VentanaDeEstancia
         }
 
         return $this->fin === null || $momento->lessThanOrEqualTo($this->fin);
-    }
-
-    /** Si la estancia sigue abierta, o sea si la ventana no tiene tope. */
-    public function estaAbierta(): bool
-    {
-        return $this->fin === null;
     }
 
     /**
