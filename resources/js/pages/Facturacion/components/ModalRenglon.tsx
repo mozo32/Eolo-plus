@@ -14,10 +14,12 @@ import {
 import { Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO, campoConError, errorStyle, labelStyle, sectionTitle } from './estilos';
-import { esConceptoDeEstancia, fechaMexico, formatearMonto, importeVistaPrevia } from './formato';
+import { PRECIO_SERVICIO_MAX, esConceptoDeEstancia, fechaMexico, formatearMonto, importeVistaPrevia, parsearMonto, sinCerosFinales, validarMonto } from './formato';
 import ModalBase from './ModalBase';
 
 const CANTIDAD_MAX = 9999;
+/** Los mismos límites que el precio de un servicio del catálogo: la columna es la misma, `decimal(10,4)`. */
+const OPCIONES_PRECIO = { nombre: 'el precio unitario', obligatorio: true, decimales: 4, minimo: 0, maximo: PRECIO_SERVICIO_MAX } as const;
 const REMISION_MAX = 255;
 const ESPERA_AERONAVE_MS = 300;
 const MAXIMO_AERONAVES = 20;
@@ -93,6 +95,8 @@ const claveDeCategoria = (servicio: Servicio): string => (servicio.categoria !==
 export interface DatosRenglon {
     servicio_id: number;
     cantidad: number;
+    /** El precio tecleado, o null para que el servidor use el del catálogo, la remisión, el comisariato o la tarifa. */
+    precio_unitario: number | null;
     proveedor_id: number | null;
     remision: string | null;
     /** Solo en los tres tramos de tránsito: la aeronave cuya tarifa se cobra. */
@@ -113,7 +117,7 @@ interface Props {
     onGuardar: (datos: DatosRenglon) => Promise<void>;
 }
 
-type Campo = 'servicio_id' | 'cantidad' | 'proveedor_id' | 'remision' | 'aeronave_id' | 'remision_combustible_id' | 'servicio_comisariato_id';
+type Campo = 'servicio_id' | 'cantidad' | 'precio_unitario' | 'proveedor_id' | 'remision' | 'aeronave_id' | 'remision_combustible_id' | 'servicio_comisariato_id';
 
 /**
  * Agregar un servicio a una prefactura: servicio (solo activos, sin los de
@@ -133,6 +137,7 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
     const [categoriaId, setCategoriaId] = useState('');
     const [servicioId, setServicioId] = useState('');
     const [cantidad, setCantidad] = useState('1');
+    const [precio, setPrecio] = useState('');
     const [proveedorId, setProveedorId] = useState('');
     const [remision, setRemision] = useState('');
 
@@ -303,22 +308,43 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
                 : concepto === 'estancia_pernocta' ? aeronave.tarifa_pernocta_efectiva
                     : null;
 
-    // En un tránsito ajeno el precio NO es el del catálogo —ahí vale 99.00, que es relleno— sino
-    // la tarifa de la aeronave elegida. Es el mismo precio que el servidor va a cobrar.
-    // Con una remisión elegida pasa lo mismo: el precio y los litros son los de la remisión, no los del catálogo ni la cantidad tecleada.
+    // Con una remisión elegida los litros son los de la remisión, no la cantidad tecleada.
     const litrosDeLaRemision = remisionElegida === null ? null : Math.trunc(Number(remisionElegida.total_litros));
-    const precioEfectivo = pideMatricula
+
+    // El precio que aplicaría sin teclear nada. En un tránsito ajeno NO es el del catálogo —ahí vale
+    // 99.00, que es relleno— sino la tarifa de la aeronave elegida; con una remisión o un comisariato
+    // elegidos, el de ese registro. Es con lo que se precarga el campo y contra lo que el servidor
+    // decide si el precio se capturó a mano.
+    const precioHeredado = pideMatricula
         ? (aeronaveElegida === null ? null : tarifaDelTramo(aeronaveElegida, servicio?.concepto))
         : esCombustible && remisionElegida !== null
           ? remisionElegida.precio
-          : (servicio?.precio_unitario ?? null);
+          : esComisariato && comisariatoElegido !== null
+            ? comisariatoElegido.subtotal
+            : (servicio?.precio_unitario ?? null);
+
+    // Al cambiar de servicio, de remisión, de comisariato o de aeronave, el precio heredado cambia y
+    // el campo vuelve a precargarse: si no, quedaría el de la elección anterior y se cobraría eso.
+    useEffect(() => {
+        setPrecio(precioHeredado === null ? '' : sinCerosFinales(precioHeredado));
+        setErrores(previos => (previos.precio_unitario ? { ...previos, precio_unitario: undefined } : previos));
+    }, [precioHeredado]);
+
+    /** Lo tecleado, solo si es un importe válido. Es lo que se manda y con lo que se calcula la vista previa. */
+    const precioTecleado = validarMonto(precio, OPCIONES_PRECIO) === null ? parsearMonto(precio) : null;
+    const precioEfectivo = precioTecleado === null ? null : String(precioTecleado);
 
     // Vista previa: un ajuste desconocido lanza (a propósito: cobrar sin ajuste en silencio sería peor), y aquí se dice.
     let vistaPrevia: { importe: number } | { problema: string } | null = null;
-    if (servicio && pideMatricula && aeronaveElegida !== null && precioEfectivo === null) {
+    if (servicio && pideMatricula && aeronaveElegida !== null && precioHeredado === null && precioEfectivo === null) {
         vistaPrevia = { problema: 'Esta aeronave no tiene tarifa para ese tramo, ni propia ni por su categoría: no hay precio que cobrar.' };
     } else if (servicio && esComisariato && comisariatoElegido !== null) {
         // El importe y el margen son los del comisariato y su proveedor, que este menú no trae: la cifra la calcula el servidor al agregarlo.
+        // Sigue sin vista previa aunque el precio ya se pueda teclear, y es a propósito: el margen
+        // y el ajuste que se aplican salen del proveedor DEL COMISARIATO
+        // (`RenglonDeComisariato` lee `$comisariato->factServicio`), que no tiene por qué ser el
+        // servicio elegido en este menú. Calcularla con `servicio.margen` enseñaría una cifra que
+        // el servidor no va a cobrar. El precio tecleado SÍ viaja.
         vistaPrevia = null;
     } else if (servicio && esCombustible && remisionElegida !== null) {
         // El servidor cobra los litros enteros a su precio, sin margen ni ajuste: congela lo que dice la remisión.
@@ -375,6 +401,9 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
             else if (cantidadNumero > CANTIDAD_MAX) nuevos.cantidad = 'La cantidad no puede pasar de 9,999.';
         }
 
+        const errorPrecio = validarMonto(precio, OPCIONES_PRECIO);
+        if (errorPrecio !== null) nuevos.precio_unitario = errorPrecio;
+
         if (remision.trim().length > REMISION_MAX) nuevos.remision = `La remisión no puede pasar de ${REMISION_MAX} caracteres.`;
 
         return nuevos;
@@ -398,6 +427,7 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
             await onGuardar({
                 servicio_id: Number(servicioId),
                 cantidad: cantidadAEnviar,
+                precio_unitario: precioTecleado,
                 proveedor_id: proveedorId === '' ? null : Number(proveedorId),
                 remision: remision.trim() === '' ? null : remision.trim(),
                 aeronave_id: pideMatricula ? (aeronaveElegida?.aeronave_id ?? null) : null,
@@ -631,6 +661,37 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
                             {errores.servicio_comisariato_id && <p className={errorStyle}>{errores.servicio_comisariato_id}</p>}
                         </div>
                     )}
+
+                    <div>
+                        <label htmlFor="renglon-precio" className={labelStyle}>
+                            Precio unitario <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            id="renglon-precio"
+                            type="text"
+                            inputMode="decimal"
+                            autoComplete="off"
+                            value={precio}
+                            onChange={e => {
+                                setPrecio(e.target.value);
+                                limpiarError('precio_unitario');
+                            }}
+                            className={campoConError(!!errores.precio_unitario)}
+                            aria-invalid={errores.precio_unitario ? true : undefined}
+                        />
+                        {precioHeredado !== null && precioTecleado !== null && Number(precioHeredado) !== precioTecleado && (
+                            <p className="mt-1 text-[10px] font-bold text-amber-700">
+                                {remisionElegida !== null
+                                    ? `La remisión ${remisionElegida.folio} trae ${remisionElegida.precio}: el renglón cobrará otro precio y la remisión seguirá marcada como cobrada.`
+                                    : comisariatoElegido !== null
+                                      ? `El comisariato trae ${comisariatoElegido.subtotal}: el renglón cobrará otro precio y el comisariato seguirá marcado como cobrado.`
+                                      : aeronaveElegida !== null
+                                        ? `La tarifa de ${aeronaveElegida.matricula ?? 'esa aeronave'} para este tramo es ${precioHeredado}.`
+                                        : `El catálogo dice ${precioHeredado}.`}
+                            </p>
+                        )}
+                        {errores.precio_unitario && <p className={errorStyle}>{errores.precio_unitario}</p>}
+                    </div>
 
                     <div>
                         <label htmlFor="renglon-cantidad" className={labelStyle}>
