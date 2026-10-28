@@ -357,3 +357,130 @@ test('una salida anterior a la llegada no trae nada: la ventana no se da la vuel
 
     expect(App\Services\ComisariatosFacturables::candidatas($prefactura))->toBeEmpty();
 });
+
+test('el renglon de un comisariato toma el margen y el ajuste DEL SERVICIO, no ceros', function () {
+    $proveedor = proveedorComisariato('Comisariato_Manny', 50, FactServicio::AJUSTE_MAS_5);
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-20', '10:00', [
+        'fact_servicio_id' => $proveedor->id,
+        'subtotal' => 1000,
+    ]);
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/comisariatos/sincronizar")
+        ->assertOk()
+        ->assertJsonPath('agregados', 1);
+
+    $renglon = $prefactura->renglones()->whereNotNull('servicio_comisariato_id')->sole();
+
+    // Lo contrario que en combustible, y a proposito: aqui el margen ES el negocio.
+    expect((float) $renglon->margen)->toBe(50.0)
+        ->and($renglon->ajuste_precio)->toBe(FactServicio::AJUSTE_MAS_5)
+        ->and($renglon->es_de_tercero)->toBeTrue()
+        ->and((float) $renglon->precio_unitario)->toBe(1000.0)
+        ->and($renglon->cantidad)->toBe(1)
+        ->and($renglon->servicio_comisariato_id)->toBe($comisariato->id);
+});
+
+test('un proveedor al 0 por ciento (Comexa) no lleva margen ni es de tercero', function () {
+    $comexa = proveedorComisariato('Comisariato_Comexa', 0);
+    comisariatoPara('XA-UNO', '2026-10-20', '10:00', ['fact_servicio_id' => $comexa->id]);
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/comisariatos/sincronizar")->assertOk();
+
+    $renglon = $prefactura->renglones()->whereNotNull('servicio_comisariato_id')->sole();
+
+    expect((float) $renglon->margen)->toBe(0.0)
+        ->and($renglon->es_de_tercero)->toBeFalse()
+        ->and($renglon->servicio_id)->toBe($comexa->id)
+        ->and($renglon->nombre_servicio)->toBe('Comisariato_Comexa');
+});
+
+test('sincronizar dos veces no duplica nada', function () {
+    comisariatoPara('XA-UNO', '2026-10-20', '10:00');
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $ruta = "/api/facturacion/prefacturas/{$prefactura->id}/comisariatos/sincronizar";
+    $this->postJson($ruta)->assertOk()->assertJsonPath('agregados', 1);
+    $this->postJson($ruta)->assertOk()->assertJsonPath('agregados', 0);
+
+    expect($prefactura->renglones()->whereNotNull('servicio_comisariato_id')->count())->toBe(1);
+});
+
+test('los renglones nuevos siguen el orden de los que ya habia y entre ellos', function () {
+    $primero = comisariatoPara('XA-UNO', '2026-10-20', '09:00');
+    $segundo = comisariatoPara('XA-UNO', '2026-10-20', '15:00');
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+    $prefactura->renglones()->create([
+        'servicio_id' => $primero->fact_servicio_id,
+        'nombre_servicio' => 'Previo',
+        'precio_unitario' => 1,
+        'cantidad' => 1,
+        'orden' => 7,
+    ]);
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/comisariatos/sincronizar")
+        ->assertOk()
+        ->assertJsonPath('agregados', 2);
+
+    $renglones = $prefactura->renglones()->whereNotNull('servicio_comisariato_id')->reorder('orden')->get();
+
+    expect($renglones->pluck('servicio_comisariato_id')->all())->toBe([$primero->id, $segundo->id])
+        ->and($renglones->pluck('orden')->all())->toBe([8, 9]);
+});
+
+test('sincronizar deja una linea en la bitacora solo cuando agrego algo', function () {
+    comisariatoPara('XA-UNO', '2026-10-20', '10:00');
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $ruta = "/api/facturacion/prefacturas/{$prefactura->id}/comisariatos/sincronizar";
+    $this->postJson($ruta)->assertOk();
+    $this->postJson($ruta)->assertOk();
+
+    $entradas = App\Models\Bitacora::query()
+        ->where('modulo', App\Models\Bitacora::MODULO_FACTURACION_PREFACTURAS)
+        ->where('registro_id', $prefactura->id)
+        ->where('descripcion', 'like', '%comisariatos%')
+        ->count();
+
+    expect($entradas)->toBe(1);
+});
+
+test('una prefactura cerrada, descartada o reabierta no sincroniza', function (string $campo, string $valor, string $codigo) {
+    comisariatoPara('XA-UNO', '2026-10-20', '10:00');
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+    $prefactura->update([$campo => $valor]);
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/comisariatos/sincronizar")
+        ->assertStatus(409)
+        ->assertJsonPath('codigo', $codigo);
+
+    expect($prefactura->renglones()->count())->toBe(0);
+})->with([
+    'cerrada' => ['estado', FactPrefactura::ESTADO_CERRADA, 'ya_cerrada'],
+    'reabierta' => ['estado', FactPrefactura::ESTADO_REABIERTA, 'reabierta'],
+    'descartada' => ['status', 'N', 'ya_descartada'],
+]);
+
+test('sin el permiso de prefacturas no se sincroniza', function () {
+    comisariatoPara('XA-UNO', '2026-10-20', '10:00');
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+
+    $this->actingAs(usuarioConSubdepartamento('factCatalogo', 'Facturacion'));
+
+    $this->postJson("/api/facturacion/prefacturas/{$prefactura->id}/comisariatos/sincronizar")->assertForbidden();
+
+    expect($prefactura->renglones()->count())->toBe(0);
+});

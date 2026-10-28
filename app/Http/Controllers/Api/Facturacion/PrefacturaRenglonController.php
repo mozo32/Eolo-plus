@@ -12,7 +12,9 @@ use App\Models\FactPrefactura;
 use App\Models\FactServicio;
 use App\Models\Remision;
 use App\Services\CargosEstancia;
+use App\Services\ComisariatosFacturables;
 use App\Services\RemisionesFacturables;
+use App\Services\RenglonDeComisariato;
 use App\Services\ServicioDeEstanciaNoDisponibleException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -255,6 +257,59 @@ class PrefacturaRenglonController extends Controller
                 'agregados' => $agregados,
                 'fuera_de_ventana' => $this->remisionesFueraDeVentana($actual),
             ]);
+        });
+    }
+
+    /**
+     * Trae a la prefactura los comisariatos de Tráfico de su matrícula que caen en su estancia.
+     *
+     * Hermano de `sincronizarRemisiones()`: mismas guardas, mismo candado dentro de la
+     * transacción, mismo orden de rechazos y misma bitácora. Es IDEMPOTENTE y solo AÑADE; lo
+     * que el operador quitó a mano de ESTA prefactura no vuelve (lo resuelve `candidatas()`).
+     *
+     * No hay un caso «falta el servicio»: el proveedor viaja en cada comisariato y `candidatas()`
+     * ya descarta los que no lo tienen. El renglón lo arma `RenglonDeComisariato`, que toma el
+     * margen y el ajuste del servicio: aquí el margen es el negocio, al revés que en combustible.
+     */
+    public function sincronizarComisariatos(Request $request, int $id): JsonResponse
+    {
+        $prefactura = FactPrefactura::findOrFail($id);
+
+        if ($respuesta = $this->rechazoRapido($prefactura) ?? $this->rechazarSincronizarSiReabierta($prefactura)) {
+            return $respuesta;
+        }
+
+        return DB::transaction(function () use ($id, $request) {
+            $actual = $this->bloquear($id);
+
+            if ($respuesta = $this->rechazarSiDescartada($actual) ?? $this->rechazarSincronizarSiReabierta($actual)) {
+                return $respuesta;
+            }
+
+            // Una sola consulta para los proveedores de todas: leer `factServicio` de uno en uno
+            // dentro del bucle seria N+1.
+            $candidatas = ComisariatosFacturables::candidatas($actual)->load('factServicio');
+
+            $orden = (int) $actual->renglones()->reorder()->max('orden');
+            $agregados = 0;
+
+            foreach ($candidatas as $comisariato) {
+                $actual->renglones()->create(RenglonDeComisariato::atributos($comisariato, ++$orden));
+
+                $agregados++;
+            }
+
+            if ($agregados > 0) {
+                Bitacora::log(
+                    modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
+                    accion: Bitacora::ACCION_CREAR,
+                    descripcion: "Se trajeron {$agregados} comisariatos a la prefactura {$actual->id}.",
+                    usuarioId: $request->user()->id,
+                    registroId: $actual->id,
+                );
+            }
+
+            return response()->json(['agregados' => $agregados]);
         });
     }
 
