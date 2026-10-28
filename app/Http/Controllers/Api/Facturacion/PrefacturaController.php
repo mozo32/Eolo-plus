@@ -718,6 +718,9 @@ class PrefacturaController extends Controller
             // El cobro solo va en la ficha: el listado no lo muestra y cada fila costaría una docena de consultas.
             $datos += $this->cobro($p);
 
+            // Un solo SELECT para los comisariatos de todos los renglones, y solo la columna que se enseña.
+            $p->loadMissing('renglones.servicioComisariato:id,forma_pago');
+
             $datos['renglones'] = $p->renglones->map(fn (FactPrefacturaRenglon $r) => [
                 'id' => $r->id,
                 'servicio_id' => $r->servicio_id,
@@ -730,6 +733,10 @@ class PrefacturaController extends Controller
                 'remision' => $r->remision,
                 'es_cortesia' => $r->es_cortesia,
                 'grupo' => $r->grupo,
+                // Solo en un renglón nacido de un comisariato. La forma de pago va TAL COMO está escrita en Tráfico: el campo no está
+                // normalizado (hay cuatro grafías de «cargo a la matrícula»), así que el sistema no la interpreta, solo la enseña.
+                'servicio_comisariato_id' => $r->servicio_comisariato_id,
+                'forma_pago_comisariato' => $r->servicioComisariato?->forma_pago,
             ] + $this->importeDelRenglon($r))->all();
 
             $datos['versiones'] = $this->versiones($p);

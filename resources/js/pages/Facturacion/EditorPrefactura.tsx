@@ -20,10 +20,16 @@ const TEXTO_MAX = 120;
 const MENSAJE_HORA_24 = 'La hora va en formato de 24 horas, de 00:00 a 23:59 (por ejemplo, 14:30).';
 
 /**
- * La sincronización automática de remisiones solo corre en un borrador activo. Una reabierta es un documento ya emitido que alguien abrió
- * para corregir algo concreto: no se le traen renglones solos (el servidor tampoco lo hace); las remisiones se eligen a mano en el modal.
+ * La sincronización automática de remisiones y de comisariatos solo corre en un borrador activo. Una reabierta es un documento ya emitido que
+ * alguien abrió para corregir algo concreto: no se le traen renglones solos (el servidor tampoco lo hace); se eligen a mano en el modal.
  */
 const sincronizaSola = (p: Prefactura): boolean => p.estado === 'borrador' && p.status !== 'N';
+
+/**
+ * Un comisariato de importe 0 se marca para revisar. La marca se deriva del propio importe del renglón (no hay columna): una cortesía
+ * también vale 0, pero ahí el 0 es a propósito y no se avisa.
+ */
+const esComisariatoSinImporte = (r: RenglonPrefactura): boolean => r.servicio_comisariato_id !== null && !r.es_cortesia && r.importe !== null && Number(r.importe) === 0;
 
 /** Lo mismo que acepta el servidor para la etiqueta de un grupo. */
 const GRUPO_MAX = 60;
@@ -375,6 +381,30 @@ export default function EditorPrefactura({ id }: Props) {
         }
     }, [id, cargar]);
 
+    /**
+     * Lo mismo con los comisariatos de Tráfico de la estancia. Idempotente, igual que el de remisiones. Un fallo aquí se avisa y lo demás sigue.
+     */
+    const sincronizarComisariatos = useCallback(async () => {
+        try {
+            const resultado = await apiPrefacturas.sincronizarComisariatos(id);
+            await cargar();
+
+            if (resultado.agregados > 0) {
+                toast.fire({ icon: 'success', titleText: resultado.agregados === 1 ? 'Se trajo 1 comisariato.' : `Se trajeron ${resultado.agregados} comisariatos.` });
+            }
+        } catch (e) {
+            toast.fire({ icon: 'warning', titleText: `No se pudieron traer los comisariatos. ${mensajeDeError(e)}`, timer: 8000 });
+            // Un 409 dice que la ficha en pantalla ya no es la del servidor (se cerró o se descartó): se refresca.
+            if (e instanceof ErrorApi && e.status === 409) await cargar();
+        }
+    }, [id, cargar]);
+
+    /** Una detrás de otra: dos recargas de la ficha a la vez solo se pisarían. */
+    const sincronizarSolos = useCallback(async () => {
+        await sincronizarRemisiones();
+        await sincronizarComisariatos();
+    }, [sincronizarRemisiones, sincronizarComisariatos]);
+
     // Una sola vez por prefactura y solo en un borrador activo: ni una cerrada, ni una descartada, ni una reabierta.
     const sincronizadaRef = useRef<number | null>(null);
     const prefacturaId = prefactura?.id ?? null;
@@ -384,8 +414,8 @@ export default function EditorPrefactura({ id }: Props) {
         if (prefacturaId === null || !sePuedeSincronizar || sincronizadaRef.current === prefacturaId) return;
 
         sincronizadaRef.current = prefacturaId;
-        void sincronizarRemisiones();
-    }, [prefacturaId, sePuedeSincronizar, sincronizarRemisiones]);
+        void sincronizarSolos();
+    }, [prefacturaId, sePuedeSincronizar, sincronizarSolos]);
 
     const breadcrumbs: BreadcrumbItem[] = [{ title: 'Prefacturas', href: facturacionPrefacturas().url }, { title: prefactura ? (prefactura.folio === null ? `Borrador ${prefactura.matricula ?? ''}`.trim() : `Folio ${prefactura.folio}`) : 'Prefactura' }];
 
@@ -578,7 +608,7 @@ export default function EditorPrefactura({ id }: Props) {
                 // Al guardar la salida el servidor recalcula la estancia y puede dejarla sin cobrar (Guarda, sin ficha, tarifa nula) o perder una
                 // cortesía. Un toast de «guardado» encima sería el cobro silencioso: se queda como aviso en la tabla y se explica en un diálogo.
                 setAvisoCargos(avisoDeEstancia);
-                if (cambioLaSalida) await sincronizarRemisiones();
+                if (cambioLaSalida) await sincronizarSolos();
                 await Swal.fire({
                     icon: 'warning',
                     titleText: 'Encabezado guardado, con un aviso de estancia',
@@ -591,7 +621,7 @@ export default function EditorPrefactura({ id }: Props) {
 
             toast.fire({ icon: 'success', titleText: 'Encabezado guardado.' });
             // Después del aviso de guardado: si trae remisiones, su aviso es el que queda a la vista.
-            if (cambioLaSalida) await sincronizarRemisiones();
+            if (cambioLaSalida) await sincronizarSolos();
         } catch (e) {
             const delCampo = e instanceof ErrorApi && e.codigo === null ? Object.entries(e.errors).filter(([campo]) => CAMPOS_DEL_ENCABEZADO.includes(campo as CampoEncabezado)) : [];
 
@@ -1409,6 +1439,11 @@ export default function EditorPrefactura({ id }: Props) {
                                                             CORTESÍA
                                                         </span>
                                                     )}
+                                                    {esComisariatoSinImporte(renglon) && (
+                                                        <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black text-amber-700" title="Este comisariato se registró en Tráfico con importe 0: revísalo antes de cerrar, o quítalo si no se cobra.">
+                                                            REVISAR: IMPORTE 0
+                                                        </span>
+                                                    )}
                                                     {renglon.grupo !== null && (
                                                         <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-[9px] font-black text-indigo-700" title={`Grupo «${renglon.grupo}»: en el documento los renglones con esta etiqueta salen juntos, en una sola fila.`}>
                                                             {renglon.grupo}
@@ -1420,6 +1455,12 @@ export default function EditorPrefactura({ id }: Props) {
                                                         {renglon.remision ? `Remisión ${renglon.remision}` : ''}
                                                         {renglon.remision && Number(renglon.margen) > 0 ? ' · ' : ''}
                                                         {Number(renglon.margen) > 0 ? `Margen ${Number(renglon.margen)} %` : ''}
+                                                    </p>
+                                                )}
+                                                {renglon.servicio_comisariato_id !== null && (
+                                                    // Tal como está escrita en Tráfico, sin interpretarla: así quien factura ve de un vistazo cuál quitar.
+                                                    <p className="text-[10px] font-bold text-slate-400">
+                                                        Forma de pago: <span className="text-slate-600">{renglon.forma_pago_comisariato === null || renglon.forma_pago_comisariato.trim() === '' ? 'sin registrar' : renglon.forma_pago_comisariato}</span>
                                                     </p>
                                                 )}
                                             </td>

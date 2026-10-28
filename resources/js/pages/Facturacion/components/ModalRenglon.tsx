@@ -6,6 +6,7 @@ import {
     apiServicios,
     obtenerAeronavesFacturablesApi,
     type AeronaveFacturable,
+    type ComisariatoFacturable,
     type Proveedor,
     type RemisionFacturable,
     type Servicio,
@@ -41,6 +42,24 @@ function etiquetaDeRemision(remision: RemisionFacturable): string {
     return etiqueta;
 }
 
+/** La opción del menú: «20/10/2026 10:00 — $1,000.00 — Proveedor — Cargo a la matrícula», más lo que impide o advierte. */
+function etiquetaDeComisariato(comisariato: ComisariatoFacturable): string {
+    const hora = comisariato.hora_entrega === null ? '' : ` ${comisariato.hora_entrega.slice(0, 5)}`;
+    const fecha = comisariato.fecha_entrega === null ? 'sin fecha' : fechaMexico(comisariato.fecha_entrega);
+    // La forma de pago se enseña tal como está escrita en Tráfico: no se interpreta.
+    let etiqueta = `${fecha}${hora} — ${formatearMonto(comisariato.subtotal)} — ${comisariato.proveedor ?? 'sin proveedor'} — ${comisariato.forma_pago ?? 'sin forma de pago'}`;
+
+    // Ya en este documento no es de otro: lo dice el servidor con un booleano, nunca el texto de `tomado_por`.
+    if (comisariato.en_este_documento) etiqueta += ' · ya está en este documento';
+    // Tomado por OTRO documento solo se marca: elegirlo está permitido, para rescatar una marca puesta por error.
+    else if (comisariato.tomado_por !== null) etiqueta += ` · ya facturado en ${comisariato.tomado_por}`;
+
+    if (comisariato.sin_proveedor) etiqueta += ' · sin proveedor';
+    if (comisariato.sin_importe) etiqueta += ' · importe 0, revísalo';
+
+    return etiqueta;
+}
+
 /** Los tres tramos SI se pueden agregar, a nombre de otra aeronave; los dos ajustes no. */
 const CONCEPTOS_DE_TRANSITO = ['estancia_transito_2h', 'estancia_transito_12h', 'estancia_pernocta'];
 
@@ -57,6 +76,9 @@ const esTramoDeTransito = (concepto: string | null | undefined): boolean => type
  * suyo, pero mientras esté en `false` no se pueden capturar nuevos desde aquí.
  */
 const MUESTRA_PROVEEDOR = false;
+
+/** La categoría del catálogo cuyos servicios son los proveedores de comisariato. */
+const CATEGORIA_COMISARIATOS = 'Comisariatos';
 
 /** Valor del menú de categoría para los servicios que no tienen una activa. */
 const SIN_CATEGORIA = 'sin-categoria';
@@ -77,10 +99,12 @@ export interface DatosRenglon {
     aeronave_id: number | null;
     /** Solo en el combustible: la remisión de la que salen los litros y el precio. null cobra a mano, al precio del catálogo. */
     remision_combustible_id: number | null;
+    /** Solo en un comisariato: el de Tráfico del que sale el importe. null cobra a mano, con el servicio elegido. */
+    servicio_comisariato_id: number | null;
 }
 
 interface Props {
-    /** La prefactura que se edita: el buscador de remisiones marca cuáles ya están en ella. */
+    /** La prefactura que se edita: los buscadores de remisiones y de comisariatos marcan cuáles ya están en ella. */
     prefacturaId: number;
     /** La matrícula de la prefactura: con ella arranca el buscador de remisiones. */
     matricula: string | null;
@@ -89,7 +113,7 @@ interface Props {
     onGuardar: (datos: DatosRenglon) => Promise<void>;
 }
 
-type Campo = 'servicio_id' | 'cantidad' | 'proveedor_id' | 'remision' | 'aeronave_id' | 'remision_combustible_id';
+type Campo = 'servicio_id' | 'cantidad' | 'proveedor_id' | 'remision' | 'aeronave_id' | 'remision_combustible_id' | 'servicio_comisariato_id';
 
 /**
  * Agregar un servicio a una prefactura: servicio (solo activos, sin los de
@@ -123,6 +147,11 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
     const [remisionElegida, setRemisionElegida] = useState<RemisionFacturable | null>(null);
     const [errorRemision, setErrorRemision] = useState<string | null>(null);
     const [buscandoRemision, setBuscandoRemision] = useState(false);
+
+    const [comisariatos, setComisariatos] = useState<ComisariatoFacturable[]>([]);
+    const [comisariatoElegido, setComisariatoElegido] = useState<ComisariatoFacturable | null>(null);
+    const [errorComisariato, setErrorComisariato] = useState<string | null>(null);
+    const [buscandoComisariato, setBuscandoComisariato] = useState(false);
 
     const [errores, setErrores] = useState<Partial<Record<Campo, string>>>({});
     const [mensajeGeneral, setMensajeGeneral] = useState<string | null>(null);
@@ -180,6 +209,7 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
 
     const pideMatricula = esTramoDeTransito(servicio?.concepto);
     const esCombustible = servicio?.concepto === 'combustible';
+    const esComisariato = servicio?.categoria?.nombre === CATEGORIA_COMISARIATOS;
 
     useEffect(() => {
         if (! pideMatricula) return;
@@ -237,6 +267,34 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
         };
     }, [busquedaRemision, esCombustible, prefacturaId]);
 
+    useEffect(() => {
+        if (! esComisariato) return;
+
+        let vigente = true;
+
+        // El servidor ya acota por la matrícula de la prefactura: no hay caja de búsqueda, se pide la lista una vez.
+        void (async () => {
+            setBuscandoComisariato(true);
+
+            try {
+                const lista = await apiPrefacturas.comisariatosDe(prefacturaId);
+                if (!vigente) return;
+                setComisariatos(lista);
+                setErrorComisariato(null);
+            } catch (e) {
+                if (!vigente) return;
+                setComisariatos([]);
+                setErrorComisariato(e instanceof Error ? e.message : 'No se pudieron cargar los comisariatos.');
+            } finally {
+                if (vigente) setBuscandoComisariato(false);
+            }
+        })();
+
+        return () => {
+            vigente = false;
+        };
+    }, [esComisariato, prefacturaId]);
+
     /** La tarifa EFECTIVA del tramo —propia o heredada de la categoría—, ya resuelta por el servidor. */
     const tarifaDelTramo = (aeronave: AeronaveFacturable, concepto: string | null | undefined): string | null =>
         concepto === 'estancia_transito_2h' ? aeronave.tarifa_transito_2h_efectiva
@@ -258,6 +316,9 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
     let vistaPrevia: { importe: number } | { problema: string } | null = null;
     if (servicio && pideMatricula && aeronaveElegida !== null && precioEfectivo === null) {
         vistaPrevia = { problema: 'Esta aeronave no tiene tarifa para ese tramo, ni propia ni por su categoría: no hay precio que cobrar.' };
+    } else if (servicio && esComisariato && comisariatoElegido !== null) {
+        // El importe y el margen son los del comisariato y su proveedor, que este menú no trae: la cifra la calcula el servidor al agregarlo.
+        vistaPrevia = null;
     } else if (servicio && esCombustible && remisionElegida !== null) {
         // El servidor cobra los litros enteros a su precio, sin margen ni ajuste: congela lo que dice la remisión.
         vistaPrevia = precioEfectivo !== null && litrosDeLaRemision !== null ? { importe: importeVistaPrevia(Number(precioEfectivo), 0, 'ninguno', litrosDeLaRemision) } : null;
@@ -285,7 +346,15 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
         limpiarError('remision_combustible_id');
     };
 
-    const tieneCambios = categoriaId !== '' || servicioId !== '' || cantidad !== '1' || proveedorId !== '' || remision !== '' || aeronaveElegida !== null || remisionElegida !== null;
+    /** Al cambiar de servicio el comisariato elegido deja de aplicar. */
+    const limpiarComisariato = () => {
+        setComisariatoElegido(null);
+        setComisariatos([]);
+        setErrorComisariato(null);
+        limpiarError('servicio_comisariato_id');
+    };
+
+    const tieneCambios = comisariatoElegido !== null || categoriaId !== '' || servicioId !== '' || cantidad !== '1' || proveedorId !== '' || remision !== '' || aeronaveElegida !== null || remisionElegida !== null;
 
     const validar = (): Partial<Record<Campo, string>> => {
         const nuevos: Partial<Record<Campo, string>> = {};
@@ -297,8 +366,8 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
 
         if (pideMatricula && aeronaveElegida === null) nuevos.aeronave_id = 'Elige la aeronave cuyo tránsito se va a cobrar.';
 
-        // Con una remisión elegida la cantidad no se usa (los litros los pone la remisión), así que no se valida.
-        if (remisionElegida === null) {
+        // Con una remisión o un comisariato elegido la cantidad no se usa (la ponen ellos), así que no se valida.
+        if (remisionElegida === null && comisariatoElegido === null) {
             if (cantidadNumero === null || cantidadNumero < 1) nuevos.cantidad = 'La cantidad debe ser un número entero de al menos 1.';
             else if (cantidadNumero > CANTIDAD_MAX) nuevos.cantidad = 'La cantidad no puede pasar de 9,999.';
         }
@@ -316,7 +385,8 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
         setErrores(nuevos);
         setMensajeGeneral(null);
         // Con una remisión el servidor ignora la cantidad y toma los litros de ella, pero la exige entera y de al menos 1: va el mínimo.
-        const cantidadAEnviar = remisionElegida === null ? cantidadNumero : 1;
+        // Con un comisariato pasa igual: es una entrega, y el servidor ignora la cantidad.
+        const cantidadAEnviar = remisionElegida === null && comisariatoElegido === null ? cantidadNumero : 1;
         if (Object.keys(nuevos).length > 0 || cantidadAEnviar === null) return;
 
         setGuardando(true);
@@ -329,6 +399,7 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
                 remision: remision.trim() === '' ? null : remision.trim(),
                 aeronave_id: pideMatricula ? (aeronaveElegida?.aeronave_id ?? null) : null,
                 remision_combustible_id: esCombustible ? (remisionElegida?.id ?? null) : null,
+                servicio_comisariato_id: esComisariato ? (comisariatoElegido?.id ?? null) : null,
             });
         } catch (error) {
             if (error instanceof ErrorApi && Object.keys(error.errors).length > 0) {
@@ -354,6 +425,12 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
         ...remisiones,
     ];
 
+    // Igual: el elegido va primero aunque la lista no lo traiga.
+    const opcionesComisariato = [
+        ...(comisariatoElegido !== null && ! comisariatos.some(c => c.id === comisariatoElegido.id) ? [comisariatoElegido] : []),
+        ...comisariatos,
+    ];
+
     return (
         <ModalBase idTitulo="titulo-modal-renglon" titulo="Agregar servicio" subtitulo="Elige el servicio y la cantidad" tieneCambios={tieneCambios} onCerrar={onCerrar} ancho="max-w-xl">
             <form onSubmit={guardar} noValidate className="space-y-5">
@@ -376,6 +453,7 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
                                 setAeronaveElegida(null);
                                 setBusquedaAeronave('');
                                 limpiarRemision();
+                                limpiarComisariato();
                                 limpiarError('servicio_id');
                                 limpiarError('aeronave_id');
                             }}
@@ -403,6 +481,7 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
                                 setAeronaveElegida(null);
                                 setBusquedaAeronave('');
                                 limpiarRemision();
+                                limpiarComisariato();
                                 limpiarError('servicio_id');
                                 limpiarError('aeronave_id');
                             }}
@@ -514,6 +593,42 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
                         </div>
                     )}
 
+                    {esComisariato && (
+                        <div>
+                            <label htmlFor="renglon-comisariato" className={labelStyle}>
+                                Comisariato de Tráfico
+                            </label>
+                            <p className="mb-1 text-[10px] font-bold text-slate-400 italic">
+                                Opcional. Con un comisariato, el importe sale de él; sin él, se cobra a mano al precio del servicio. Salen los de la matrícula de esta prefactura.
+                            </p>
+                            <select
+                                id="renglon-comisariato"
+                                value={comisariatoElegido === null ? '' : String(comisariatoElegido.id)}
+                                onChange={e => {
+                                    setComisariatoElegido(opcionesComisariato.find(c => String(c.id) === e.target.value) ?? null);
+                                    limpiarError('servicio_comisariato_id');
+                                    limpiarError('cantidad');
+                                }}
+                                className={campoConError(!!errores.servicio_comisariato_id)}
+                                aria-invalid={errores.servicio_comisariato_id ? true : undefined}
+                            >
+                                <option value="">Sin comisariato (cobrar a mano)</option>
+                                {opcionesComisariato.map(c => (
+                                    // Solo se deshabilita lo que el servidor rechaza: repetido en ESTE documento (booleano, no el texto de `tomado_por`) o sin proveedor.
+                                    <option key={c.id} value={c.id} disabled={c.en_este_documento || c.sin_proveedor}>
+                                        {etiquetaDeComisariato(c)}
+                                    </option>
+                                ))}
+                            </select>
+                            {buscandoComisariato && <p className="mt-1 text-[10px] font-bold text-slate-400 italic">Buscando…</p>}
+                            {errorComisariato && <p className={errorStyle}>{errorComisariato}</p>}
+                            {!buscandoComisariato && !errorComisariato && comisariatos.length === 0 && (
+                                <p className="mt-1 text-[10px] font-bold text-slate-400 italic">Esta matrícula no tiene comisariatos.</p>
+                            )}
+                            {errores.servicio_comisariato_id && <p className={errorStyle}>{errores.servicio_comisariato_id}</p>}
+                        </div>
+                    )}
+
                     <div>
                         <label htmlFor="renglon-cantidad" className={labelStyle}>
                             Cantidad <span className="text-red-500">*</span>
@@ -523,8 +638,8 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
                             type="text"
                             inputMode="numeric"
                             autoComplete="off"
-                            value={litrosDeLaRemision === null ? cantidad : String(litrosDeLaRemision)}
-                            disabled={remisionElegida !== null}
+                            value={litrosDeLaRemision !== null ? String(litrosDeLaRemision) : comisariatoElegido !== null ? '1' : cantidad}
+                            disabled={remisionElegida !== null || comisariatoElegido !== null}
                             onChange={e => {
                                 setCantidad(e.target.value);
                                 limpiarError('cantidad');
@@ -533,6 +648,7 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
                             aria-invalid={errores.cantidad ? true : undefined}
                         />
                         {remisionElegida !== null && <p className="mt-1 text-[10px] font-bold text-slate-400 italic">Los litros los pone la remisión.</p>}
+                        {comisariatoElegido !== null && <p className="mt-1 text-[10px] font-bold text-slate-400 italic">Un comisariato es una sola entrega.</p>}
                         {errores.cantidad && <p className={errorStyle}>{errores.cantidad}</p>}
                     </div>
 
@@ -588,7 +704,9 @@ export default function ModalRenglon({ prefacturaId, matricula, onCerrar, onGuar
                         <p className="mt-1 text-[10px] font-bold text-slate-500 italic">
                             {vistaPrevia && 'problema' in vistaPrevia
                                 ? vistaPrevia.problema
-                                : servicio && esCombustible && remisionElegida !== null
+                                : servicio && esComisariato && comisariatoElegido !== null
+                                  ? 'El importe sale del comisariato, con el margen de su proveedor; el sistema calcula la cifra que cobra al agregarlo.'
+                                  : servicio && esCombustible && remisionElegida !== null
                                   ? 'Es una vista previa con los litros y el precio de la remisión, sin margen ni ajuste; el sistema calcula la cifra que cobra al agregarlo.'
                                   : servicio
                                   ? 'Es una vista previa con el precio, el margen y el ajuste del servicio; el sistema calcula la cifra que cobra al agregarlo.'

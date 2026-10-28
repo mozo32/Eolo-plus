@@ -435,6 +435,27 @@ export type RemisionFacturable = {
     sin_precio: boolean;
 };
 
+/**
+ * Un comisariato de Tráfico que se puede cobrar en la prefactura. Las claves son las diez que fija el servidor.
+ * `subtotal` llega como texto ("1000.00"); `forma_pago` es el texto libre de Tráfico, sin normalizar.
+ */
+export type ComisariatoFacturable = {
+    id: number;
+    fecha_entrega: string | null;
+    hora_entrega: string | null;
+    subtotal: string;
+    forma_pago: string | null;
+    proveedor: string | null;
+    /** El OTRO documento que ya lo tiene, o null si está libre (o si es de esta misma prefactura: ver `en_este_documento`). Solo marca: elegirlo está permitido. */
+    tomado_por: string | null;
+    /** Ya tiene renglón en ESTA prefactura: no se puede elegir otra vez (el servidor lo rechaza con 422). */
+    en_este_documento: boolean;
+    /** Sin proveedor no hay servicio con el que cobrarlo: el servidor lo rechaza con 422. */
+    sin_proveedor: boolean;
+    /** Importe 0: se puede elegir, pero se marca para revisar. */
+    sin_importe: boolean;
+};
+
 export type ResultadoSincronizar = {
     agregados: number;
     fuera_de_ventana: { renglon_id: number; folio: string }[];
@@ -479,6 +500,10 @@ export interface RenglonPrefactura {
     es_cortesia: boolean;
     /** Etiqueta del grupo en el que sale el renglón en el documento; null si va suelto. La etiqueta ES la identidad del grupo. */
     grupo: string | null;
+    /** Solo en un renglón nacido de un comisariato de Tráfico. */
+    servicio_comisariato_id: number | null;
+    /** La forma de pago de ese comisariato TAL COMO está escrita en Tráfico (sin normalizar): se enseña, no se interpreta. */
+    forma_pago_comisariato: string | null;
 }
 
 /** Lo que el sello guardó contra lo que derivan hoy los renglones, por campo. */
@@ -632,6 +657,10 @@ export const apiPrefacturas = {
     sincronizarRemisiones: (id: number) => pedir<ResultadoSincronizar>(`${BASE}/prefacturas/${id}/remisiones/sincronizar`, { method: 'POST' }),
     /** Las remisiones de una matrícula, para elegir una a mano. `q` es la matrícula a buscar. */
     remisionesDe: (id: number, q: string) => pedir<{ remisiones: RemisionFacturable[] }>(`${BASE}/prefacturas/${id}/remisiones?q=${encodeURIComponent(q)}`),
+    /** Trae los comisariatos de Tráfico de la estancia y los agrega como renglones. Idempotente, igual que el de remisiones. */
+    sincronizarComisariatos: (id: number) => pedir<{ agregados: number }>(`${BASE}/prefacturas/${id}/comisariatos/sincronizar`, { method: 'POST' }),
+    /** Los comisariatos de la matrícula de la prefactura, para elegir uno a mano. */
+    comisariatosDe: (id: number) => pedir<ComisariatoFacturable[]>(`${BASE}/prefacturas/${id}/comisariatos`),
     quitarRenglon: (id: number, renglon: number) => pedir<{ message: string }>(`${BASE}/prefacturas/${id}/renglones/${renglon}`, { method: 'DELETE' }),
     /** Los dos ajustes son opcionales: ausentes cuentan 0. */
     estancia: (id: number, datos: DatosEstancia) => pedir<{ renglones: number; motivo: string | null }>(`${BASE}/prefacturas/${id}/estancia`, { method: 'PATCH', body: datos }),

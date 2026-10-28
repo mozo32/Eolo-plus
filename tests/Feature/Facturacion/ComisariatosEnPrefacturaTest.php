@@ -829,3 +829,33 @@ test('el buscador devuelve los valores del comisariato: el subtotal, no el total
         ->and($fila['hora_entrega'])->toBe('10:30')
         ->and($fila['proveedor'])->toBe('Comisariato_Manny');
 });
+
+test('la ficha enseña la forma de pago del comisariato tal como esta escrita, y null en los demas renglones', function () {
+    $comisariato = comisariatoPara('XA-UNO', '2026-10-20', '10:00', ['forma_pago' => 'G']);
+    $prefactura = prefacturaDe('XA-UNO', '2026-10-20 08:00:00', '2026-10-21 08:00:00');
+    $prefactura->renglones()->create([
+        'servicio_id' => $comisariato->fact_servicio_id,
+        'servicio_comisariato_id' => $comisariato->id,
+        'nombre_servicio' => 'Comisariato_Manny',
+        'precio_unitario' => 1000,
+        'cantidad' => 1,
+        'orden' => 1,
+    ]);
+    $prefactura->renglones()->create([
+        'servicio_id' => $comisariato->fact_servicio_id,
+        'nombre_servicio' => 'Suelto',
+        'precio_unitario' => 10,
+        'cantidad' => 1,
+        'orden' => 2,
+    ]);
+
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $renglones = $this->getJson("/api/facturacion/prefacturas/{$prefactura->id}")->assertOk()->json('prefactura.renglones');
+
+    // Sin interpretar: «G» llega como «G», no como «cargo a la matrícula» ni como nada.
+    expect($renglones[0]['servicio_comisariato_id'])->toBe($comisariato->id)
+        ->and($renglones[0]['forma_pago_comisariato'])->toBe('G')
+        ->and($renglones[1]['servicio_comisariato_id'])->toBeNull()
+        ->and($renglones[1]['forma_pago_comisariato'])->toBeNull();
+});
