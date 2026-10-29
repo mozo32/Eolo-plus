@@ -534,3 +534,13 @@ test('las tarifas de una prefactura que no existe dan 404', function () {
 
     $this->getJson('/api/facturacion/prefacturas/999999/tarifas-estancia')->assertNotFound();
 });
+
+// Un cero es una tarifa válida y distinta de la ausencia: separa «se descuenta cero» de «no se puede descontar».
+test('una tarifa de cero viaja como cero y no como null', function () {
+    $p = conEstanciaCobrada();
+    FactAeronave::query()->where('aeronave_id', $p->aeronave_id)->update(['tarifa_pernocta' => 0.00]);
+
+    $this->getJson("/api/facturacion/prefacturas/{$p->id}/tarifas-estancia")
+        ->assertOk()
+        ->assertJsonPath('tarifas.estancia_pernocta', '0.00');
+});
