@@ -104,7 +104,7 @@ test('sin grupo en el renglon de origen el descuento sale suelto', function () {
     expect(renglonDeConcepto($p, FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_PERNOCTA)->grupo)->toBeNull();
 });
 
-test('el descuento sale justo despues del cargo que descuenta', function () {
+test('el descuento sale justo despues del cargo que descuenta, y empuja a los de atras', function () {
     $p = conEstanciaCobrada();
     $transito2h = renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H);
 
@@ -113,8 +113,14 @@ test('el descuento sale justo despues del cargo que descuenta', function () {
         'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H],
     ])->assertOk();
 
-    expect(renglonDeConcepto($p, FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_TRANSITO_2H)->orden)
-        ->toBe($transito2h->orden + 1);
+    // La posicion OBSERVABLE: los renglones salen por `orden` y luego por `id`, asi que
+    // comprobar `orden == orden del cargo + 1` no garantiza donde cae la fila.
+    expect($p->fresh()->renglones()->pluck('concepto')->all())->toBe([
+        FactServicio::CONCEPTO_ESTANCIA_PERNOCTA,
+        FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H,
+        FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_TRANSITO_2H,
+        FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H,
+    ]);
 });
 
 test('el mismo tramo se puede descontar dos veces y el total baja el doble', function () {
@@ -182,5 +188,5 @@ test('la ficha que responde el endpoint ya trae el renglon del descuento', funct
         'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->id,
         'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
     ])->assertOk()
-        ->assertJsonPath('prefactura.renglones.2.concepto', FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_PERNOCTA);
+        ->assertJsonPath('prefactura.renglones.1.concepto', FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_PERNOCTA);
 });

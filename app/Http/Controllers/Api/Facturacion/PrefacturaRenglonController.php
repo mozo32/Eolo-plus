@@ -961,16 +961,28 @@ class PrefacturaRenglonController extends Controller
      * cobra— va al final. `reorder()` es obligatorio: la relación `renglones()` tiene
      * orden por defecto y sin él el `max()` saldría con un ORDER BY que MySQL rechaza
      * en algunos modos; es lo que ya hace `CargosEstancia::maximoOrden()`.
+     *
+     * El hueco se abre empujando los `orden` de los renglones de atrás.
      */
     private function ordenDelDescuento(FactPrefactura $prefactura, string $concepto): int
     {
         $delCargo = $prefactura->renglones()->where('concepto', $concepto)->reorder()->max('orden');
 
-        if ($delCargo !== null) {
-            return (int) $delCargo + 1;
+        if ($delCargo === null) {
+            return (int) $prefactura->renglones()->reorder()->max('orden') + 1;
         }
 
-        return (int) $prefactura->renglones()->reorder()->max('orden') + 1;
+        $nuevo = (int) $delCargo + 1;
+
+        // Hueco para el descuento. Sin esto comparte `orden` con el renglón siguiente, el
+        // desempate por `id` lo manda DESPUÉS de ese renglón y con los tres cargos de estancia
+        // acaba al final del documento, que no es «después del cargo que descuenta».
+        // El UPDATE masivo no pasa por la guarda del modelo, igual que
+        // `CargosEstancia::quitarEstancia()`: lo protegen el candado y los dos rechazos de
+        // cerrada y descartada de más arriba.
+        $prefactura->renglones()->where('orden', '>=', $nuevo)->increment('orden');
+
+        return $nuevo;
     }
 
     /**
