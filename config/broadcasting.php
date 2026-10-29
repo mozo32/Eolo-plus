@@ -15,7 +15,13 @@ return [
     |
     */
 
-    'default' => 'reverb',
+    /*
+     * `reverb` sigue siendo el valor por omisión, así que donde no se defina
+     * `BROADCAST_CONNECTION` nada cambia. Antes estaba escrito a mano y la
+     * variable no servía de nada: un servidor sin Reverb levantado intentaba
+     * igualmente hablar con el host de desarrollo al emitir `RemisionCreada`.
+     */
+    'default' => env('BROADCAST_CONNECTION', 'reverb'),
     /*
     |--------------------------------------------------------------------------
     | Broadcast Connections
