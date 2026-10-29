@@ -721,3 +721,35 @@ test('el aviso del descuento retirado queda en la bitacora de Estancia y ajustes
 
     expect($bitacora->datos_nuevos['motivo'])->toBe('Se retiró 1 descuento de estancia cuyo concepto ya no se cobra: pernocta. Si vuelve a cobrarse, el descuento se aplica otra vez a mano.');
 });
+
+test('el aviso del descuento retirado queda en la bitacora al guardar el encabezado con otra salida', function () {
+    $p = conEstanciaCobrada();
+    $p->update(['llegada_at' => '2026-10-15 12:00:00']);
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertOk();
+
+    // 8 horas de estancia: ninguna pernocta, asi que el tramo descontado deja de cobrarse.
+    $this->putJson("/api/facturacion/prefacturas/{$p->id}", [
+        'aeronave_id' => $p->aeronave_id,
+        'cliente_id' => null,
+        'llegada_at' => '2026-10-15 12:00:00',
+        'salida_at' => '2026-10-15 20:00:00',
+        'origen' => 'MMTO',
+        'destino' => null,
+        'tipo_destino' => FactPrefactura::DESTINO_NACIONAL,
+    ])->assertOk();
+
+    expect($p->fresh()->renglones()->where('concepto', FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_PERNOCTA)->count())->toBe(0);
+
+    $bitacora = Bitacora::query()
+        ->where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)
+        ->where('accion', Bitacora::ACCION_ACTUALIZAR)
+        ->where('registro_id', $p->id)
+        ->where('descripcion', 'like', '%al cambiar la salida%')
+        ->sole();
+
+    expect($bitacora->datos_nuevos['motivo'])->toBe('Se retiró 1 descuento de estancia cuyo concepto ya no se cobra: pernocta. Si vuelve a cobrarse, el descuento se aplica otra vez a mano.');
+});
