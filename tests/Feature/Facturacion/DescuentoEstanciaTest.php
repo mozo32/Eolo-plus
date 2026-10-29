@@ -544,3 +544,107 @@ test('una tarifa de cero viaja como cero y no como null', function () {
         ->assertOk()
         ->assertJsonPath('tarifas.estancia_pernocta', '0.00');
 });
+
+test('el descuento sigue ahi despues de recalcular, si su tramo se sigue cobrando', function () {
+    $p = conEstanciaCobrada();
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertOk();
+
+    $resultado = app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 3, transitos2h: 1, transitos12h: 1);
+
+    $descuento = renglonDeConcepto($p, FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_PERNOCTA);
+
+    expect((float) $descuento->precio_unitario)->toBe(-4676.00)
+        ->and($descuento->cantidad)->toBe(1)
+        // `motivo` es null cuando no hay nada que avisar, y `toContain` sobre null revienta:
+        // la comprobacion es «no lo menciona», que es verdad tambien cuando no hay motivo.
+        ->and($resultado['motivo'] === null || ! str_contains($resultado['motivo'], 'descuento'))->toBeTrue();
+});
+
+test('si el tramo descontado deja de cobrarse, el descuento se retira y el aviso lo nombra', function () {
+    $p = conEstanciaCobrada();
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertOk();
+
+    $resultado = app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 0, transitos2h: 1, transitos12h: 1);
+
+    expect($p->fresh()->renglones()->where('concepto', FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_PERNOCTA)->count())->toBe(0)
+        ->and($resultado['motivo'])->toBe('Se retiró 1 descuento de estancia cuyo concepto ya no se cobra: pernocta. Si vuelve a cobrarse, el descuento se aplica otra vez a mano.');
+});
+
+test('dos descuentos retirados se cuentan y se nombran los dos', function () {
+    $p = conEstanciaCobrada();
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA, FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H],
+    ])->assertOk();
+
+    $resultado = app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 0, transitos2h: 1, transitos12h: 0);
+
+    expect($p->fresh()->renglones()->whereIn('concepto', DescuentoDeEstancia::conceptos())->count())->toBe(0)
+        ->and($resultado['motivo'])->toContain('Se retiraron 2 descuentos de estancia cuyos conceptos ya no se cobran: pernocta, tránsito de 12 horas.');
+});
+
+test('el aviso del descuento retirado convive con el de la cortesia perdida', function () {
+    $p = conEstanciaCobrada();
+    renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H)->update(['es_cortesia' => true]);
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertOk();
+
+    $resultado = app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 0, transitos2h: 0, transitos12h: 1);
+
+    expect($resultado['motivo'])->toContain('Se perdió la cortesía')
+        ->and($resultado['motivo'])->toContain('Se retiró 1 descuento de estancia');
+});
+
+test('una aeronave en Guarda pierde sus descuentos y el aviso lo dice', function () {
+    $p = conEstanciaCobrada();
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertOk();
+
+    FactAeronave::query()->where('aeronave_id', $p->aeronave_id)->update(['estatus' => FactAeronave::ESTATUS_GUARDA]);
+
+    $resultado = app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 1, transitos2h: 1, transitos12h: 1);
+
+    expect($p->fresh()->renglones()->whereIn('concepto', DescuentoDeEstancia::conceptos())->count())->toBe(0)
+        ->and($resultado['motivo'])->toContain('Guarda')
+        ->and($resultado['motivo'])->toContain('Se retiró 1 descuento de estancia');
+});
+
+test('sin ficha de facturacion los descuentos tambien se retiran nombrados', function () {
+    $p = conEstanciaCobrada();
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertOk();
+
+    FactAeronave::query()->where('aeronave_id', $p->aeronave_id)->delete();
+
+    $resultado = app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 1, transitos2h: 1, transitos12h: 1);
+
+    expect($p->fresh()->renglones()->whereIn('concepto', DescuentoDeEstancia::conceptos())->count())->toBe(0)
+        ->and($resultado['motivo'])->toContain('Se retiró 1 descuento de estancia');
+});
+
+test('el recalculo no toca un renglon que no es descuento ni cargo de estancia', function () {
+    $p = conEstanciaCobrada();
+    $suelto = renglonDe($p, 500.0, 1);
+
+    app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 1, transitos2h: 0, transitos12h: 0);
+
+    expect($p->fresh()->renglones()->whereKey($suelto->id)->exists())->toBeTrue();
+});

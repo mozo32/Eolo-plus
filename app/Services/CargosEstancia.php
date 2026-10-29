@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\FactAeronave;
 use App\Models\FactPrefactura;
 use App\Models\FactServicio;
+use App\Support\DescuentoDeEstancia;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -89,21 +90,23 @@ class CargosEstancia
             // a una aeronave que no la paga.
             if ($satelite === null) {
                 $perdidas = $this->conceptosEnCortesia($actual);
+                $descuentos = $this->retirarDescuentosSinCargo($actual, []);
                 $quitados = $this->quitarEstancia($actual);
 
                 return [
                     'renglones' => 0,
-                    'motivo' => 'La matrícula no tiene ficha de facturación, así que no hay tarifas de estancia que aplicar.'.$this->nota($quitados).$this->avisoDePerdidas($perdidas),
+                    'motivo' => 'La matrícula no tiene ficha de facturación, así que no hay tarifas de estancia que aplicar.'.$this->nota($quitados).$this->avisoDePerdidas($perdidas).$this->avisoDeDescuentosRetirados($descuentos),
                 ];
             }
 
             if ($satelite->estatus === FactAeronave::ESTATUS_GUARDA) {
                 $perdidas = $this->conceptosEnCortesia($actual);
+                $descuentos = $this->retirarDescuentosSinCargo($actual, []);
                 $quitados = $this->quitarEstancia($actual);
 
                 return [
                     'renglones' => 0,
-                    'motivo' => 'La aeronave está en Guarda y una aeronave en Guarda no paga estancia. Si corresponde cobrarla, corrige el estatus de la aeronave a Tránsito y vuelve a recalcular.'.$this->nota($quitados).$this->avisoDePerdidas($perdidas),
+                    'motivo' => 'La aeronave está en Guarda y una aeronave en Guarda no paga estancia. Si corresponde cobrarla, corrige el estatus de la aeronave a Tránsito y vuelve a recalcular.'.$this->nota($quitados).$this->avisoDePerdidas($perdidas).$this->avisoDeDescuentosRetirados($descuentos),
                 ];
             }
 
@@ -130,6 +133,7 @@ class CargosEstancia
             $this->quitarEstancia($actual);
 
             $creados = 0;
+            $cobrados = [];
             $sinTarifa = [];
             $conservadas = [];
             $conceptosConservados = [];
@@ -174,6 +178,7 @@ class CargosEstancia
                 }
 
                 $creados++;
+                $cobrados[] = $concepto;
             }
 
             $motivo = null;
@@ -205,6 +210,14 @@ class CargosEstancia
 
             if ($perdidas !== []) {
                 $motivo = trim(($motivo ?? '').$this->avisoDePerdidas($perdidas));
+            }
+
+            // Un descuento cuyo tramo no se cobró en esta pasada se retira: ver
+            // `retirarDescuentosSinCargo()`.
+            $descuentos = $this->retirarDescuentosSinCargo($actual, $cobrados);
+
+            if ($descuentos !== []) {
+                $motivo = trim(($motivo ?? '').$this->avisoDeDescuentosRetirados($descuentos));
             }
 
             return ['renglones' => $creados, 'motivo' => $motivo];
@@ -321,6 +334,66 @@ class CargosEstancia
     private function quitarEstancia(FactPrefactura $prefactura): int
     {
         return $prefactura->renglones()->whereIn('concepto', FactServicio::CONCEPTOS_ESTANCIA)->delete();
+    }
+
+    /**
+     * Retira los descuentos de estancia cuyo tramo NO quedó cobrado en esta pasada, y
+     * devuelve sus etiquetas en el orden en que se nombran.
+     *
+     * Un descuento es una decisión comercial y sobrevive al recálculo solo (su concepto
+     * no está en `CONCEPTOS_ESTANCIA`, que es lo que `quitarEstancia()` borra). Pero un
+     * descuento de pernocta en una prefactura que ya no cobra pernocta es un renglón
+     * negativo suelto que baja el total sin contraparte: ese se retira, y se dice.
+     *
+     * Con `$conceptosCobrados` vacío retira todos, que es lo que necesitan las dos
+     * salidas tempranas (sin ficha y Guarda).
+     *
+     * El borrado es masivo y no pasa por la guarda del modelo, igual que
+     * `quitarEstancia()`: lo protege el candado y la comprobación de cerrada que
+     * `recalcular()` hace dentro de su transacción. Por eso tampoco aquí se usa
+     * `increment()`/`decrement()`.
+     *
+     * @param  list<string>  $conceptosCobrados  conceptos DE ESTANCIA que sí se cobraron
+     * @return list<string>
+     */
+    private function retirarDescuentosSinCargo(FactPrefactura $prefactura, array $conceptosCobrados): array
+    {
+        $etiquetas = [];
+
+        foreach (DescuentoDeEstancia::conceptosDescontables() as $concepto) {
+            if (in_array($concepto, $conceptosCobrados, true)) {
+                continue;
+            }
+
+            $retirados = $prefactura->renglones()
+                ->where('concepto', DescuentoDeEstancia::conceptoDe($concepto))
+                ->delete();
+
+            if ($retirados > 0) {
+                $etiquetas[] = DescuentoDeEstancia::etiquetaDe($concepto);
+            }
+        }
+
+        return $etiquetas;
+    }
+
+    /**
+     * El aviso de los descuentos retirados. Mismo molde que `avisoDePerdidas()`: una
+     * decisión de dinero que desaparece no puede desaparecer en silencio.
+     *
+     * @param  list<string>  $etiquetas
+     */
+    private function avisoDeDescuentosRetirados(array $etiquetas): string
+    {
+        if ($etiquetas === []) {
+            return '';
+        }
+
+        $lista = implode(', ', $etiquetas);
+
+        return count($etiquetas) === 1
+            ? " Se retiró 1 descuento de estancia cuyo concepto ya no se cobra: {$lista}. Si vuelve a cobrarse, el descuento se aplica otra vez a mano."
+            : ' Se retiraron '.count($etiquetas)." descuentos de estancia cuyos conceptos ya no se cobran: {$lista}. Si vuelven a cobrarse, los descuentos se aplican otra vez a mano.";
     }
 
     /**
