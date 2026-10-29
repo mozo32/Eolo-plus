@@ -52,7 +52,9 @@ final class ComisionAmex
         }
 
         // Medio centavo antes de truncar, en aritmética de cadenas: redondea hacia
-        // arriba en el medio sin pasar por float, igual que `FactPrefactura::calcularIva()`.
+        // arriba en el medio sin pasar por float. `FactPrefactura::calcularIva()` suma ese
+        // medio centavo con el signo del producto y esta función no: la comisión nunca es
+        // negativa (el monto bruto de un cobro es positivo), así que no hace falta.
         return bcadd(bcdiv(bcmul($montoBruto, self::TASA, 6), $divisor, 6), '0.005', 2);
     }
 

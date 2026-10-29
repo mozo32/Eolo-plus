@@ -384,14 +384,15 @@ class FactPrefactura extends Model
      * histórico— llame a esta y no escriba otra copia: si hubiera dos, la red que
      * existe para detectar una divergencia podría desalinearse de lo que verifica.
      *
-     * Medio centavo antes de truncar, en aritmética de cadenas: redondea hacia
-     * arriba en el medio sin pasar por float. `bcmul` a escala 6 es exacto
+     * Medio centavo antes de truncar, en aritmética de cadenas: redondea el medio
+     * alejándose del cero sin pasar por float. `bcmul` a escala 6 es exacto
      * (subtotal de 2 decimales por tasa de 4).
      *
-     * `bcadd` trunca hacia cero, así que el medio centavo se suma con el signo del producto:
-     * redondear «hacia arriba» un negativo (como hace `number_format` del sistema viejo, que
-     * redondea el medio alejándose del cero) le quitaría un centavo al IVA exacto de un
-     * descuento: -3916.080000 + 0.005 truncaría a -3916.07 en lugar de -3916.08.
+     * `bcadd` trunca hacia cero, así que el medio centavo se suma con el signo del producto.
+     * Con un `+0.005` fijo, un subtotal negativo perdía un centavo incluso cuando el producto
+     * es EXACTO, sin medio alguno: -24475.50 × 0.16 = -3916.080000, y -3916.080000 + 0.005
+     * truncaba a -3916.07 en lugar de -3916.08. Con subtotal positivo o cero el resultado
+     * no cambia.
      */
     public static function calcularIva(string $subtotal, string $tasa): string
     {

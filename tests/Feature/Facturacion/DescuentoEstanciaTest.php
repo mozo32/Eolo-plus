@@ -401,17 +401,22 @@ test('dentro de un grupo el descuento se suma al importe del grupo y no sale com
 
 test('el iva y el total bajan con el descuento, derivados', function () {
     $p = conEstanciaCobrada();
+    $antes = ['subtotal' => $p->subtotal(), 'iva' => $p->iva(), 'total' => $p->total()];
 
     $this->postJson(urlDescuentos($p), [
         'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H)->id,
         'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H],
     ])->assertOk();
 
-    $p = $p->fresh();
+    $despues = $p->fresh();
 
-    // 8158.50 - 1144.50 = 7014.00; el IVA sale de la tasa configurada y no se teclea aqui.
-    expect($p->subtotal())->toBe('7014.00')
-        ->and(bcadd($p->subtotal(), $p->iva(), 2))->toBe($p->total());
+    // 8158.50 - 1144.50 = 7014.00. `total()` es subtotal + IVA por definicion, asi que no
+    // se asierta contra esa suma (seria una identidad): se asierta el IVA medido antes y despues.
+    expect($antes['subtotal'])->toBe('8158.50')
+        ->and($antes['iva'])->toBe('1305.36')
+        ->and($despues->subtotal())->toBe('7014.00')
+        ->and($despues->iva())->toBe('1122.24')
+        ->and(bccomp($despues->total(), $antes['total'], 2))->toBe(-1);
 });
 
 test('una prefactura cuyo total queda negativo se cierra y sella el total en negativo', function () {
@@ -430,7 +435,9 @@ test('una prefactura cuyo total queda negativo se cierra y sella el total en neg
 
     expect(bccomp($p->fresh()->subtotal(), '0.00', 2))->toBe(-1);
 
-    $respuesta = $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar", ['confirmar_sin_cobro' => true]);
+    // SIN `confirmar_sin_cobro`: pagado (0.00) supera al total negativo, asi que se toma la rama
+    // del sobrepago y la del faltante no se ejecuta. No hay ninguna confirmacion de por medio.
+    $respuesta = $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar");
 
     $respuesta->assertOk()->assertJsonPath('message', 'Prefactura cerrada con folio 10000.');
 
@@ -443,6 +450,19 @@ test('una prefactura cuyo total queda negativo se cierra y sella el total en neg
         ->and($cerrada->iva_sellado)->toBe('-3916.08')
         ->and($cerrada->total_sellado)->toBe('-28391.58')
         ->and($cerrada->selloDiscrepa())->toBeFalse();
+
+    // El sobrepago fantasma: nadie pago nada (pagado 0.00) y el cierre lo registra como cobrado
+    // de mas por el valor absoluto del total. Se fija tal cual esta; si se decide rechazar o
+    // tratar distinto un total negativo, esta es la asercion que debe cambiar.
+    $bitacora = Bitacora::where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)
+        ->where('accion', Bitacora::ACCION_FINALIZAR)
+        ->where('registro_id', $p->id)
+        ->sole();
+
+    expect($bitacora->descripcion)->toBe('Se cerró la prefactura con folio 10000 por un total de -28391.58. Se cerró con el cliente cobrado por encima del total: pagado 0.00, sobrepago 28391.58.')
+        ->and($bitacora->datos_nuevos['pagado'])->toBe('0.00')
+        ->and($bitacora->datos_nuevos['sobrepago'])->toBe('28391.58')
+        ->and($bitacora->datos_nuevos)->not->toHaveKey('faltante');
 });
 
 test('el iva de un subtotal negativo es simetrico al del positivo', function (string $subtotal, string $tasa, string $iva) {
@@ -452,6 +472,6 @@ test('el iva de un subtotal negativo es simetrico al del positivo', function (st
     'exacto positivo' => ['24475.50', '0.1600', '3916.08'],
     'medio centavo negativo, lejos del cero' => ['-1.00', '0.1650', '-0.17'],
     'medio centavo positivo' => ['1.00', '0.1650', '0.17'],
-    'redondea hacia arriba un negativo' => ['-26.06', '0.1600', '-4.17'],
+    'exacto lejos del cero, negativo' => ['-26.06', '0.1600', '-4.17'],
     'cero' => ['0.00', '0.1600', '0.00'],
 ]);
