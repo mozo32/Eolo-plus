@@ -869,7 +869,7 @@ class PrefacturaRenglonController extends Controller
                     descripcion: "Se recalculó la estancia de la prefactura {$prefactura->id}: {$resultado['renglones']} renglones.",
                     usuarioId: $request->user()->id,
                     registroId: $prefactura->id,
-                    datosNuevos: $datos + ['motivo' => $resultado['motivo']],
+                    datosNuevos: $datos + ($resultado['motivo'] === null ? [] : ['motivo' => $resultado['motivo']]),
                 );
 
                 return $resultado;
