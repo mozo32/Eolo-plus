@@ -1061,17 +1061,23 @@ test('una prefactura cuyo total queda negativo: esto es lo que hace el cierre ho
 
     $respuesta = $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar", ['confirmar_sin_cobro' => true]);
 
-    // Documenta el estado real: si el cierre lo acepta, el sello tiene que cuadrar con la
-    // derivacion; si lo rechaza, tiene que decir por que y no dejar el folio consumido.
-    expect($respuesta->status())->toBeIn([200, 422, 409]);
-
-    if ($respuesta->status() === 200) {
-        expect($p->fresh()->estado)->toBe(FactPrefactura::ESTADO_CERRADA)
-            ->and(bccomp((string) $p->fresh()->total_sellado, '0.00', 2))->toBe(-1);
-    } else {
-        expect($p->fresh()->estado)->toBe(FactPrefactura::ESTADO_BORRADOR)
-            ->and($p->fresh()->folio)->toBeNull();
-    }
+    // AQUI NO DEJES UN RANGO. Corre la prueba, mira que hace el cierre de verdad, y fija
+    // ESE comportamiento con una asercion exacta, eligiendo una de las dos ramas de abajo
+    // y borrando la otra. Una prueba que acepta tres codigos de respuesta no guarda nada.
+    //
+    // Rama A, si el cierre ACEPTA el total negativo:
+    //   $respuesta->assertOk();
+    //   expect($p->fresh()->estado)->toBe(FactPrefactura::ESTADO_CERRADA)
+    //       ->and(bccomp((string) $p->fresh()->total_sellado, '0.00', 2))->toBe(-1)
+    //       ->and($p->fresh()->folio)->not->toBeNull();
+    //
+    // Rama B, si el cierre lo RECHAZA: asierta el codigo HTTP exacto y el `codigo` del
+    // cuerpo que devolvio, y que no consumio folio:
+    //   $respuesta->assertUnprocessable()->assertJsonPath('codigo', '<el que salga>');
+    //   expect($p->fresh()->estado)->toBe(FactPrefactura::ESTADO_BORRADOR)
+    //       ->and($p->fresh()->folio)->toBeNull();
+    //
+    // Y di en el informe cual de las dos rige, con el status y el message literales.
 });
 ```
 
@@ -1080,7 +1086,7 @@ test('una prefactura cuyo total queda negativo: esto es lo que hace el cierre ho
 Run: `php artisan test tests/Feature/Facturacion/DescuentoEstanciaTest.php`
 Expected: las tres primeras PASS sin tocar producción. La del cierre dirá cuál de las dos ramas ocurre: apunta el `status` y el `message` exactos en el informe.
 
-Si falla por el nombre de la columna sellada (`total_sellado`), lee el modelo `FactPrefactura` y usa el nombre real; si el cierre exige más campos en el cuerpo, léelos en `PrefacturaController::cerrar()` y pásalos.
+La columna sellada se llama `total_sellado` (comprobado en `fact_prefacturas`, junto a `subtotal_sellado` e `iva_sellado`). Si el cierre exige más campos en el cuerpo, léelos en `PrefacturaController::cerrar()` y pásalos.
 
 - [ ] **Step 3: Si el cierre revela un fallo, arréglalo**
 
@@ -1176,7 +1182,7 @@ test('las tarifas de una prefactura que no existe dan 404', function () {
 });
 ```
 
-Si `FactCategoriaAeronave::create` exige más campos, léelos en `tests/Feature/Facturacion/CatalogosTarifasTest.php` y añádelos.
+`FactCategoriaAeronave` acepta `nombre`, `tarifa_pernocta`, `tarifa_transito_2h`, `tarifa_transito_12h` y `status` (comprobado en el modelo): con `nombre` y la tarifa basta.
 
 - [ ] **Step 2: Corre las pruebas y comprueba que fallan**
 
@@ -1266,7 +1272,9 @@ test('el descuento sigue ahi despues de recalcular, si su tramo se sigue cobrand
 
     expect((float) $descuento->precio_unitario)->toBe(-4676.00)
         ->and($descuento->cantidad)->toBe(1)
-        ->and($resultado['motivo'])->not->toContain('descuento');
+        // `motivo` es null cuando no hay nada que avisar, y `toContain` sobre null revienta:
+        // la comprobacion es «no lo menciona», que es verdad tambien cuando no hay motivo.
+        ->and($resultado['motivo'] === null || ! str_contains($resultado['motivo'], 'descuento'))->toBeTrue();
 });
 
 test('si el tramo descontado deja de cobrarse, el descuento se retira y el aviso lo nombra', function () {
