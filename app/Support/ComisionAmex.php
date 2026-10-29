@@ -53,10 +53,12 @@ final class ComisionAmex
 
         // Medio centavo antes de truncar, en aritmética de cadenas: redondea hacia
         // arriba en el medio sin pasar por float. `FactPrefactura::calcularIva()` suma ese
-        // medio centavo con el signo del producto y esta función no: un monto negativo no
-        // llega aquí porque el guardia `porCobrar() <= 0` de `PagosPrefactura::registrarAmex()`
-        // lo rechaza antes de llamar a `totalConComision()`. Esta función, por sí sola, no
-        // lo impide.
+        // medio centavo con el signo del producto y esta función no. En el cobro, un monto
+        // negativo no llega aquí: `PagosPrefactura::normalizarMonto()` lo rechaza al entrar a
+        // `registrarAmex()` (su regex no admite el signo menos y descarta cero y negativos), y
+        // antes lo rechaza el `min:0.01` de las reglas que `StorePagoAmexRequest` hereda.
+        // Esta función, por sí sola, no lo impide: `CompararPagos` la llama con los montos del
+        // histórico sin mirar su signo.
         return bcadd(bcdiv(bcmul($montoBruto, self::TASA, 6), $divisor, 6), '0.005', 2);
     }
 
