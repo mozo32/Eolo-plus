@@ -944,8 +944,15 @@ Dentro del `foreach` de `descuentosDeEstancia()`, **antes** del `create()`:
                 $etiqueta = DescuentoDeEstancia::etiquetaDe($concepto);
 
                 // Sin tarifa no hay cifra que descontar, y teclearla a mano no es lo que se
-                // eligió (decisión 2 de la spec). El `return` dentro de la transacción la
-                // revierte: o entran todos los descuentos de la llamada o no entra ninguno.
+                // eligió (decisión 2 de la spec).
+                //
+                // CORRECCIÓN DEL PLAN (ruling del coordinador, 2026-10-29): la versión
+                // anterior de este plan decía que el `return` dentro de `DB::transaction()`
+                // revierte lo escrito. ES FALSO: `DB::transaction()` confirma salvo que se
+                // lance. Con el rechazo dentro del bucle, pedir dos tramos y fallar el
+                // segundo dejaba el primer descuento GUARDADO. Por eso la comprobación de
+                // tarifa y de servicio activo se hace en una PRIMERA PASADA sobre todos los
+                // tramos, sin escribir nada, y solo después se crean los renglones.
                 if ($tarifa === null) {
                     return response()->json([
                         'message' => "Esta matrícula no tiene tarifa de {$etiqueta}, así que no hay nada que descontar. Captúrala en la ficha de facturación de la aeronave (o en su categoría) y vuelve a intentarlo.",
