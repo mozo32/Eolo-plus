@@ -572,10 +572,15 @@ test('si el tramo descontado deja de cobrarse, el descuento se retira y el aviso
         'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
     ])->assertOk();
 
+    $suelto = renglonDe($p, 500.0, 1);
+
     $resultado = app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 0, transitos2h: 1, transitos12h: 1);
 
     expect($p->fresh()->renglones()->where('concepto', FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_PERNOCTA)->count())->toBe(0)
-        ->and($resultado['motivo'])->toBe('Se retiró 1 descuento de estancia cuyo concepto ya no se cobra: pernocta. Si vuelve a cobrarse, el descuento se aplica otra vez a mano.');
+        ->and($resultado['motivo'])->toBe('Se retiró 1 descuento de estancia cuyo concepto ya no se cobra: pernocta. Si vuelve a cobrarse, el descuento se aplica otra vez a mano.')
+        ->and($p->fresh()->renglones()->whereKey($suelto->id)->exists())->toBeTrue()
+        ->and($p->fresh()->renglones()->where('concepto', FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H)->count())->toBe(1)
+        ->and($p->fresh()->renglones()->where('concepto', FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H)->count())->toBe(1);
 });
 
 test('dos descuentos retirados se cuentan y se nombran los dos', function () {
@@ -589,7 +594,7 @@ test('dos descuentos retirados se cuentan y se nombran los dos', function () {
     $resultado = app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 0, transitos2h: 1, transitos12h: 0);
 
     expect($p->fresh()->renglones()->whereIn('concepto', DescuentoDeEstancia::conceptos())->count())->toBe(0)
-        ->and($resultado['motivo'])->toContain('Se retiraron 2 descuentos de estancia cuyos conceptos ya no se cobran: pernocta, tránsito de 12 horas.');
+        ->and($resultado['motivo'])->toBe('Se retiraron 2 descuentos de estancia cuyos conceptos ya no se cobran: pernocta, tránsito de 12 horas. Si vuelven a cobrarse, los descuentos se aplican otra vez a mano.');
 });
 
 test('el aviso del descuento retirado convive con el de la cortesia perdida', function () {
@@ -612,7 +617,7 @@ test('una aeronave en Guarda pierde sus descuentos y el aviso lo dice', function
 
     $this->postJson(urlDescuentos($p), [
         'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->id,
-        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA, FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H],
     ])->assertOk();
 
     FactAeronave::query()->where('aeronave_id', $p->aeronave_id)->update(['estatus' => FactAeronave::ESTATUS_GUARDA]);
@@ -621,7 +626,7 @@ test('una aeronave en Guarda pierde sus descuentos y el aviso lo dice', function
 
     expect($p->fresh()->renglones()->whereIn('concepto', DescuentoDeEstancia::conceptos())->count())->toBe(0)
         ->and($resultado['motivo'])->toContain('Guarda')
-        ->and($resultado['motivo'])->toContain('Se retiró 1 descuento de estancia');
+        ->and($resultado['motivo'])->toContain('Se retiraron 2 descuentos de estancia cuyos conceptos ya no se cobran: pernocta, tránsito de 12 horas. Si vuelven a cobrarse, los descuentos se aplican otra vez a mano.');
 });
 
 test('sin ficha de facturacion los descuentos tambien se retiran nombrados', function () {
@@ -629,7 +634,7 @@ test('sin ficha de facturacion los descuentos tambien se retiran nombrados', fun
 
     $this->postJson(urlDescuentos($p), [
         'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->id,
-        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA, FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H],
     ])->assertOk();
 
     FactAeronave::query()->where('aeronave_id', $p->aeronave_id)->delete();
@@ -637,7 +642,7 @@ test('sin ficha de facturacion los descuentos tambien se retiran nombrados', fun
     $resultado = app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 1, transitos2h: 1, transitos12h: 1);
 
     expect($p->fresh()->renglones()->whereIn('concepto', DescuentoDeEstancia::conceptos())->count())->toBe(0)
-        ->and($resultado['motivo'])->toContain('Se retiró 1 descuento de estancia');
+        ->and($resultado['motivo'])->toContain('Se retiraron 2 descuentos de estancia cuyos conceptos ya no se cobran: pernocta, tránsito de 12 horas. Si vuelven a cobrarse, los descuentos se aplican otra vez a mano.');
 });
 
 test('el recalculo no toca un renglon que no es descuento ni cargo de estancia', function () {
@@ -647,4 +652,22 @@ test('el recalculo no toca un renglon que no es descuento ni cargo de estancia',
     app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 1, transitos2h: 0, transitos12h: 0);
 
     expect($p->fresh()->renglones()->whereKey($suelto->id)->exists())->toBeTrue();
+});
+
+test('el descuento de un tramo en cortesia que se sigue cobrando se conserva y el aviso no lo nombra', function () {
+    $p = conEstanciaCobrada();
+    renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->update(['es_cortesia' => true]);
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertOk();
+
+    $resultado = app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 3, transitos2h: 1, transitos12h: 1);
+
+    // Un tramo en cortesia conserva su renglon en el documento aunque no se cobre, asi que
+    // su descuento no es un negativo huerfano y no se retira.
+    expect($p->fresh()->renglones()->where('concepto', FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_PERNOCTA)->count())->toBe(1)
+        ->and($resultado['motivo'])->toContain('Se conservó la cortesía')
+        ->and($resultado['motivo'])->not->toContain('descuento');
 });

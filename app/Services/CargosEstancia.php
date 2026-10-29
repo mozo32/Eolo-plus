@@ -353,7 +353,10 @@ class CargosEstancia
      * `recalcular()` hace dentro de su transacción. Por eso tampoco aquí se usa
      * `increment()`/`decrement()`.
      *
-     * @param  list<string>  $conceptosCobrados  conceptos DE ESTANCIA que sí se cobraron
+     * @param  list<string>  $conceptosCobrados  conceptos de estancia cuyo renglón se creó en esta
+     *                                           pasada; en el camino normal incluye también los dos ajustes,
+     *                                           lo que es inocuo porque solo se consulta contra los tres
+     *                                           conceptos descontables
      * @return list<string>
      */
     private function retirarDescuentosSinCargo(FactPrefactura $prefactura, array $conceptosCobrados): array
