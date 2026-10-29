@@ -653,9 +653,35 @@ class PrefacturaRenglonController extends Controller
             // misma razón por la que `CargosEstancia::recalcular()` la relee.
             $satelite = FactAeronave::query()->where('aeronave_id', $actual->aeronave_id)->first();
 
+            // Se comprueba todo ANTES de escribir nada. Un `return` dentro de
+            // `DB::transaction()` NO revierte: la transacción confirma lo que haya escrito
+            // hasta ahí. Por eso el rechazo va en esta primera pasada, sin escrituras: o
+            // entran todos los descuentos de la llamada o no entra ninguno.
+            $servicios = [];
+
             foreach ($datos['conceptos'] as $concepto) {
-                $tarifa = $satelite === null ? null : DescuentoDeEstancia::tarifaDe($satelite, $concepto);
-                $servicio = FactServicio::porConcepto($concepto)->activos()->first();
+                $etiqueta = DescuentoDeEstancia::etiquetaDe($concepto);
+
+                if ($satelite === null || DescuentoDeEstancia::tarifaDe($satelite, $concepto) === null) {
+                    return response()->json([
+                        'message' => "Esta matrícula no tiene tarifa de {$etiqueta}, así que no hay nada que descontar. Captúrala en la ficha de facturación de la aeronave (o en su categoría) y vuelve a intentarlo.",
+                        'codigo' => 'sin_tarifa_de_estancia',
+                    ], 422);
+                }
+
+                $servicios[$concepto] = FactServicio::porConcepto($concepto)->activos()->first();
+
+                if ($servicios[$concepto] === null) {
+                    return response()->json([
+                        'message' => "El servicio de {$etiqueta} está dado de baja en el catálogo, así que no se puede armar su descuento. Reactívalo y vuelve a intentarlo.",
+                        'codigo' => 'servicio_de_estancia_no_disponible',
+                    ], 422);
+                }
+            }
+
+            foreach ($datos['conceptos'] as $concepto) {
+                $tarifa = DescuentoDeEstancia::tarifaDe($satelite, $concepto);
+                $servicio = $servicios[$concepto];
                 $etiqueta = DescuentoDeEstancia::etiquetaDe($concepto);
 
                 $renglon = $actual->renglones()->create([

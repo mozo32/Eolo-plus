@@ -208,3 +208,158 @@ test('la ficha que responde el endpoint ya trae el renglon del descuento', funct
     ])->assertOk()
         ->assertJsonPath('prefactura.renglones.1.concepto', FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_PERNOCTA);
 });
+
+test('sin tarifa para ese tramo se rechaza nombrando el tramo, y no se escribe nada', function () {
+    $p = conEstanciaCobrada();
+    $pernocta = renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA);
+    $renglonesAntes = $p->fresh()->renglones()->count();
+
+    FactAeronave::query()->where('aeronave_id', $p->aeronave_id)->update(['tarifa_pernocta' => null]);
+
+    $respuesta = $this->postJson(urlDescuentos($p), [
+        'renglon_id' => $pernocta->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertUnprocessable()->assertJsonPath('codigo', 'sin_tarifa_de_estancia');
+
+    expect($respuesta->json('message'))->toContain('pernocta')
+        ->and($p->fresh()->renglones()->count())->toBe($renglonesAntes);
+});
+
+test('un tramo sin tarifa no deja pasar los otros de la misma llamada', function () {
+    // La transaccion es una: o entran los dos descuentos o no entra ninguno. Si entrara
+    // el primero, el operador veria un documento a medias y creeria que fallo todo.
+    $p = conEstanciaCobrada();
+    FactAeronave::query()->where('aeronave_id', $p->aeronave_id)->update(['tarifa_transito_2h' => null]);
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA, FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H],
+    ])->assertUnprocessable();
+
+    expect($p->fresh()->renglones()->whereIn('concepto', DescuentoDeEstancia::conceptos())->count())->toBe(0);
+});
+
+test('sin ficha de facturacion no hay tarifa que descontar', function () {
+    $p = conEstanciaCobrada();
+    $pernocta = renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA);
+
+    FactAeronave::query()->where('aeronave_id', $p->aeronave_id)->delete();
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => $pernocta->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertUnprocessable()->assertJsonPath('codigo', 'sin_tarifa_de_estancia');
+});
+
+test('un servicio de estancia dado de baja se rechaza en lugar de reventar', function () {
+    $p = conEstanciaCobrada();
+    $pernocta = renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA);
+
+    FactServicio::query()->where('concepto', FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->update(['status' => 'I']);
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => $pernocta->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertUnprocessable()->assertJsonPath('codigo', 'servicio_de_estancia_no_disponible');
+
+    expect($p->fresh()->renglones()->whereIn('concepto', DescuentoDeEstancia::conceptos())->count())->toBe(0);
+});
+
+test('el renglon de origen tiene que ser de esta prefactura', function () {
+    $p = conEstanciaCobrada();
+    $otra = conEstancia();
+    app(CargosEstancia::class)->recalcular($otra, pernoctas: 1, transitos2h: 0, transitos12h: 0);
+    $ajeno = renglonDeConcepto($otra, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA);
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => $ajeno->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertUnprocessable()->assertJsonValidationErrors('renglon_id');
+
+    expect($p->fresh()->renglones()->whereIn('concepto', DescuentoDeEstancia::conceptos())->count())->toBe(0);
+});
+
+test('el renglon de origen no puede ser un servicio cualquiera', function () {
+    $p = conEstanciaCobrada();
+    $suelto = renglonDe($p, 500.0, 1);
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => $suelto->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertUnprocessable()->assertJsonValidationErrors('renglon_id');
+});
+
+test('un renglon de origen que no existe se rechaza', function () {
+    $p = conEstanciaCobrada();
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => 999999,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertUnprocessable()->assertJsonValidationErrors('renglon_id');
+});
+
+test('la lista de tramos no puede venir vacia ni con basura ni repetida', function (array $cuerpo, string $campo) {
+    $p = conEstanciaCobrada();
+    $pernocta = renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA);
+
+    $this->postJson(urlDescuentos($p), ['renglon_id' => $pernocta->id] + $cuerpo)
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors($campo);
+})->with([
+    'vacia' => [['conceptos' => []], 'conceptos'],
+    'ausente' => [[], 'conceptos'],
+    'no es lista' => [['conceptos' => 'estancia_pernocta'], 'conceptos'],
+    'inventado' => [['conceptos' => ['estancia_lo_que_sea']], 'conceptos.0'],
+    'un ajuste de estancia' => [['conceptos' => ['estancia_ajuste_2h_12h']], 'conceptos.0'],
+    'repetido' => [['conceptos' => ['estancia_pernocta', 'estancia_pernocta']], 'conceptos.0'],
+]);
+
+test('una prefactura cerrada no acepta descuentos', function () {
+    $p = conEstanciaCobrada();
+    $pernocta = renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA);
+
+    $p->update(['estado' => FactPrefactura::ESTADO_CERRADA]);
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => $pernocta->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertConflict()->assertJsonPath('codigo', 'ya_cerrada');
+});
+
+test('un borrador descartado no acepta descuentos', function () {
+    $p = conEstanciaCobrada();
+    $pernocta = renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA);
+
+    $p->update(['status' => FactPrefactura::STATUS_INACTIVO]);
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => $pernocta->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertConflict()->assertJsonPath('codigo', 'ya_descartada');
+});
+
+test('una prefactura REABIERTA si acepta descuentos: se reabre justo para corregir', function () {
+    // `rechazoRapido()` rechaza cerrada y descartada, no reabierta (ESTADO_REABIERTA es su
+    // propio estado, no el status 'N'). Es el mismo trato que le dan las demas acciones de
+    // renglon, y esta prueba lo fija para que nadie lo cierre por simetria.
+    $p = conEstanciaCobrada();
+    $pernocta = renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA);
+
+    $p->update(['estado' => FactPrefactura::ESTADO_REABIERTA]);
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => $pernocta->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertOk();
+
+    expect($p->fresh()->renglones()->where('concepto', FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_PERNOCTA)->count())->toBe(1);
+});
+
+test('una prefactura que no existe da 404', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->postJson('/api/facturacion/prefacturas/999999/descuentos-estancia', [
+        'renglon_id' => 1,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertNotFound();
+});
