@@ -1502,10 +1502,9 @@ export default function EditorPrefactura({ id }: Props) {
                                                             aria-pressed={renglon.es_cortesia}
                                                             title={renglon.es_cortesia ? 'Quitar la cortesía: vuelve a cobrarse' : 'Marcar como cortesía: se ve en el documento pero no se cobra'}
                                                             aria-label={`${renglon.es_cortesia ? 'Quitar la cortesía de' : 'Marcar como cortesía'} ${renglon.nombre_servicio}`}
-                                                            className={`flex items-center gap-1 rounded border px-2 py-1 text-[9px] font-black uppercase transition-colors disabled:opacity-50 ${renglon.es_cortesia ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border-slate-200 bg-white text-slate-400 hover:text-emerald-700'}`}
+                                                            className={`rounded border p-2 transition-colors disabled:opacity-50 ${renglon.es_cortesia ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border-slate-200 bg-white text-slate-400 hover:text-emerald-700'}`}
                                                         >
-                                                            <Gift size={12} />
-                                                            Cortesía
+                                                            <Gift size={16} />
                                                         </button>
                                                         <button
                                                             type="button"
@@ -1513,10 +1512,9 @@ export default function EditorPrefactura({ id }: Props) {
                                                             disabled={ocupado}
                                                             title={ocupado ? 'Hay otra operación en curso: espera a que termine.' : renglon.grupo === null ? 'Agrupar: sale en el documento junto con los renglones de la misma etiqueta' : `Cambiar de grupo (hoy «${renglon.grupo}»)`}
                                                             aria-label={`${renglon.grupo === null ? 'Agrupar' : 'Cambiar el grupo de'} ${renglon.nombre_servicio}`}
-                                                            className="flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-[9px] font-black uppercase text-slate-400 transition-colors hover:text-indigo-700 disabled:opacity-50"
+                                                            className="rounded border border-slate-200 bg-white p-2 text-slate-400 transition-colors hover:text-indigo-700 disabled:opacity-50"
                                                         >
-                                                            <Group size={12} />
-                                                            {renglon.grupo === null ? 'Agrupar' : 'Cambiar grupo'}
+                                                            <Group size={16} />
                                                         </button>
                                                         {renglon.grupo !== null && (
                                                             <button
@@ -1525,10 +1523,9 @@ export default function EditorPrefactura({ id }: Props) {
                                                                 disabled={ocupado}
                                                                 title={ocupado ? 'Hay otra operación en curso: espera a que termine.' : `Desagrupar: sale del grupo «${renglon.grupo}» y vuelve a salir suelto`}
                                                                 aria-label={`Desagrupar ${renglon.nombre_servicio}`}
-                                                                className="flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[9px] font-black uppercase text-indigo-700 transition-colors hover:bg-indigo-100 disabled:opacity-50"
+                                                                className="rounded border border-indigo-200 bg-indigo-50 p-2 text-indigo-700 transition-colors hover:bg-indigo-100 disabled:opacity-50"
                                                             >
-                                                                <Ungroup size={12} />
-                                                                Desagrupar
+                                                                <Ungroup size={16} />
                                                             </button>
                                                         )}
                                                         <button
