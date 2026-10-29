@@ -77,7 +77,15 @@ test('los tres tramos se descuentan en una sola llamada', function () {
     ])->assertOk();
 
     expect($p->fresh()->renglones()->whereIn('concepto', DescuentoDeEstancia::conceptos())->count())->toBe(3)
-        ->and($p->fresh()->subtotal())->toBe('0.00');
+        ->and($p->fresh()->subtotal())->toBe('0.00')
+        ->and($p->fresh()->renglones()->pluck('concepto')->all())->toBe([
+            FactServicio::CONCEPTO_ESTANCIA_PERNOCTA,
+            FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_PERNOCTA,
+            FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H,
+            FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_TRANSITO_2H,
+            FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H,
+            FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_TRANSITO_12H,
+        ]);
 });
 
 test('el descuento hereda el grupo del renglon desde el que se pidio', function () {
@@ -234,7 +242,7 @@ test('un tramo sin tarifa no deja pasar los otros de la misma llamada', function
     $this->postJson(urlDescuentos($p), [
         'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->id,
         'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA, FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H],
-    ])->assertUnprocessable();
+    ])->assertUnprocessable()->assertJsonPath('codigo', 'sin_tarifa_de_estancia');
 
     expect($p->fresh()->renglones()->whereIn('concepto', DescuentoDeEstancia::conceptos())->count())->toBe(0);
 });
@@ -296,6 +304,18 @@ test('un renglon de origen que no existe se rechaza', function () {
         'renglon_id' => 999999,
         'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
     ])->assertUnprocessable()->assertJsonValidationErrors('renglon_id');
+});
+
+test('sin renglon de origen se rechaza con el mensaje propio', function () {
+    $p = conEstanciaCobrada();
+
+    $this->postJson(urlDescuentos($p), [
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('renglon_id')
+        ->assertJsonPath('errors.renglon_id.0', 'Indica desde qué renglón se aplica el descuento.');
+
+    expect($p->fresh()->renglones()->whereIn('concepto', DescuentoDeEstancia::conceptos())->count())->toBe(0);
 });
 
 test('la lista de tramos no puede venir vacia ni con basura ni repetida', function (array $cuerpo, string $campo) {
@@ -464,17 +484,6 @@ test('una prefactura cuyo total queda negativo se cierra y sella el total en neg
         ->and($bitacora->datos_nuevos['sobrepago'])->toBe('28391.58')
         ->and($bitacora->datos_nuevos)->not->toHaveKey('faltante');
 });
-
-test('el iva de un subtotal negativo es simetrico al del positivo', function (string $subtotal, string $tasa, string $iva) {
-    expect(FactPrefactura::calcularIva($subtotal, $tasa))->toBe($iva);
-})->with([
-    'exacto negativo' => ['-24475.50', '0.1600', '-3916.08'],
-    'exacto positivo' => ['24475.50', '0.1600', '3916.08'],
-    'medio centavo negativo, lejos del cero' => ['-1.00', '0.1650', '-0.17'],
-    'medio centavo positivo' => ['1.00', '0.1650', '0.17'],
-    'exacto lejos del cero, negativo' => ['-26.06', '0.1600', '-4.17'],
-    'cero' => ['0.00', '0.1600', '0.00'],
-]);
 
 test('las tarifas de estancia se sirven por concepto, listas para el modal', function () {
     $p = conEstanciaCobrada();
@@ -670,4 +679,45 @@ test('el descuento de un tramo en cortesia que se sigue cobrando se conserva y e
     expect($p->fresh()->renglones()->where('concepto', FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_PERNOCTA)->count())->toBe(1)
         ->and($resultado['motivo'])->toContain('Se conservó la cortesía')
         ->and($resultado['motivo'])->not->toContain('descuento');
+});
+
+test('un tramo con cantidad pero sin tarifa no se cobra, y su descuento se retira nombrado', function () {
+    $p = conEstanciaCobrada();
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertOk();
+
+    FactAeronave::query()->where('aeronave_id', $p->aeronave_id)->update(['tarifa_pernocta' => null]);
+
+    $resultado = app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 2, transitos2h: 1, transitos12h: 1);
+
+    expect($p->fresh()->renglones()->where('concepto', FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->count())->toBe(0)
+        ->and($p->fresh()->renglones()->where('concepto', FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_PERNOCTA)->count())->toBe(0)
+        ->and($resultado['motivo'])->toBe('No se pudo determinar el precio de pernocta (sin tarifa en la matrícula ni en su categoría), así que no se cobró. Se retiró 1 descuento de estancia cuyo concepto ya no se cobra: pernocta. Si vuelve a cobrarse, el descuento se aplica otra vez a mano.');
+});
+
+test('el aviso del descuento retirado queda en la bitacora de Estancia y ajustes', function () {
+    $p = conEstanciaCobrada();
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA)->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertOk();
+
+    $this->patchJson("/api/facturacion/prefacturas/{$p->id}/estancia", [
+        'pernoctas' => 0,
+        'transitos_2h' => 1,
+        'transitos_12h' => 1,
+    ])->assertOk();
+
+    $bitacora = Bitacora::query()
+        ->where('modulo', Bitacora::MODULO_FACTURACION_PREFACTURAS)
+        ->where('accion', Bitacora::ACCION_ACTUALIZAR)
+        ->where('registro_id', $p->id)
+        ->latest('id')
+        ->first();
+
+    expect($bitacora->datos_nuevos['motivo'])->toBe('Se retiró 1 descuento de estancia cuyo concepto ya no se cobra: pernocta. Si vuelve a cobrarse, el descuento se aplica otra vez a mano.');
 });

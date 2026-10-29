@@ -349,6 +349,7 @@ class PrefacturaController extends Controller
                             'transitos_12h' => $tramos['transitos12h'],
                             'ajustes_2h_12h' => $cantidadesAnteriores['ajustes_2h_12h'],
                             'ajustes_12h_pernocta' => $cantidadesAnteriores['ajustes_12h_pernocta'],
+                            'motivo' => $resultado['motivo'],
                         ],
                     );
                 }

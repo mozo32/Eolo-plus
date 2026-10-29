@@ -100,7 +100,7 @@ final class DescuentoDeEstancia
     {
         $positiva = bccomp($tarifa, '0', 4) < 0 ? bcmul($tarifa, '-1', 4) : $tarifa;
 
-        return bccomp($positiva, '0', 4) === 0 ? bcadd('0', '0', 4) : bcmul($positiva, '-1', 4);
+        return bcmul($positiva, '-1', 4);
     }
 
     private static function noSeDescuenta(string $concepto): InvalidArgumentException

@@ -312,6 +312,20 @@ test('el comando y el modelo calculan el IVA con la misma funcion, en los casos 
         ->assertExitCode(0);
 });
 
+test('el iva de un subtotal negativo es simetrico al del positivo', function (string $subtotal, string $tasa, string $iva) {
+    // Unica cobertura de la rama negativa de `calcularIva()`, que usan todas las prefacturas
+    // y el sello del cierre. -26.06 × 0.16 = -4.1696: no es un producto exacto, es un
+    // redondeo normal que se aleja del cero (-4.17), el espejo del 26.06 de arriba.
+    expect(App\Models\FactPrefactura::calcularIva($subtotal, $tasa))->toBe($iva);
+})->with([
+    'exacto negativo' => ['-24475.50', '0.1600', '-3916.08'],
+    'exacto positivo' => ['24475.50', '0.1600', '3916.08'],
+    'medio centavo negativo, lejos del cero' => ['-1.00', '0.1650', '-0.17'],
+    'medio centavo positivo' => ['1.00', '0.1650', '0.17'],
+    'redondeo normal negativo, lejos del cero' => ['-26.06', '0.1600', '-4.17'],
+    'cero' => ['0.00', '0.1600', '0.00'],
+]);
+
 test('la linea de exactas lleva su propia etiqueta: la del Total no tapa a la del IVA', function () {
     // IVA con un centavo de desviación (4.18 contra 4.17) y total consistente con
     // ese IVA: el IVA tiene 0 exactas y el Total 1. Con un rótulo común, la
