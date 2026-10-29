@@ -1189,7 +1189,7 @@ test('las tarifas de una prefactura que no existe dan 404', function () {
 });
 ```
 
-`FactCategoriaAeronave` acepta `nombre`, `tarifa_pernocta`, `tarifa_transito_2h`, `tarifa_transito_12h` y `status` (comprobado en el modelo): con `nombre` y la tarifa basta.
+`FactCategoriaAeronave` exige `nombre` y **las tres tarifas**: `tarifa_pernocta`, `tarifa_transito_2h` y `tarifa_transito_12h` son NOT NULL. (Corrección del plan, 2026-10-29: antes decía que con el nombre y una tarifa bastaba, comprobado solo contra `$fillable` y no contra la tabla.)
 
 - [ ] **Step 2: Corre las pruebas y comprueba que fallan**
 
