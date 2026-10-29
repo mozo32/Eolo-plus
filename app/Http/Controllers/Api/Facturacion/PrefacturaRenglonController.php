@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Facturacion;
 
 use App\Http\Controllers\Api\Facturacion\Concerns\RechazaPrefacturaCerrada;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Facturacion\StoreDescuentoEstanciaRequest;
 use App\Http\Requests\Facturacion\StoreRenglonRequest;
 use App\Models\Aeronave;
 use App\Models\Bitacora;
@@ -18,6 +19,7 @@ use App\Services\ComisariatosFacturables;
 use App\Services\RemisionesFacturables;
 use App\Services\RenglonDeComisariato;
 use App\Services\ServicioDeEstanciaNoDisponibleException;
+use App\Support\DescuentoDeEstancia;
 use App\Support\PrecioDeRenglon;
 use App\Support\VentanaDeEstancia;
 use Illuminate\Http\JsonResponse;
@@ -617,6 +619,87 @@ class PrefacturaRenglonController extends Controller
     }
 
     /**
+     * Aplica un descuento a uno o varios tramos de estancia: un renglón negativo por
+     * tramo, con la tarifa de la matrícula.
+     *
+     * Réplica del descuento del sistema viejo, decisión por decisión (spec
+     * 2026-10-28): la cifra sale de la TARIFA y no de lo que la prefactura cobra, es
+     * una unidad, **no tiene tope y se puede repetir**. Eso permite descontar un tramo
+     * que no se cobró y dejar el documento en negativo; se eligió así con el costo
+     * escrito, y el rastro es la bitácora, que no es un freno.
+     *
+     * El `grupo` lo hereda del renglón de origen, como el viejo.
+     */
+    public function descuentosDeEstancia(StoreDescuentoEstanciaRequest $request, int $id): JsonResponse
+    {
+        $datos = $request->validated();
+
+        $prefactura = FactPrefactura::findOrFail($id);
+
+        if ($respuesta = $this->rechazoRapido($prefactura)) {
+            return $respuesta;
+        }
+
+        $resultado = DB::transaction(function () use ($request, $datos, $id) {
+            $actual = $this->bloquear($id);
+
+            if ($respuesta = $this->rechazarSiDescartada($actual)) {
+                return $respuesta;
+            }
+
+            $origen = $actual->renglones()->whereKey($datos['renglon_id'])->firstOrFail();
+
+            // La ficha se lee aquí, ya con candado, y no de la relación cacheada: es la
+            // misma razón por la que `CargosEstancia::recalcular()` la relee.
+            $satelite = FactAeronave::query()->where('aeronave_id', $actual->aeronave_id)->first();
+
+            foreach ($datos['conceptos'] as $concepto) {
+                $tarifa = $satelite === null ? null : DescuentoDeEstancia::tarifaDe($satelite, $concepto);
+                $servicio = FactServicio::porConcepto($concepto)->activos()->first();
+                $etiqueta = DescuentoDeEstancia::etiquetaDe($concepto);
+
+                $renglon = $actual->renglones()->create([
+                    'servicio_id' => $servicio->id,
+                    'nombre_servicio' => DescuentoDeEstancia::nombreDe($concepto),
+                    'precio_unitario' => DescuentoDeEstancia::precioDe($tarifa),
+                    'cantidad' => 1,
+                    'es_de_tercero' => false,
+                    'margen' => 0,
+                    'ajuste_precio' => FactServicio::AJUSTE_NINGUNO,
+                    'concepto' => DescuentoDeEstancia::conceptoDe($concepto),
+                    'grupo' => $origen->grupo,
+                    'orden' => $this->ordenDelDescuento($actual, $concepto),
+                ]);
+
+                Bitacora::log(
+                    modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
+                    accion: Bitacora::ACCION_CREAR,
+                    descripcion: "Se aplicó un descuento de {$etiqueta} por ".number_format((float) $tarifa, 2).' a la prefactura '.$actual->id.'.',
+                    usuarioId: $request->user()->id,
+                    registroId: $actual->id,
+                    datosNuevos: [
+                        'renglon_id' => $renglon->id,
+                        'concepto' => $renglon->concepto,
+                        'precio_unitario' => $renglon->precio_unitario,
+                        'importe' => $renglon->importe(),
+                    ],
+                );
+            }
+
+            return $actual;
+        });
+
+        if ($resultado instanceof JsonResponse) {
+            return $resultado;
+        }
+
+        return response()->json([
+            'message' => count($datos['conceptos']) === 1 ? 'Descuento aplicado.' : 'Descuentos aplicados.',
+            'prefactura' => app(PrefacturaController::class)->fichaDe($resultado->id),
+        ]);
+    }
+
+    /**
      * Agrupa o desagrupa un renglón: `grupo` es la etiqueta, o `null` para desagrupar.
      *
      * NO toca el dinero, y eso es el invariante del bloque: `subtotal()` sigue sumando el
@@ -869,6 +952,25 @@ class PrefacturaRenglonController extends Controller
             'renglones' => $resultado['renglones'],
             'motivo' => $resultado['motivo'],
         ]);
+    }
+
+    /**
+     * El `orden` del descuento: justo después del cargo que descuenta.
+     *
+     * Cuando ese cargo no existe —la decisión 2 permite descontar un tramo que no se
+     * cobra— va al final. `reorder()` es obligatorio: la relación `renglones()` tiene
+     * orden por defecto y sin él el `max()` saldría con un ORDER BY que MySQL rechaza
+     * en algunos modos; es lo que ya hace `CargosEstancia::maximoOrden()`.
+     */
+    private function ordenDelDescuento(FactPrefactura $prefactura, string $concepto): int
+    {
+        $delCargo = $prefactura->renglones()->where('concepto', $concepto)->reorder()->max('orden');
+
+        if ($delCargo !== null) {
+            return (int) $delCargo + 1;
+        }
+
+        return (int) $prefactura->renglones()->reorder()->max('orden') + 1;
     }
 
     /**
