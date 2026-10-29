@@ -387,9 +387,16 @@ class FactPrefactura extends Model
      * Medio centavo antes de truncar, en aritmética de cadenas: redondea hacia
      * arriba en el medio sin pasar por float. `bcmul` a escala 6 es exacto
      * (subtotal de 2 decimales por tasa de 4).
+     *
+     * `bcadd` trunca hacia cero, así que el medio centavo se suma con el signo del producto:
+     * redondear «hacia arriba» un negativo (como hace `number_format` del sistema viejo, que
+     * redondea el medio alejándose del cero) le quitaría un centavo al IVA exacto de un
+     * descuento: -3916.080000 + 0.005 truncaría a -3916.07 en lugar de -3916.08.
      */
     public static function calcularIva(string $subtotal, string $tasa): string
     {
-        return bcadd(bcmul($subtotal, $tasa, 6), '0.005', 2);
+        $producto = bcmul($subtotal, $tasa, 6);
+
+        return bcadd($producto, bccomp($producto, '0', 6) < 0 ? '-0.005' : '0.005', 2);
     }
 }

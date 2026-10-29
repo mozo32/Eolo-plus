@@ -363,3 +363,95 @@ test('una prefactura que no existe da 404', function () {
         'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
     ])->assertNotFound();
 });
+
+test('el documento saca el descuento como una linea propia con su nombre', function () {
+    $p = conEstanciaCobrada();
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H)->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_TRANSITO_12H],
+    ])->assertOk();
+
+    $filas = app(App\Services\DocumentoDePrefactura::class)->filas($p->fresh()->load('renglones'));
+    $linea = collect($filas)->firstWhere('concepto', 'Descuento tránsito de 12 horas');
+
+    expect($linea)->not->toBeNull()
+        ->and($linea['importe'])->toBe('-2338.00')
+        ->and($linea['cortesia'])->toBeFalse()
+        ->and($linea['cantidad'])->toBe(1);
+});
+
+test('dentro de un grupo el descuento se suma al importe del grupo y no sale como linea', function () {
+    // Es el riesgo aceptado de la spec: el cliente deja de ver que se le perdono algo.
+    // Se fija con una prueba para que el dia que moleste se sepa donde cambiarlo.
+    $p = conEstanciaCobrada();
+    $pernocta = renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA);
+    $pernocta->update(['grupo' => 'Estancia']);
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => $pernocta->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertOk();
+
+    $filas = app(App\Services\DocumentoDePrefactura::class)->filas($p->fresh()->load('renglones'));
+
+    expect(collect($filas)->firstWhere('concepto', 'Descuento pernocta'))->toBeNull()
+        ->and(collect($filas)->firstWhere('concepto', 'Estancia')['importe'])->toBe('0.00');
+});
+
+test('el iva y el total bajan con el descuento, derivados', function () {
+    $p = conEstanciaCobrada();
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H)->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H],
+    ])->assertOk();
+
+    $p = $p->fresh();
+
+    // 8158.50 - 1144.50 = 7014.00; el IVA sale de la tasa configurada y no se teclea aqui.
+    expect($p->subtotal())->toBe('7014.00')
+        ->and(bcadd($p->subtotal(), $p->iva(), 2))->toBe($p->total());
+});
+
+test('una prefactura cuyo total queda negativo se cierra y sella el total en negativo', function () {
+    // Sin precedente en el sistema viejo (ninguna de sus 10 lineas negativas dejo un documento
+    // negativo): esta prueba fija lo que el cierre hace, para que no se descubra en produccion.
+    $p = conEstanciaCobrada();
+    $p->update(['cliente_id' => App\Models\FactCliente::create(['nombre' => 'Cliente '.uniqid()])->id]);
+    $pernocta = renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_PERNOCTA);
+
+    foreach ([1, 2, 3, 4] as $vez) {
+        $this->postJson(urlDescuentos($p), [
+            'renglon_id' => $pernocta->id,
+            'conceptos' => DescuentoDeEstancia::conceptosDescontables(),
+        ])->assertOk();
+    }
+
+    expect(bccomp($p->fresh()->subtotal(), '0.00', 2))->toBe(-1);
+
+    $respuesta = $this->patchJson("/api/facturacion/prefacturas/{$p->id}/cerrar", ['confirmar_sin_cobro' => true]);
+
+    $respuesta->assertOk()->assertJsonPath('message', 'Prefactura cerrada con folio 10000.');
+
+    $cerrada = $p->fresh();
+
+    // 8158.50 - 4 * 8158.50; el IVA es el 16% exacto del subtotal, redondeado alejandose del cero.
+    expect($cerrada->estado)->toBe(FactPrefactura::ESTADO_CERRADA)
+        ->and($cerrada->folio)->toBe(10000)
+        ->and($cerrada->subtotal_sellado)->toBe('-24475.50')
+        ->and($cerrada->iva_sellado)->toBe('-3916.08')
+        ->and($cerrada->total_sellado)->toBe('-28391.58')
+        ->and($cerrada->selloDiscrepa())->toBeFalse();
+});
+
+test('el iva de un subtotal negativo es simetrico al del positivo', function (string $subtotal, string $tasa, string $iva) {
+    expect(FactPrefactura::calcularIva($subtotal, $tasa))->toBe($iva);
+})->with([
+    'exacto negativo' => ['-24475.50', '0.1600', '-3916.08'],
+    'exacto positivo' => ['24475.50', '0.1600', '3916.08'],
+    'medio centavo negativo, lejos del cero' => ['-1.00', '0.1650', '-0.17'],
+    'medio centavo positivo' => ['1.00', '0.1650', '0.17'],
+    'redondea hacia arriba un negativo' => ['-26.06', '0.1600', '-4.17'],
+    'cero' => ['0.00', '0.1600', '0.00'],
+]);
