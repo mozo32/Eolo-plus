@@ -176,7 +176,7 @@ sin endpoint nuevo.
 
 ## El recálculo de estancia
 
-`CargosEstancia::sincronizar()` lee el orden y las cortesías **antes** de borrar,
+`CargosEstancia::recalcular()` lee el orden y las cortesías **antes** de borrar,
 borra los conceptos de estancia, recrea los que tienen cantidad y tarifa, y
 arma un `motivo` que ya dice qué cortesías se conservaron y qué cortesías se
 perdieron. El descuento se engancha en ese mismo sitio y con esa misma forma:
@@ -190,7 +190,7 @@ perdieron. El descuento se engancha en ese mismo sitio y con esa misma forma:
 Ese `motivo` ya viaja a la pantalla y ya se muestra en el diálogo de «Recalcular
 estancia» y al guardar el encabezado. No hay plomería nueva.
 
-Los dos caminos de salida temprana de `sincronizar()` —la matrícula sin ficha y
+Los dos caminos de salida temprana de `recalcular()` —la matrícula sin ficha y
 la aeronave en Guarda— quitan la estancia y devuelven antes de llegar a la
 creación. Los descuentos también se retiran ahí, con su nombre en el aviso: una
 aeronave en Guarda no paga estancia, así que tampoco tiene nada que descontar.
