@@ -3,12 +3,13 @@ import { facturacionPrefacturas } from '@/routes';
 import { ErrorApi, apiPrefacturas, mensajeDeError, urlCotizacionPrefactura, urlDocumentoPrefactura, urlVersionPrefactura, type DiscrepanciaSello, type Prefactura, type RenglonPrefactura, type ResultadoSincronizar, type VersionPrefactura } from '@/stores/apiFacturacionCatalogos';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { ArrowLeft, Ban, FileText, Gift, Globe, Group, History, Lock, LockOpen, PlaneLanding, Plus, Printer, RefreshCw, Save, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, Ungroup, X } from 'lucide-react';
+import { ArrowLeft, Ban, FileText, Gift, Globe, Group, History, Lock, LockOpen, PlaneLanding, Plus, Printer, RefreshCw, Save, ShieldAlert, ShieldCheck, TicketPercent, Trash2, TriangleAlert, Ungroup, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import CabeceraPantalla from './components/CabeceraPantalla';
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO, TD, TH, campoConError, errorStyle, labelStyle, sectionTitle, toast } from './components/estilos';
-import { esConceptoComisionAmex, esConceptoDeEstancia, esHora24, esMontoPositivo, fechaHoraSinZona, formatearHora24, formatearMonto, formatearTasa, partirFechaHora, unirFechaHora } from './components/formato';
+import { admiteDescuentoDeEstancia, esConceptoComisionAmex, esConceptoDeEstancia, esHora24, esMontoPositivo, fechaHoraSinZona, formatearHora24, formatearMonto, formatearTasa, partirFechaHora, unirFechaHora } from './components/formato';
+import ModalDescuentoEstancia from './components/ModalDescuentoEstancia';
 import ModalEstancia, { type CantidadesEstancia } from './components/ModalEstancia';
 import ModalReabrir from './components/ModalReabrir';
 import ModalRenglon, { type DatosRenglon } from './components/ModalRenglon';
@@ -313,6 +314,8 @@ export default function EditorPrefactura({ id }: Props) {
     const [guardandoEncabezado, setGuardandoEncabezado] = useState(false);
 
     const [modal, setModal] = useState<'renglon' | 'estancia' | 'reabrir' | null>(null);
+    /** El renglón de estancia desde cuyo icono se abrió el modal del descuento. `null` = cerrado. */
+    const [descuentoDe, setDescuentoDe] = useState<RenglonPrefactura | null>(null);
     const [accionando, setAccionando] = useState<string | null>(null);
     const [avisoCargos, setAvisoCargos] = useState<string | null>(null);
     // Las remisiones de combustible cobradas aquí cuya carga ya no cae en la estancia. Solo avisa: el renglón no se toca.
@@ -909,6 +912,19 @@ export default function EditorPrefactura({ id }: Props) {
             await cargar();
             toast.fire({ icon: 'success', titleText: marcar ? `«${nombre}» queda como cortesía: ya no se cobra.` : `«${nombre}» vuelve a cobrarse.` });
         });
+
+    /**
+     * Aplica los descuentos elegidos. La cifra la pone el servidor con la tarifa de la matrícula; aquí no se calcula dinero.
+     *
+     * Deja que el ErrorApi suba: el modal lo muestra en su propio sitio, que es donde la persona está mirando.
+     */
+    const aplicarDescuento = async (renglon: RenglonPrefactura, conceptos: string[]): Promise<void> => {
+        const { prefactura: ficha } = await apiPrefacturas.descuentosDeEstancia(prefactura.id, renglon.id, conceptos);
+
+        aplicar(ficha);
+        setDescuentoDe(null);
+        toast.fire({ icon: 'success', titleText: conceptos.length === 1 ? 'Descuento aplicado.' : 'Descuentos aplicados.' });
+    };
 
     /**
      * Pide la etiqueta con la que sale el renglón y la manda; el servidor guarda lo que llega (recortado) y esa etiqueta es la identidad
@@ -1528,6 +1544,18 @@ export default function EditorPrefactura({ id }: Props) {
                                                                 <Ungroup size={16} />
                                                             </button>
                                                         )}
+                                                        {admiteDescuentoDeEstancia(renglon.concepto) && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setDescuentoDe(renglon)}
+                                                                disabled={ocupado}
+                                                                title="Descontar: entra un renglón negativo con la tarifa de esta matrícula"
+                                                                aria-label={`Descontar ${renglon.nombre_servicio}`}
+                                                                className="rounded border border-slate-200 bg-white p-2 text-slate-400 transition-colors hover:text-amber-700 disabled:opacity-50"
+                                                            >
+                                                                <TicketPercent size={16} />
+                                                            </button>
+                                                        )}
                                                         <button
                                                             type="button"
                                                             onClick={() => void quitarRenglon(renglon.id, renglon.nombre_servicio, renglon.concepto)}
@@ -1664,6 +1692,14 @@ export default function EditorPrefactura({ id }: Props) {
             {modal === 'renglon' && <ModalRenglon prefacturaId={prefactura.id} matricula={prefactura.matricula} onCerrar={() => setModal(null)} onGuardar={agregarRenglon} />}
             {modal === 'estancia' && <ModalEstancia prefacturaId={prefactura.id} onCerrar={() => setModal(null)} onGuardar={recalcularEstancia} />}
             {modal === 'reabrir' && <ModalReabrir folio={prefactura.folio} onCerrar={() => setModal(null)} onGuardar={reabrirPrefactura} />}
+            {descuentoDe !== null && (
+                <ModalDescuentoEstancia
+                    prefacturaId={prefactura.id}
+                    renglon={descuentoDe}
+                    onCerrar={() => setDescuentoDe(null)}
+                    onAplicar={conceptos => aplicarDescuento(descuentoDe, conceptos)}
+                />
+            )}
         </AppLayout>
     );
 }

@@ -654,6 +654,14 @@ export const apiPrefacturas = {
         pedir<{ message: string; prefactura: Prefactura }>(`${BASE}/prefacturas/${id}/renglones/${renglon}/grupo`, { method: 'PATCH', body: { grupo } }),
     cortesia: (id: number, renglon: number, esCortesia: boolean) =>
         pedir<{ message: string; prefactura: Prefactura }>(`${BASE}/prefacturas/${id}/renglones/${renglon}/cortesia`, { method: 'PATCH', body: { es_cortesia: esCortesia } }),
+    /** Las tarifas de estancia de la matrícula de esa prefactura, por concepto. Solo lectura: la cifra que cuenta la relee el servidor al aplicar. */
+    tarifasDeEstancia: (id: number) => pedir<{ tarifas: Record<string, string | null> }>(`${BASE}/prefacturas/${id}/tarifas-estancia`),
+    /** Aplica un descuento por cada concepto de estancia indicado. `renglonId` es el renglón desde el que se pidió: de él hereda el grupo. */
+    descuentosDeEstancia: (id: number, renglonId: number, conceptos: string[]) =>
+        pedir<{ message: string; prefactura: Prefactura }>(`${BASE}/prefacturas/${id}/descuentos-estancia`, {
+            method: 'POST',
+            body: { renglon_id: renglonId, conceptos },
+        }),
     agregarRenglon: (id: number, datos: Record<string, unknown>) => pedir<{ renglon_id: number }>(`${BASE}/prefacturas/${id}/renglones`, { method: 'POST', body: datos }),
     /** Trae las remisiones de combustible de la estancia y las agrega como renglones. Idempotente: llamarlo en cada carga no duplica nada. */
     sincronizarRemisiones: (id: number) => pedir<ResultadoSincronizar>(`${BASE}/prefacturas/${id}/remisiones/sincronizar`, { method: 'POST' }),

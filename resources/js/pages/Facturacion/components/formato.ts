@@ -290,6 +290,16 @@ export function formatearHora24(valor: string): string {
 export const esConceptoDeEstancia = (concepto: string | null | undefined): boolean => typeof concepto === 'string' && concepto.startsWith('estancia_');
 
 /**
+ * Los tres tramos a los que se les puede aplicar un descuento. Los dos AJUSTES de estancia no, igual que en el sistema viejo.
+ *
+ * Es una lista y no un prefijo a propósito: `esConceptoDeEstancia()` acepta los cinco, y el descuento solo existe para estos tres.
+ */
+const CONCEPTOS_DESCONTABLES = ['estancia_pernocta', 'estancia_transito_2h', 'estancia_transito_12h'];
+
+export const admiteDescuentoDeEstancia = (concepto: string | null | undefined): boolean =>
+    typeof concepto === 'string' && CONCEPTOS_DESCONTABLES.includes(concepto);
+
+/**
  * La comisión de un pago Amex la agrega el sistema (`PagosPrefactura::registrarAmex()`) como renglón con este concepto. Es la contrapartida
  * de un cargo ya hecho a una tarjeta: tocarla deja el documento por debajo (o por encima) de lo que se cobró.
  */
