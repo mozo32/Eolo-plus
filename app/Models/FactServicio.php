@@ -41,6 +41,21 @@ class FactServicio extends Model
 
     public const CONCEPTO_ESTANCIA_AJUSTE_12H_PERNOCTA = 'estancia_ajuste_12h_pernocta';
 
+    /**
+     * El descuento de un tramo de estancia: un renglón de precio negativo que perdona
+     * lo que ese tramo cobra.
+     *
+     * NO entran en `CONCEPTOS_ESTANCIA` a propósito: esa lista es la que
+     * `CargosEstancia` borra entera en cada recálculo, y un descuento concedido no se
+     * pierde porque alguien corrija una hora de llegada. Tampoco empiezan por
+     * `estancia_`, que es el prefijo con el que la pantalla marca un cargo de estancia.
+     */
+    public const CONCEPTO_DESCUENTO_ESTANCIA_PERNOCTA = 'descuento_estancia_pernocta';
+
+    public const CONCEPTO_DESCUENTO_ESTANCIA_TRANSITO_2H = 'descuento_estancia_transito_2h';
+
+    public const CONCEPTO_DESCUENTO_ESTANCIA_TRANSITO_12H = 'descuento_estancia_transito_12h';
+
     /** El renglón que agrega el pago Amex: en el origen es `id_servicio = 100`, «Comisión AMEX». */
     public const CONCEPTO_COMISION_AMEX = 'comision_amex';
 
