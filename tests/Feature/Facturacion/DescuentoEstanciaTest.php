@@ -123,6 +123,24 @@ test('el descuento sale justo despues del cargo que descuenta, y empuja a los de
     ]);
 });
 
+test('se puede descontar un tramo que la prefactura no cobra, y el descuento va al final', function () {
+    // Decision 2 de la spec: la cifra sale de la TARIFA, no de lo que se cobra. Sin cargo de
+    // ese tramo no hay `orden` detras del que colocarse, asi que va al final.
+    $p = conEstanciaCobrada();
+    app(CargosEstancia::class)->recalcular($p->fresh(), pernoctas: 0, transitos2h: 1, transitos12h: 0);
+    $transito2h = renglonDeConcepto($p, FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H);
+
+    $this->postJson(urlDescuentos($p), [
+        'renglon_id' => $transito2h->id,
+        'conceptos' => [FactServicio::CONCEPTO_ESTANCIA_PERNOCTA],
+    ])->assertOk();
+
+    expect($p->fresh()->renglones()->pluck('concepto')->all())->toBe([
+        FactServicio::CONCEPTO_ESTANCIA_TRANSITO_2H,
+        FactServicio::CONCEPTO_DESCUENTO_ESTANCIA_PERNOCTA,
+    ])->and($p->fresh()->subtotal())->toBe('-3531.50');
+});
+
 test('el mismo tramo se puede descontar dos veces y el total baja el doble', function () {
     // Es la decision 2 de la spec, tomada con su costo escrito: sin tope y repetible.
     // Esta prueba la fija para que nadie «la arregle» sin leer la spec.

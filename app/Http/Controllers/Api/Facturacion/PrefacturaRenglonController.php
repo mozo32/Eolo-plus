@@ -674,7 +674,7 @@ class PrefacturaRenglonController extends Controller
                 Bitacora::log(
                     modulo: Bitacora::MODULO_FACTURACION_PREFACTURAS,
                     accion: Bitacora::ACCION_CREAR,
-                    descripcion: "Se aplicó un descuento de {$etiqueta} por ".number_format((float) $tarifa, 2).' a la prefactura '.$actual->id.'.',
+                    descripcion: "Se aplicó un descuento de {$etiqueta} por ".number_format(abs((float) $renglon->precio_unitario), 2).' a la prefactura '.$actual->id.'.',
                     usuarioId: $request->user()->id,
                     registroId: $actual->id,
                     datosNuevos: [
@@ -955,14 +955,20 @@ class PrefacturaRenglonController extends Controller
     }
 
     /**
-     * El `orden` del descuento: justo después del cargo que descuenta.
+     * El `orden` del descuento: justo después del cargo que descuenta, abriendo hueco.
      *
-     * Cuando ese cargo no existe —la decisión 2 permite descontar un tramo que no se
-     * cobra— va al final. `reorder()` es obligatorio: la relación `renglones()` tiene
-     * orden por defecto y sin él el `max()` saldría con un ORDER BY que MySQL rechaza
-     * en algunos modos; es lo que ya hace `CargosEstancia::maximoOrden()`.
+     * Sin el hueco el descuento comparte `orden` con el renglón siguiente, el desempate por
+     * `id` lo manda detrás de él y, con los tres cargos de estancia, acaba al final del
+     * documento: eso no es «después del cargo que descuenta».
      *
-     * El hueco se abre empujando los `orden` de los renglones de atrás.
+     * El hueco se abre renglón por renglón con `update()` y NO con `increment()`, que es del
+     * constructor de consultas y se salta el evento `saving` de `FactPrefacturaRenglon` —la
+     * guarda que rechaza escribir en una prefactura cerrada y que se traduce sola a 409—. Es
+     * la misma invariante que `CargosEstancia` deja escrita en su docblock.
+     *
+     * Cuando el cargo de ese tramo no existe —la decisión 2 de la spec permite descontar un
+     * tramo que no se cobra— el descuento va al final. El `reorder()` es obligatorio: la
+     * relación `renglones()` lleva orden por defecto.
      */
     private function ordenDelDescuento(FactPrefactura $prefactura, string $concepto): int
     {
@@ -974,13 +980,9 @@ class PrefacturaRenglonController extends Controller
 
         $nuevo = (int) $delCargo + 1;
 
-        // Hueco para el descuento. Sin esto comparte `orden` con el renglón siguiente, el
-        // desempate por `id` lo manda DESPUÉS de ese renglón y con los tres cargos de estancia
-        // acaba al final del documento, que no es «después del cargo que descuenta».
-        // El UPDATE masivo no pasa por la guarda del modelo, igual que
-        // `CargosEstancia::quitarEstancia()`: lo protegen el candado y los dos rechazos de
-        // cerrada y descartada de más arriba.
-        $prefactura->renglones()->where('orden', '>=', $nuevo)->increment('orden');
+        $prefactura->renglones()->where('orden', '>=', $nuevo)->get()->each(
+            fn (FactPrefacturaRenglon $renglon) => $renglon->update(['orden' => $renglon->orden + 1])
+        );
 
         return $nuevo;
     }
