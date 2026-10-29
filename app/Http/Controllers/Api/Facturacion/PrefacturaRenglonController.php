@@ -238,6 +238,34 @@ class PrefacturaRenglonController extends Controller
         return response()->json($comisariatos);
     }
 
+    /**
+     * Las tarifas de estancia de esta matrícula, por concepto, para el modal del
+     * descuento.
+     *
+     * Es de SOLO LECTURA y **no es la autoridad de la cifra**: al aplicar el descuento,
+     * el endpoint vuelve a leer la tarifa con candado y es esa la que se congela en el
+     * renglón. Esto solo evita que la pantalla ofrezca un tramo que acabaría en 422.
+     *
+     * Existe porque `show()` carga la aeronave con `id, matricula` y nada más. Sigue el
+     * precedente de `PrefacturaController::estanciaSugerida()`.
+     *
+     * Las claves son los conceptos de estancia tal cual: la pantalla devuelve en el POST
+     * la misma clave que leyó, sin traducirla.
+     */
+    public function tarifasDeEstancia(int $id): JsonResponse
+    {
+        $prefactura = FactPrefactura::findOrFail($id);
+        $satelite = FactAeronave::query()->where('aeronave_id', $prefactura->aeronave_id)->first();
+
+        $tarifas = [];
+
+        foreach (DescuentoDeEstancia::conceptosDescontables() as $concepto) {
+            $tarifas[$concepto] = $satelite === null ? null : DescuentoDeEstancia::tarifaDe($satelite, $concepto);
+        }
+
+        return response()->json(['tarifas' => $tarifas]);
+    }
+
     /** Las remisiones de una matrícula para el buscador del modal, con sus marcas. */
     public function remisiones(Request $request, int $id): JsonResponse
     {

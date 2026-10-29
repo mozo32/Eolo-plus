@@ -475,3 +475,62 @@ test('el iva de un subtotal negativo es simetrico al del positivo', function (st
     'exacto lejos del cero, negativo' => ['-26.06', '0.1600', '-4.17'],
     'cero' => ['0.00', '0.1600', '0.00'],
 ]);
+
+test('las tarifas de estancia se sirven por concepto, listas para el modal', function () {
+    $p = conEstanciaCobrada();
+
+    $this->getJson("/api/facturacion/prefacturas/{$p->id}/tarifas-estancia")
+        ->assertOk()
+        ->assertJsonPath('tarifas.estancia_pernocta', '4676.00')
+        ->assertJsonPath('tarifas.estancia_transito_2h', '1144.50')
+        ->assertJsonPath('tarifas.estancia_transito_12h', '2338.00');
+});
+
+test('una tarifa que no existe viaja como null y no como cero', function () {
+    $p = conEstanciaCobrada();
+    FactAeronave::query()->where('aeronave_id', $p->aeronave_id)->update(['tarifa_pernocta' => null]);
+
+    $this->getJson("/api/facturacion/prefacturas/{$p->id}/tarifas-estancia")
+        ->assertOk()
+        ->assertJsonPath('tarifas.estancia_pernocta', null)
+        ->assertJsonPath('tarifas.estancia_transito_2h', '1144.50');
+});
+
+test('sin ficha de facturacion las tres tarifas son null', function () {
+    $p = conEstanciaCobrada();
+    FactAeronave::query()->where('aeronave_id', $p->aeronave_id)->delete();
+
+    $this->getJson("/api/facturacion/prefacturas/{$p->id}/tarifas-estancia")
+        ->assertOk()
+        ->assertJsonPath('tarifas.estancia_pernocta', null)
+        ->assertJsonPath('tarifas.estancia_transito_2h', null)
+        ->assertJsonPath('tarifas.estancia_transito_12h', null);
+});
+
+test('la tarifa heredada de la categoria tambien se sirve', function () {
+    $p = conEstanciaCobrada();
+    $categoria = App\Models\FactCategoriaAeronave::create(['nombre' => 'Categoria '.uniqid(), 'tarifa_pernocta' => 7000.00, 'tarifa_transito_2h' => 1144.50, 'tarifa_transito_12h' => 2338.00]);
+    FactAeronave::query()->where('aeronave_id', $p->aeronave_id)
+        ->update(['tarifa_pernocta' => null, 'categoria_aeronave_id' => $categoria->id]);
+
+    $this->getJson("/api/facturacion/prefacturas/{$p->id}/tarifas-estancia")
+        ->assertOk()
+        ->assertJsonPath('tarifas.estancia_pernocta', '7000.00');
+});
+
+test('consultar las tarifas no escribe nada', function () {
+    $p = conEstanciaCobrada();
+    $renglones = $p->fresh()->renglones()->count();
+    $bitacora = Bitacora::query()->count();
+
+    $this->getJson("/api/facturacion/prefacturas/{$p->id}/tarifas-estancia")->assertOk();
+
+    expect($p->fresh()->renglones()->count())->toBe($renglones)
+        ->and(Bitacora::query()->count())->toBe($bitacora);
+});
+
+test('las tarifas de una prefactura que no existe dan 404', function () {
+    $this->actingAs(usuarioConSubdepartamento('factPrefacturas', 'Facturacion'));
+
+    $this->getJson('/api/facturacion/prefacturas/999999/tarifas-estancia')->assertNotFound();
+});

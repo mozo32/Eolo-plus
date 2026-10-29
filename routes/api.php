@@ -380,6 +380,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('facturacion')->group(functio
     Route::get('/prefacturas/{id}/remisiones', [PrefacturaRenglonController::class, 'remisiones'])->whereNumber('id');
     Route::get('/prefacturas/{id}/comisariatos', [PrefacturaRenglonController::class, 'comisariatos'])->whereNumber('id');
     Route::get('/prefacturas/{id}/estancia-sugerida', [PrefacturaController::class, 'estanciaSugerida'])->whereNumber('id');
+    Route::get('/prefacturas/{id}/tarifas-estancia', [PrefacturaRenglonController::class, 'tarifasDeEstancia'])->whereNumber('id');
     Route::get('/prefacturas/{id}', [PrefacturaController::class, 'show'])->whereNumber('id');
 
     // Imprimir no escribe nada, así que vive fuera del grupo de escritura; pero exige el
