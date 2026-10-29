@@ -32,7 +32,8 @@ interface Props {
  */
 export default function ModalDescuentoEstancia({ prefacturaId, renglon, onCerrar, onAplicar }: Props) {
     const [tarifas, setTarifas] = useState<Record<string, string | null> | null>(null);
-    const [elegidos, setElegidos] = useState<string[]>(renglon.concepto === null ? [] : [renglon.concepto]);
+    const inicial = renglon.concepto === null ? [] : [renglon.concepto];
+    const [elegidos, setElegidos] = useState<string[]>(inicial);
     const [cargando, setCargando] = useState(true);
     const [guardando, setGuardando] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -76,6 +77,9 @@ export default function ModalDescuentoEstancia({ prefacturaId, renglon, onCerrar
         }
     };
 
+    // El tramo premarcado no es un cambio de la persona: solo cuenta lo que difiere de él.
+    const tieneCambios = elegidos.length !== inicial.length || elegidos.some(c => !inicial.includes(c));
+
     const total = elegidos.reduce((suma, concepto) => suma + Number(tarifas?.[concepto] ?? 0), 0);
 
     return (
@@ -83,7 +87,7 @@ export default function ModalDescuentoEstancia({ prefacturaId, renglon, onCerrar
             idTitulo="titulo-descuento-estancia"
             titulo="Descontar estancia"
             subtitulo={`Desde «${renglon.nombre_servicio}»`}
-            tieneCambios={elegidos.length > 0}
+            tieneCambios={tieneCambios}
             bloqueado={guardando}
             onCerrar={onCerrar}
             ancho="max-w-xl"
@@ -126,7 +130,7 @@ export default function ModalDescuentoEstancia({ prefacturaId, renglon, onCerrar
                     </ul>
                 )}
 
-                {elegidos.length > 0 && (
+                {tarifas !== null && elegidos.length > 0 && (
                     <p className="text-[11px] font-black uppercase text-slate-700">
                         Se descontará {formatearMonto(String(total))} en {elegidos.length === 1 ? '1 renglón' : `${elegidos.length} renglones`}.
                     </p>
@@ -138,7 +142,7 @@ export default function ModalDescuentoEstancia({ prefacturaId, renglon, onCerrar
                     <button type="button" onClick={onCerrar} disabled={guardando} className={BOTON_SECUNDARIO}>
                         Cancelar
                     </button>
-                    <button type="button" onClick={() => void aplicar()} disabled={guardando || elegidos.length === 0} className={BOTON_PRIMARIO}>
+                    <button type="button" onClick={() => void aplicar()} disabled={guardando || cargando || tarifas === null || elegidos.length === 0} className={BOTON_PRIMARIO}>
                         {guardando ? 'Aplicando…' : 'Aplicar descuento'}
                     </button>
                 </div>
