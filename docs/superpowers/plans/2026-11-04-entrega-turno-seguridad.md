@@ -2933,14 +2933,29 @@ beforeEach(function () {
     Storage::fake('public');
 });
 
+/**
+ * La firma de prueba, propia de ESTE archivo.
+ *
+ * No se reúsa el `firmaBase64Valida()` de `EditarYEliminarRelevoTest.php`
+ * aunque en Pest las funciones de un archivo de pruebas sean globales de
+ * toda la suite: correr este archivo suelto daría «Call to undefined
+ * function», porque el otro no se habría cargado. Un archivo de pruebas que
+ * solo funciona si antes se cargó otro es frágil, y la duplicación de un
+ * PNG de un pixel cuesta menos que esa dependencia escondida.
+ */
+function firmaPngMinima(): string
+{
+    return 'data:image/png;base64,'
+        .'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+}
+
 function intentarRelevoEl(string $dia): \Illuminate\Testing\TestResponse
 {
     return test()->actingAs(User::factory()->create())
         ->postJson('/api/EntregaTurnoSeguridad', [
             'fecha_hora' => "{$dia} 07:30:00",
             'seccion' => EntregaTurnoSeguridad::SECCION_FRENTE,
-            'firma_quien_entrega' => 'data:image/png;base64,'
-                .'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+            'firma_quien_entrega' => firmaPngMinima(),
         ]);
 }
 
@@ -2998,7 +3013,7 @@ test('el FBO puede firmar un relevo viejo dejando su fecha', function () {
     $relevo = relevoViejo();
     $suFecha = $relevo->fecha_hora->format('Y-m-d H:i:s');
 
-    editarComoFbo($relevo, ['fecha_hora' => $suFecha, 'firma_fbo' => firmaBase64Valida()])
+    editarComoFbo($relevo, ['fecha_hora' => $suFecha, 'firma_fbo' => firmaPngMinima()])
         ->assertSuccessful();
 
     $relevo->load('firmas');
