@@ -1003,7 +1003,16 @@ test('el buscador filtra por el nombre de quien entregó', function () {
         'fecha_hora' => '2026-11-04 07:30:00',
         'seccion' => EntregaTurnoSeguridad::SECCION_FRENTE,
     ]);
-    relevoDelDia('2026-11-03', EntregaTurnoSeguridad::SECCION_FRENTE);
+
+    // El nombre del otro va explícito: con el que invente la factory hay
+    // una posibilidad remota de que contenga «Robles» y la prueba falle
+    // sin que nada esté roto.
+    $otro = User::factory()->create(['name' => 'Beto Sánchez']);
+    EntregaTurnoSeguridad::create([
+        'user_id' => $otro->id,
+        'fecha_hora' => '2026-11-03 07:30:00',
+        'seccion' => EntregaTurnoSeguridad::SECCION_FRENTE,
+    ]);
 
     expect(array_column(listado(['search' => 'Robles'])->json('data'), 'fecha'))
         ->toBe(['2026-11-04']);
@@ -2493,7 +2502,10 @@ git commit -m "feat(seguridad): el relevo de turno solo admite hoy y ayer"
 - Consumes: `types.ts`, `fetchRelevos`, `eliminarRelevo`, y
   `ModalPeriodo` de `@/components/ModalPeriodo`.
 - Produces:
-  `<TablaEntregaTurno puedeEditar={boolean} recargar={number} onEditar={(id: number) => void} onVerPrevia={(fecha: string) => void} />`
+  `<TablaEntregaTurno puedeEditar={boolean} recargar={number} onEditar={(id: number) => void} onVerPrevia={(fila: FilaRelevo) => void} />`
+  — `onVerPrevia` entrega la **fila completa**, no la fecha: la tabla ya
+  la tiene, y mandar solo la fecha obligaría a la página a buscar un
+  renglón que nunca tuvo o a pedirlo otra vez al servidor
   y
   `<SelectorSeccion fila={FilaRelevo} accion={'editar' | 'eliminar'} onElegir={(id: number) => void} onCerrar={() => void} />`.
 
