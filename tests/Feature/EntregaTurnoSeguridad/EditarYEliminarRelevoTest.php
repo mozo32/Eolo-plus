@@ -229,10 +229,18 @@ test('el detalle fija el contrato que lee la vista previa', function () {
     // La vista previa lee estas claves POR NOMBRE, y `tsc` no atrapa que
     // alguien las renombre en el servidor: no hay corredor de pruebas de
     // JavaScript. Esta prueba es la única red de ese contrato.
+    //
+    // Las DOS firmas van en el PUT porque las dos pantallas buscan la suya
+    // por el `rol` del pivote: `VistaPreviaEntregaTurno` pinta las dos
+    // columnas y `FormEntregaTurno` enseña la firma vigente de cada rol. Con
+    // solo la del FBO vigilado, un renombre de `quien_entrega` pasaba.
     $relevo = relevoGuardado(['observaciones' => 'Quedó una camioneta sin resguardo.']);
 
     $this->actingAs(usuarioCon('fbo'))
-        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", ['firma_fbo' => firmaBase64Valida()])
+        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
+            'firma_quien_entrega' => firmaBase64Valida(),
+            'firma_fbo' => firmaBase64Valida(),
+        ])
         ->assertSuccessful();
 
     $datos = $this->actingAs(usuarioCon('empleado'))
@@ -253,14 +261,18 @@ test('el detalle fija el contrato que lee la vista previa', function () {
         expect($datos[$casilla])->toBeBool();
     }
 
+    // La lista de estados sale de la constante y no escrita a mano: es la
+    // misma que usan los dos Form Request en su `Rule::in`, así que si
+    // alguien agrega un cuarto estado la validación y esta prueba siguen de
+    // acuerdo.
     expect($datos['firmas'][0])->toHaveKeys(['id', 'rol', 'tag', 'url'])
         ->and($datos['firmas'][0]['url'])->toBeString()
+        ->and(array_column($datos['firmas'], 'rol'))->toContain(
+            EntregaTurnoSeguridad::ROL_QUIEN_ENTREGA,
+            EntregaTurnoSeguridad::ROL_FBO,
+        )
         ->and($datos['observaciones'])->toBe('Quedó una camioneta sin resguardo.')
-        ->and($datos['pernocta_mensual'])->toBeIn([
-            EntregaTurnoSeguridad::PERNOCTA_HECHA,
-            EntregaTurnoSeguridad::PERNOCTA_NO_HECHA,
-            EntregaTurnoSeguridad::PERNOCTA_SIN_REVISAR,
-        ])
+        ->and($datos['pernocta_mensual'])->toBeIn(EntregaTurnoSeguridad::PERNOCTA_ESTADOS)
         ->and($datos['hora'])->toMatch('/^\d{2}:\d{2}$/');
 });
 

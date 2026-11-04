@@ -12,6 +12,8 @@ import {
     ETIQUETA_SECCION,
     horaAhora,
     PERNOCTA,
+    ROL_FBO,
+    ROL_QUIEN_ENTREGA,
     SECCIONES,
     type Casilla,
     type DetalleRelevo,
@@ -102,7 +104,6 @@ function Formulario({ relevo, nombreUsuario, puedeFirmarComoFbo, onCerrar, onGua
                     pernocta_mensual: datos.pernocta_mensual,
                     observaciones: datos.observaciones.trim() || null,
                     firma_quien_entrega: firmaQuienEntrega,
-                    ...(puedeFirmarComoFbo && firmaFbo ? { firma_fbo: firmaFbo } : {}),
                 };
 
                 await guardarRelevo(payload);
@@ -262,15 +263,15 @@ function Formulario({ relevo, nombreUsuario, puedeFirmarComoFbo, onCerrar, onGua
                     </div>
 
                     <div>
-                        <FirmaActual firma={firmaGuardada('quien_entrega')} />
+                        <FirmaActual firma={firmaGuardada(ROL_QUIEN_ENTREGA)} />
                         <SignaturePad title="Firma de quien entrega" value={firmaQuienEntrega} onChange={setFirmaQuienEntrega} compact />
                         {editando && <p className="mt-1 text-[10px] text-slate-500">Déjala en blanco para conservar la firma actual.</p>}
                         <MensajeError mensajes={errores.firma_quien_entrega} />
                     </div>
-
-                    {puedeFirmarComoFbo && (
+                    {/* §4 de la spec: al crear se guarda la firma de quien entrega NADA MÁS; el FBO firma después, por la cola de pendientes. Ofrecer aquí su pad le hacía dibujar una firma que `store` descartaba al validar, con un 201 de «relevo registrado correctamente» encima. */}
+                    {editando && puedeFirmarComoFbo && (
                         <div>
-                            <FirmaActual firma={firmaGuardada('fbo')} />
+                            <FirmaActual firma={firmaGuardada(ROL_FBO)} />
                             <SignaturePad title="Firma del FBO" value={firmaFbo} onChange={setFirmaFbo} compact />
                             <MensajeError mensajes={errores.firma_fbo} />
                         </div>

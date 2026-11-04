@@ -65,6 +65,19 @@ export type FilaRelevo = {
     atras: SeccionRelevo | null;
 };
 
+/**
+ * Los dos roles del pivote de firmas, como los escribe el servidor en
+ * `EntregaTurnoSeguridad::ROL_QUIEN_ENTREGA` y `::ROL_FBO`.
+ *
+ * Están aquí para que las pantallas no repitan el literal: `tsc` no atrapa un
+ * renombre del lado servidor, así que un literal suelto en un componente
+ * seguiría compilando y dejaría de encontrar la firma en silencio. La prueba
+ * de contrato del detalle vigila los dos valores.
+ */
+export const ROL_QUIEN_ENTREGA = 'quien_entrega';
+
+export const ROL_FBO = 'fbo';
+
 export type FirmaRelevo = {
     id: number;
     rol: string;
@@ -129,12 +142,26 @@ export const formatearFecha = (fecha: string): string => {
     return anio && mes && dia ? `${dia}/${mes}/${anio}` : fecha;
 };
 
-/** La hora de ahora en 24 horas, como `HH:mm`. */
-export const horaAhora = (): string => {
-    const ahora = new Date();
-
-    return `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
-};
+/**
+ * La hora de ahora en 24 horas, como `HH:mm`, en hora de México.
+ *
+ * La zona va EXPLÍCITA y no se usa `new Date().getHours()`, que lee el reloj
+ * del equipo. El formulario toma la fecha de `fechaHoy()`, que es el día del
+ * SERVIDOR; en un equipo fuera de la zona de México un reloj local daría un
+ * par fecha+hora que no corresponde a ningún instante real, y cerca de
+ * medianoche caería del lado equivocado del día.
+ *
+ * Es copia literal de `pages/despacho/operacionesProgramadas/types.ts`, que
+ * ya lo resolvía así. Copiar es la exención; reimplementarlo distinto no lo
+ * era.
+ */
+export const horaAhora = (): string =>
+    new Intl.DateTimeFormat('es-MX', {
+        timeZone: 'America/Mexico_City',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).format(new Date());
 
 /** Lo que el botón de fechas dice cuando está cerrado. */
 export const etiquetaPeriodo = (rango: RangoPeriodo): string => {

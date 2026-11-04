@@ -39,10 +39,27 @@ class StoreEntregaTurnoSeguridadRequest extends FormRequest
             'visitantes' => ['sometimes', 'boolean'],
             'pernocta_mensual' => ['sometimes', Rule::in(EntregaTurnoSeguridad::PERNOCTA_ESTADOS)],
             'observaciones' => ['nullable', 'string'],
+            /*
+             * El `=` solo se admite como relleno FINAL, y el cierre es `\z` y
+             * no `$`.
+             *
+             * Con `[A-Za-z0-9+\/=]{16,}$` dieciséis `=` pasaban la
+             * validación: `base64_decode` devolvía cadena vacía, se escribía
+             * un archivo de cero bytes y se creaba el renglón de `Firma`. El
+             * `detalle()` solo descarta las firmas cuyo archivo NO existe, y
+             * éste existe, así que el relevo quedaba «firmado» con una imagen
+             * rota. En este módulo la firma es lo que da valor al registro.
+             *
+             * El `\z` cierra además que `$` en PHP, sin el modificador `D`,
+             * acepta un salto de línea final.
+             *
+             * La MISMA regla va en UpdateEntregaTurnoSeguridadRequest, dos
+             * veces: si se cambia una, se cambian las tres.
+             */
             'firma_quien_entrega' => [
                 'required',
                 'string',
-                'regex:/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+\/=]{16,}$/',
+                'regex:/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+\/]{16,}={0,2}\z/',
             ],
         ];
     }

@@ -129,6 +129,21 @@ test('se guarda con la firma de quien entrega y sin la del FBO', function () {
         ->and(Storage::disk('public')->size($firma->path))->toBeGreaterThan(0);
 });
 
+test('al crear, una firma del FBO se ignora y el relevo queda pendiente', function () {
+    // La spec §4 dice que el relevo se guarda con la firma de quien entrega
+    // nada más. El formulario ya no ofrece el pad del FBO al crear, pero el
+    // endpoint tiene que ser explícito: si llega, se ignora, y el relevo
+    // sigue apareciendo en la cola de pendientes.
+    $this->actingAs(User::factory()->create())
+        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['firma_fbo' => firmaBase64()]))
+        ->assertCreated();
+
+    $relevo = EntregaTurnoSeguridad::with('firmas')->sole();
+
+    expect($relevo->tieneFirmaDe(EntregaTurnoSeguridad::ROL_QUIEN_ENTREGA))->toBeTrue()
+        ->and($relevo->tieneFirmaDe(EntregaTurnoSeguridad::ROL_FBO))->toBeFalse();
+});
+
 test('sin la firma de quien entrega no se guarda', function () {
     $this->actingAs(User::factory()->create())
         ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['firma_quien_entrega' => '']))
@@ -154,6 +169,12 @@ test('un SVG se rechaza aunque sea una imagen', function (string $firma) {
     // directa corre su propio script en el origen de la aplicación, y crear
     // un relevo está abierto a cualquiera con sesión: sería XSS almacenado.
     // Un `text/html` se rechaza por lo mismo.
+    //
+    // El caso «solo relleno» cierra otra cosa: dieciséis `=` son base64
+    // sintácticamente válido para la regla vieja y decodifican a cadena
+    // vacía, así que se escribía un archivo de cero bytes y el relevo quedaba
+    // «firmado» con una imagen rota. Se comprobó por mutación: antes del
+    // apriete este caso creaba el relevo con 201.
     $this->actingAs(User::factory()->create())
         ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['firma_quien_entrega' => $firma]))
         ->assertJsonValidationErrorFor('firma_quien_entrega');
@@ -162,6 +183,7 @@ test('un SVG se rechaza aunque sea una imagen', function (string $firma) {
 })->with([
     'svg' => 'data:image/svg+xml;base64,PHN2Zz48c2NyaXB0PmFsZXJ0KDEpPC9zY3JpcHQ+PC9zdmc+',
     'html' => 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==',
+    'solo relleno' => 'data:image/png;base64,================',
 ]);
 
 test('una cabecera de imagen sin cuerpo se rechaza', function () {

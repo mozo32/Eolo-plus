@@ -64,18 +64,25 @@ class UpdateEntregaTurnoSeguridadRequest extends FormRequest
              * `nullable` va por delante para que un `null` explícito —no
              * mandar firma— siga siendo válido: la regex solo juzga lo que
              * llega con contenido.
+             *
+             * El `=` solo se admite como relleno FINAL y el cierre es `\z`:
+             * con `[A-Za-z0-9+\/=]{16,}$` dieciséis `=` pasaban y dejaban un
+             * archivo de cero bytes con su renglón de `Firma`, o sea un
+             * relevo «firmado» sin firma. Las tres reglas de forma del módulo
+             * —ésta, la de `firma_fbo` y la de `Store`— son la MISMA a
+             * propósito: si se cambia una, se cambian las tres.
              */
             'firma_quien_entrega' => [
                 'sometimes',
                 'nullable',
                 'string',
-                'regex:/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+\/=]{16,}$/',
+                'regex:/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+\/]{16,}={0,2}\z/',
             ],
             'firma_fbo' => [
                 'sometimes',
                 'nullable',
                 'string',
-                'regex:/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+\/=]{16,}$/',
+                'regex:/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+\/]{16,}={0,2}\z/',
             ],
         ];
     }

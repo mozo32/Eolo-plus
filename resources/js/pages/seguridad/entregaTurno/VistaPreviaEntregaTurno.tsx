@@ -6,6 +6,8 @@ import {
     ETIQUETA_CASILLA,
     ETIQUETA_PERNOCTA,
     ETIQUETA_SECCION,
+    ROL_FBO,
+    ROL_QUIEN_ENTREGA,
     SECCIONES,
     formatearFecha,
     type DetalleRelevo,
@@ -72,8 +74,8 @@ function Columna({ seccion, detalle }: { seccion: Seccion; detalle: DetalleRelev
                         <p className="whitespace-pre-wrap text-xs text-slate-700">{detalle.observaciones?.trim() || '—'}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-4 pt-2">
-                        <Firma firma={firmaPorRol(detalle, 'quien_entrega')} titulo="Quien entrega" />
-                        <Firma firma={firmaPorRol(detalle, 'fbo')} titulo="FBO" />
+                        <Firma firma={firmaPorRol(detalle, ROL_QUIEN_ENTREGA)} titulo="Quien entrega" />
+                        <Firma firma={firmaPorRol(detalle, ROL_FBO)} titulo="FBO" />
                     </div>
                 </div>
             )}
