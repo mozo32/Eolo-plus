@@ -2965,6 +2965,84 @@ test('rechaza un relevo de mañana', function () {
 
     expect(EntregaTurnoSeguridad::count())->toBe(0);
 });
+
+/*
+ * Al editar: no puedes PONER una fecha fuera de ventana, pero puedes DEJAR
+ * la que ya estaba. Sin esto, el FBO no podría firmar un relevo de hace tres
+ * días, que es justo lo que la cola de pendientes saca a flote.
+ */
+
+function relevoViejo(): EntregaTurnoSeguridad
+{
+    $hace3 = Carbon::today(config('app.timezone'))->subDays(3);
+
+    return EntregaTurnoSeguridad::create([
+        'user_id' => User::factory()->create()->id,
+        'fecha_hora' => $hace3->copy()->setTime(7, 30)->format('Y-m-d H:i:s'),
+        'seccion' => EntregaTurnoSeguridad::SECCION_FRENTE,
+    ]);
+}
+
+function editarComoFbo(EntregaTurnoSeguridad $relevo, array $datos): \Illuminate\Testing\TestResponse
+{
+    $fbo = User::factory()->create();
+    $rol = \App\Models\Role::firstOrCreate(['slug' => 'fbo'], ['nombre' => 'FBO']);
+    $fbo->roles()->attach($rol->id);
+
+    return test()->actingAs($fbo)->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", $datos);
+}
+
+test('el FBO puede firmar un relevo viejo dejando su fecha', function () {
+    // Éste es el caso que la cola de pendientes necesita. Si falla, el botón
+    // de pendientes enseña relevos que nadie puede firmar.
+    $relevo = relevoViejo();
+    $suFecha = $relevo->fecha_hora->format('Y-m-d H:i:s');
+
+    editarComoFbo($relevo, ['fecha_hora' => $suFecha, 'firma_fbo' => firmaBase64Valida()])
+        ->assertSuccessful();
+
+    $relevo->load('firmas');
+
+    expect($relevo->tieneFirmaDe(EntregaTurnoSeguridad::ROL_FBO))->toBeTrue();
+});
+
+test('no se puede mover un relevo viejo a otra fecha vieja', function () {
+    $relevo = relevoViejo();
+    $otraVieja = Carbon::today(config('app.timezone'))->subDays(5)->format('Y-m-d H:i:s');
+
+    editarComoFbo($relevo, ['fecha_hora' => $otraVieja])
+        ->assertJsonValidationErrorFor('fecha_hora');
+
+    expect($relevo->fresh()->fecha_hora->toDateString())
+        ->toBe($relevo->fecha_hora->toDateString());
+});
+
+test('sí se puede traer un relevo viejo a hoy', function () {
+    $relevo = relevoViejo();
+    $hoy = Carbon::today(config('app.timezone'))->setTime(8, 0)->format('Y-m-d H:i:s');
+
+    editarComoFbo($relevo, ['fecha_hora' => $hoy])->assertSuccessful();
+
+    expect($relevo->fresh()->fecha_hora->toDateString())
+        ->toBe(Carbon::today(config('app.timezone'))->toDateString());
+});
+
+test('una fecha no se puede lavar pasando por una válida', function () {
+    // Cada petición se juzga contra lo guardado EN ESE MOMENTO. Traer el
+    // relevo a hoy y devolverlo a su fecha vieja debe fallar en el segundo
+    // paso: si pasara, la ventana no serviría de nada.
+    $relevo = relevoViejo();
+    $vieja = $relevo->fecha_hora->format('Y-m-d H:i:s');
+    $hoy = Carbon::today(config('app.timezone'))->setTime(8, 0)->format('Y-m-d H:i:s');
+
+    editarComoFbo($relevo, ['fecha_hora' => $hoy])->assertSuccessful();
+
+    editarComoFbo($relevo, ['fecha_hora' => $vieja])
+        ->assertJsonValidationErrorFor('fecha_hora');
+
+    expect($relevo->fresh()->fecha_hora->toDateString())
+        ->toBe(Carbon::today(config('app.timezone'))->toDateString());
+});
 ```
 
 - [ ] **Step 2: Correr las pruebas y ver que fallan**
@@ -3004,12 +3082,57 @@ lo que exige `tests/Feature/VentanasDeFechaTest.php`:
             'fecha_hora' => ['required', 'date', new DentroDeLaVentana('seguridad.entrega_turno')],
 ```
 
-En `UpdateEntregaTurnoSeguridadRequest::rules()`, igual pero con
-`sometimes`:
+En `UpdateEntregaTurnoSeguridadRequest::rules()` la regla va
+**condicionada**, y esto es lo más importante de la tarea:
 
 ```php
-            'fecha_hora' => ['sometimes', 'date', new DentroDeLaVentana('seguridad.entrega_turno')],
+            'fecha_hora' => $this->cambiaElDia()
+                ? ['sometimes', 'date', new DentroDeLaVentana('seguridad.entrega_turno')]
+                : ['sometimes', 'date'],
 ```
+
+con este ayudante privado en el mismo Form Request:
+
+```php
+    /**
+     * Si la fecha recibida es un día DISTINTO del que ya está guardado.
+     *
+     * La regla del proyecto al editar es «no puedes PONER una fecha fuera de
+     * ventana, pero puedes DEJAR la que ya estaba». Sin esto, el FBO no
+     * podría firmar un relevo de hace tres días: el formulario manda
+     * `fecha_hora` siempre, esa fecha está fuera de «hoy y ayer», y el
+     * servidor devolvería 422 —justo con los relevos viejos que la cola de
+     * pendientes existe para sacar a flote, ordenados de más viejo primero.
+     *
+     * Tampoco se puede «lavar» una fecha: cada petición se juzga contra lo
+     * que hay guardado en ese momento, así que pasar por una fecha válida y
+     * volver a la vieja se rechaza en el segundo paso.
+     *
+     * El día se compara con `diaQueGuardaElModelo` y no con `Carbon::parse`,
+     * por lo mismo que la regla: difieren con una cadena numérica y con un
+     * desfase de zona.
+     */
+    private function cambiaElDia(): bool
+    {
+        $relevo = EntregaTurnoSeguridad::activas()->find($this->route('id'));
+
+        if ($relevo === null) {
+            return true;
+        }
+
+        $recibido = VentanasDeFecha::diaQueGuardaElModelo($this->input('fecha_hora'));
+
+        return $recibido !== $relevo->fecha_hora?->toDateString();
+    }
+```
+
+Agregar los `use` de `App\Support\VentanasDeFecha` y
+`App\Models\EntregaTurnoSeguridad`.
+
+El patrón sale de `MovimientoCSAEController.php:251` y `:307-312`, que
+resuelve lo mismo para la salida de un avión. Ese módulo valida en el
+controlador y aquí se hace en el Form Request, que es donde vive la
+validación de este módulo; la decisión es la misma.
 
 Y el `use App\Rules\DentroDeLaVentana;` en los dos. Quitar de los
 docblocks la nota que decía que la regla llegaba en esta tarea.
