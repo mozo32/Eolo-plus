@@ -4,7 +4,7 @@ import { Head, usePage } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import Swal from 'sweetalert2';
-import { fetchRelevo } from '@/stores/apiEntregaTurnoSeguridad';
+import { ErrorDeApi, fetchRelevo } from '@/stores/apiEntregaTurnoSeguridad';
 import FormEntregaTurno from './entregaTurno/FormEntregaTurno';
 import TablaEntregaTurno from './entregaTurno/TablaEntregaTurno';
 import type { DetalleRelevo } from './entregaTurno/types';
@@ -50,6 +50,11 @@ export default function EntregaTurno() {
                 title: 'No se pudo abrir el relevo',
                 text: error instanceof Error ? error.message : 'Error inesperado',
             });
+
+            // Un 404 es que alguien ya lo borró: se refresca para quitar el renglón.
+            if (error instanceof ErrorDeApi && error.status === 404) {
+                setRecargar(n => n + 1);
+            }
         }
     };
 
@@ -79,6 +84,7 @@ export default function EntregaTurno() {
                     <TablaEntregaTurno
                         puedeEditar={puedeEditar}
                         recargar={recargar}
+                        onRecargar={() => setRecargar(n => n + 1)}
                         onEditar={editar}
                         // La tarea 10 abre aquí la vista previa del día.
                         onVerPrevia={() => {}}

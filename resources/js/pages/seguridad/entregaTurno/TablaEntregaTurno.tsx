@@ -1,9 +1,10 @@
-import { Calendar, ChevronDown, Eye, Pencil, Trash2, X } from 'lucide-react';
+import { Eye, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Swal from 'sweetalert2';
 import ModalPeriodo, { type RangoPeriodo } from '@/components/ModalPeriodo';
 import { eliminarRelevo, ErrorDeApi, fetchRelevos } from '@/stores/apiEntregaTurnoSeguridad';
 import { CeldaSeccion, idUnicoDe, pernoctaDelDia } from './CeldasRelevo';
+import FilaFiltros from './FilaFiltros';
 import PaginadorRelevos from './PaginadorRelevos';
 import SelectorSeccion from './SelectorSeccion';
 import { etiquetaPeriodo, formatearFecha, type FilaRelevo, type FiltrosRelevo } from './types';
@@ -12,12 +13,13 @@ interface Props {
     puedeEditar: boolean;
     /** Cada vez que cambia, la tabla vuelve a pedir el listado. */
     recargar: number;
+    /** La tabla lo llama cuando necesita que la página incremente `recargar`. */
+    onRecargar: () => void;
     onEditar: (id: number) => void;
     onVerPrevia: (fila: FilaRelevo) => void;
 }
 
 const TH = 'px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center';
-const FILTRO = 'w-full text-[10px] border border-slate-200 p-1.5 rounded bg-white outline-none focus:border-blue-400 uppercase text-center';
 
 const toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, timerProgressBar: true });
 
@@ -26,7 +28,7 @@ const PERIODO_INICIAL: RangoPeriodo = { periodo: 'mes', fecha_inicio: '', fecha_
 
 type Accion = 'editar' | 'eliminar';
 
-export default function TablaEntregaTurno({ puedeEditar, recargar, onEditar, onVerPrevia }: Props) {
+export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, onEditar, onVerPrevia }: Props) {
     const [filtros, setFiltros] = useState<FiltrosRelevo>(FILTROS_INICIALES);
     const [periodo, setPeriodo] = useState<RangoPeriodo>(PERIODO_INICIAL);
     const [modalPeriodoAbierto, setModalPeriodoAbierto] = useState(false);
@@ -36,18 +38,40 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onEditar, onV
     const [total, setTotal] = useState(0);
     const [ultimaPagina, setUltimaPagina] = useState(1);
     const [cargando, setCargando] = useState(false);
-    const [recargaLocal, setRecargaLocal] = useState(0);
+    // Lo que el buscador ya aplicó: se retrasa 300 ms para no pedir por tecla.
+    const [busqueda, setBusqueda] = useState('');
     const [eligiendo, setEligiendo] = useState<{ fila: FilaRelevo; accion: Accion } | null>(null);
+
+    useEffect(() => {
+        const temporizador = setTimeout(() => {
+            setBusqueda(actual => {
+                if (actual !== filtros.search) setPagina(1);
+
+                return filtros.search ?? '';
+            });
+        }, 300);
+
+        return () => clearTimeout(temporizador);
+    }, [filtros.search]);
+
+    const { seccion, estado, fecha_inicio, fecha_fin } = filtros;
 
     useEffect(() => {
         let vigente = true;
 
-        // La espera evita una petición por tecla en la búsqueda.
-        const temporizador = setTimeout(async () => {
+        const cargar = async () => {
             setCargando(true);
 
             try {
-                const respuesta = await fetchRelevos({ ...filtros, page: pagina, per_page: porPagina });
+                const respuesta = await fetchRelevos({
+                    search: busqueda,
+                    seccion,
+                    estado,
+                    fecha_inicio,
+                    fecha_fin,
+                    page: pagina,
+                    per_page: porPagina,
+                });
 
                 if (!vigente) return;
 
@@ -63,6 +87,8 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onEditar, onV
             } catch (error) {
                 if (!vigente) return;
                 setFilas([]);
+                setTotal(0);
+                setUltimaPagina(1);
                 toast.fire({
                     icon: 'error',
                     title: error instanceof Error ? error.message : 'No se pudo cargar la lista',
@@ -70,21 +96,25 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onEditar, onV
             } finally {
                 if (vigente) setCargando(false);
             }
-        }, 300);
+        };
+
+        void cargar();
 
         return () => {
             vigente = false;
-            clearTimeout(temporizador);
         };
-    }, [filtros, pagina, porPagina, recargar, recargaLocal]);
+    }, [busqueda, seccion, estado, fecha_inicio, fecha_fin, pagina, porPagina, recargar]);
 
     const cambiarFiltros = (cambio: Partial<FiltrosRelevo>) => {
         setFiltros(actual => ({ ...actual, ...cambio }));
         setPagina(1);
     };
 
+    const escribirBusqueda = (search: string) => setFiltros(actual => ({ ...actual, search }));
+
     const limpiar = () => {
         setFiltros(FILTROS_INICIALES);
+        setBusqueda('');
         setPeriodo(PERIODO_INICIAL);
         setPagina(1);
     };
@@ -119,7 +149,7 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onEditar, onV
             }
         }
 
-        setRecargaLocal(n => n + 1);
+        onRecargar();
     };
 
     const actuar = (accion: Accion, id: number) => {
@@ -137,7 +167,7 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onEditar, onV
 
         if (id !== null) {
             actuar(accion, id);
-        } else {
+        } else if (fila.frente !== null || fila.atras !== null) {
             setEligiendo({ fila, accion });
         }
     };
@@ -156,58 +186,14 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onEditar, onV
                                 <th className="px-6 py-4 text-right text-[9px] font-black uppercase text-slate-400">Acciones</th>
                             </tr>
 
-                            <tr className="bg-slate-50">
-                                <td className="border-b border-slate-200 px-2 py-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setModalPeriodoAbierto(true)}
-                                        title="Filtrar por día, rango, mes o año"
-                                        className={`${FILTRO} flex items-center justify-between gap-2 text-left`}
-                                    >
-                                        <span className="flex items-center gap-1.5 overflow-hidden">
-                                            <Calendar size={14} className="shrink-0 text-[#00677F]" />
-                                            <span className="truncate font-bold uppercase text-slate-600">{etiquetaPeriodo(periodo)}</span>
-                                        </span>
-                                        <ChevronDown size={14} className="shrink-0 text-slate-400" />
-                                    </button>
-                                </td>
-                                <td className="border-b border-slate-200 px-2 py-2">
-                                    <input
-                                        type="text"
-                                        placeholder="Buscar nombre..."
-                                        className={FILTRO}
-                                        value={filtros.search}
-                                        onChange={e => cambiarFiltros({ search: e.target.value.toUpperCase() })}
-                                    />
-                                </td>
-                                <td className="border-b border-slate-200 px-2 py-2">
-                                    <select
-                                        className={FILTRO}
-                                        value={filtros.seccion}
-                                        onChange={e => cambiarFiltros({ seccion: e.target.value as FiltrosRelevo['seccion'] })}
-                                    >
-                                        <option value="">AMBAS SECCIONES</option>
-                                        <option value="frente">FRENTE</option>
-                                        <option value="atras">ATRÁS</option>
-                                    </select>
-                                </td>
-                                <td className="border-b border-slate-200 px-2 py-2">
-                                    <select
-                                        className={FILTRO}
-                                        value={filtros.estado}
-                                        onChange={e => cambiarFiltros({ estado: e.target.value as FiltrosRelevo['estado'] })}
-                                    >
-                                        <option value="">TODOS</option>
-                                        <option value="falta_fbo">FALTA FBO</option>
-                                        <option value="completas">COMPLETAS</option>
-                                    </select>
-                                </td>
-                                <td className="border-b border-slate-200 px-2 py-2 text-right">
-                                    <button type="button" onClick={limpiar} className="p-1.5 text-slate-400 transition-colors hover:text-red-500" title="Limpiar filtros">
-                                        <X size={14} />
-                                    </button>
-                                </td>
-                            </tr>
+                            <FilaFiltros
+                                filtros={filtros}
+                                etiquetaFecha={etiquetaPeriodo(periodo)}
+                                onAbrirFechas={() => setModalPeriodoAbierto(true)}
+                                onCambiar={cambiarFiltros}
+                                onBuscar={escribirBusqueda}
+                                onLimpiar={limpiar}
+                            />
                         </thead>
 
                         <tbody className={cargando ? 'opacity-60' : ''}>
