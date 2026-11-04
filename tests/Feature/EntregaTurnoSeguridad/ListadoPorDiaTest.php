@@ -191,14 +191,22 @@ test('el rango de fechas acota los días', function () {
     expect($fechas)->toBe(['2026-11-04']);
 });
 
-test('falta_fbo trae el día pero el renglón sigue mostrando las dos secciones', function () {
+test('falta_fbo excluye los días ya firmados y el renglón sigue completo', function () {
+    // Esta prueba NO distingue un filtro por día de uno por registro: para
+    // «falta_fbo» los dos dan el mismo conjunto de días, así que no hay
+    // nada que distinguir. La que vigila esa diferencia es la de
+    // «completas». Lo que se comprueba aquí es otra cosa, y sí importa: que
+    // el filtro decida qué DÍAS salen y no qué secciones se ven, y que un
+    // día enteramente firmado no aparezca.
     $frente = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE);
     relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_ATRAS, '19:00');
     firmarComoFbo($frente);
 
+    firmarComoFbo(relevoDelDia('2026-11-03', EntregaTurnoSeguridad::SECCION_FRENTE));
+
     $datos = listado(['estado' => 'falta_fbo'])->json('data');
 
-    expect($datos)->toHaveCount(1)
+    expect(array_column($datos, 'fecha'))->toBe(['2026-11-04'])
         ->and($datos[0]['frente'])->not->toBeNull()
         ->and($datos[0]['atras'])->not->toBeNull();
 });
@@ -223,4 +231,12 @@ test('sin registros el listado viene vacío y no revienta', function () {
 
     expect($respuesta->json('data'))->toBe([])
         ->and($respuesta->json('meta.total'))->toBe(0);
+});
+
+test('per_page tiene techo: no se puede pedir la tabla entera de un jalón', function () {
+    // Sin techo, un per_page=100000 pide cien mil días y arrastra toda la
+    // tabla con sus firmas.
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE);
+
+    expect(listado(['per_page' => 100000])->json('meta.per_page'))->toBe(100);
 });

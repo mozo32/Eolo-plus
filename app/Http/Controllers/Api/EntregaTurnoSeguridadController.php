@@ -9,7 +9,6 @@ use App\Models\Firma;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -29,7 +28,11 @@ class EntregaTurnoSeguridadController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $porPagina = max(1, (int) $request->integer('per_page', 10));
+        /*
+         * El techo es tan necesario como el piso: sin él, un `per_page=100000`
+         * pide cien mil días y arrastra toda la tabla con sus firmas.
+         */
+        $porPagina = min(100, max(1, (int) $request->integer('per_page', 10)));
 
         $dias = $this->consultaFiltrada($request)
             ->selectRaw(self::DIA.' as dia')
@@ -56,11 +59,13 @@ class EntregaTurnoSeguridadController extends Controller
     /**
      * Un renglón por día, con sus dos secciones.
      *
-     * Trae los registros con UNA consulta por rango y descarta en PHP los
-     * días que no son de la página. Los días de una página son pocos y
-     * cada uno tiene dos registros, así que sobra traer de más; la
-     * alternativa sería un `IN` sobre la expresión del día, que no gana
-     * nada y enreda la consulta.
+     * Pide exactamente los días de la página con un `IN` sobre la misma
+     * expresión del día que usa el agrupamiento.
+     *
+     * NO se usa un rango entre el día más viejo y el más nuevo. Parecía
+     * más simple, pero con un filtro disperso —un buscador que acierte un
+     * día por mes— una página de diez días abarca casi un año y trae
+     * cientos de registros para pintar diez renglones.
      *
      * @param  list<string>  $diasDeLaPagina
      * @return list<array{fecha: string, frente: ?array, atras: ?array}>
@@ -73,10 +78,7 @@ class EntregaTurnoSeguridadController extends Controller
 
         $registros = EntregaTurnoSeguridad::activas()
             ->with(['usuario:id,name', 'firmas'])
-            ->whereBetween('fecha_hora', [
-                Carbon::parse(min($diasDeLaPagina))->startOfDay(),
-                Carbon::parse(max($diasDeLaPagina))->endOfDay(),
-            ])
+            ->whereIn(DB::raw(self::DIA), $diasDeLaPagina)
             ->get()
             ->groupBy(
                 static fn (EntregaTurnoSeguridad $relevo): string => $relevo->fecha_hora->toDateString()
@@ -167,6 +169,11 @@ class EntregaTurnoSeguridadController extends Controller
      * día en que el frente firmó y el de atrás no está incompleto, y un
      * filtro por registro lo daría por completo a través del frente.
      *
+     * La base agrupa y devuelve días, no fechas completas: traer un renglón
+     * por registro sin firmar y deduplicar en PHP crecía sin tope con el
+     * historial, y en un mes en que el FBO se atrasara serían sesenta
+     * valores para distinguir treinta días.
+     *
      * @return list<string>
      */
     private function diasIncompletos(): array
@@ -176,10 +183,9 @@ class EntregaTurnoSeguridadController extends Controller
                 'firmas',
                 static fn (Builder $firma): Builder => $firma->where('firmables.rol', EntregaTurnoSeguridad::ROL_FBO)
             )
-            ->pluck('fecha_hora')
-            ->map(static fn (Carbon $fecha): string => $fecha->toDateString())
-            ->unique()
-            ->values()
+            ->selectRaw(self::DIA.' as dia')
+            ->distinct()
+            ->pluck('dia')
             ->all();
     }
 
