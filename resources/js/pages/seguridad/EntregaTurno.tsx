@@ -1,10 +1,10 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
-import { ClipboardCheck, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { Plus } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import Swal from 'sweetalert2';
-import { ErrorDeApi, fetchRelevo } from '@/stores/apiEntregaTurnoSeguridad';
+import { ErrorDeApi, fetchPendientesRelevo, fetchRelevo } from '@/stores/apiEntregaTurnoSeguridad';
 import FormEntregaTurno from './entregaTurno/FormEntregaTurno';
 import PendientesFirmaFbo from './entregaTurno/PendientesFirmaFbo';
 import TablaEntregaTurno from './entregaTurno/TablaEntregaTurno';
@@ -33,8 +33,47 @@ export default function EntregaTurno() {
     const [recargar, setRecargar] = useState(0);
     const [previa, setPrevia] = useState<FilaRelevo | null>(null);
     const [pendientesAbierto, setPendientesAbierto] = useState(false);
+    const [pendientes, setPendientes] = useState(0);
     // El FBO vacía la cola: si el formulario se abrió desde ella, al guardar vuelve a ella.
     const [veniaDeLaCola, setVeniaDeLaCola] = useState(false);
+
+    /*
+     * La cuenta se trae al cargar la pantalla y se refresca sola cada dos
+     * minutos, igual que en Operaciones Diarias.
+     *
+     * Hace falta porque el botón solo aparece cuando hay algo pendiente: sin
+     * la cuenta por delante, el FBO no sabría que tiene trabajo hasta abrir
+     * el cajón, que es justo lo que este botón viene a evitar. `recargar`
+     * entra en las dependencias para que guardar o eliminar la actualicen.
+     */
+    useEffect(() => {
+        if (!puedeEditar) {
+            return;
+        }
+
+        let vigente = true;
+
+        const contar = async () => {
+            try {
+                const { data } = await fetchPendientesRelevo();
+
+                if (vigente) {
+                    setPendientes(data.length);
+                }
+            } catch {
+                // Un fallo al contar no debe tumbar la pantalla: se queda la
+                // cuenta anterior y el siguiente refresco lo corrige.
+            }
+        };
+
+        contar();
+        const intervalo = setInterval(contar, 120000);
+
+        return () => {
+            vigente = false;
+            clearInterval(intervalo);
+        };
+    }, [puedeEditar, recargar]);
 
     const cerrarForm = () => {
         setFormAbierto(false);
@@ -85,14 +124,25 @@ export default function EntregaTurno() {
                         <div className="flex items-center justify-between gap-4">
                             <h1 className="text-lg font-black uppercase text-slate-700">Entrega de Turno</h1>
                             <div className="flex items-center gap-2">
-                            {puedeEditar && (
+                            {/*
+                              * Mismo botón que en Operaciones Diarias: rojo,
+                              * pulsante, con la cuenta, y SOLO cuando hay algo.
+                              * Que desaparezca es parte del diseño: su ausencia
+                              * es la respuesta a «¿tengo algo por firmar?».
+                              */}
+                            {puedeEditar && pendientes > 0 && (
                                 <button
                                     type="button"
                                     onClick={() => setPendientesAbierto(true)}
-                                    className="flex items-center gap-2 rounded border border-amber-300 bg-amber-50 px-4 py-2 text-[10px] font-black text-amber-700 transition-all hover:bg-amber-100 active:scale-95"
+                                    className="relative flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-white shadow-md transition-all animate-pulse hover:bg-red-700"
                                 >
-                                    <ClipboardCheck size={14} />
-                                    PENDIENTES
+                                    <span className="flex h-3 w-3">
+                                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"></span>
+                                        <span className="relative inline-flex h-3 w-3 rounded-full bg-white"></span>
+                                    </span>
+                                    <span className="text-sm font-bold">
+                                        PENDIENTES ({pendientes})
+                                    </span>
                                 </button>
                             )}
                             <button

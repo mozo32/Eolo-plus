@@ -6,16 +6,23 @@ const FILTRO = 'w-full text-[10px] border border-slate-200 p-1.5 rounded bg-whit
 interface Props {
     filtros: FiltrosRelevo;
     etiquetaFecha: string;
+    abierto: boolean;
     onAbrirFechas: () => void;
     onCambiar: (cambio: Partial<FiltrosRelevo>) => void;
     onBuscar: (search: string) => void;
     onLimpiar: () => void;
 }
 
-/** La fila de filtros bajo los encabezados de la tabla. */
-export default function FilaFiltros({ filtros, etiquetaFecha, onAbrirFechas, onCambiar, onBuscar, onLimpiar }: Props) {
+/**
+ * La fila de filtros bajo los encabezados de la tabla.
+ *
+ * Nace oculta y la enseña el botón FILTRAR, igual que en Operaciones
+ * Diarias. Se esconde con `hidden` y no desmontándola para que lo escrito
+ * en los filtros sobreviva a cerrarla y volver a abrirla.
+ */
+export default function FilaFiltros({ filtros, etiquetaFecha, abierto, onAbrirFechas, onCambiar, onBuscar, onLimpiar }: Props) {
     return (
-        <tr className="bg-slate-50">
+        <tr className={`bg-slate-50 transition-all duration-300 ease-in-out ${abierto ? 'opacity-100' : 'hidden opacity-0'}`}>
             <td className="border-b border-slate-200 px-2 py-2">
                 <button
                     type="button"

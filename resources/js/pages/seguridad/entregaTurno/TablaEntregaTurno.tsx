@@ -1,4 +1,4 @@
-import { Eye, Pencil, Trash2 } from 'lucide-react';
+import { Eye, Filter, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Swal from 'sweetalert2';
 import ModalPeriodo, { type RangoPeriodo } from '@/components/ModalPeriodo';
@@ -32,6 +32,8 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
     const [filtros, setFiltros] = useState<FiltrosRelevo>(FILTROS_INICIALES);
     const [periodo, setPeriodo] = useState<RangoPeriodo>(PERIODO_INICIAL);
     const [modalPeriodoAbierto, setModalPeriodoAbierto] = useState(false);
+    // La fila de filtros nace oculta y la enseña el botón FILTRAR, como en Operaciones Diarias.
+    const [mostrarFiltros, setMostrarFiltros] = useState(false);
     const [pagina, setPagina] = useState(1);
     const [porPagina, setPorPagina] = useState(10);
     const [filas, setFilas] = useState<FilaRelevo[]>([]);
@@ -89,7 +91,9 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
                 setUltimaPagina(1);
                 toast.fire({
                     icon: 'error',
-                    title: error instanceof Error ? error.message : 'No se pudo cargar la lista',
+                    // `ErrorDeApi` y no `Error`: un fallo de red lanza un
+                    // `TypeError` cuyo mensaje es «Failed to fetch», en inglés.
+                    title: error instanceof ErrorDeApi ? error.message : 'No se pudo cargar la lista',
                 });
             } finally {
                 if (vigente) setCargando(false);
@@ -141,7 +145,7 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
                 Swal.fire({
                     icon: 'error',
                     title: 'No se pudo eliminar',
-                    text: error instanceof Error ? error.message : 'Error inesperado',
+                    text: error instanceof ErrorDeApi ? error.message : 'No se pudo conectar con el servidor.',
                 });
                 return;
             }
@@ -173,6 +177,20 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
     return (
         <div className="space-y-4">
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="flex flex-col justify-between gap-2 border-b border-slate-100 px-6 py-4 md:flex-row md:items-center">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Relevos por día</h3>
+
+                    {/* Mismo botón que en Operaciones Diarias: la fila de filtros nace oculta. */}
+                    <button
+                        type="button"
+                        onClick={() => setMostrarFiltros(!mostrarFiltros)}
+                        className={`flex items-center gap-2 rounded border px-4 py-2 text-[10px] font-black transition-all ${mostrarFiltros ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                    >
+                        <Filter size={14} />
+                        <span className="hidden sm:inline">{mostrarFiltros ? 'OCULTAR FILTROS' : 'FILTRAR'}</span>
+                    </button>
+                </div>
+
                 <div className="custom-scrollbar overflow-x-auto">
                     <table className="w-full min-w-[900px] border-collapse text-left">
                         <thead>
@@ -187,6 +205,7 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
                             <FilaFiltros
                                 filtros={filtros}
                                 etiquetaFecha={etiquetaPeriodo(periodo)}
+                                abierto={mostrarFiltros}
                                 onAbrirFechas={() => setModalPeriodoAbierto(true)}
                                 onCambiar={cambiarFiltros}
                                 onBuscar={escribirBusqueda}
