@@ -3286,6 +3286,30 @@ El botón de fechas abre `ModalPeriodo`, y su `onAplicar` escribe
 `fecha_inicio` y `fecha_fin` en los filtros y regresa `pagina` a 1.
 «Limpiar» devuelve todo a su valor inicial.
 
+El rótulo del botón lo arma un `etiquetaPeriodo` **propio del módulo**, en
+`types.ts`:
+
+```ts
+/** Lo que el botón de fechas dice cuando está cerrado. */
+export const etiquetaPeriodo = (rango: RangoPeriodo): string => {
+    if (!rango.fecha_inicio && !rango.fecha_fin) return 'Todas las fechas';
+    if (rango.periodo === 'dia') return formatearFecha(rango.fecha_inicio);
+    if (rango.periodo === 'rango') {
+        return `${formatearFecha(rango.fecha_inicio)} / ${formatearFecha(rango.fecha_fin)}`;
+    }
+    if (rango.periodo === 'mes') return rango.fecha_inicio.substring(0, 7);
+
+    return rango.fecha_inicio.substring(0, 4);
+};
+```
+
+La copia es deliberada y **no es un hallazgo de duplicación**: ya existen
+dos, en `Trafico/prestamoChalecos/types.ts:130` y
+`Rampa/relacionPlanta/types.ts:115`, cada una tipada contra el tipo de
+filtros de su módulo. Unificarlas pediría un tipo compartido y tocar dos
+módulos ajenos a este trabajo. Aquí se tipa contra el `RangoPeriodo` que
+`ModalPeriodo` ya exporta, que es lo más cerca de compartido que hay.
+
 La celda de cada sección:
 
 ```tsx
