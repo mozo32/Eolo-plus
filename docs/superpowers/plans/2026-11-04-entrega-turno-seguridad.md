@@ -1955,6 +1955,19 @@ Agregar al controlador:
 Agregar al `use` del controlador:
 `App\Http\Requests\EntregaTurnoSeguridad\UpdateEntregaTurnoSeguridadRequest`.
 
+**Y cambiar la respuesta de `store`** para que también pase por `detalle()`:
+
+```php
+            'data' => $this->detalle($relevo->load(['usuario:id,name', 'firmas'])),
+```
+
+Antes devolvía el modelo crudo, con `usuario` anidado, las firmas del
+pivote y `fecha_hora` en ISO. Que el POST y el PUT devolvieran formas
+distintas del mismo recurso obliga al navegador a tipar una de las dos
+como `unknown` y es la clase de incoherencia que muerde al siguiente que
+la use. Las pruebas de la Tarea 2 no asertan el cuerpo de la respuesta,
+así que el cambio no rompe ninguna.
+
 - [ ] **Step 5: Registrar las rutas**
 
 En el grupo de `routes/api.php`. **El orden importa:** `eliminar/{id}`
@@ -2351,11 +2364,18 @@ export type FilaRelevo = {
     atras: SeccionRelevo | null;
 };
 
+/**
+ * `orden` NO se tipa a propósito.
+ *
+ * Viene de la columna del pivote sin cast, así que según el driver puede
+ * llegar como número o como cadena. Nadie en el navegador lo lee —la vista
+ * previa busca las firmas por `rol`—, así que tiparlo sería prometer algo
+ * que no se ha comprobado para un dato que no se usa.
+ */
 export type FirmaRelevo = {
     id: number;
     rol: string;
     tag: string | null;
-    orden: number;
     url: string;
 };
 
@@ -2396,14 +2416,19 @@ export const formatearFecha = (fecha: string): string => {
     return anio && mes && dia ? `${dia}/${mes}/${anio}` : fecha;
 };
 
-/** El día de hoy en la zona del equipo, como `aaaa-mm-dd`. */
-export const fechaHoy = (): string => {
-    const ahora = new Date();
-    const mes = String(ahora.getMonth() + 1).padStart(2, '0');
-    const dia = String(ahora.getDate()).padStart(2, '0');
-
-    return `${ahora.getFullYear()}-${mes}-${dia}`;
-};
+/*
+ * «Hoy» NO se define aquí. Se importa de `@/lib/fechaHoy`.
+ *
+ * Ese ayudante toma el día del SERVIDOR, que es el mismo reloj con el que
+ * `DentroDeLaVentana` valida: si el navegador y el servidor discreparan
+ * sobre qué día es hoy, el formulario ofrecería una fecha que el servidor
+ * rechaza con 422 —y este módulo estrena ventana de fecha en la Tarea 8.
+ *
+ * Una versión anterior de este plan definía aquí un `fechaHoy` con la zona
+ * del equipo. Además de reintroducir ese error, rompía
+ * `tests/Feature/FechaHoyTest.php:281`, que exige que la única definición
+ * viva en `resources/js/lib/fechaHoy.ts`.
+ */
 
 /** La hora de ahora en 24 horas, como `HH:mm`. */
 export const horaAhora = (): string => {
@@ -2564,12 +2589,18 @@ hasta que se regenere, así que importarlo antes deja el TypeScript roto.
 Correr:
 
 ```bash
-php artisan wayfinder:generate
+php artisan wayfinder:generate --with-form
 ```
 
 Es un comando de artisan, no una compilación: no hace falta `npm run
 build` para esto. Lo que genere **no se commitea**, porque la carpeta
 está ignorada y el build la vuelve a producir.
+
+**La bandera `--with-form` no es opcional.** `vite.config.ts` llama a
+`wayfinder({ formVariants: true })`, así que todo el proyecto espera las
+variantes `.form`. Generando sin la bandera desaparecen de `login`,
+`delete-user` y varias más, y `npx tsc --noEmit` pasa de un error a
+decenas, ninguno de este módulo.
 
 - [ ] **Step 6: El renglón del menú**
 
@@ -2622,7 +2653,12 @@ negocian:
 
 El estado:
 
+`fechaHoy` se importa de `@/lib/fechaHoy`, **no** de `./types`: es el día
+del servidor, el mismo con el que se valida la ventana de fecha.
+
 ```tsx
+import { fechaHoy } from '@/lib/fechaHoy';
+
 const [datos, setDatos] = useState({
     fecha: relevo?.fecha ?? fechaHoy(),
     hora: relevo?.hora ?? horaAhora(),
