@@ -2045,19 +2045,29 @@ function relevoEn(string $fechaHora, string $seccion, array $extra = []): Entreg
     ], $extra));
 }
 
-function firmarFbo(EntregaTurnoSeguridad $relevo): void
+/**
+ * Firma un relevo con el rol que se le diga.
+ *
+ * El rol es un parámetro y no una constante escondida a propósito: con un
+ * ayudante que solo supiera firmar como FBO, el filtro `firmables.rol` de
+ * `pendientes()` no tendría quien lo vigilara, y quitarlo no rompería
+ * ninguna prueba. Eso importa porque `store` adjunta la firma de quien
+ * entrega a TODOS los relevos: sin el filtro, cada relevo contaría como
+ * firmado y la cola del FBO quedaría siempre vacía.
+ */
+function firmarConRol(EntregaTurnoSeguridad $relevo, string $rol): void
 {
     $firma = Firma::create([
         'disk' => 'public',
-        'path' => 'firmas/prueba/fbo-'.$relevo->id.'.png',
-        'original_name' => 'fbo.png',
+        'path' => 'firmas/prueba/'.$rol.'-'.$relevo->id.'.png',
+        'original_name' => $rol.'.png',
         'mime' => 'image/png',
         'size' => 10,
-        'sha1' => sha1('fbo'.$relevo->id),
+        'sha1' => sha1($rol.$relevo->id),
     ]);
 
     $relevo->firmas()->attach($firma->id, [
-        'rol' => EntregaTurnoSeguridad::ROL_FBO,
+        'rol' => $rol,
         'orden' => 0,
         'status' => 'A',
     ]);
@@ -2116,6 +2126,27 @@ test('lo más viejo va primero: es la cola de trabajo del FBO', function () {
     expect(array_column(pendientes()->json('data'), 'id'))->toBe([$viejo->id, $nuevo->id]);
 });
 
+test('la firma de quien entrega no cuenta como la del FBO', function () {
+    // El relevo lleva SOLO la firma de quien entrega, que es lo que `store`
+    // adjunta a todos. Sin el filtro `firmables.rol` de `pendientes()`, esa
+    // firma lo daría por firmado y la cola quedaría siempre vacía: la función
+    // entera muerta sin una sola prueba roja.
+    $relevo = relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_FRENTE);
+    firmarConRol($relevo, EntregaTurnoSeguridad::ROL_QUIEN_ENTREGA);
+
+    expect(array_column(pendientes()->json('data'), 'id'))->toBe([$relevo->id]);
+});
+
+test('con la misma fecha y hora el orden lo rompe el id', function () {
+    // El frente y atrás del mismo relevo pueden compartir `fecha_hora`. Sin
+    // un desempate, el orden lo decide la base y cambia entre corridas.
+    $primero = relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_FRENTE);
+    $segundo = relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_ATRAS);
+
+    expect(array_column(pendientes()->json('data'), 'id'))
+        ->toBe([$primero->id, $segundo->id]);
+});
+
 test('cada pendiente dice de quién, de cuándo y de qué sección es', function () {
     $usuario = User::factory()->create(['name' => 'Luis Gómez']);
     relevoEn('2026-11-04 19:45:00', EntregaTurnoSeguridad::SECCION_ATRAS, ['user_id' => $usuario->id]);
@@ -2156,6 +2187,7 @@ Agregar al controlador:
                 static fn (Builder $firma): Builder => $firma->where('firmables.rol', EntregaTurnoSeguridad::ROL_FBO)
             )
             ->orderBy('fecha_hora')
+            ->orderBy('id')
             ->get()
             ->map(static fn (EntregaTurnoSeguridad $relevo): array => [
                 'id' => $relevo->id,
@@ -2190,15 +2222,23 @@ este prefijo podría caer dentro de `/{id}`.
 Agregar en `tests/Feature/EntregaTurnoSeguridad/EditarYEliminarRelevoTest.php`:
 
 ```php
-test('un id que no es un número no llega al controlador', function () {
+test('un id que no es un número no llega al controlador', function (string $metodo, string $ruta) {
     // Sin el `->whereNumber('id')` de las rutas, los métodos reciben
     // `int $id` y un `/abc` revienta con TypeError y 500 en vez de 404.
     // La restricción es del framework, pero sin esta prueba nadie nota si
     // alguien la quita.
+    //
+    // Las TRES rutas con `{id}` entran en el dataset: vigilar solo una
+    // dejaría las otras dos sin guardia, que es la misma deuda una capa
+    // más abajo.
     $this->actingAs(usuarioCon('fbo'))
-        ->getJson('/api/EntregaTurnoSeguridad/abc')
+        ->json($metodo, $ruta)
         ->assertNotFound();
-});
+})->with([
+    'detalle' => ['GET', '/api/EntregaTurnoSeguridad/abc'],
+    'editar' => ['PUT', '/api/EntregaTurnoSeguridad/abc'],
+    'eliminar' => ['GET', '/api/EntregaTurnoSeguridad/eliminar/abc'],
+]);
 ```
 
 Comprobarla por mutación: quitar `->whereNumber('id')` de la ruta `GET
