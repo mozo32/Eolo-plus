@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\PernoctaDiaController;
 use App\Http\Controllers\Api\PernoctaMesController;
 use App\Http\Controllers\Api\EstacionamientoSubterraneoController;
 use App\Http\Controllers\Api\ChecklistEquipoSeguridadController;
+use App\Http\Controllers\Api\EntregaTurnoSeguridadController;
 use App\Http\Controllers\Api\UsuarioController;
 use App\Http\Controllers\Api\EntregaTurnoRController;
 use App\Http\Controllers\Api\ChecklistTurnoController;
@@ -128,6 +129,10 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('ChecklistEquipoSeguridad')->
     Route::get('/{ChecklistEquipoSeguridad}', [ChecklistEquipoSeguridadController::class, 'show']);
     Route::put('/{ChecklistEquipoSeguridad}', [ChecklistEquipoSeguridadController::class, 'update']);
     Route::get('/eliminar/{id}', [ChecklistEquipoSeguridadController::class, 'eliminar']);
+});
+
+Route::middleware(['api', 'auth:sanctum'])->prefix('EntregaTurnoSeguridad')->group(function () {
+    Route::post('/', [EntregaTurnoSeguridadController::class, 'store']);
 });
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('EntregaTurnoR')->group(function () {
