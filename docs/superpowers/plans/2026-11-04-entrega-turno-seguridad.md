@@ -477,7 +477,6 @@ Crear `tests/Feature/EntregaTurnoSeguridad/CrearRelevoTest.php`:
 <?php
 
 use App\Models\EntregaTurnoSeguridad;
-use App\Models\Role;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -486,15 +485,6 @@ use Illuminate\Support\Facades\Storage;
  * Crear un relevo. Está abierto a cualquiera con sesión: editar y
  * eliminar son los que piden rol.
  */
-
-function usuarioConRolDeSeguridad(string $slug, string $nombre): User
-{
-    $usuario = User::factory()->create();
-    $rol = Role::firstOrCreate(['slug' => $slug], ['nombre' => $nombre]);
-    $usuario->roles()->attach($rol->id);
-
-    return $usuario;
-}
 
 /** Un PNG de un pixel, en base64, con el prefijo que el servidor espera. */
 function firmaBase64(): string
@@ -596,12 +586,50 @@ test('las casillas marcadas se guardan y las demás quedan apagadas', function (
 test('se guarda con la firma de quien entrega y sin la del FBO', function () {
     $this->actingAs(User::factory()->create())
         ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo())
-        ->assertSuccessful();
+        ->assertCreated();
 
     $relevo = EntregaTurnoSeguridad::with('firmas')->sole();
 
     expect($relevo->tieneFirmaDe(EntregaTurnoSeguridad::ROL_QUIEN_ENTREGA))->toBeTrue()
         ->and($relevo->tieneFirmaDe(EntregaTurnoSeguridad::ROL_FBO))->toBeFalse();
+
+    // El renglón del pivote no prueba que el archivo exista. Sin esto, un
+    // fallo al escribir en el disco dejaría la firma «guardada» apuntando a
+    // una ruta vacía, y la vista previa pintaría una imagen rota.
+    $firma = $relevo->firmas->first();
+
+    Storage::disk('public')->assertExists($firma->path);
+
+    expect($firma->path)->toStartWith('firmas/EntregaTurnoSeguridad/')
+        ->and($firma->path)->toEndWith('.png')
+        ->and(Storage::disk('public')->size($firma->path))->toBeGreaterThan(0);
+});
+
+test('un SVG se rechaza aunque sea una imagen', function (string $firma) {
+    // El archivo se guarda en el disco `public`. Un SVG servido por su URL
+    // directa corre su propio script en el origen de la aplicación, y crear
+    // un relevo está abierto a cualquiera con sesión: sería XSS almacenado.
+    // Un `text/html` se rechaza por lo mismo.
+    $this->actingAs(User::factory()->create())
+        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['firma_quien_entrega' => $firma]))
+        ->assertJsonValidationErrorFor('firma_quien_entrega');
+
+    expect(EntregaTurnoSeguridad::count())->toBe(0);
+})->with([
+    'svg' => 'data:image/svg+xml;base64,PHN2Zz48c2NyaXB0PmFsZXJ0KDEpPC9zY3JpcHQ+PC9zdmc+',
+    'html' => 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==',
+]);
+
+test('una cabecera de imagen sin cuerpo se rechaza', function () {
+    // `data:image/png;base64,` a secas pasaba la regla anterior y escribía un
+    // archivo de cero bytes: una firma que existe en la base y no se ve.
+    $this->actingAs(User::factory()->create())
+        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo([
+            'firma_quien_entrega' => 'data:image/png;base64,',
+        ]))
+        ->assertJsonValidationErrorFor('firma_quien_entrega');
+
+    expect(EntregaTurnoSeguridad::count())->toBe(0);
 });
 
 test('sin la firma de quien entrega no se guarda', function () {
@@ -694,12 +722,26 @@ class StoreEntregaTurnoSeguridadRequest extends FormRequest
              * a secas, un `"abc"` pasaba, el guardia de guardarFirmaBase64
              * hacía `return` en silencio y el relevo se guardaba SIN firma de
              * quien entrega, que es obligatoria: 201 y un relevo sin firmar.
-             * La única fuente es SignaturePad, que emite `toDataURL`.
+             *
+             * Los tipos van en lista blanca y no como `image/*`, por dos
+             * razones concretas:
+             *
+             * - `image/svg+xml` es ejecutable. El archivo se guarda en el
+             *   disco `public`, así que abrir su URL directa correría el
+             *   script del SVG en el origen de la aplicación: XSS almacenado
+             *   por un endpoint abierto a cualquiera con sesión.
+             * - El cuerpo tiene que traer algo. `data:image/png;base64,` sin
+             *   nada detrás pasaba y escribía un archivo de cero bytes que
+             *   luego se pinta como imagen rota.
+             *
+             * La única fuente real es SignaturePad, que emite
+             * `toDataURL("image/png")`, así que la lista blanca no quita nada
+             * que el sistema use.
              */
             'firma_quien_entrega' => [
                 'required',
                 'string',
-                'regex:/^data:image\/[a-zA-Z0-9.+-]+;base64,/',
+                'regex:/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+\/=]{16,}$/',
             ],
         ];
     }
@@ -712,7 +754,7 @@ class StoreEntregaTurnoSeguridadRequest extends FormRequest
             'seccion.in' => 'La sección solo puede ser frente o atrás.',
             'pernocta_mensual.in' => 'La pernocta mensual solo puede estar hecha, no hecha o sin revisar.',
             'firma_quien_entrega.required' => 'Falta la firma de quien entrega el turno.',
-            'firma_quien_entrega.regex' => 'La firma de quien entrega no llegó en un formato válido.',
+            'firma_quien_entrega.regex' => 'La firma de quien entrega no llegó como una imagen válida.',
         ];
     }
 }
@@ -805,7 +847,22 @@ class EntregaTurnoSeguridadController extends Controller
         preg_match('/data:(.*?);base64/', $meta, $matches);
 
         $mime = $matches[1] ?? 'image/png';
-        $extension = explode('/', $mime)[1] ?? 'png';
+
+        /*
+         * La extensión sale de una lista blanca y NO de partir el mime. Con
+         * `explode('/', $mime)[1]`, un `image/svg+xml` dejaba un archivo
+         * `.svg+xml` en el disco público, y un SVG servido por su URL corre
+         * su propio script en el origen de la aplicación.
+         *
+         * Aquí se separa de `MovimientoCSAEController`, que sí parte el mime.
+         * La diferencia es deliberada: ese módulo arrastra el defecto y este
+         * no lo copia.
+         */
+        $extension = match ($mime) {
+            'image/jpeg', 'image/jpg' => 'jpg',
+            'image/webp' => 'webp',
+            default => 'png',
+        };
 
         $fileName = Str::uuid().'.'.$extension;
         $path = $folder.'/'.$fileName;
@@ -1643,13 +1700,13 @@ class UpdateEntregaTurnoSeguridadRequest extends FormRequest
                 'sometimes',
                 'nullable',
                 'string',
-                'regex:/^data:image\/[a-zA-Z0-9.+-]+;base64,/',
+                'regex:/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+\/=]{16,}$/',
             ],
             'firma_fbo' => [
                 'sometimes',
                 'nullable',
                 'string',
-                'regex:/^data:image\/[a-zA-Z0-9.+-]+;base64,/',
+                'regex:/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+\/=]{16,}$/',
             ],
         ];
     }
@@ -1848,7 +1905,16 @@ use App\Models\User;
  * pendientes enseña solo el del frente.
  */
 
-function usuarioConRol(string $slug): User
+/**
+ * El nombre lleva sufijo a propósito.
+ *
+ * En Pest las funciones declaradas en un archivo de pruebas son GLOBALES de
+ * toda la suite, y `usuarioConRol` ya existe en
+ * `tests/Feature/OperacionesDiarias/CancelarOperacionTest.php`. Declararla
+ * otra vez da un fatal por redeclaración que no se ve corriendo solo esta
+ * carpeta y revienta `php artisan test` completo.
+ */
+function usuarioFboDePendientes(string $slug): User
 {
     $usuario = User::factory()->create();
     $rol = Role::firstOrCreate(['slug' => $slug], ['nombre' => ucfirst($slug)]);
@@ -1886,7 +1952,7 @@ function firmarFbo(EntregaTurnoSeguridad $relevo): void
 
 function pendientes(): \Illuminate\Testing\TestResponse
 {
-    return test()->actingAs(usuarioConRol('fbo'))
+    return test()->actingAs(usuarioFboDePendientes('fbo'))
         ->getJson('/api/EntregaTurnoSeguridad/pendientes');
 }
 
