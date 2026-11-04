@@ -1958,8 +1958,17 @@ Agregar al `use` del controlador:
 **Y cambiar la respuesta de `store`** para que también pase por `detalle()`:
 
 ```php
-            'data' => $this->detalle($relevo->load(['usuario:id,name', 'firmas'])),
+            'data' => $this->detalle($relevo->fresh()->load(['usuario:id,name', 'firmas'])),
 ```
+
+El `fresh()` **no** es decoración, y es la razón por la que `update` ya lo
+tenía. `create()` devuelve el modelo con solo los atributos que se le
+pasaron: si la petición omite `pernocta_mensual`, el valor `R` lo pone el
+valor por omisión de la columna y el modelo en memoria lo tiene en `null`.
+Sin refrescar, el 201 devolvería `pernocta_mensual: null` mientras el tipo
+del navegador promete `'S' | 'N' | 'R'`. Ninguna prueba lo atrapaba,
+porque las de la Tarea 2 releen el registro de la base y no el cuerpo de
+la respuesta.
 
 Antes devolvía el modelo crudo, con `usuario` anidado, las firmas del
 pivote y `fecha_hora` en ISO. Que el POST y el PUT devolvieran formas
@@ -2399,6 +2408,33 @@ export type PendienteRelevo = {
     seccion: Seccion;
 };
 
+/**
+ * Lo que el formulario manda al editar: todo opcional, porque el `PUT`
+ * acepta cambios parciales.
+ */
+export type PayloadRelevo = Partial<Record<Casilla, boolean>> & {
+    fecha_hora?: string;
+    seccion?: Seccion;
+    pernocta_mensual?: Pernocta;
+    observaciones?: string | null;
+    firma_quien_entrega?: string;
+    firma_fbo?: string;
+};
+
+/**
+ * Lo que manda al CREAR, donde tres campos son obligatorios.
+ *
+ * Tiparlo así y no como `Record<string, unknown>` es lo único que aquí
+ * atrapa un nombre de campo mal escrito: no hay corredor de pruebas de
+ * JavaScript, así que un `observacioens` pasaría hasta producción, el
+ * servidor lo descartaría al validar y el texto se perdería en silencio.
+ */
+export type PayloadRelevoNuevo = PayloadRelevo & {
+    fecha_hora: string;
+    seccion: Seccion;
+    firma_quien_entrega: string;
+};
+
 export type FiltrosRelevo = {
     page?: number;
     per_page?: number;
@@ -2428,6 +2464,15 @@ export const formatearFecha = (fecha: string): string => {
  * del equipo. Además de reintroducir ese error, rompía
  * `tests/Feature/FechaHoyTest.php:281`, que exige que la única definición
  * viva en `resources/js/lib/fechaHoy.ts`.
+ */
+
+/*
+ * Hay otra copia de `horaAhora` en
+ * `pages/despacho/operacionesProgramadas/types.ts`. Se deja duplicada a
+ * propósito: su sitio natural sería `lib/`, junto a `fechaHoy`, pero
+ * mudarla obligaría a tocar un módulo ajeno a este trabajo. Son cuatro
+ * líneas de función pura; acoplar los tipos de Seguridad a los de
+ * Operaciones Programadas costaría más que la copia.
  */
 
 /** La hora de ahora en 24 horas, como `HH:mm`. */
@@ -2460,11 +2505,31 @@ function getXsrfToken(): string {
     return match ? decodeURIComponent(match.split('=')[1]) : '';
 }
 
+/**
+ * Un error que conserva el estado y los errores por campo.
+ *
+ * Un `Error` pelado con solo el mensaje no sirve: el formulario no podría
+ * pintar «la pernocta mensual solo puede estar hecha, no hecha o sin
+ * revisar» junto a su campo, ni distinguir un 403 —no tienes permiso— de
+ * un 404 —alguien ya lo borró— de un 422. Y el servidor manda los tres con
+ * la misma forma `{ message }`, así que sin el estado son indistinguibles.
+ */
+export class ErrorDeApi extends Error {
+    constructor(
+        mensaje: string,
+        public readonly status: number,
+        public readonly errors: Record<string, string[]> = {},
+    ) {
+        super(mensaje);
+        this.name = 'ErrorDeApi';
+    }
+}
+
 async function leerJson(res: Response, mensajeDeError: string) {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-        throw new Error(data?.message || mensajeDeError);
+        throw new ErrorDeApi(data?.message || mensajeDeError, res.status, data?.errors ?? {});
     }
 
     return data;
@@ -2681,6 +2746,32 @@ const [datos, setDatos] = useState({
 - Las **ocho casillas** se recorren con `CASILLAS` y se etiquetan con
   `ETIQUETA_CASILLA`. No se escribe la lista a mano en el JSX: duplicarla
   es cómo se desincroniza del servidor.
+
+  El marcado sale del relevo hermano,
+  `despacho/components/entregaTurno/ChecklistComunicacion.tsx:104-111`:
+
+```tsx
+<label className="inline-flex items-center gap-2 text-xs text-gray-800">
+    <input
+        type="checkbox"
+        checked={datos.casillas[casilla]}
+        onChange={() => alternar(casilla)}
+        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+    />
+    <span>{ETIQUETA_CASILLA[casilla]}</span>
+</label>
+```
+
+  **No se usa `components/ui/checkbox.tsx`.** Existe, pero en todo el
+  proyecto solo lo importa `pages/auth/login.tsx`: es del sistema de
+  diseño de las pantallas de autenticación, no del de los módulos. Es el
+  mismo caso que `DataTable`.
+
+  **Sin clases `dark:`.** Las pantallas de Seguridad no traen ni una
+  (`MovimientoAvionesCSAE` y `RegistroVisitantes` dan cero), así que este
+  módulo tampoco. La regla del proyecto es seguir a las páginas
+  existentes, y las existentes de esta área no soportan modo oscuro. Que
+  falte **no es un defecto** en este módulo.
 - La **pernocta mensual** son tres botones de opción recorriendo
   `PERNOCTA` con `ETIQUETA_PERNOCTA`, con `R` marcado al abrir.
 - Las **observaciones** son un `<textarea rows={4} />`.
