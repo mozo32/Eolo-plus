@@ -132,6 +132,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('ChecklistEquipoSeguridad')->
 });
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('EntregaTurnoSeguridad')->group(function () {
+    Route::get('/', [EntregaTurnoSeguridadController::class, 'index']);
     Route::post('/', [EntregaTurnoSeguridadController::class, 'store']);
 });
 
