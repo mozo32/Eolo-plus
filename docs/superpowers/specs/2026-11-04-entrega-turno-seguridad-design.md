@@ -457,15 +457,23 @@ parte del trabajo:
 - `resources/js/pages/seguridad/entregaTurno/PendientesFirmaFbo.tsx`
 - `resources/js/stores/apiEntregaTurnoSeguridad.ts`
 
-**Ningún archivo pasa de las trescientas líneas**, y eso explica por qué
-hay más archivos de los que esta lista tenía al principio: la tabla y el
-formulario se partieron al escribirlos, no después. `FilaFiltros`,
-`CeldasRelevo`, `PaginadorRelevos` y `FirmaActual` salieron de ahí.
+**Ningún archivo del navegador pasa de las trescientas líneas**, y eso
+explica por qué hay más archivos de los que esta lista tenía al
+principio: la tabla y el formulario se partieron al escribirlos, no
+después. `FilaFiltros`, `CeldasRelevo`, `PaginadorRelevos` y
+`FirmaActual` salieron de ahí.
 
-El límite es para los archivos de **código**. Un archivo de pruebas de
-trescientas líneas son pruebas; partirlo obligaría a mover sus ayudantes
-y a crear la dependencia entre archivos de prueba que este trabajo
-rechazó por frágil —un archivo que solo funciona si antes se cargó otro.
+**El controlador es la excepción, y conviene decirlo en vez de afirmar lo
+contrario:** acumuló las cinco tareas del servidor y quedó en 446 líneas.
+Partirlo —un scope `sinFirmaFbo()` en el modelo, un recurso para el
+mapeo, y la lógica de firmas a un servicio— está aparcado a propósito,
+porque es refactor sin cambio de comportamiento y las cinco tareas
+siguientes eran de navegador y no lo tocaban.
+
+El límite no aplica a los archivos de **prueba**. Trescientas líneas de
+pruebas son pruebas; partirlas obligaría a mover sus ayudantes y a crear
+la dependencia entre archivos de prueba que este trabajo rechazó por
+frágil —un archivo que solo funciona si antes se cargó otro.
 
 ## 12. Qué se prueba
 
