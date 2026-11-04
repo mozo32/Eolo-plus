@@ -39,19 +39,29 @@ function relevoEn(string $fechaHora, string $seccion, array $extra = []): Entreg
     ], $extra));
 }
 
-function firmarFbo(EntregaTurnoSeguridad $relevo): void
+/**
+ * Firma un relevo con el rol que se le diga.
+ *
+ * El rol es un parámetro y no una constante escondida a propósito: con un
+ * ayudante que solo supiera firmar como FBO, el filtro `firmables.rol` de
+ * `pendientes()` no tendría quien lo vigilara, y quitarlo no rompería
+ * ninguna prueba. Eso importa porque `store` adjunta la firma de quien
+ * entrega a TODOS los relevos: sin el filtro, cada relevo contaría como
+ * firmado y la cola del FBO quedaría siempre vacía.
+ */
+function firmarConRol(EntregaTurnoSeguridad $relevo, string $rol): void
 {
     $firma = Firma::create([
         'disk' => 'public',
-        'path' => 'firmas/prueba/fbo-'.$relevo->id.'.png',
-        'original_name' => 'fbo.png',
+        'path' => 'firmas/prueba/'.$rol.'-'.$relevo->id.'.png',
+        'original_name' => $rol.'.png',
         'mime' => 'image/png',
         'size' => 10,
-        'sha1' => sha1('fbo'.$relevo->id),
+        'sha1' => sha1($rol.$relevo->id),
     ]);
 
     $relevo->firmas()->attach($firma->id, [
-        'rol' => EntregaTurnoSeguridad::ROL_FBO,
+        'rol' => $rol,
         'orden' => 0,
         'status' => 'A',
     ]);
@@ -67,7 +77,7 @@ test('lista solo lo que le falta firmar al FBO', function () {
     $firmado = relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_FRENTE);
     $sinFirmar = relevoEn('2026-11-04 19:00:00', EntregaTurnoSeguridad::SECCION_ATRAS);
 
-    firmarFbo($firmado);
+    firmarConRol($firmado, EntregaTurnoSeguridad::ROL_FBO);
 
     expect(array_column(pendientes()->assertSuccessful()->json('data'), 'id'))
         ->toBe([$sinFirmar->id]);
@@ -78,7 +88,7 @@ test('deja de listar un relevo en cuanto se firma', function () {
 
     expect(array_column(pendientes()->json('data'), 'id'))->toBe([$relevo->id]);
 
-    firmarFbo($relevo);
+    firmarConRol($relevo, EntregaTurnoSeguridad::ROL_FBO);
 
     expect(pendientes()->json('data'))->toBe([]);
 });
@@ -88,7 +98,7 @@ test('una firma retirada vuelve a dejarlo pendiente', function () {
     // historial en vez de las vigentes, este relevo seguiría dado por
     // firmado y nadie lo firmaría de nuevo.
     $relevo = relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_FRENTE);
-    firmarFbo($relevo);
+    firmarConRol($relevo, EntregaTurnoSeguridad::ROL_FBO);
 
     $relevo->firmasAll()->newPivotStatement()
         ->where('firmable_id', $relevo->id)
@@ -108,6 +118,27 @@ test('lo más viejo va primero: es la cola de trabajo del FBO', function () {
     $viejo = relevoEn('2026-11-01 19:00:00', EntregaTurnoSeguridad::SECCION_ATRAS);
 
     expect(array_column(pendientes()->json('data'), 'id'))->toBe([$viejo->id, $nuevo->id]);
+});
+
+test('la firma de quien entrega no cuenta como la del FBO', function () {
+    // El relevo lleva SOLO la firma de quien entrega, que es lo que `store`
+    // adjunta a todos. Sin el filtro `firmables.rol` de `pendientes()`, esa
+    // firma lo daría por firmado y la cola quedaría siempre vacía: la función
+    // entera muerta sin una sola prueba roja.
+    $relevo = relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_FRENTE);
+    firmarConRol($relevo, EntregaTurnoSeguridad::ROL_QUIEN_ENTREGA);
+
+    expect(array_column(pendientes()->json('data'), 'id'))->toBe([$relevo->id]);
+});
+
+test('con la misma fecha y hora el orden lo rompe el id', function () {
+    // El frente y atrás del mismo relevo pueden compartir `fecha_hora`. Sin
+    // un desempate, el orden lo decide la base y cambia entre corridas.
+    $primero = relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_FRENTE);
+    $segundo = relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_ATRAS);
+
+    expect(array_column(pendientes()->json('data'), 'id'))
+        ->toBe([$primero->id, $segundo->id]);
 });
 
 test('cada pendiente dice de quién, de cuándo y de qué sección es', function () {

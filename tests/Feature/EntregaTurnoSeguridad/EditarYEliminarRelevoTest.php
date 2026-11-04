@@ -256,12 +256,20 @@ test('la edición respeta las tres letras de la pernocta mensual', function () {
         ->toBe(EntregaTurnoSeguridad::PERNOCTA_SIN_REVISAR);
 });
 
-test('un id que no es un número no llega al controlador', function () {
+test('un id que no es un número no llega al controlador', function (string $metodo, string $ruta) {
     // Sin el `->whereNumber('id')` de las rutas, los métodos reciben
     // `int $id` y un `/abc` revienta con TypeError y 500 en vez de 404.
     // La restricción es del framework, pero sin esta prueba nadie nota si
     // alguien la quita.
+    //
+    // Las TRES rutas con `{id}` entran en el dataset: vigilar solo una
+    // dejaría las otras dos sin guardia, que es la misma deuda una capa
+    // más abajo.
     $this->actingAs(usuarioCon('fbo'))
-        ->getJson('/api/EntregaTurnoSeguridad/abc')
+        ->json($metodo, $ruta)
         ->assertNotFound();
-});
+})->with([
+    'detalle' => ['GET', '/api/EntregaTurnoSeguridad/abc'],
+    'editar' => ['PUT', '/api/EntregaTurnoSeguridad/abc'],
+    'eliminar' => ['GET', '/api/EntregaTurnoSeguridad/eliminar/abc'],
+]);

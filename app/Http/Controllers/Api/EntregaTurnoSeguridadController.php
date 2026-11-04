@@ -310,6 +310,7 @@ class EntregaTurnoSeguridadController extends Controller
                 static fn (Builder $firma): Builder => $firma->where('firmables.rol', EntregaTurnoSeguridad::ROL_FBO)
             )
             ->orderBy('fecha_hora')
+            ->orderBy('id')
             ->get()
             ->map(static fn (EntregaTurnoSeguridad $relevo): array => [
                 'id' => $relevo->id,
