@@ -2214,9 +2214,12 @@ Esperado: PASA todo.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add app/Http/Controllers/Api/EntregaTurnoSeguridadController.php routes/api.php tests/Feature/EntregaTurnoSeguridad/PendientesDeFirmaTest.php
+git add app/Http/Controllers/Api/EntregaTurnoSeguridadController.php routes/api.php tests/Feature/EntregaTurnoSeguridad/PendientesDeFirmaTest.php tests/Feature/EntregaTurnoSeguridad/EditarYEliminarRelevoTest.php
 git commit -m "feat(seguridad): cola de pendientes de firma del FBO"
 ```
+
+El cuarto archivo es el del paso «4 bis»: la prueba del id no numérico vive
+con las demás de edición y borrado, no con las de pendientes.
 
 ---
 
