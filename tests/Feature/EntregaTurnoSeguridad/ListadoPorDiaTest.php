@@ -173,6 +173,63 @@ test('el buscador filtra por el nombre de quien entregó', function () {
         ->toBe(['2026-11-04']);
 });
 
+/**
+ * Un relevo del día 4 a nombre de `$nombre` y otro del 3 a nombre de
+ * `$otroNombre`.
+ *
+ * Los dos nombres van explícitos: con el que invente la factory hay una
+ * posibilidad remota de que contenga lo que se busca y la prueba falle sin
+ * que nada esté roto.
+ */
+function dosRelevosConNombres(string $nombre, string $otroNombre): void
+{
+    foreach ([['2026-11-04', $nombre], ['2026-11-03', $otroNombre]] as [$dia, $quien]) {
+        EntregaTurnoSeguridad::create([
+            'user_id' => User::factory()->create(['name' => $quien])->id,
+            'fecha_hora' => "{$dia} 07:30:00",
+            'seccion' => EntregaTurnoSeguridad::SECCION_FRENTE,
+        ]);
+    }
+}
+
+test('el buscador encuentra en mayúsculas, que es lo que la pantalla manda', function () {
+    // `FilaFiltros.tsx:39` manda `e.target.value.toUpperCase()`, así que el
+    // servidor NUNCA recibe lo que el usuario escribió tal cual. La prueba
+    // hermana busca «Robles» con su mayúscula inicial, que es lo que nadie
+    // manda.
+    dosRelevosConNombres('Ana Robles', 'Beto Lopez');
+
+    expect(array_column(listado(['search' => 'ROBLES'])->json('data'), 'fecha'))
+        ->toBe(['2026-11-04']);
+});
+
+test('el buscador encuentra un nombre acentuado en mayúsculas', function () {
+    // HALLAZGO, no un detalle de la prueba: en sqlite esto NO encuentra nada.
+    // El `LIKE` de sqlite solo pliega mayúsculas del ASCII, así que la `Á`
+    // que manda la pantalla no empareja con la `á` guardada y el nombre
+    // entero deja de encontrarse. En producción sí funciona —la collation
+    // configurada es `utf8mb4_unicode_ci`, que pliega caso Y acentos
+    // (config/database.php:56)—, por eso está `skip` y no borrada: el defecto
+    // es latente y depende de la collation, no del código.
+    //
+    // El `.toUpperCase()` es convención del proyecto: los filtros por nombre
+    // de `despacho/EntregaTurno.tsx` y de `Rampa/.../TablaJefeArea.tsx` hacen
+    // lo mismo y comparten la misma dependencia. Quitarlo solo aquí dejaría
+    // este buscador distinto de los otros tres.
+    dosRelevosConNombres('Beto Sánchez', 'Ana Robles');
+
+    expect(array_column(listado(['search' => 'SÁNCHEZ'])->json('data'), 'fecha'))
+        ->toBe(['2026-11-04']);
+})->skip('El LIKE de sqlite no pliega la Á; en MySQL utf8mb4_unicode_ci sí. Defecto latente que comparten otros tres buscadores por nombre.');
+
+test('un filtro en forma de arreglo se rechaza con 422, no con 500', function (string $campo) {
+    // Sin el Form Request, `$request->string($campo)` recibía un arreglo y
+    // lanzaba TypeError: un 500 al alcance de cualquiera con sesión.
+    test()->actingAs(User::factory()->create())
+        ->getJson("/api/EntregaTurnoSeguridad?{$campo}[]=x")
+        ->assertStatus(422);
+})->with(['search', 'seccion', 'estado', 'fecha_inicio', 'fecha_fin']);
+
 test('el filtro de sección deja solo los días con esa sección', function () {
     relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE);
     relevoDelDia('2026-11-03', EntregaTurnoSeguridad::SECCION_ATRAS, '19:00');

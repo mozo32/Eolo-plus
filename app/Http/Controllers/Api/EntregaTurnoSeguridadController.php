@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\EntregaTurnoSeguridad\IndexEntregaTurnoSeguridadRequest;
 use App\Http\Requests\EntregaTurnoSeguridad\StoreEntregaTurnoSeguridadRequest;
 use App\Http\Requests\EntregaTurnoSeguridad\UpdateEntregaTurnoSeguridadRequest;
 use App\Models\EntregaTurnoSeguridad;
@@ -27,7 +28,8 @@ class EntregaTurnoSeguridadController extends Controller
      */
     private const DIA = 'DATE(fecha_hora)';
 
-    public function index(Request $request): JsonResponse
+    /** `consultaFiltrada()` sigue pidiendo un `Request`: un Form Request lo es. */
+    public function index(IndexEntregaTurnoSeguridadRequest $request): JsonResponse
     {
         /*
          * El techo es tan necesario como el piso: sin él, un `per_page=100000`
