@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-import { obtenerHistoricoPlantaApi } from '@/stores/apiRelacionPlanta';
-import { fechaCorta, formatearHoras, horasAHHMM, type FiltrosHistorico, type Prestamo } from './types';
+import { obtenerHistoricoPlantaApi, type PaginaHistorico } from '@/stores/apiRelacionPlanta';
+import { fechaCorta, formatearHoras, horasAHHMM, type FiltrosHistorico, type MetaPaginacion, type Prestamo } from './types';
 
 /**
  * Las columnas del reporte, en orden, y las mismas ocho que la tabla del
@@ -84,11 +84,36 @@ const aFilaExcel = (prestamo: Prestamo, numero: number): FilaExcelHistorico => (
 });
 
 /**
+ * Laravel pagina de dos formas: con las claves de la paginación arriba, al
+ * lado de `data`, o metidas en un `meta`. Hoy este endpoint devuelve la
+ * primera, pero leer una sola de las dos es frágil.
+ */
+type RespuestaPaginada = PaginaHistorico & { meta?: Partial<MetaPaginacion> };
+
+/** El número si es uno utilizable; `null` si viene ausente, cero o basura. */
+const numeroPositivo = (valor: unknown): number | null => {
+    const numero = Number(valor);
+
+    return Number.isFinite(numero) && numero > 0 ? numero : null;
+};
+
+/**
  * Trae TODAS las filas que casan con los filtros, recorriendo páginas.
  *
  * El histórico se pagina en el servidor, así que lo que hay en pantalla es una
  * página: exportar solo eso daría veinte filas cuando el filtro casa con
  * cientos, y la diferencia no se vería hasta abrir el archivo.
+ *
+ * El recorrido NO se guía por `last_page`. Si ese campo llega `undefined` —
+ * porque el servidor paginó metiendo las claves en `meta`— el bucle se cortaba
+ * en la primera página, y encima `truncado` salía `false`: la exportación se
+ * quedaba corta en silencio. Ahora se para cuando ya se juntaron todas las
+ * filas que el servidor dice que hay, o cuando una página viene incompleta.
+ *
+ * El tamaño con el que se mide «incompleta» es el que el servidor DIJO que
+ * usó, no el que se pidió: `RelacionPlantaController::historico` baja a 20 en
+ * silencio cualquier `per_page` que no esté en su lista, así que comparar
+ * contra el pedido daría por corta una página que está llena.
  *
  * Está separada de la descarga a propósito: la vista previa necesita las filas
  * ANTES de que exista el archivo, y así lo que se enseña y lo que se descarga
@@ -97,20 +122,29 @@ const aFilaExcel = (prestamo: Prestamo, numero: number): FilaExcelHistorico => (
 export async function traerFilasHistorico(filtros: FiltrosHistorico): Promise<ResultadoExportacion> {
     const prestamos: Prestamo[] = [];
     let pagina = 1;
-    let ultima = 1;
     let truncado = false;
 
-    while (pagina <= ultima) {
-        const respuesta = await obtenerHistoricoPlantaApi(filtros, pagina, POR_PAGINA);
+    for (;;) {
+        const respuesta = (await obtenerHistoricoPlantaApi(filtros, pagina, POR_PAGINA)) as RespuestaPaginada;
+        const bloque = respuesta.data ?? [];
+        const meta = respuesta.meta ?? respuesta;
+        const total = numeroPositivo(meta.total);
+        const tamanoDePagina = numeroPositivo(meta.per_page) ?? POR_PAGINA;
 
-        prestamos.push(...respuesta.data);
-        ultima = respuesta.last_page;
-        pagina += 1;
+        prestamos.push(...bloque);
 
-        if (prestamos.length >= TOPE_FILAS) {
-            truncado = pagina <= ultima;
+        const quedanPaginas = total !== null ? prestamos.length < total : bloque.length > 0 && bloque.length >= tamanoDePagina;
+
+        if (!quedanPaginas) {
             break;
         }
+
+        if (prestamos.length >= TOPE_FILAS) {
+            truncado = true;
+            break;
+        }
+
+        pagina += 1;
     }
 
     return {
