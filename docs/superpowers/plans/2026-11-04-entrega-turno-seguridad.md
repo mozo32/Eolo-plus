@@ -2799,8 +2799,13 @@ import SignaturePad from '@/pages/despacho/components/walkAround/SignaturePad';
   incómodo pero no se mueve en este trabajo: ya lo importan de fuera
   `FirmaCanvas.tsx` y `WalkAroundForm.tsx`, y mudarlo es otra tarea.
 
-  Viaja en `firma_quien_entrega`. Sin ella el botón de guardar queda
-  deshabilitado.
+  Viaja en `firma_quien_entrega`.
+
+  **Obligatoria al CREAR, opcional al editar.** Al crear, sin ella el botón
+  de guardar queda deshabilitado. Al editar no se pide: el `PUT` conserva la
+  firma anterior si no llega una nueva, y el Form Request de edición ya la
+  declara `sometimes|nullable`. Exigirla al editar obligaría a quien corrige
+  una casilla a redibujar la firma de otra persona, que es falsificarla.
 - La **firma del FBO** aparece en el formulario **solo** cuando quien
   mira tiene `fbo` o `admin`, con otro `SignaturePad`, y viaja en
   `firma_fbo`. Es por aquí por donde el FBO firma lo que la cola de
@@ -3008,6 +3013,42 @@ En `UpdateEntregaTurnoSeguridadRequest::rules()`, igual pero con
 
 Y el `use App\Rules\DentroDeLaVentana;` en los dos. Quitar de los
 docblocks la nota que decía que la regla llegaba en esta tarea.
+
+- [ ] **Step 5 bis: La deuda que arrastra la Tarea 7**
+
+Al editar, el formulario dice por texto que ya hay firma pero no la
+enseña. `SignaturePad` no sirve para eso: su `value` espera un
+`data:image/png;base64,…` y lo guardado es una URL a un archivo.
+
+Eso importa porque quien edita puede dibujar encima de una firma buena sin
+darse cuenta de que existía. El dato está a mano en
+`DetalleRelevo.firmas[].url`, así que se enseña:
+
+```tsx
+/** La firma vigente de un rol, o null si ese rol no ha firmado. */
+const firmaGuardada = (rol: string): FirmaRelevo | null =>
+    relevo?.firmas.find(firma => firma.rol === rol) ?? null;
+```
+
+y, encima de cada `SignaturePad`, cuando hay firma guardada:
+
+```tsx
+<div className="mb-2">
+    <p className="text-[10px] font-bold uppercase text-slate-400">Firma actual</p>
+    <img
+        src={firma.url}
+        alt="Firma registrada"
+        className="h-16 rounded border border-slate-200 bg-white"
+    />
+    <p className="text-[10px] text-slate-400">
+        Dibujar una nueva la reemplaza; la anterior queda en el historial.
+    </p>
+</div>
+```
+
+El texto de abajo no es adorno: el servidor no borra la firma anterior, la
+retira poniendo su pivote en `N`. Quien edita merece saber que lo que hace
+es reemplazar y no destruir.
 
 - [ ] **Step 6: El calendario en el formulario**
 
