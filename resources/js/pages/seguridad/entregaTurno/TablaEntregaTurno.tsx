@@ -44,11 +44,9 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
 
     useEffect(() => {
         const temporizador = setTimeout(() => {
-            setBusqueda(actual => {
-                if (actual !== filtros.search) setPagina(1);
-
-                return filtros.search ?? '';
-            });
+            // El efecto solo corre al cambiar el texto (o al montar): se vuelve a la primera página.
+            setPagina(1);
+            setBusqueda(filtros.search ?? '');
         }, 300);
 
         return () => clearTimeout(temporizador);
