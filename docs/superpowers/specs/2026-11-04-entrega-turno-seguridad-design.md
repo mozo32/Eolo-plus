@@ -464,7 +464,7 @@ después. `FilaFiltros`, `CeldasRelevo`, `PaginadorRelevos` y
 `FirmaActual` salieron de ahí.
 
 **El controlador es la excepción, y conviene decirlo en vez de afirmar lo
-contrario:** acumuló las cinco tareas del servidor y quedó en 446 líneas.
+contrario:** acumuló las cinco tareas del servidor y quedó en 442 líneas.
 Partirlo —un scope `sinFirmaFbo()` en el modelo, un recurso para el
 mapeo, y la lógica de firmas a un servicio— está aparcado a propósito,
 porque es refactor sin cambio de comportamiento y las cinco tareas
