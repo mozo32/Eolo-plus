@@ -94,10 +94,29 @@ test('eliminar solo cambia el status: el renglón sigue en la base', function ()
         ->and(EntregaTurnoSeguridad::activas()->find($relevo->id))->toBeNull();
 });
 
-test('eliminar algo que no existe devuelve 404', function () {
+test('eliminar algo que no existe devuelve el 404 del controlador', function () {
+    // El mensaje se asserta a propósito. Con solo `assertNotFound()`, la
+    // prueba pasaría igual si alguien borrara la ruta: Laravel devuelve 404
+    // cuando no hay ruta, y entonces la prueba daría por vigilado un guardia
+    // que ya no se ejecuta. El mensaje solo lo escribe el controlador.
     $this->actingAs(usuarioCon('fbo'))
         ->getJson('/api/EntregaTurnoSeguridad/eliminar/999')
-        ->assertNotFound();
+        ->assertNotFound()
+        ->assertJson(['message' => 'El relevo no existe.']);
+});
+
+test('el detalle de algo que no existe devuelve el 404 del controlador', function () {
+    $this->actingAs(usuarioCon('empleado'))
+        ->getJson('/api/EntregaTurnoSeguridad/999')
+        ->assertNotFound()
+        ->assertJson(['message' => 'El relevo no existe.']);
+});
+
+test('editar algo que no existe devuelve el 404 del controlador', function () {
+    $this->actingAs(usuarioCon('fbo'))
+        ->putJson('/api/EntregaTurnoSeguridad/999', ['combustible' => true])
+        ->assertNotFound()
+        ->assertJson(['message' => 'El relevo no existe.']);
 });
 
 test('la firma del FBO llega por el PUT y deja de faltar', function () {
