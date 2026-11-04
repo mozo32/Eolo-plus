@@ -90,6 +90,26 @@ export type PendienteRelevo = {
     seccion: Seccion;
 };
 
+/**
+ * Lo que el formulario manda al editar: todo opcional, porque el `PUT`
+ * acepta cambios parciales.
+ */
+export type PayloadRelevo = Partial<Record<Casilla, boolean>> & {
+    fecha_hora?: string;
+    seccion?: Seccion;
+    pernocta_mensual?: Pernocta;
+    observaciones?: string | null;
+    firma_quien_entrega?: string;
+    firma_fbo?: string;
+};
+
+/** Lo que manda al CREAR, donde tres campos son obligatorios. */
+export type PayloadRelevoNuevo = PayloadRelevo & {
+    fecha_hora: string;
+    seccion: Seccion;
+    firma_quien_entrega: string;
+};
+
 export type FiltrosRelevo = {
     page?: number;
     per_page?: number;

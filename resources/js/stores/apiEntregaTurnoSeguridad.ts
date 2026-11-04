@@ -2,6 +2,8 @@ import type {
     DetalleRelevo,
     FilaRelevo,
     FiltrosRelevo,
+    PayloadRelevo,
+    PayloadRelevoNuevo,
     PendienteRelevo,
 } from '@/pages/seguridad/entregaTurno/types';
 
@@ -13,11 +15,31 @@ function getXsrfToken(): string {
     return match ? decodeURIComponent(match.split('=')[1]) : '';
 }
 
+/**
+ * Un error que conserva el estado y los errores por campo.
+ *
+ * Un `Error` pelado con solo el mensaje no sirve: el formulario no podría
+ * pintar «la pernocta mensual solo puede estar hecha, no hecha o sin
+ * revisar» junto a su campo, ni distinguir un 403 —no tienes permiso— de
+ * un 404 —alguien ya lo borró— de un 422. Y el servidor manda los tres con
+ * la misma forma `{ message }`, así que sin el estado son indistinguibles.
+ */
+export class ErrorDeApi extends Error {
+    constructor(
+        mensaje: string,
+        public readonly status: number,
+        public readonly errors: Record<string, string[]> = {},
+    ) {
+        super(mensaje);
+        this.name = 'ErrorDeApi';
+    }
+}
+
 async function leerJson(res: Response, mensajeDeError: string) {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-        throw new Error(data?.message || mensajeDeError);
+        throw new ErrorDeApi(data?.message || mensajeDeError, res.status, data?.errors ?? {});
     }
 
     return data;
@@ -65,7 +87,7 @@ export async function fetchPendientesRelevo(): Promise<{ data: PendienteRelevo[]
     return leerJson(res, 'No se pudieron cargar los pendientes');
 }
 
-export async function guardarRelevo(form: Record<string, unknown>): Promise<{ message: string; data: DetalleRelevo }> {
+export async function guardarRelevo(form: PayloadRelevoNuevo): Promise<{ message: string; data: DetalleRelevo }> {
     const res = await fetch(BASE, {
         method: 'POST',
         headers: {
@@ -80,7 +102,7 @@ export async function guardarRelevo(form: Record<string, unknown>): Promise<{ me
     return leerJson(res, 'No se pudo guardar el relevo');
 }
 
-export async function actualizarRelevo(id: number, form: Record<string, unknown>): Promise<{ message: string; data: DetalleRelevo }> {
+export async function actualizarRelevo(id: number, form: PayloadRelevo): Promise<{ message: string; data: DetalleRelevo }> {
     const res = await fetch(`${BASE}/${id}`, {
         method: 'PUT',
         headers: {
