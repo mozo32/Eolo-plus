@@ -2811,6 +2811,58 @@ import SignaturePad from '@/pages/despacho/components/walkAround/SignaturePad';
   `actualizarRelevo(relevo.id, …)` cuando no, y avisa con el `Swal.mixin`
   de `toast` que ya usa `TablaPrestamosChalecos.tsx:31`.
 
+  **El payload va anotado**, y esto no es estilo:
+
+```tsx
+const payload: PayloadRelevoNuevo = {
+    ...datos.casillas,
+    fecha_hora: `${datos.fecha} ${datos.hora}:00`,
+    seccion: datos.seccion,
+    pernocta_mensual: datos.pernocta_mensual,
+    observaciones: datos.observaciones.trim() || null,
+    firma_quien_entrega: firmaQuienEntrega,
+};
+```
+
+  TypeScript solo comprueba propiedades sobrantes en **literales frescos**.
+  Armar el objeto con spread y pasarlo por una variable sin anotar desactiva
+  esa comprobación, y entonces un `observacioens` o un `aviones_csea`
+  pasarían sin queja: el tipo quedaría de adorno y el dato se perdería en
+  silencio al validar en el servidor. Con la anotación en la variable, la
+  comprobación corre.
+
+- **Los errores se leen con `instanceof ErrorDeApi`**, no suponiendo que
+  todo error trae `status`: un fallo de red hace que `fetch` lance un
+  `TypeError` pelado.
+
+```tsx
+try {
+    // …guardar…
+} catch (error) {
+    if (error instanceof ErrorDeApi) {
+        setErrores(error.errors);
+
+        toast.fire({
+            icon: 'error',
+            title: error.status === 403
+                ? 'No tienes permiso para editar este relevo.'
+                : error.status === 404
+                  ? 'El relevo ya no existe.'
+                  : error.message,
+        });
+
+        return;
+    }
+
+    toast.fire({ icon: 'error', title: 'No se pudo conectar con el servidor.' });
+}
+```
+
+  `errores` es un `Record<string, string[]>` y cada campo pinta el suyo con
+  `errores.observaciones?.[0]`. Distinguir el 403 del 404 importa: el
+  servidor manda los dos con la misma forma `{ message }`, y «no tienes
+  permiso» y «alguien ya lo borró» piden al usuario cosas distintas.
+
 La ventana de fecha **no** se conecta aquí: es la Tarea 8.
 
 - [ ] **Step 2: Colgar el formulario de la página**
