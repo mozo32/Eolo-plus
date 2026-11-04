@@ -94,6 +94,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('seguridad/MovimientoAvionesCSAE');
     })->name('movimientoAvionesCSAE');
 
+    Route::get('entregaTurnoSeguridad', function () {
+        return Inertia::render('seguridad/EntregaTurno');
+    })->name('entregaTurnoSeguridad');
+
     Route::get('movimientosVehiculoEolo', function () {
         return Inertia::render('seguridad/MovimientosVehiculoEolo');
     })->name('movimientosVehiculoEolo');
