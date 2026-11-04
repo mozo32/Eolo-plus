@@ -74,9 +74,12 @@ test('un día con una sola sección deja la otra en null', function () {
 });
 
 test('tres registros de la misma sección dan un renglón con dos extras', function () {
+    // El de las 23:00 se crea PRIMERO a propósito. Creándolos en orden de
+    // hora, el id mayor coincide con la hora mayor y la prueba no
+    // distinguiría `sortByDesc('fecha_hora')` de «el último que se creó».
+    $ultimo = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE, '23:00');
     relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE, '07:00');
     relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE, '15:00');
-    $ultimo = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE, '23:00');
 
     $datos = listado()->json('data');
 
@@ -240,3 +243,45 @@ test('per_page tiene techo: no se puede pedir la tabla entera de un jalón', fun
 
     expect(listado(['per_page' => 100000])->json('meta.per_page'))->toBe(100);
 });
+
+test('un retirado no cuenta como el más reciente ni infla los extras', function () {
+    // Esta prueba existe porque la de arriba NO vigila el `activas()` del
+    // listado: con un solo registro retirado, el día no entra en la página
+    // y la prueba pasaría igual aunque se cayera el filtro.
+    //
+    // Aquí el día lleva un activo y un retirado MÁS RECIENTE. Sin el filtro,
+    // el retirado saldría como «el más reciente», `extras` valdría 1 y el día
+    // se marcaría como incompleto por una firma que nadie debe esperar.
+    $activo = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE, '07:30');
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE, '23:00', ['status' => 'N']);
+
+    $fila = listado()->json('data.0');
+
+    expect($fila['frente']['id'])->toBe($activo->id)
+        ->and($fila['frente']['hora'])->toBe('07:30')
+        ->and($fila['frente']['extras'])->toBe(0);
+});
+
+test('el rango de fechas incluye sus dos bordes', function () {
+    // Las horas de los bordes no son 07:30 a propósito. Comparar un datetime
+    // contra `'2026-11-05'` como cadena excluye el día entero, y con todos
+    // los registros a media mañana y ninguno en el borde ese fallo no se
+    // vería: la prueba pasaría con `where` en vez de `whereDate`.
+    relevoDelDia('2026-11-02', EntregaTurnoSeguridad::SECCION_FRENTE, '00:00');
+    relevoDelDia('2026-11-05', EntregaTurnoSeguridad::SECCION_ATRAS, '23:59');
+    relevoDelDia('2026-11-06', EntregaTurnoSeguridad::SECCION_FRENTE, '07:30');
+
+    $fechas = array_column(
+        listado(['fecha_inicio' => '2026-11-02', 'fecha_fin' => '2026-11-05'])->json('data'),
+        'fecha'
+    );
+
+    expect($fechas)->toBe(['2026-11-05', '2026-11-02']);
+});
+
+test('per_page tiene piso: el cero y los negativos dan uno', function (int $pedido) {
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE);
+    relevoDelDia('2026-11-03', EntregaTurnoSeguridad::SECCION_FRENTE);
+
+    expect(listado(['per_page' => $pedido])->json('meta.per_page'))->toBe(1);
+})->with([0, -5]);
