@@ -1638,9 +1638,14 @@ test('un texto que no es una firma se rechaza también al editar', function () {
 });
 
 test('una firma vacía al editar significa «no firmé», no un error', function () {
-    // `nullable` no se salta la regex con `''`, solo con null, así que sin el
-    // prepareForValidation un formulario que arranque con useState('')
-    // recibiría 422 por no haber firmado.
+    // Lo que hace que esto funcione NO es código de este módulo: Laravel
+    // registra `ConvertEmptyStringsToNull` en su pila global, así que el `''`
+    // llega al Form Request ya como `null` y `nullable` se salta la regex.
+    //
+    // La prueba se queda porque el comportamiento importa: un formulario que
+    // arranque con `useState('')` no debe recibir 422 por no haber firmado.
+    // Pero vigila el comportamiento de punta a punta, no un guardia propio;
+    // si alguien desactivara ese middleware, esta prueba lo diría.
     $relevo = relevoGuardado();
 
     $this->actingAs(usuarioCon('fbo'))
@@ -1678,6 +1683,26 @@ test('el detalle lo puede ver cualquiera con sesión', function () {
     $this->actingAs(usuarioCon('empleado'))
         ->getJson("/api/EntregaTurnoSeguridad/{$relevo->id}")
         ->assertSuccessful();
+});
+
+test('un relevo eliminado deja de poder verse y de poder editarse', function () {
+    // Sin estas dos, quitar el `activas()` de `show` o de `update` no rompería
+    // ninguna prueba: la de «solo cambia el status» comprueba el scope del
+    // modelo, no que los endpoints lo usen. Un relevo borrado que se pueda
+    // seguir editando es un borrado que no borra.
+    $relevo = relevoGuardado(['status' => 'N']);
+
+    $this->actingAs(usuarioCon('empleado'))
+        ->getJson("/api/EntregaTurnoSeguridad/{$relevo->id}")
+        ->assertNotFound()
+        ->assertJson(['message' => 'El relevo no existe.']);
+
+    $this->actingAs(usuarioCon('fbo'))
+        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", ['combustible' => true])
+        ->assertNotFound()
+        ->assertJson(['message' => 'El relevo no existe.']);
+
+    expect($relevo->fresh()->combustible)->toBeFalse();
 });
 
 test('la edición no deja cambiar de dueño', function () {
@@ -1740,22 +1765,18 @@ class UpdateEntregaTurnoSeguridadRequest extends FormRequest
         return $this->user() !== null;
     }
 
-    /**
-     * Una firma vacía es «no mandé firma», no una firma mal formada.
+    /*
+     * NO hace falta un `prepareForValidation` que pase `''` a `null`.
      *
-     * `nullable` solo se salta las reglas siguientes cuando el valor es
-     * `null`, no cuando es `''`. Un formulario de React que arranque con
-     * `useState('')` manda la cadena vacía, y sin esto chocaría con la regex
-     * y devolvería 422 por no haber firmado, que no es un error.
+     * Una versión anterior de este plan lo mandaba, razonando que `nullable`
+     * solo se salta las reglas siguientes con `null` y no con `''`, y que un
+     * formulario de React que arranque con `useState('')` chocaría con la
+     * regex. El razonamiento es correcto en abstracto y falso aquí: Laravel
+     * registra `ConvertEmptyStringsToNull` en su pila global de middleware
+     * (`Foundation\Configuration\Middleware`) y `bootstrap/app.php` no lo
+     * quita, así que la cadena vacía llega ya como `null`. El método era
+     * código inalcanzable y su prueba pasaba sin él.
      */
-    protected function prepareForValidation(): void
-    {
-        foreach (['firma_quien_entrega', 'firma_fbo'] as $campo) {
-            if ($this->input($campo) === '') {
-                $this->merge([$campo => null]);
-            }
-        }
-    }
 
     /** @return array<string, mixed> */
     public function rules(): array
@@ -1940,10 +1961,15 @@ En el grupo de `routes/api.php`. **El orden importa:** `eliminar/{id}`
 va antes de `{id}`, porque si no, `eliminar` se leería como un id.
 
 ```php
-    Route::get('/eliminar/{id}', [EntregaTurnoSeguridadController::class, 'eliminar']);
-    Route::get('/{id}', [EntregaTurnoSeguridadController::class, 'show']);
-    Route::put('/{id}', [EntregaTurnoSeguridadController::class, 'update']);
+    Route::get('/eliminar/{id}', [EntregaTurnoSeguridadController::class, 'eliminar'])->whereNumber('id');
+    Route::get('/{id}', [EntregaTurnoSeguridadController::class, 'show'])->whereNumber('id');
+    Route::put('/{id}', [EntregaTurnoSeguridadController::class, 'update'])->whereNumber('id');
 ```
+
+El `whereNumber('id')` no es adorno. Los métodos reciben `int $id`, así que
+un `GET /EntregaTurnoSeguridad/abc` reventaría con un `TypeError` y un 500 en
+vez de un 404. Además deja libre el prefijo para cualquier ruta literal que
+se agregue después —`pendientes` es la primera— sin que `/{id}` se la coma.
 
 - [ ] **Step 6: Correr las pruebas y ver que pasan**
 
