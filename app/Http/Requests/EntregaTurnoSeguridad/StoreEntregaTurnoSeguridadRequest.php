@@ -40,7 +40,11 @@ class StoreEntregaTurnoSeguridadRequest extends FormRequest
             'visitantes' => ['sometimes', 'boolean'],
             'pernocta_mensual' => ['sometimes', Rule::in(EntregaTurnoSeguridad::PERNOCTA_ESTADOS)],
             'observaciones' => ['nullable', 'string'],
-            'firma_quien_entrega' => ['required', 'string'],
+            'firma_quien_entrega' => [
+                'required',
+                'string',
+                'regex:/^data:image\/[a-zA-Z0-9.+-]+;base64,/',
+            ],
         ];
     }
 
@@ -52,6 +56,7 @@ class StoreEntregaTurnoSeguridadRequest extends FormRequest
             'seccion.in' => 'La sección solo puede ser frente o atrás.',
             'pernocta_mensual.in' => 'La pernocta mensual solo puede estar hecha, no hecha o sin revisar.',
             'firma_quien_entrega.required' => 'Falta la firma de quien entrega el turno.',
+            'firma_quien_entrega.regex' => 'La firma de quien entrega no llegó en un formato válido.',
         ];
     }
 }

@@ -136,6 +136,18 @@ test('sin la firma de quien entrega no se guarda', function () {
     expect(EntregaTurnoSeguridad::count())->toBe(0);
 });
 
+test('un texto que no es una firma se rechaza y no crea nada', function () {
+    // Sin la regla de forma, `required|string` dejaba pasar cualquier texto,
+    // el guardia de guardarFirmaBase64 hacía `return` en silencio y el
+    // relevo se guardaba SIN firma de quien entrega, que es obligatoria.
+    // El fallo era silencioso: 201 y un relevo sin firmar.
+    $this->actingAs(User::factory()->create())
+        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['firma_quien_entrega' => 'abc']))
+        ->assertJsonValidationErrorFor('firma_quien_entrega');
+
+    expect(EntregaTurnoSeguridad::count())->toBe(0);
+});
+
 test('las observaciones se guardan tal como se escribieron', function () {
     $texto = 'Se quedó una camioneta sin resguardo en la posición 4.';
 
