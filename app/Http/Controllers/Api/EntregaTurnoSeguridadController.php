@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\EntregaTurnoSeguridad\StoreEntregaTurnoSeguridadRequest;
+use App\Http\Requests\EntregaTurnoSeguridad\UpdateEntregaTurnoSeguridadRequest;
 use App\Models\EntregaTurnoSeguridad;
 use App\Models\Firma;
 use Illuminate\Database\Eloquent\Builder;
@@ -292,5 +293,119 @@ class EntregaTurnoSeguridadController extends Controller
             EntregaTurnoSeguridad::ROL_FBO => 'Firma del FBO',
             default => ucfirst(str_replace('_', ' ', $rol)),
         };
+    }
+
+    public function show(int $id): JsonResponse
+    {
+        $relevo = EntregaTurnoSeguridad::activas()
+            ->with(['usuario:id,name', 'firmas'])
+            ->find($id);
+
+        if ($relevo === null) {
+            return response()->json(['message' => 'El relevo no existe.'], 404);
+        }
+
+        return response()->json(['data' => $this->detalle($relevo)]);
+    }
+
+    public function update(UpdateEntregaTurnoSeguridadRequest $request, int $id): JsonResponse
+    {
+        if (! $request->user()->hasAnyRole(['fbo', 'admin'])) {
+            return response()->json([
+                'message' => 'Solo el FBO y el administrador pueden editar un relevo.',
+            ], 403);
+        }
+
+        $relevo = EntregaTurnoSeguridad::activas()->find($id);
+
+        if ($relevo === null) {
+            return response()->json(['message' => 'El relevo no existe.'], 404);
+        }
+
+        $validado = $request->validated();
+        $firmaEntrega = $validado['firma_quien_entrega'] ?? null;
+        $firmaFbo = $validado['firma_fbo'] ?? null;
+        unset($validado['firma_quien_entrega'], $validado['firma_fbo']);
+
+        DB::transaction(function () use ($relevo, $validado, $firmaEntrega, $firmaFbo): void {
+            if ($validado !== []) {
+                $relevo->update($validado);
+            }
+
+            if (is_string($firmaEntrega)) {
+                $this->guardarFirmaBase64($firmaEntrega, EntregaTurnoSeguridad::ROL_QUIEN_ENTREGA, $relevo);
+            }
+
+            if (is_string($firmaFbo)) {
+                $this->guardarFirmaBase64($firmaFbo, EntregaTurnoSeguridad::ROL_FBO, $relevo);
+            }
+        });
+
+        return response()->json([
+            'message' => 'Relevo actualizado correctamente',
+            'data' => $this->detalle($relevo->fresh()->load(['usuario:id,name', 'firmas'])),
+        ]);
+    }
+
+    public function eliminar(Request $request, int $id): JsonResponse
+    {
+        if (! $request->user()->hasAnyRole(['fbo', 'admin'])) {
+            return response()->json([
+                'message' => 'Solo el FBO y el administrador pueden eliminar un relevo.',
+            ], 403);
+        }
+
+        $relevo = EntregaTurnoSeguridad::activas()->find($id);
+
+        if ($relevo === null) {
+            return response()->json(['message' => 'El relevo no existe.'], 404);
+        }
+
+        $relevo->update(['status' => 'N']);
+
+        return response()->json(['message' => 'Relevo eliminado correctamente']);
+    }
+
+    /**
+     * El relevo como lo espera la pantalla: el nombre resuelto, el día y la
+     * hora por separado en 24 horas, y las firmas con su URL.
+     *
+     * Las firmas cuyo archivo ya no está en el disco se omiten en vez de
+     * devolver una URL muerta que el navegador pintaría como imagen rota.
+     *
+     * @return array<string, mixed>
+     */
+    private function detalle(EntregaTurnoSeguridad $relevo): array
+    {
+        $firmas = $relevo->firmas
+            ->filter(static fn (Firma $firma): bool => Storage::disk($firma->disk ?? 'public')->exists($firma->path))
+            ->map(static fn (Firma $firma): array => [
+                'id' => $firma->id,
+                'rol' => $firma->pivot->rol,
+                'tag' => $firma->pivot->tag,
+                'orden' => $firma->pivot->orden,
+                'url' => $firma->url(),
+            ])
+            ->values()
+            ->all();
+
+        $casillas = [];
+
+        foreach (EntregaTurnoSeguridad::CASILLAS as $casilla) {
+            $casillas[$casilla] = (bool) $relevo->{$casilla};
+        }
+
+        return [
+            'id' => $relevo->id,
+            'nombre' => $relevo->usuario?->name ?? '',
+            'fecha' => $relevo->fecha_hora->toDateString(),
+            'hora' => $relevo->fecha_hora->format('H:i'),
+            'fecha_hora' => $relevo->fecha_hora->format('Y-m-d H:i:s'),
+            'seccion' => $relevo->seccion,
+            ...$casillas,
+            'pernocta_mensual' => $relevo->pernocta_mensual,
+            'observaciones' => $relevo->observaciones,
+            'firmas' => $firmas,
+        ];
     }
 }
