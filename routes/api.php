@@ -135,6 +135,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('EntregaTurnoSeguridad')->gro
     Route::get('/', [EntregaTurnoSeguridadController::class, 'index']);
     Route::post('/', [EntregaTurnoSeguridadController::class, 'store']);
     Route::get('/eliminar/{id}', [EntregaTurnoSeguridadController::class, 'eliminar'])->whereNumber('id');
+    Route::get('/pendientes', [EntregaTurnoSeguridadController::class, 'pendientes']);
     Route::get('/{id}', [EntregaTurnoSeguridadController::class, 'show'])->whereNumber('id');
     Route::put('/{id}', [EntregaTurnoSeguridadController::class, 'update'])->whereNumber('id');
 });

@@ -255,3 +255,13 @@ test('la edición respeta las tres letras de la pernocta mensual', function () {
     expect($relevo->fresh()->pernocta_mensual)
         ->toBe(EntregaTurnoSeguridad::PERNOCTA_SIN_REVISAR);
 });
+
+test('un id que no es un número no llega al controlador', function () {
+    // Sin el `->whereNumber('id')` de las rutas, los métodos reciben
+    // `int $id` y un `/abc` revienta con TypeError y 500 en vez de 404.
+    // La restricción es del framework, pero sin esta prueba nadie nota si
+    // alguien la quita.
+    $this->actingAs(usuarioCon('fbo'))
+        ->getJson('/api/EntregaTurnoSeguridad/abc')
+        ->assertNotFound();
+});

@@ -295,6 +295,34 @@ class EntregaTurnoSeguridadController extends Controller
         };
     }
 
+    /**
+     * Los relevos a los que les falta la firma del FBO.
+     *
+     * De lo más viejo a lo más nuevo a propósito: es una cola de trabajo, y
+     * lo que lleva días sin firmar es lo que corre prisa.
+     */
+    public function pendientes(): JsonResponse
+    {
+        $relevos = EntregaTurnoSeguridad::activas()
+            ->with('usuario:id,name')
+            ->whereDoesntHave(
+                'firmas',
+                static fn (Builder $firma): Builder => $firma->where('firmables.rol', EntregaTurnoSeguridad::ROL_FBO)
+            )
+            ->orderBy('fecha_hora')
+            ->get()
+            ->map(static fn (EntregaTurnoSeguridad $relevo): array => [
+                'id' => $relevo->id,
+                'nombre' => $relevo->usuario?->name ?? '',
+                'fecha' => $relevo->fecha_hora->toDateString(),
+                'hora' => $relevo->fecha_hora->format('H:i'),
+                'seccion' => $relevo->seccion,
+            ])
+            ->all();
+
+        return response()->json(['data' => $relevos]);
+    }
+
     public function show(int $id): JsonResponse
     {
         $relevo = EntregaTurnoSeguridad::activas()
