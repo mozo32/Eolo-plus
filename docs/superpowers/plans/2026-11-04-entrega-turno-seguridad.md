@@ -2178,6 +2178,33 @@ En `routes/api.php`, **antes** de `/{id}`, por lo mismo que `eliminar`:
     Route::get('/pendientes', [EntregaTurnoSeguridadController::class, 'pendientes']);
 ```
 
+- [ ] **Step 4 bis: La deuda que arrastra la Tarea 4**
+
+`/{id}` lleva `->whereNumber('id')` desde la tarea anterior, y hoy
+quitarlo no rompe ninguna prueba: la restricción es del framework, pero
+que nadie la vigile es la misma clase de defecto que esta rama ya
+corrigió seis veces. Ahora que existe `pendientes` hay además un segundo
+motivo para que esté: sin la restricción, una ruta literal nueva bajo
+este prefijo podría caer dentro de `/{id}`.
+
+Agregar en `tests/Feature/EntregaTurnoSeguridad/EditarYEliminarRelevoTest.php`:
+
+```php
+test('un id que no es un número no llega al controlador', function () {
+    // Sin el `->whereNumber('id')` de las rutas, los métodos reciben
+    // `int $id` y un `/abc` revienta con TypeError y 500 en vez de 404.
+    // La restricción es del framework, pero sin esta prueba nadie nota si
+    // alguien la quita.
+    $this->actingAs(usuarioCon('fbo'))
+        ->getJson('/api/EntregaTurnoSeguridad/abc')
+        ->assertNotFound();
+});
+```
+
+Comprobarla por mutación: quitar `->whereNumber('id')` de la ruta `GET
+/{id}` y confirmar que la prueba falla —probablemente con un 500— y
+restaurarlo antes de commitear.
+
 - [ ] **Step 5: Correr las pruebas y ver que pasan**
 
 Correr: `php artisan test tests/Feature/EntregaTurnoSeguridad/`
