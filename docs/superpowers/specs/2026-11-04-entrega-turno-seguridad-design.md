@@ -1,0 +1,424 @@
+# Entrega de Turno de Seguridad
+
+Fecha: 2026-11-04
+
+Un módulo nuevo en Seguridad para registrar la entrega de turno: quién
+entregó, qué alcanzó a revisar, qué observó y las dos firmas que cierran
+el relevo.
+
+---
+
+## 1. Qué se pide
+
+Seguridad trabaja en dos puestos, **frente** y **atrás**. Al cerrar el
+turno, cada puesto deja dicho cuáles de sus diez puntos alcanzó a
+revisar, escribe lo que haya que advertir al siguiente turno, firma, y
+el FBO firma de recibido.
+
+Hoy eso no se registra en ninguna parte. Lo que se pide es:
+
+- una tabla con el mismo sistema de filtrado que Operaciones Diarias,
+- tres acciones por renglón: editar, vista previa y eliminar,
+- editar y eliminar reservadas a `fbo` y `admin`; la vista previa para
+  todos,
+- un formulario con el nombre tomado del usuario que inició sesión, la
+  fecha y hora del día en hora de México, los diez apartados a contestar
+  — ocho casillas, la pernocta mensual con tres estados y las
+  observaciones en texto libre — y dos firmas,
+- todo con las fechas en 24 horas y con el diseño que el proyecto ya
+  trae.
+
+## 2. Por qué no se reúsa la entrega de turno de Despacho
+
+Ya existe una tabla `entregas_turno`, de Despacho, con firmas
+polimórficas y la misma idea de relevo. No se reúsa, y no es por
+comodidad: sus campos son otros. Despacho registra copiadoras, fondo de
+documentación, equipo de oficina y el estado de la caja fuerte.
+Seguridad registra aviones de CSAE, resguardo vehicular, posiciones,
+vehículos y visitantes. No se cruza ni una columna.
+
+Compartir la tabla obligaría a dejar en nulo la mitad de las columnas en
+cada renglón y a adivinar, al leer, de qué área es el registro. El
+módulo va por su cuenta, en su propia tabla, y lo único que comparte con
+Despacho es la maquinaria de firmas — que ya es compartida por otros
+siete modelos.
+
+## 3. Los datos
+
+### 3.1 La tabla
+
+Tabla `entregas_turno_seguridad`. **Un registro por sección**, no por
+día.
+
+| columna | tipo | nota |
+|---|---|---|
+| `id` | bigint | |
+| `user_id` | FK `users` | de aquí sale el nombre de quien entrega |
+| `fecha_hora` | datetime | el instante del relevo |
+| `seccion` | varchar(10) | `frente` o `atras` |
+| `aviones_csae` | boolean, default false | |
+| `combustible` | boolean, default false | |
+| `resguardo_vehicular` | boolean, default false | |
+| `estacionamiento` | boolean, default false | |
+| `posiciones` | boolean, default false | |
+| `vehiculos` | boolean, default false | |
+| `operaciones` | boolean, default false | |
+| `visitantes` | boolean, default false | |
+| `pernocta_mensual` | char(1), default `R` | `S` hecho, `N` no hecho, `R` sin revisar |
+| `observaciones` | text, nullable | texto libre |
+| `status` | char(1), default `A` | borrado lógico |
+| timestamps | | |
+
+Ocho casillas, un tri-estado y un texto. Sin marcar quiere decir que no
+se hizo: no hay un tercer estado escondido en los ocho booleanos.
+
+El nombre de los índices se mantiene corto a propósito. MySQL rechaza
+identificadores de más de 64 caracteres y sqlite no, así que una
+migración con nombres largos pasa todas las pruebas y revienta en
+producción; ya pasó una vez en este proyecto. El índice de llave
+foránea queda en `entregas_turno_seguridad_user_id_foreign`, de 39
+caracteres.
+
+### 3.2 Por qué columnas booleanas y no un JSON
+
+Despacho guarda sus listas de revisión en columnas JSON. Aquí no, por
+una razón concreta: la lista es fija y la van a querer contar. «Cuántos
+días del mes no se revisó combustible» es una pregunta de una sola
+consulta con columnas, y de leer fila por fila en PHP con un JSON. Ocho
+`tinyint` cuestan ocho bytes por renglón; la consulta que ahorran vale
+más que eso.
+
+### 3.3 Por qué no hay candado de uno por día y sección
+
+Lo normal son dos entregas al día, una por puesto. Lo tentador es poner
+un índice único sobre `(fecha, seccion)` para garantizarlo. No se pone.
+
+Si alguna vez hay un relevo extra — un turno partido, una emergencia, un
+cambio de guardia a media noche — el sistema no tiene por qué negarse a
+registrarlo. En vez del candado, la tabla **agrupa por día de
+calendario**: si una sección entregó dos veces el mismo día, su casilla
+dice «2 registros» y el selector de acciones las lista. Se degrada bien
+en vez de rechazar un dato verdadero.
+
+### 3.4 Los tres estados de la pernocta mensual
+
+Los otros ocho puntos son diarios: no marcado significa «hoy no lo
+hice», y eso es una falta. La pernocta es mensual, así que «hoy no la
+hice» es lo normal casi todos los días del mes, y leerlo como falta
+sería mentir.
+
+Por eso lleva tres estados y nace en `R`, **sin revisar**. El `N`, «no
+hecho», se escoge a mano, y ahí sí quiere decir que tocaba y no se hizo.
+
+## 4. Las firmas
+
+Van por la tabla `firmables` que ya existe, con `morphToMany` como en
+`MovimientoCSAE`:
+
+```php
+public function firmas()
+{
+    return $this->morphToMany(Firma::class, 'firmable', 'firmables')
+        ->withPivot(['rol', 'tag', 'orden', 'status'])
+        ->wherePivot('status', 'A')
+        ->withTimestamps();
+}
+```
+
+Dos roles: `quien_entrega` y `fbo`. Se guardan igual que en
+`MovimientoCSAEController::guardarFirmaBase64()` — llega un base64, la
+firma anterior de ese rol pasa a `status = 'I'` y se engancha la nueva.
+No se inventa maquinaria.
+
+**El relevo se guarda con la firma de quien entrega nada más.** El FBO
+firma después, y para eso tiene un botón de pendientes que consulta los
+registros a los que les falta su firma, calcado del
+`ChecklistEquipoSeguridad/pendientes` que ya existe.
+
+Como los registros son dos, **el FBO firma cada sección por separado**.
+Si el frente entregó y el de atrás no, pendientes enseña solo el del
+frente.
+
+## 5. La API
+
+Prefijo `EntregaTurnoSeguridad`, bajo `['api', 'auth:sanctum']`, como el
+resto:
+
+| verbo | ruta | qué hace |
+|---|---|---|
+| GET | `/` | el listado, agrupado por día y paginado por día |
+| GET | `/pendientes` | los registros sin la firma del FBO |
+| GET | `/{id}` | el detalle de un registro, con sus firmas |
+| POST | `/` | crea un registro |
+| PUT | `/{id}` | lo edita — solo `fbo` y `admin` |
+| GET | `/eliminar/{id}` | borrado lógico — solo `fbo` y `admin` |
+
+El `GET /eliminar/{id}` es raro para un borrado, pero es la forma que
+usa el módulo hermano de Seguridad y la convención manda sobre el gusto.
+
+**La firma del FBO llega por ese mismo `PUT`**, en un campo `firma_fbo`
+con el base64. No hay una ruta aparte para firmar: el FBO ya tiene
+permiso de `PUT`, y una segunda ruta que hiciera lo mismo sería otra
+puerta que cuidar.
+
+### La paginación se cuenta en días, no en registros
+
+El listado paginaría mal si contara registros: una página de diez
+registros puede partir un día a la mitad y dejar el frente en una página
+y el de atrás en la siguiente. Se resuelve con dos consultas:
+
+```php
+$dias = EntregaTurnoSeguridad::query()
+    ->where('status', 'A')
+    ->selectRaw('DATE(fecha_hora) as dia')
+    ->groupBy('dia')
+    ->orderByDesc('dia')
+    ->paginate($perPage);
+```
+
+y después se traen todos los registros cuyo `DATE(fecha_hora)` cae en
+esos días. La paginación cuenta días; el renglón nunca sale partido.
+
+### Los filtros deciden qué días salen, no qué secciones se ven
+
+Si se filtra por «falta la firma del FBO», aparecen los **días** que
+tienen al menos un registro sin firmar — pero el renglón sigue mostrando
+las dos secciones completas. Esconder la sección ya firmada haría que el
+renglón mintiera sobre lo que pasó ese día.
+
+### La forma de cada renglón
+
+```json
+{
+  "fecha": "2026-11-04",
+  "frente": {
+    "id": 12,
+    "nombre": "Juan Pérez",
+    "hora": "07:30",
+    "firmado_fbo": true,
+    "pernocta_mensual": "R",
+    "extras": 0
+  },
+  "atras": null
+}
+```
+
+`null` quiere decir que esa sección no entregó. `extras` cuenta los
+registros adicionales de la misma sección ese día — cero casi siempre.
+
+Cuando `extras` no es cero, el renglón enseña **el registro más
+reciente** de esa sección, y el selector de acciones lista todos.
+
+## 6. La tabla en pantalla
+
+### 6.1 Sobre qué se construye
+
+Operaciones Diarias arma su tabla a mano: `OperacionesCards.tsx` tiene
+1307 líneas con la tabla, los filtros, el modal de fechas y la
+paginación escritos ahí mismo. El proyecto también tiene
+`components/DataTable.tsx` y `components/ModalPeriodo.tsx` como
+componentes compartidos, y `TablaPrestamosChalecos.tsx` consigue lo
+mismo en 285 líneas usándolos.
+
+**Esta tabla se construye sobre los componentes compartidos.** Se ve
+igual — el mismo `rounded-xl border`, el mismo `bg-muted/50`, el mismo
+`text-muted-foreground` — es la cuarta parte de código, y el modal de
+periodos queda compartido en vez de duplicado.
+
+### 6.2 Las columnas
+
+Una fila por día:
+
+| Fecha | Frente | Atrás | Pernocta mensual | Acciones |
+|---|---|---|---|---|
+| 04/11/2026 | Juan Pérez · 07:30 ✓ | Luis Gómez · 19:00 ⏳ | Sin revisar | 👁 ✏ 🗑 |
+
+El distintivo de cada sección:
+
+- **✓** el FBO ya firmó,
+- **⏳** falta la firma del FBO,
+- **—** esa sección no entregó.
+
+La columna de pernocta mensual imprime una sola etiqueta cuando las dos
+secciones coinciden. **Si discrepan, imprime las dos**, el frente
+primero: `Hecho / Sin revisar`. Resumirlo a un solo valor obligaría a
+decidir cuál de los dos gana, y cualquier elección borraría lo que una
+de las dos secciones dijo.
+
+### 6.3 Los filtros
+
+- buscador por nombre de quien entregó,
+- periodo con `ModalPeriodo` — día, rango, mes, año,
+- sección: ambas, frente, atrás,
+- estado: «todas»; «falta la firma del FBO», que trae los días con al
+  menos un registro sin firmar; y «completas», los días en que toda
+  sección que entregó ya tiene sus dos firmas,
+- limpiar.
+
+**No se arrastran** los filtros propios de Operaciones Diarias — equipo,
+lugar, tipo de operación, pax, eqp, cliente, matrícula. En una entrega
+de turno no significan nada, y heredarlos sería dejar cinco controles
+muertos en pantalla.
+
+### 6.4 Las acciones
+
+La vista previa abre el día completo, con las dos secciones.
+
+Editar y eliminar actúan sobre **un registro**, no sobre el día: borrar
+«el día» borraría el trabajo de otra persona. Cuando el día tiene dos
+secciones, la acción abre un selector que pregunta sobre cuál. Cuando
+tiene una sola, entra directo sin preguntar.
+
+## 7. El formulario
+
+- **Nombre:** se muestra el del usuario autenticado y no se puede
+  escribir. El servidor lo toma de `$request->user()`, nunca de lo que
+  llegue en la petición.
+- **Fecha y hora:** se propone el instante actual en hora de México, en
+  24 horas.
+- **Sección:** frente o atrás, a escoger.
+- **Ocho casillas** con sus etiquetas tal como se pidieron.
+- **Pernocta mensual:** tres opciones, con «sin revisar» marcada al
+  abrir.
+- **Observaciones:** área de texto libre. Vacía quiere decir que no hubo
+  observaciones.
+- **Firma de quien entrega:** obligatoria para guardar.
+- **Firma del FBO:** opcional al crear, se agrega después.
+
+## 8. La vista previa
+
+Modal, con la forma de `VistaPreviaCsae.tsx`: dos columnas lado a lado,
+Frente y Atrás. Cada una con sus nueve puntos en ✓/✗, la pernocta
+mensual con su estado escrito, el texto de las observaciones y las dos
+firmas como imagen, leídas por el `rol` del pivote igual que el
+`getFirmaByRol` que esa vista ya tiene.
+
+Una sección que no entregó se dibuja como «sin entregar», no como una
+columna de casillas vacías — vacío y no entregado no son lo mismo.
+
+## 9. Permisos
+
+El front esconde botones, y eso no es un permiso. Van los dos lados.
+
+**Navegador:** `tieneRol('fbo', 'admin')`, con el mismo juego de
+`rolesUsuario` y `tieneRol` de `MovimientoAvionesCSAE.tsx`. Quien no
+tenga el rol no ve el lápiz ni el bote.
+
+**Servidor:** `$request->user()->hasAnyRole(['fbo', 'admin'])` o 403, en
+`update` y en el borrado, como ya lo hace
+`OperacionesDiariasController`. El proyecto no tiene `app/Policies`, así
+que la revisión va en el controlador: es su convención, no un atajo.
+
+`store` queda abierto a cualquiera con acceso al módulo. El rol de
+administrador se llama `admin`.
+
+Eliminar siempre es lógico: `status = 'I'`. El renglón se queda en la
+base.
+
+## 10. La fecha: 24 horas y hora de México
+
+La aplicación ya corre en la zona de México. La fecha se guarda como
+`datetime` y se muestra siempre en 24 horas, con los ayudantes de
+formato que `VistaPreviaCsae.tsx` ya trae: `dd/mm/aaaa` para el día y
+`HH:mm` para la hora, sin `am`/`pm` en ninguna pantalla del módulo.
+
+## 11. Los archivos
+
+**Servidor**
+
+- migración de `entregas_turno_seguridad`
+- `app/Models/EntregaTurnoSeguridad.php`
+- `app/Http/Controllers/Api/EntregaTurnoSeguridadController.php`
+- `app/Http/Requests/EntregaTurnoSeguridad/StoreEntregaTurnoSeguridadRequest.php`
+- `app/Http/Requests/EntregaTurnoSeguridad/UpdateEntregaTurnoSeguridadRequest.php`
+- `routes/api.php`, `routes/web.php`
+
+**Navegador**
+
+- `resources/js/components/navigation.ts` — el renglón del menú, en
+  Seguridad, junto a Operaciones Diarias
+- `resources/js/pages/seguridad/EntregaTurno.tsx` — la página
+- `resources/js/pages/seguridad/entregaTurno/TablaEntregaTurno.tsx`
+- `resources/js/pages/seguridad/entregaTurno/FormEntregaTurno.tsx`
+- `resources/js/pages/seguridad/entregaTurno/VistaPreviaEntregaTurno.tsx`
+- `resources/js/pages/seguridad/entregaTurno/SelectorSeccion.tsx`
+- `resources/js/pages/seguridad/entregaTurno/PendientesFirmaFbo.tsx`
+- `resources/js/stores/apiEntregaTurnoSeguridad.ts`
+
+Ningún archivo pasa de las trescientas líneas. La página orquesta; cada
+pieza tiene un trabajo.
+
+## 12. Qué se prueba
+
+Pruebas de característica en Pest, contra la API, corridas en serie:
+
+1. el nombre sale del usuario autenticado, no de lo que manda el
+   navegador: una petición que trae otro `user_id` guarda el del
+   autenticado
+2. la fecha se guarda y se devuelve en hora de México
+3. `pernocta_mensual` nace en `R` cuando no se manda
+4. `pernocta_mensual` acepta `S`, `N` y `R`, y rechaza cualquier otra
+   cosa
+5. `seccion` acepta `frente` y `atras`, y rechaza cualquier otra cosa
+6. dos secciones el mismo día devuelven **un** renglón, con las dos
+   llenas
+7. un día con una sola sección devuelve la otra en `null`
+8. tres registros de la misma sección el mismo día devuelven un renglón
+   con `extras` en 2
+9. la paginación cuenta días: con once días y diez por página, la
+   primera página trae diez renglones completos, ninguno partido
+10. el filtro «falta la firma del FBO» trae el día, y el renglón sigue
+    mostrando las dos secciones
+11. cuando las dos secciones discrepan en la pernocta mensual, el
+    renglón devuelve los dos estados
+12. un `empleado` recibe 403 al editar y al eliminar
+13. `fbo` y `admin` pasan en los dos
+14. eliminar solo cambia `status` a `I`; el renglón sigue en la base y
+    desaparece del listado
+15. se guarda con la firma de quien entrega nada más, sin la del FBO
+16. `pendientes` lista solo los registros sin la firma del FBO, y deja
+    de listar uno en cuanto se firma
+17. firmar de nuevo el mismo rol deja la firma anterior en
+    `status = 'I'` y una sola activa
+
+Del navegador la prueba es `npm run build` en verde y
+`npx tsc --noEmit` con el único error de base que el proyecto ya
+arrastra. No hay corredor de pruebas de JavaScript en este proyecto.
+
+## 13. Lo que NO entra
+
+- exportar a Excel o a PDF,
+- avisos o notificaciones cuando falta una firma,
+- un candado de una entrega por sección por día,
+- los filtros propios de Operaciones Diarias,
+- reutilizar la tabla de Despacho,
+- editar el nombre de quien entrega,
+- subfilas desplegables en la tabla: el día se abre en la vista previa.
+
+## 14. Decisiones registradas
+
+1. **Módulo independiente del de Despacho.** No se cruza una sola
+   columna; compartir la tabla dejaría la mitad en nulo.
+2. **Un registro por sección, una fila por día.** Dos personas
+   distintas entregan, y cada una es dueña de lo que escribió.
+3. **Editar y eliminar preguntan sobre qué sección.** Con una sola
+   sección entran directo.
+4. **Observaciones es caja de texto.** Un checkbox de «ya comenté mis
+   observaciones» no guarda la observación.
+5. **Crear está abierto a cualquiera con acceso; editar y eliminar solo
+   `fbo` y `admin`.**
+6. **Se guarda con la firma de quien entrega; el FBO firma después** y
+   tiene un botón de pendientes.
+7. **Ocho columnas booleanas, no un JSON**, para poder contarlas.
+8. **Sin índice único por día y sección**, para no rechazar un relevo
+   extra verdadero.
+9. **La tabla se construye sobre `DataTable` y `ModalPeriodo`**, no
+   copiando las 1307 líneas de `OperacionesCards`.
+10. **La paginación cuenta días, no registros**, para no partir un
+    renglón.
+11. **El filtro decide qué días aparecen; el renglón siempre muestra las
+    dos secciones.**
+12. **Si las dos secciones discrepan en la pernocta mensual, se imprimen
+    los dos estados.**
+13. **La pernocta mensual nace en «sin revisar»**, porque es el estado
+    verdadero casi todos los días del mes.
