@@ -134,3 +134,31 @@ test('una fecha no se puede lavar pasando por una válida', function () {
     expect($relevo->fresh()->fecha_hora->toDateString())
         ->toBe(Carbon::today(config('app.timezone'))->toDateString());
 });
+
+test('el mismo día con otra hora pasa en un relevo viejo', function () {
+    // La comparación es por DÍA, no por instante: el FBO que firma un relevo
+    // de hace tres días puede además corregirle la hora. Sin esta prueba,
+    // nadie nota si alguien cambia `cambiaElDia()` para comparar el datetime
+    // completo y deja ese caso en 422.
+    $relevo = relevoViejo();
+    $mismoDiaOtraHora = $relevo->fecha_hora->copy()->setTime(19, 45)->format('Y-m-d H:i:s');
+
+    editarComoFbo($relevo, ['fecha_hora' => $mismoDiaOtraHora])->assertSuccessful();
+
+    expect($relevo->fresh()->fecha_hora->format('H:i'))->toBe('19:45');
+});
+
+test('un PUT sin fecha_hora no se juzga', function () {
+    // Es el caso de la cola de pendientes: el FBO manda solo su firma. El
+    // `sometimes` tiene que saltarse el campo, o firmar un relevo viejo
+    // daría 422 sin que nadie haya tocado una fecha.
+    $relevo = relevoViejo();
+    $suDia = $relevo->fecha_hora->toDateString();
+
+    editarComoFbo($relevo, ['firma_fbo' => firmaPngMinima()])->assertSuccessful();
+
+    $relevo->refresh()->load('firmas');
+
+    expect($relevo->tieneFirmaDe(EntregaTurnoSeguridad::ROL_FBO))->toBeTrue()
+        ->and($relevo->fecha_hora->toDateString())->toBe($suDia);
+});

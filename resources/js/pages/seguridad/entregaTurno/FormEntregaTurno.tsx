@@ -21,6 +21,7 @@ import {
     type Pernocta,
     type Seccion,
 } from './types';
+import FirmaActual from './FirmaActual';
 
 type Props = {
     abierto: boolean;
@@ -38,21 +39,6 @@ const ETIQUETA = 'mb-1 block text-[10px] font-black uppercase text-slate-500';
 
 function MensajeError({ mensajes }: { mensajes?: string[] }) {
     return mensajes?.[0] ? <p className="mt-1 text-[10px] font-bold text-red-600">{mensajes[0]}</p> : null;
-}
-
-/** La firma que el relevo ya tiene, para que nadie dibuje encima sin saberlo. */
-function FirmaActual({ firma }: { firma: FirmaRelevo | null }) {
-    if (firma === null) {
-        return null;
-    }
-
-    return (
-        <div className="mb-2">
-            <p className="text-[10px] font-bold uppercase text-slate-400">Firma actual</p>
-            <img src={firma.url} alt="Firma registrada" className="h-16 rounded border border-slate-200 bg-white" />
-            <p className="text-[10px] text-slate-400">Dibujar una nueva la reemplaza; la anterior queda en el historial.</p>
-        </div>
-    );
 }
 
 /**
