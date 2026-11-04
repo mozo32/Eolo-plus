@@ -325,8 +325,19 @@ tiene una sola, entra directo sin preguntar.
   abrir.
 - **Observaciones:** área de texto libre. Vacía quiere decir que no hubo
   observaciones.
-- **Firma de quien entrega:** obligatoria para guardar.
-- **Firma del FBO:** opcional al crear, se agrega después.
+- **Firma de quien entrega:** obligatoria al crear. Al editar no se pide:
+  el `PUT` conserva la anterior si no llega una nueva, y exigirla
+  obligaría a quien corrige una casilla a redibujar la firma de otra
+  persona, que es falsificarla.
+- **Firma del FBO:** **no se pide al crear.** El campo no aparece hasta
+  que el relevo existe.
+
+  Una versión anterior de esta spec decía «opcional al crear», lo que
+  contradecía la §4 —«el relevo se guarda con la firma de quien entrega
+  nada más»— y el formulario acabó ofreciendo al FBO un campo que el
+  servidor descartaba al validar: dibujaba su firma, leía «relevo
+  registrado correctamente», y la firma no existía. Manda la §4. El FBO
+  firma después, por la cola de pendientes.
 
 ## 8. La vista previa
 
@@ -408,18 +419,53 @@ parte del trabajo:
 
 **Navegador**
 
-- `resources/js/components/navigation.ts` — el renglón del menú, en
-  Seguridad, junto a Operaciones Diarias
+- `resources/js/components/navigation.ts` — el menú. **Ojo: se arma de
+  DOS maneras y hay que tocar las dos.** Esto costó un defecto crítico en
+  este módulo y conviene que no se repita:
+
+  - `getNavModules` tiene una rama `if (user.isAdmin)` (línea 168) con la
+    lista escrita a mano. Ahí va el renglón nuevo.
+  - **Para todos los demás usuarios**, el menú se construye recorriendo
+    `user.departamentos[].subdepartamentos[]` y pasando cada ruta por
+    `ROUTE_CONFIG`; lo que no esté en ese mapa **se descarta en silencio**
+    (línea 261: `if (!routeKey || !ROUTE_CONFIG[routeKey]) return null;`).
+  - Las dos ramas son excluyentes: `HandleInertiaRequests:79` manda
+    `departamentos` vacío a los administradores.
+
+  Así que un módulo que solo se agregue a la lista de admin **no existe
+  para nadie más**. Hacen falta tres piezas, siguiendo el precedente de
+  `PrestamoChalecosSubdepartamentoSeeder`:
+
+  1. la entrada en `ROUTE_CONFIG`;
+  2. un seeder que cree el `SubDepartamento` cuyo nombre **slugifique a
+     esa misma llave** (`Str::slug('entregaTurnoSeguridad')` da
+     `entregaturnoseguridad`);
+  3. el registro de ese seeder en `DatabaseSeeder`, donde ya viven otros
+     cuatro iguales.
+
+- `resources/js/pages/seguridad/entregaTurno/types.ts` — tipos,
+  etiquetas y ayudantes del módulo
 - `resources/js/pages/seguridad/EntregaTurno.tsx` — la página
 - `resources/js/pages/seguridad/entregaTurno/TablaEntregaTurno.tsx`
+- `resources/js/pages/seguridad/entregaTurno/FilaFiltros.tsx`
+- `resources/js/pages/seguridad/entregaTurno/CeldasRelevo.tsx`
+- `resources/js/pages/seguridad/entregaTurno/PaginadorRelevos.tsx`
 - `resources/js/pages/seguridad/entregaTurno/FormEntregaTurno.tsx`
+- `resources/js/pages/seguridad/entregaTurno/FirmaActual.tsx`
 - `resources/js/pages/seguridad/entregaTurno/VistaPreviaEntregaTurno.tsx`
 - `resources/js/pages/seguridad/entregaTurno/SelectorSeccion.tsx`
 - `resources/js/pages/seguridad/entregaTurno/PendientesFirmaFbo.tsx`
 - `resources/js/stores/apiEntregaTurnoSeguridad.ts`
 
-Ningún archivo pasa de las trescientas líneas. La página orquesta; cada
-pieza tiene un trabajo.
+**Ningún archivo pasa de las trescientas líneas**, y eso explica por qué
+hay más archivos de los que esta lista tenía al principio: la tabla y el
+formulario se partieron al escribirlos, no después. `FilaFiltros`,
+`CeldasRelevo`, `PaginadorRelevos` y `FirmaActual` salieron de ahí.
+
+El límite es para los archivos de **código**. Un archivo de pruebas de
+trescientas líneas son pruebas; partirlo obligaría a mover sus ayudantes
+y a crear la dependencia entre archivos de prueba que este trabajo
+rechazó por frágil —un archivo que solo funciona si antes se cargó otro.
 
 ## 12. Qué se prueba
 
