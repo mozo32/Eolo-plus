@@ -111,6 +111,7 @@ use App\Models\EntregaTurnoSeguridad;
 use App\Models\Firma;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 /*
  * El registro de un relevo de Seguridad: una fila por sección, con sus
@@ -208,15 +209,27 @@ test('tieneFirmaDe distingue el rol que falta del que está', function () {
         ->and($relevo->tieneFirmaDe(EntregaTurnoSeguridad::ROL_FBO))->toBeFalse();
 });
 
-test('el nombre del índice de la migración cabe en MySQL', function () {
+test('los nombres de índice que crea la migración caben en MySQL', function () {
     // MySQL rechaza identificadores de más de 64 caracteres y sqlite no,
     // así que sin esta prueba la migración pasaría aquí y reventaría en el
     // servidor. Ya pasó una vez en este proyecto.
-    foreach ([
-        'entregas_turno_seg_fecha_seccion_idx',
-        'entregas_turno_seguridad_user_id_foreign',
-    ] as $identificador) {
-        expect(strlen($identificador))->toBeLessThanOrEqual(64);
+    //
+    // Lee el ESQUEMA y no una lista escrita a mano: una lista de literales
+    // mediría su propia longitud y no detectaría un renombre en la
+    // migración. El guardia de lista no vacía va primero porque sin él un
+    // `getIndexes` vacío dejaría pasar el bucle sin comprobar nada.
+    //
+    // La llave foránea NO se mide: `SQLiteGrammar::getForeignKey()` emite
+    // «foreign key(...) references ...» sin nombre de restricción, así que
+    // en sqlite no hay nombre que medir. Sus 40 caracteres salen de la
+    // convención de Laravel, no de un aserto.
+    $nombres = array_column(Schema::getIndexes('entregas_turno_seguridad'), 'name');
+
+    expect($nombres)->not->toBeEmpty()
+        ->and($nombres)->toContain('entregas_turno_seg_fecha_seccion_idx');
+
+    foreach ($nombres as $nombre) {
+        expect(strlen($nombre))->toBeLessThanOrEqual(64);
     }
 });
 ```
