@@ -2554,24 +2554,44 @@ En `routes/web.php`, dentro del mismo grupo que las demás de Seguridad:
     })->name('entregaTurnoSeguridad');
 ```
 
-- [ ] **Step 5: El renglón del menú**
+- [ ] **Step 5: Generar el ayudante de ruta**
+
+`navigation.ts` importa sus ayudantes de `@/routes`, que es
+`resources/js/routes/` — una carpeta **generada por Wayfinder** y que está
+en `.gitignore` (línea 8). El ayudante `entregaTurnoSeguridad` no existe
+hasta que se regenere, así que importarlo antes deja el TypeScript roto.
+
+Correr:
+
+```bash
+php artisan wayfinder:generate
+```
+
+Es un comando de artisan, no una compilación: no hace falta `npm run
+build` para esto. Lo que genere **no se commitea**, porque la carpeta
+está ignorada y el build la vuelve a producir.
+
+- [ ] **Step 6: El renglón del menú**
 
 En `resources/js/components/navigation.ts`: agregar
-`entregaTurnoSeguridad` a los `import` de rutas, y el renglón al módulo
-`Seguridad`, después de `seguridad-operaciones`:
+`entregaTurnoSeguridad` a los `import` de rutas desde `@/routes`, y el
+renglón al módulo `Seguridad`, después de `seguridad-operaciones`:
 
 ```ts
 { id: 'seguridad-entrega-turno', title: 'Entrega de Turno', href: entregaTurnoSeguridad(), icon: LayoutGrid },
 ```
 
-- [ ] **Step 6: Comprobar que compila**
+Ojo: ya existe un `entregaTurno` importado ahí, que es el de Despacho.
+Son dos rutas distintas y dos páginas distintas; no se reúsa ninguna.
+
+- [ ] **Step 7: Comprobar que compila**
 
 Quien coordina corre `npm run build` y `npx tsc --noEmit`.
 
 Esperado: `npm run build` sale con 0; `tsc` reporta **exactamente un**
 error, el de base en `WalkAroundController.ts:905`.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add routes/web.php resources/js/components/navigation.ts resources/js/stores/apiEntregaTurnoSeguridad.ts resources/js/pages/seguridad/EntregaTurno.tsx resources/js/pages/seguridad/entregaTurno/types.ts
