@@ -69,6 +69,14 @@ día.
 | `status` | char(1), default `A` | borrado lógico |
 | timestamps | | |
 
+**Las letras son `A` activo y `N` retirado**, tanto en el registro como
+en el pivote de firmas. Así lo hace todo el servidor —
+`MovimientoCSAEController::eliminar()` escribe `'N'`, y los siete
+módulos que retiran una firma escriben `'N'` en el pivote. La letra `I`
+no existe en el servidor; aparece solo en una comparación de
+`VistaPreviaCsae.tsx` que, por eso, nunca se cumple. No se copia esa
+comparación.
+
 Ocho casillas, un tri-estado y un texto. Sin marcar quiere decir que no
 se hizo: no hay un tercer estado escondido en los ocho booleanos.
 
@@ -127,8 +135,8 @@ public function firmas()
 
 Dos roles: `quien_entrega` y `fbo`. Se guardan igual que en
 `MovimientoCSAEController::guardarFirmaBase64()` — llega un base64, la
-firma anterior de ese rol pasa a `status = 'I'` y se engancha la nueva.
-No se inventa maquinaria.
+firma anterior de ese rol pasa a `status = 'N'` en el pivote y se
+engancha la nueva. No se inventa maquinaria.
 
 **El relevo se guarda con la firma de quien entrega nada más.** El FBO
 firma después, y para eso tiene un botón de pendientes que consulta los
@@ -215,15 +223,31 @@ reciente** de esa sección, y el selector de acciones lista todos.
 
 Operaciones Diarias arma su tabla a mano: `OperacionesCards.tsx` tiene
 1307 líneas con la tabla, los filtros, el modal de fechas y la
-paginación escritos ahí mismo. El proyecto también tiene
-`components/DataTable.tsx` y `components/ModalPeriodo.tsx` como
-componentes compartidos, y `TablaPrestamosChalecos.tsx` consigue lo
-mismo en 285 líneas usándolos.
+paginación escritos ahí mismo. Copiar esas 1307 líneas no es la única
+salida, pero tampoco lo es el componente genérico que parecía estar ahí
+para eso.
 
-**Esta tabla se construye sobre los componentes compartidos.** Se ve
-igual — el mismo `rounded-xl border`, el mismo `bg-muted/50`, el mismo
-`text-muted-foreground` — es la cuarta parte de código, y el modal de
-periodos queda compartido en vez de duplicado.
+Existe `components/DataTable.tsx`, un componente de tabla genérico.
+**No se usa.** No hay ni una importación de él en todo
+`resources/js/pages`, y además su vocabulario visual es otro:
+`rounded-xl`, `bg-muted/50`, `text-muted-foreground`. Las tablas de
+Seguridad y de Tráfico usan `rounded`, `border-slate-200` y
+encabezados `text-[9px] font-black uppercase text-slate-400`. Montar
+esta tabla sobre `DataTable` se vería distinto de todo el resto, que es
+exactamente lo contrario de lo que se pidió.
+
+**Lo que sí se reúsa es `components/ModalPeriodo.tsx`**, que es
+compartido de verdad — Relación de planta y Préstamo de chalecos ya lo
+traen — y es el mismo modal de fechas de Operaciones Diarias.
+
+Así que: el modal de periodo se importa, y la tabla se escribe a mano
+con las clases estándar, siguiendo
+`TablaPrestamosChalecos.tsx`, que resuelve una tabla con filtros,
+paginación y acciones en 285 líneas. Sus constantes `TH` y `FILTRO` se
+copian tal cual; son las de la tabla estándar.
+
+`DataTable.tsx` no se toca ni se borra en este trabajo: es código
+muerto, pero borrarlo es otra tarea y no esta.
 
 ### 6.2 Las columnas
 
@@ -248,7 +272,8 @@ de las dos secciones dijo.
 ### 6.3 Los filtros
 
 - buscador por nombre de quien entregó,
-- periodo con `ModalPeriodo` — día, rango, mes, año,
+- periodo con `ModalPeriodo` — sus cuatro modos son `dia`, `rango`,
+  `mes` y `año`,
 - sección: ambas, frente, atrás,
 - estado: «todas»; «falta la firma del FBO», que trae los días con al
   menos un registro sin firmar; y «completas», los días en que toda
@@ -312,15 +337,43 @@ que la revisión va en el controlador: es su convención, no un atajo.
 `store` queda abierto a cualquiera con acceso al módulo. El rol de
 administrador se llama `admin`.
 
-Eliminar siempre es lógico: `status = 'I'`. El renglón se queda en la
+Eliminar siempre es lógico: `status = 'N'`. El renglón se queda en la
 base.
 
 ## 10. La fecha: 24 horas y hora de México
 
-La aplicación ya corre en la zona de México. La fecha se guarda como
-`datetime` y se muestra siempre en 24 horas, con los ayudantes de
-formato que `VistaPreviaCsae.tsx` ya trae: `dd/mm/aaaa` para el día y
-`HH:mm` para la hora, sin `am`/`pm` en ninguna pantalla del módulo.
+La aplicación ya corre en la zona de México: `config('app.timezone')`
+vale `America/Mexico_City`. La fecha se guarda como `datetime` y se
+muestra siempre en 24 horas, con los ayudantes de formato que
+`VistaPreviaCsae.tsx` ya trae: `dd/mm/aaaa` para el día y `HH:mm` para
+la hora, sin `am`/`pm` en ninguna pantalla del módulo.
+
+### La ventana de fecha es obligatoria
+
+El proyecto no deja que un formulario con fecha elija el día libremente.
+Hay una política en un solo sitio, `App\Support\VentanasDeFecha`, que
+dice cuántos días atrás y si se admite el futuro, y la leen tanto la
+regla del servidor (`App\Rules\DentroDeLaVentana`) como las props que
+`HandleInertiaRequests` publica al navegador. No es opcional: hay
+pruebas que exigen que cada clave de la tabla se use en el servidor **y**
+en el navegador.
+
+La clave de este módulo es **`seguridad.entrega_turno`**, con
+`['atras' => 1, 'futuro' => false]` — hoy y ayer. Es la misma ventana de
+`turno.checklist` y `turno.entrega_rampa`, y por la misma razón: se
+llena en el momento, con un día de margen para quien cierra a la mañana
+siguiente. No tiene sentido registrar un relevo de la semana pasada, ni
+uno que todavía no ocurrió.
+
+Agregar la clave obliga a tocar **cuatro** sitios, y los cuatro son
+parte del trabajo:
+
+1. `App\Support\VentanasDeFecha::CLAVES`
+2. `tests/Feature/VentanasDeFechaTest.php`, donde la tabla está
+   duplicada a propósito para que cambiarla exija reconocerlo
+3. el Form Request, con la regla pegada a `date` o `date_format`
+4. el formulario, con `useVentanaDeFecha('seguridad.entrega_turno', …)`,
+   pasándole la fecha original cuando se está editando
 
 ## 11. Los archivos
 
@@ -331,6 +384,8 @@ formato que `VistaPreviaCsae.tsx` ya trae: `dd/mm/aaaa` para el día y
 - `app/Http/Controllers/Api/EntregaTurnoSeguridadController.php`
 - `app/Http/Requests/EntregaTurnoSeguridad/StoreEntregaTurnoSeguridadRequest.php`
 - `app/Http/Requests/EntregaTurnoSeguridad/UpdateEntregaTurnoSeguridadRequest.php`
+- `app/Support/VentanasDeFecha.php` — la clave nueva
+- `tests/Feature/VentanasDeFechaTest.php` — la tabla duplicada
 - `routes/api.php`, `routes/web.php`
 
 **Navegador**
@@ -373,13 +428,19 @@ Pruebas de característica en Pest, contra la API, corridas en serie:
     renglón devuelve los dos estados
 12. un `empleado` recibe 403 al editar y al eliminar
 13. `fbo` y `admin` pasan en los dos
-14. eliminar solo cambia `status` a `I`; el renglón sigue en la base y
+14. eliminar solo cambia `status` a `N`; el renglón sigue en la base y
     desaparece del listado
 15. se guarda con la firma de quien entrega nada más, sin la del FBO
 16. `pendientes` lista solo los registros sin la firma del FBO, y deja
     de listar uno en cuanto se firma
 17. firmar de nuevo el mismo rol deja la firma anterior en
-    `status = 'I'` y una sola activa
+    `status = 'N'` y una sola activa
+18. la ventana de fecha rechaza un relevo de hace una semana y uno de
+    mañana, y acepta hoy y ayer
+
+Las pruebas que ya existen en `tests/Feature/VentanasDeFechaTest.php`
+cubren el resto de la clave nueva por sí solas: que esté usada en el
+servidor y en el navegador, y que la regla vaya pegada a `date`.
 
 Del navegador la prueba es `npm run build` en verde y
 `npx tsc --noEmit` con el único error de base que el proyecto ya
@@ -412,8 +473,9 @@ arrastra. No hay corredor de pruebas de JavaScript en este proyecto.
 7. **Ocho columnas booleanas, no un JSON**, para poder contarlas.
 8. **Sin índice único por día y sección**, para no rechazar un relevo
    extra verdadero.
-9. **La tabla se construye sobre `DataTable` y `ModalPeriodo`**, no
-   copiando las 1307 líneas de `OperacionesCards`.
+9. **Se reúsa `ModalPeriodo`; la tabla se escribe a mano con las clases
+   estándar**, siguiendo `TablaPrestamosChalecos`. No se usa
+   `DataTable`: nadie lo importa y su aspecto no es el del proyecto.
 10. **La paginación cuenta días, no registros**, para no partir un
     renglón.
 11. **El filtro decide qué días aparecen; el renglón siempre muestra las
@@ -422,3 +484,5 @@ arrastra. No hay corredor de pruebas de JavaScript en este proyecto.
     los dos estados.**
 13. **La pernocta mensual nace en «sin revisar»**, porque es el estado
     verdadero casi todos los días del mes.
+14. **La ventana de fecha es `seguridad.entrega_turno`, hoy y ayer**, la
+    misma que los otros dos relevos del proyecto.
