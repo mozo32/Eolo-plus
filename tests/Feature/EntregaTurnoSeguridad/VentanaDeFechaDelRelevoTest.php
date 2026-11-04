@@ -99,13 +99,17 @@ test('el FBO puede firmar un relevo viejo dejando su fecha', function () {
 
 test('no se puede mover un relevo viejo a otra fecha vieja', function () {
     $relevo = relevoViejo();
+    // El día de antes se guarda en una variable, igual que `$suFecha` en la
+    // prueba de arriba: comparar `$relevo->fresh()` contra `$relevo` discrimina
+    // hoy, pero el día que alguien cambie ese `fresh()` por un `refresh()` el
+    // aserto se vuelve tautológico sin que nada falle.
+    $suDia = $relevo->fecha_hora->toDateString();
     $otraVieja = Carbon::today(config('app.timezone'))->subDays(5)->format('Y-m-d H:i:s');
 
     editarComoFbo($relevo, ['fecha_hora' => $otraVieja])
         ->assertJsonValidationErrorFor('fecha_hora');
 
-    expect($relevo->fresh()->fecha_hora->toDateString())
-        ->toBe($relevo->fecha_hora->toDateString());
+    expect($relevo->fresh()->fecha_hora->toDateString())->toBe($suDia);
 });
 
 test('sí se puede traer un relevo viejo a hoy', function () {
@@ -149,7 +153,7 @@ test('el mismo día con otra hora pasa en un relevo viejo', function () {
 });
 
 test('un PUT sin fecha_hora no se juzga', function () {
-    // Es el caso de la cola de pendientes: el FBO manda solo su firma. El
+    // Es el caso de la cola de pendientes: el FBO manda solo su firma.
     // Un campo ausente no se juzga: ni `date` ni la regla de ventana son
     // implícitas, así que Laravel las salta cuando `fecha_hora` no llega.
     // Si no, firmar un relevo viejo daría 422 sin que nadie haya tocado una fecha.
