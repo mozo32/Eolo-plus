@@ -1,3 +1,5 @@
+import type { RangoPeriodo } from '@/components/ModalPeriodo';
+
 /** Los ocho apartados que se contestan con una casilla. */
 export const CASILLAS = [
     'aviones_csae',
@@ -132,4 +134,16 @@ export const horaAhora = (): string => {
     const ahora = new Date();
 
     return `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
+};
+
+/** Lo que el botón de fechas dice cuando está cerrado. */
+export const etiquetaPeriodo = (rango: RangoPeriodo): string => {
+    if (!rango.fecha_inicio && !rango.fecha_fin) return 'Todas las fechas';
+    if (rango.periodo === 'dia') return formatearFecha(rango.fecha_inicio);
+    if (rango.periodo === 'rango') {
+        return `${formatearFecha(rango.fecha_inicio)} / ${formatearFecha(rango.fecha_fin)}`;
+    }
+    if (rango.periodo === 'mes') return rango.fecha_inicio.substring(0, 7);
+
+    return rango.fecha_inicio.substring(0, 4);
 };

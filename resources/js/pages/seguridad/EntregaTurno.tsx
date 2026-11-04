@@ -3,7 +3,10 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
+import Swal from 'sweetalert2';
+import { fetchRelevo } from '@/stores/apiEntregaTurnoSeguridad';
 import FormEntregaTurno from './entregaTurno/FormEntregaTurno';
+import TablaEntregaTurno from './entregaTurno/TablaEntregaTurno';
 import type { DetalleRelevo } from './entregaTurno/types';
 
 type Role = { slug: string; nombre: string; };
@@ -21,15 +24,33 @@ export default function EntregaTurno() {
         (user?.roles ?? []).map(role => role.slug.trim().toLowerCase()),
     );
     const tieneRol = (...roles: string[]) => roles.some(role => rolesUsuario.has(role));
-    // Lo consumen las tareas 7 y 9.
     const puedeEditar = tieneRol('fbo', 'admin');
     const [formAbierto, setFormAbierto] = useState(false);
-    // La tabla de la tarea 9 lo llenará al elegir un relevo para editar.
     const [relevoEnEdicion, setRelevoEnEdicion] = useState<DetalleRelevo | null>(null);
+
+    const [recargar, setRecargar] = useState(0);
 
     const cerrarForm = () => {
         setFormAbierto(false);
         setRelevoEnEdicion(null);
+    };
+
+    const guardado = () => {
+        cerrarForm();
+        setRecargar(n => n + 1);
+    };
+
+    const editar = async (id: number) => {
+        try {
+            const { data } = await fetchRelevo(id);
+            setRelevoEnEdicion(data);
+        } catch (error) {
+            Swal.fire({
+                icon: 'error',
+                title: 'No se pudo abrir el relevo',
+                text: error instanceof Error ? error.message : 'Error inesperado',
+            });
+        }
     };
 
     return (
@@ -55,7 +76,13 @@ export default function EntregaTurno() {
                         </div>
                     </div>
 
-                    {/* Las tareas 9 y 10 llenan la tabla y el formulario. */}
+                    <TablaEntregaTurno
+                        puedeEditar={puedeEditar}
+                        recargar={recargar}
+                        onEditar={editar}
+                        // La tarea 10 abre aquí la vista previa del día.
+                        onVerPrevia={() => {}}
+                    />
                 </div>
             </div>
 
@@ -65,7 +92,7 @@ export default function EntregaTurno() {
                 nombreUsuario={user?.name ?? ''}
                 puedeFirmarComoFbo={puedeEditar}
                 onCerrar={cerrarForm}
-                onGuardado={cerrarForm}
+                onGuardado={guardado}
             />
         </AppLayout>
     );

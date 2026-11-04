@@ -150,8 +150,9 @@ test('el mismo día con otra hora pasa en un relevo viejo', function () {
 
 test('un PUT sin fecha_hora no se juzga', function () {
     // Es el caso de la cola de pendientes: el FBO manda solo su firma. El
-    // `sometimes` tiene que saltarse el campo, o firmar un relevo viejo
-    // daría 422 sin que nadie haya tocado una fecha.
+    // Un campo ausente no se juzga: ni `date` ni la regla de ventana son
+    // implícitas, así que Laravel las salta cuando `fecha_hora` no llega.
+    // Si no, firmar un relevo viejo daría 422 sin que nadie haya tocado una fecha.
     $relevo = relevoViejo();
     $suDia = $relevo->fecha_hora->toDateString();
 
