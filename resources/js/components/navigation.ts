@@ -99,6 +99,16 @@ const ROUTE_CONFIG: Record<
         href: registroVisitantes,
         title: 'Registro de Visitantes',
     },
+    // La llave es `Str::slug('entregaTurnoSeguridad')`, que es el nombre del
+    // SubDepartamento que crea EntregaTurnoSeguridadSubdepartamentoSeeder.
+    // Sin este renglón el módulo no existe para nadie que no sea
+    // administrador —la línea de abajo descarta en silencio lo que no esté en
+    // este mapa—, y eso incluye al rol `fbo`, que es justo quien cierra el
+    // relevo con su firma.
+    entregaturnoseguridad: {
+        href: entregaTurnoSeguridad,
+        title: 'Entrega de Turno',
+    },
     entregaturnor: {
         href: entregaTurnoR,
         title: 'Entrega de Turno',
