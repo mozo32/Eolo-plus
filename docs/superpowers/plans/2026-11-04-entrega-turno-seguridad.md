@@ -612,6 +612,18 @@ test('sin la firma de quien entrega no se guarda', function () {
     expect(EntregaTurnoSeguridad::count())->toBe(0);
 });
 
+test('un texto que no es una firma se rechaza y no crea nada', function () {
+    // Sin la regla de forma, `required|string` dejaba pasar cualquier texto,
+    // el guardia de guardarFirmaBase64 hacía `return` en silencio y el
+    // relevo se guardaba SIN firma de quien entrega, que es obligatoria.
+    // El fallo era silencioso: 201 y un relevo sin firmar.
+    $this->actingAs(User::factory()->create())
+        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['firma_quien_entrega' => 'abc']))
+        ->assertJsonValidationErrorFor('firma_quien_entrega');
+
+    expect(EntregaTurnoSeguridad::count())->toBe(0);
+});
+
 test('las observaciones se guardan tal como se escribieron', function () {
     $texto = 'Se quedó una camioneta sin resguardo en la posición 4.';
 
@@ -677,7 +689,18 @@ class StoreEntregaTurnoSeguridadRequest extends FormRequest
             'visitantes' => ['sometimes', 'boolean'],
             'pernocta_mensual' => ['sometimes', Rule::in(EntregaTurnoSeguridad::PERNOCTA_ESTADOS)],
             'observaciones' => ['nullable', 'string'],
-            'firma_quien_entrega' => ['required', 'string'],
+            /*
+             * La forma se valida, no solo que sea texto. Con `required|string`
+             * a secas, un `"abc"` pasaba, el guardia de guardarFirmaBase64
+             * hacía `return` en silencio y el relevo se guardaba SIN firma de
+             * quien entrega, que es obligatoria: 201 y un relevo sin firmar.
+             * La única fuente es SignaturePad, que emite `toDataURL`.
+             */
+            'firma_quien_entrega' => [
+                'required',
+                'string',
+                'regex:/^data:image\/[a-zA-Z0-9.+-]+;base64,/',
+            ],
         ];
     }
 
@@ -689,6 +712,7 @@ class StoreEntregaTurnoSeguridadRequest extends FormRequest
             'seccion.in' => 'La sección solo puede ser frente o atrás.',
             'pernocta_mensual.in' => 'La pernocta mensual solo puede estar hecha, no hecha o sin revisar.',
             'firma_quien_entrega.required' => 'Falta la firma de quien entrega el turno.',
+            'firma_quien_entrega.regex' => 'La firma de quien entrega no llegó en un formato válido.',
         ];
     }
 }
@@ -1454,6 +1478,37 @@ test('volver a firmar deja la anterior retirada y una sola vigente', function ()
         ->and($relevo->firmasAll()->wherePivot('status', 'N')->count())->toBe(1);
 });
 
+test('un texto que no es una firma se rechaza también al editar', function () {
+    // El mismo hueco que al crear: sin la regla de forma, el guardia hacía
+    // `return` en silencio y la respuesta decía que todo salió bien mientras
+    // el relevo se quedaba sin la firma del FBO.
+    $relevo = relevoGuardado();
+
+    $this->actingAs(usuarioCon('fbo'))
+        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", ['firma_fbo' => 'abc'])
+        ->assertJsonValidationErrorFor('firma_fbo');
+
+    $relevo->load('firmas');
+
+    expect($relevo->tieneFirmaDe(EntregaTurnoSeguridad::ROL_FBO))->toBeFalse();
+});
+
+test('una firma vacía al editar significa «no firmé», no un error', function () {
+    // `nullable` no se salta la regex con `''`, solo con null, así que sin el
+    // prepareForValidation un formulario que arranque con useState('')
+    // recibiría 422 por no haber firmado.
+    $relevo = relevoGuardado();
+
+    $this->actingAs(usuarioCon('fbo'))
+        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
+            'firma_fbo' => '',
+            'combustible' => true,
+        ])
+        ->assertSuccessful();
+
+    expect($relevo->fresh()->combustible)->toBeTrue();
+});
+
 test('el detalle trae el nombre, la hora en 24 horas y las firmas', function () {
     $usuario = User::factory()->create(['name' => 'Ana Robles']);
     $relevo = relevoGuardado(['user_id' => $usuario->id, 'fecha_hora' => '2026-11-04 19:45:00']);
@@ -1541,6 +1596,23 @@ class UpdateEntregaTurnoSeguridadRequest extends FormRequest
         return $this->user() !== null;
     }
 
+    /**
+     * Una firma vacía es «no mandé firma», no una firma mal formada.
+     *
+     * `nullable` solo se salta las reglas siguientes cuando el valor es
+     * `null`, no cuando es `''`. Un formulario de React que arranque con
+     * `useState('')` manda la cadena vacía, y sin esto chocaría con la regex
+     * y devolvería 422 por no haber firmado, que no es un error.
+     */
+    protected function prepareForValidation(): void
+    {
+        foreach (['firma_quien_entrega', 'firma_fbo'] as $campo) {
+            if ($this->input($campo) === '') {
+                $this->merge([$campo => null]);
+            }
+        }
+    }
+
     /** @return array<string, mixed> */
     public function rules(): array
     {
@@ -1557,8 +1629,28 @@ class UpdateEntregaTurnoSeguridadRequest extends FormRequest
             'visitantes' => ['sometimes', 'boolean'],
             'pernocta_mensual' => ['sometimes', Rule::in(EntregaTurnoSeguridad::PERNOCTA_ESTADOS)],
             'observaciones' => ['sometimes', 'nullable', 'string'],
-            'firma_quien_entrega' => ['sometimes', 'nullable', 'string'],
-            'firma_fbo' => ['sometimes', 'nullable', 'string'],
+            /*
+             * La misma regla de forma que al crear, y por lo mismo: sin ella
+             * un PUT con `firma_fbo => "abc"` pasaba la validación, el guardia
+             * hacía `return` en silencio y el relevo se quedaba sin la firma
+             * del FBO mientras la respuesta decía que todo salió bien.
+             *
+             * `nullable` va por delante para que un `null` explícito —no
+             * mandar firma— siga siendo válido: la regex solo juzga lo que
+             * llega con contenido.
+             */
+            'firma_quien_entrega' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'regex:/^data:image\/[a-zA-Z0-9.+-]+;base64,/',
+            ],
+            'firma_fbo' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'regex:/^data:image\/[a-zA-Z0-9.+-]+;base64,/',
+            ],
         ];
     }
 
@@ -1568,6 +1660,8 @@ class UpdateEntregaTurnoSeguridadRequest extends FormRequest
         return [
             'seccion.in' => 'La sección solo puede ser frente o atrás.',
             'pernocta_mensual.in' => 'La pernocta mensual solo puede estar hecha, no hecha o sin revisar.',
+            'firma_quien_entrega.regex' => 'La firma de quien entrega no llegó en un formato válido.',
+            'firma_fbo.regex' => 'La firma del FBO no llegó en un formato válido.',
         ];
     }
 }
