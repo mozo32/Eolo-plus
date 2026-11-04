@@ -3430,7 +3430,14 @@ git commit -m "feat(seguridad): tabla del relevo con una fila por dia"
 
 - [ ] **Step 1: Escribir la vista previa**
 
-Seguir `resources/js/pages/seguridad/MovimientoAvionesCSAE/VistaPreviaCsae.tsx`.
+Seguir `resources/js/pages/seguridad/MovimientoAvionesCSAE/VistaPreviaCsae.tsx`,
+incluido su manejo de los tres estados: un `cargando` con `LoaderCircle`
+mientras llega el detalle, un `error` con `AlertCircle` y su mensaje si
+falla, y el contenido cuando hay datos. Pedir dos secciones en paralelo
+hace esto más necesario que allí, no menos: si una de las dos peticiones
+falla, la pantalla tiene que decirlo en vez de pintar media vista previa
+como si estuviera completa.
+
 Lo que sí cambia:
 
 - recibe la **fila del día** y pide el detalle de cada sección presente
@@ -3454,14 +3461,26 @@ const firmaPorRol = (detalle: DetalleRelevo | null, rol: string): FirmaRelevo | 
 
 - [ ] **Step 2: Escribir la cola de pendientes**
 
-Crear `PendientesFirmaFbo.tsx`: un modal que llama a
-`fetchPendientesRelevo` al abrirse y lista cada pendiente con su fecha
-(`formatearFecha`), su hora en 24 horas, su sección y su nombre, con un
-botón para firmar que avisa al padre con el id. Lo más viejo ya viene
-primero del servidor; no se reordena en el navegador.
+Crear `PendientesFirmaFbo.tsx`. **No es un modal: es un cajón lateral**,
+siguiendo `resources/js/pages/Rampa/checkListEquipo/PendientesDrawer.tsx`,
+que resuelve exactamente esto en 101 líneas y es el hermano del mismo
+endpoint de pendientes. De ahí salen la estructura
+(`fixed inset-0 z-[80] flex justify-end`, el fondo difuminado, la entrada
+desde la derecha), el estado vacío en panel verde y el renglón con su
+botón de acción.
 
-Cuando no hay nada pendiente, el modal lo dice y no deja una lista vacía
-muda.
+Sus props son casi las que hacen falta: donde él tiene
+`{ isOpen, onClose, onSelectUser }`, aquí va
+`{ abierto, onCerrar, onFirmar }`.
+
+Llama a `fetchPendientesRelevo` al abrirse y lista cada pendiente con su
+fecha (`formatearFecha`), su hora en 24 horas, su sección
+(`ETIQUETA_SECCION`) y su nombre, con un botón que avisa al padre con el
+id. Lo más viejo ya viene primero del servidor; **no se reordena en el
+navegador**, que es donde se perdería el criterio de la cola.
+
+Cuando no hay nada pendiente lo dice con el panel verde del hermano, no
+con una lista vacía muda.
 
 - [ ] **Step 3: Colgar las dos de la página**
 
