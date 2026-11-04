@@ -211,6 +211,7 @@ test('la tabla de ventanas esta fijada a mano: cambiar una exige reconocerlo aqu
     expect(VentanasDeFecha::CLAVES)->toBe([
         'turno.checklist' => ['atras' => 1, 'futuro' => false],
         'turno.entrega_rampa' => ['atras' => 1, 'futuro' => false],
+        'seguridad.entrega_turno' => ['atras' => 1, 'futuro' => false],
         'autotanque.turno_inicio' => ['atras' => 1, 'futuro' => false],
         'autotanque.turno_cierre' => ['atras' => 1, 'futuro' => false],
         'chalecos.prestamo' => ['atras' => 1, 'futuro' => false],

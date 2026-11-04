@@ -1,4 +1,5 @@
 import { fechaHoy } from '@/lib/fechaHoy';
+import { useVentanaDeFecha } from '@/lib/ventanasDeFecha';
 import SignaturePad from '@/pages/despacho/components/walkAround/SignaturePad';
 import { actualizarRelevo, ErrorDeApi, guardarRelevo } from '@/stores/apiEntregaTurnoSeguridad';
 import { X } from 'lucide-react';
@@ -14,6 +15,7 @@ import {
     SECCIONES,
     type Casilla,
     type DetalleRelevo,
+    type FirmaRelevo,
     type PayloadRelevo,
     type PayloadRelevoNuevo,
     type Pernocta,
@@ -36,6 +38,21 @@ const ETIQUETA = 'mb-1 block text-[10px] font-black uppercase text-slate-500';
 
 function MensajeError({ mensajes }: { mensajes?: string[] }) {
     return mensajes?.[0] ? <p className="mt-1 text-[10px] font-bold text-red-600">{mensajes[0]}</p> : null;
+}
+
+/** La firma que el relevo ya tiene, para que nadie dibuje encima sin saberlo. */
+function FirmaActual({ firma }: { firma: FirmaRelevo | null }) {
+    if (firma === null) {
+        return null;
+    }
+
+    return (
+        <div className="mb-2">
+            <p className="text-[10px] font-bold uppercase text-slate-400">Firma actual</p>
+            <img src={firma.url} alt="Firma registrada" className="h-16 rounded border border-slate-200 bg-white" />
+            <p className="text-[10px] text-slate-400">Dibujar una nueva la reemplaza; la anterior queda en el historial.</p>
+        </div>
+    );
 }
 
 /**
@@ -65,9 +82,17 @@ function Formulario({ relevo, nombreUsuario, puedeFirmarComoFbo, onCerrar, onGua
     const [errores, setErrores] = useState<Record<string, string[]>>({});
     const [guardando, setGuardando] = useState(false);
 
+    // Al editar se le pasa la fecha original: si no, un relevo de hace tres
+    // días no se podría ni corregir porque su propia fecha quedaría fuera de
+    // la ventana.
+    const { min, max } = useVentanaDeFecha('seguridad.entrega_turno', relevo?.fecha);
+
     const editando = relevo !== null;
     // Al crear la firma de quien entrega es obligatoria; al editar, la que ya hay se conserva.
     const faltaFirma = !editando && firmaQuienEntrega === '';
+
+    /** La firma vigente de un rol, o null si ese rol no ha firmado. */
+    const firmaGuardada = (rol: string): FirmaRelevo | null => relevo?.firmas.find((firma) => firma.rol === rol) ?? null;
 
     const alternar = (casilla: Casilla) =>
         setDatos((previo) => ({ ...previo, casillas: { ...previo.casillas, [casilla]: !previo.casillas[casilla] } }));
@@ -161,6 +186,8 @@ function Formulario({ relevo, nombreUsuario, puedeFirmarComoFbo, onCerrar, onGua
                             <input
                                 type="date"
                                 value={datos.fecha}
+                                min={min}
+                                max={max}
                                 onChange={(e) => setDatos({ ...datos, fecha: e.target.value })}
                                 className={CAMPO}
                                 required
@@ -249,6 +276,7 @@ function Formulario({ relevo, nombreUsuario, puedeFirmarComoFbo, onCerrar, onGua
                     </div>
 
                     <div>
+                        <FirmaActual firma={firmaGuardada('quien_entrega')} />
                         <SignaturePad title="Firma de quien entrega" value={firmaQuienEntrega} onChange={setFirmaQuienEntrega} compact />
                         {editando && <p className="mt-1 text-[10px] text-slate-500">Déjala en blanco para conservar la firma actual.</p>}
                         <MensajeError mensajes={errores.firma_quien_entrega} />
@@ -256,6 +284,7 @@ function Formulario({ relevo, nombreUsuario, puedeFirmarComoFbo, onCerrar, onGua
 
                     {puedeFirmarComoFbo && (
                         <div>
+                            <FirmaActual firma={firmaGuardada('fbo')} />
                             <SignaturePad title="Firma del FBO" value={firmaFbo} onChange={setFirmaFbo} compact />
                             <MensajeError mensajes={errores.firma_fbo} />
                         </div>

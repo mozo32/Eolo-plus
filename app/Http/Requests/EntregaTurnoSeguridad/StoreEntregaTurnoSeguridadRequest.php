@@ -3,6 +3,7 @@
 namespace App\Http\Requests\EntregaTurnoSeguridad;
 
 use App\Models\EntregaTurnoSeguridad;
+use App\Rules\DentroDeLaVentana;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -13,9 +14,7 @@ use Illuminate\Validation\Rule;
  * sale del usuario autenticado y no de la petición. Si estuviera aquí,
  * cualquiera podría firmar un relevo a nombre de otro.
  *
- * La regla de ventana de fecha se agrega en la Tarea 8, cuando el
- * formulario ya exista: una clave usada en un solo lado deja en rojo
- * `tests/Feature/VentanasDeFechaTest.php`.
+ * `fecha_hora` solo admite hoy y ayer (`seguridad.entrega_turno`).
  */
 class StoreEntregaTurnoSeguridadRequest extends FormRequest
 {
@@ -28,7 +27,7 @@ class StoreEntregaTurnoSeguridadRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'fecha_hora' => ['required', 'date'],
+            'fecha_hora' => ['required', 'date', new DentroDeLaVentana('seguridad.entrega_turno')],
             'seccion' => ['required', Rule::in(EntregaTurnoSeguridad::SECCIONES)],
             'aviones_csae' => ['sometimes', 'boolean'],
             'combustible' => ['sometimes', 'boolean'],

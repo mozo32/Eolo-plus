@@ -3,6 +3,8 @@
 namespace App\Http\Requests\EntregaTurnoSeguridad;
 
 use App\Models\EntregaTurnoSeguridad;
+use App\Rules\DentroDeLaVentana;
+use App\Support\VentanasDeFecha;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -39,7 +41,9 @@ class UpdateEntregaTurnoSeguridadRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'fecha_hora' => ['sometimes', 'date'],
+            'fecha_hora' => $this->cambiaElDia()
+                ? ['sometimes', 'date', new DentroDeLaVentana('seguridad.entrega_turno')]
+                : ['sometimes', 'date'],
             'seccion' => ['sometimes', Rule::in(EntregaTurnoSeguridad::SECCIONES)],
             'aviones_csae' => ['sometimes', 'boolean'],
             'combustible' => ['sometimes', 'boolean'],
@@ -74,6 +78,37 @@ class UpdateEntregaTurnoSeguridadRequest extends FormRequest
                 'regex:/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+\/=]{16,}$/',
             ],
         ];
+    }
+
+    /**
+     * Si la fecha recibida es un día DISTINTO del que ya está guardado.
+     *
+     * La regla del proyecto al editar es «no puedes PONER una fecha fuera de
+     * ventana, pero puedes DEJAR la que ya estaba». Sin esto, el FBO no
+     * podría firmar un relevo de hace tres días: el formulario manda
+     * `fecha_hora` siempre, esa fecha está fuera de «hoy y ayer», y el
+     * servidor devolvería 422 —justo con los relevos viejos que la cola de
+     * pendientes existe para sacar a flote, ordenados de más viejo primero.
+     *
+     * Tampoco se puede «lavar» una fecha: cada petición se juzga contra lo
+     * que hay guardado en ese momento, así que pasar por una fecha válida y
+     * volver a la vieja se rechaza en el segundo paso.
+     *
+     * El día se compara con `diaQueGuardaElModelo` y no con `Carbon::parse`,
+     * por lo mismo que la regla: difieren con una cadena numérica y con un
+     * desfase de zona.
+     */
+    private function cambiaElDia(): bool
+    {
+        $relevo = EntregaTurnoSeguridad::activas()->find($this->route('id'));
+
+        if ($relevo === null) {
+            return true;
+        }
+
+        $recibido = VentanasDeFecha::diaQueGuardaElModelo($this->input('fecha_hora'));
+
+        return $recibido !== $relevo->fecha_hora?->toDateString();
     }
 
     /** @return array<string, string> */

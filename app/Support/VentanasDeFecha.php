@@ -34,6 +34,7 @@ final class VentanasDeFecha
         // Se llenan en el momento: un día de margen para quien cierra a la mañana siguiente.
         'turno.checklist' => ['atras' => 1, 'futuro' => false],
         'turno.entrega_rampa' => ['atras' => 1, 'futuro' => false],
+        'seguridad.entrega_turno' => ['atras' => 1, 'futuro' => false],
         'autotanque.turno_inicio' => ['atras' => 1, 'futuro' => false],
         'autotanque.turno_cierre' => ['atras' => 1, 'futuro' => false],
         'chalecos.prestamo' => ['atras' => 1, 'futuro' => false],
