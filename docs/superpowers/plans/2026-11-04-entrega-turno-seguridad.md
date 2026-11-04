@@ -1133,16 +1133,32 @@ test('el rango de fechas acota los días', function () {
     expect($fechas)->toBe(['2026-11-04']);
 });
 
-test('falta_fbo trae el día pero el renglón sigue mostrando las dos secciones', function () {
+test('falta_fbo excluye los días ya firmados y el renglón sigue completo', function () {
+    // Esta prueba NO distingue un filtro por día de uno por registro: para
+    // «falta_fbo» los dos dan el mismo conjunto de días, así que no hay
+    // nada que distinguir. La que vigila esa diferencia es la de
+    // «completas». Lo que se comprueba aquí es otra cosa, y sí importa: que
+    // el filtro decida qué DÍAS salen y no qué secciones se ven, y que un
+    // día enteramente firmado no aparezca.
     $frente = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE);
     relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_ATRAS, '19:00');
     firmarComoFbo($frente);
 
+    firmarComoFbo(relevoDelDia('2026-11-03', EntregaTurnoSeguridad::SECCION_FRENTE));
+
     $datos = listado(['estado' => 'falta_fbo'])->json('data');
 
-    expect($datos)->toHaveCount(1)
+    expect(array_column($datos, 'fecha'))->toBe(['2026-11-04'])
         ->and($datos[0]['frente'])->not->toBeNull()
         ->and($datos[0]['atras'])->not->toBeNull();
+});
+
+test('per_page tiene techo: no se puede pedir la tabla entera de un jalón', function () {
+    // Sin techo, un per_page=100000 pide cien mil días y arrastra toda la
+    // tabla con sus firmas.
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE);
+
+    expect(listado(['per_page' => 100000])->json('meta.per_page'))->toBe(100);
 });
 
 test('completas excluye el día en que una sección no está firmada', function () {
@@ -1194,7 +1210,11 @@ Agregar al controlador. Los `use` que faltan:
 
     public function index(Request $request): JsonResponse
     {
-        $porPagina = max(1, (int) $request->integer('per_page', 10));
+        /*
+         * El techo es tan necesario como el piso: sin él, un `per_page=100000`
+         * pide cien mil días y arrastra toda la tabla con sus firmas.
+         */
+        $porPagina = min(100, max(1, (int) $request->integer('per_page', 10)));
 
         $dias = $this->consultaFiltrada($request)
             ->selectRaw(self::DIA.' as dia')
@@ -1221,11 +1241,13 @@ Agregar al controlador. Los `use` que faltan:
     /**
      * Un renglón por día, con sus dos secciones.
      *
-     * Trae los registros con UNA consulta por rango y descarta en PHP los
-     * días que no son de la página. Los días de una página son pocos y
-     * cada uno tiene dos registros, así que sobra traer de más; la
-     * alternativa sería un `IN` sobre la expresión del día, que no gana
-     * nada y enreda la consulta.
+     * Pide exactamente los días de la página con un `IN` sobre la misma
+     * expresión del día que usa el agrupamiento.
+     *
+     * NO se usa un rango entre el día más viejo y el más nuevo. Parecía
+     * más simple, pero con un filtro disperso —un buscador que acierte un
+     * día por mes— una página de diez días abarca casi un año y trae
+     * cientos de registros para pintar diez renglones.
      *
      * @param  list<string>  $diasDeLaPagina
      * @return list<array{fecha: string, frente: ?array, atras: ?array}>
@@ -1238,10 +1260,7 @@ Agregar al controlador. Los `use` que faltan:
 
         $registros = EntregaTurnoSeguridad::activas()
             ->with(['usuario:id,name', 'firmas'])
-            ->whereBetween('fecha_hora', [
-                Carbon::parse(min($diasDeLaPagina))->startOfDay(),
-                Carbon::parse(max($diasDeLaPagina))->endOfDay(),
-            ])
+            ->whereIn(DB::raw(self::DIA), $diasDeLaPagina)
             ->get()
             ->groupBy(
                 static fn (EntregaTurnoSeguridad $relevo): string => $relevo->fecha_hora->toDateString()
@@ -1332,6 +1351,11 @@ Agregar al controlador. Los `use` que faltan:
      * día en que el frente firmó y el de atrás no está incompleto, y un
      * filtro por registro lo daría por completo a través del frente.
      *
+     * La base agrupa y devuelve días, no fechas completas: traer un renglón
+     * por registro sin firmar y deduplicar en PHP crecía sin tope con el
+     * historial, y en un mes en que el FBO se atrasara serían sesenta
+     * valores para distinguir treinta días.
+     *
      * @return list<string>
      */
     private function diasIncompletos(): array
@@ -1341,10 +1365,9 @@ Agregar al controlador. Los `use` que faltan:
                 'firmas',
                 static fn (Builder $firma): Builder => $firma->where('firmables.rol', EntregaTurnoSeguridad::ROL_FBO)
             )
-            ->pluck('fecha_hora')
-            ->map(static fn (Carbon $fecha): string => $fecha->toDateString())
-            ->unique()
-            ->values()
+            ->selectRaw(self::DIA.' as dia')
+            ->distinct()
+            ->pluck('dia')
             ->all();
     }
 ```
