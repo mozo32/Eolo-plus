@@ -225,6 +225,34 @@ test('el detalle trae el nombre, la hora en 24 horas y las firmas', function () 
         ->and(array_column($datos['firmas'], 'rol'))->toContain(EntregaTurnoSeguridad::ROL_FBO);
 });
 
+test('el detalle fija el contrato que lee la vista previa', function () {
+    // La vista previa lee estas claves POR NOMBRE, y `tsc` no atrapa que
+    // alguien las renombre en el servidor: no hay corredor de pruebas de
+    // JavaScript. Esta prueba es la única red de ese contrato.
+    $relevo = relevoGuardado(['observaciones' => 'Quedó una camioneta sin resguardo.']);
+
+    $this->actingAs(usuarioCon('fbo'))
+        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", ['firma_fbo' => firmaBase64Valida()])
+        ->assertSuccessful();
+
+    $datos = $this->actingAs(usuarioCon('empleado'))
+        ->getJson("/api/EntregaTurnoSeguridad/{$relevo->id}")
+        ->assertSuccessful()
+        ->json('data');
+
+    $esperadas = array_merge(
+        ['id', 'nombre', 'fecha', 'hora', 'fecha_hora', 'seccion', 'pernocta_mensual', 'observaciones', 'firmas'],
+        EntregaTurnoSeguridad::CASILLAS,
+    );
+
+    foreach ($esperadas as $clave) {
+        expect($datos)->toHaveKey($clave);
+    }
+
+    expect($datos['firmas'][0])->toHaveKeys(['id', 'rol', 'tag', 'url'])
+        ->and($datos['observaciones'])->toBe('Quedó una camioneta sin resguardo.');
+});
+
 test('el detalle lo puede ver cualquiera con sesión', function () {
     $relevo = relevoGuardado();
 

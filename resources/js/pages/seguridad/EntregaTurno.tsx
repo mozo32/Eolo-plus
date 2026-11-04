@@ -33,15 +33,22 @@ export default function EntregaTurno() {
     const [recargar, setRecargar] = useState(0);
     const [previa, setPrevia] = useState<FilaRelevo | null>(null);
     const [pendientesAbierto, setPendientesAbierto] = useState(false);
+    // El FBO vacía la cola: si el formulario se abrió desde ella, al guardar vuelve a ella.
+    const [veniaDeLaCola, setVeniaDeLaCola] = useState(false);
 
     const cerrarForm = () => {
         setFormAbierto(false);
         setRelevoEnEdicion(null);
+        setVeniaDeLaCola(false);
     };
 
     const guardado = () => {
+        const volverALaCola = veniaDeLaCola;
+
         cerrarForm();
         setRecargar(n => n + 1);
+
+        if (volverALaCola) setPendientesAbierto(true);
     };
 
     const editar = async (id: number) => {
@@ -52,12 +59,18 @@ export default function EntregaTurno() {
             Swal.fire({
                 icon: 'error',
                 title: 'No se pudo abrir el relevo',
-                text: error instanceof Error ? error.message : 'Error inesperado',
+                text: error instanceof ErrorDeApi ? error.message : 'No se pudo conectar con el servidor.',
             });
 
             // Un 404 es que alguien ya lo borró: se refresca para quitar el renglón.
             if (error instanceof ErrorDeApi && error.status === 404) {
                 setRecargar(n => n + 1);
+            }
+
+            // Si venía de la cola, se la devuelve: así desaparece el pendiente que ya no existe.
+            if (veniaDeLaCola) {
+                setVeniaDeLaCola(false);
+                setPendientesAbierto(true);
             }
         }
     };
@@ -115,6 +128,7 @@ export default function EntregaTurno() {
                     onCerrar={() => setPendientesAbierto(false)}
                     onFirmar={id => {
                         setPendientesAbierto(false);
+                        setVeniaDeLaCola(true);
                         editar(id);
                     }}
                 />

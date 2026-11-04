@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, ClipboardCheck, UserCheck, X } from 'lucide-react';
-import { fetchPendientesRelevo } from '@/stores/apiEntregaTurnoSeguridad';
+import { ErrorDeApi, fetchPendientesRelevo } from '@/stores/apiEntregaTurnoSeguridad';
 import { ETIQUETA_SECCION, formatearFecha, type PendienteRelevo } from './types';
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
 
 /** Cola de relevos sin firma del FBO. Lo más viejo va primero, tal como lo manda el servidor: no se reordena aquí. */
 export default function PendientesFirmaFbo({ abierto, onCerrar, onFirmar }: Props) {
-    const [pendientes, setPendientes] = useState<PendienteRelevo[]>([]);
+    const [pendientes, setPendientes] = useState<PendienteRelevo[] | null>(null);
     const [cargando, setCargando] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -19,6 +19,7 @@ export default function PendientesFirmaFbo({ abierto, onCerrar, onFirmar }: Prop
         if (!abierto) return;
 
         let vigente = true;
+        setPendientes(null);
         setCargando(true);
         setError(null);
 
@@ -27,7 +28,7 @@ export default function PendientesFirmaFbo({ abierto, onCerrar, onFirmar }: Prop
                 if (vigente) setPendientes(data);
             })
             .catch((e: unknown) => {
-                if (vigente) setError(e instanceof Error ? e.message : 'Error inesperado');
+                if (vigente) setError(e instanceof ErrorDeApi ? e.message : 'No se pudo conectar con el servidor.');
             })
             .finally(() => {
                 if (vigente) setCargando(false);
@@ -56,7 +57,7 @@ export default function PendientesFirmaFbo({ abierto, onCerrar, onFirmar }: Prop
                 </div>
 
                 <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto p-6">
-                    {cargando ? (
+                    {cargando || (!error && pendientes === null) ? (
                         <div className="py-20 text-center text-[10px] font-black uppercase tracking-wider text-slate-400">Cargando pendientes...</div>
                     ) : error ? (
                         <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
@@ -64,14 +65,14 @@ export default function PendientesFirmaFbo({ abierto, onCerrar, onFirmar }: Prop
                             <p className="text-xs font-black uppercase text-red-700">No se pudo cargar</p>
                             <p className="mt-1 text-[10px] text-red-600">{error}</p>
                         </div>
-                    ) : pendientes.length === 0 ? (
+                    ) : pendientes !== null && pendientes.length === 0 ? (
                         <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-6 py-20 text-center">
                             <UserCheck size={32} className="mx-auto mb-2 text-emerald-500" />
                             <p className="text-xs font-black uppercase tracking-tighter text-emerald-800">¡Al día!</p>
                             <p className="mt-1 text-[10px] font-semibold uppercase text-emerald-600">Todos los relevos tienen la firma del FBO.</p>
                         </div>
                     ) : (
-                        pendientes.map(pendiente => (
+                        (pendientes ?? []).map(pendiente => (
                             <div key={pendiente.id} className="flex items-center justify-between rounded-xl border border-slate-200/60 bg-slate-50 p-3.5 transition-all hover:bg-slate-100/70">
                                 <div className="mr-2 min-w-0">
                                     <p className="truncate text-xs font-black uppercase tracking-tight text-slate-800">{pendiente.nombre}</p>

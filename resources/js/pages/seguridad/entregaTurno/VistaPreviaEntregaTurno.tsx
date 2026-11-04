@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, Check, LoaderCircle, X } from 'lucide-react';
-import { fetchRelevo } from '@/stores/apiEntregaTurnoSeguridad';
+import { ErrorDeApi, fetchRelevo } from '@/stores/apiEntregaTurnoSeguridad';
 import {
     CASILLAS,
     ETIQUETA_CASILLA,
@@ -103,7 +103,7 @@ export default function VistaPreviaEntregaTurno({ fila, onCerrar }: Props) {
                 if (vigente) setDetalles({ frente, atras });
             })
             .catch((e: unknown) => {
-                if (vigente) setError(e instanceof Error ? e.message : 'No se pudo cargar el registro');
+                if (vigente) setError(e instanceof ErrorDeApi ? e.message : 'No se pudo conectar con el servidor.');
             })
             .finally(() => {
                 if (vigente) setCargando(false);
@@ -137,7 +137,8 @@ export default function VistaPreviaEntregaTurno({ fila, onCerrar }: Props) {
                 </div>
 
                 <div className="custom-scrollbar flex-1 overflow-y-auto bg-slate-100 p-3 md:p-6">
-                    {cargando ? (
+                    {/* Sin detalles ni error aún (primer render tras elegir fila) también es «cargando». */}
+                    {cargando || (!error && !detalles) ? (
                         <div className="flex min-h-[400px] flex-col items-center justify-center rounded-2xl bg-white">
                             <LoaderCircle size={34} className="mb-3 animate-spin text-[#003E51]" />
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cargando vista previa...</p>
