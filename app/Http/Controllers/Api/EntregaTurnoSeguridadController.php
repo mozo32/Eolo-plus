@@ -74,13 +74,25 @@ class EntregaTurnoSeguridadController extends Controller
         ]);
     }
 
+    /**
+     * Escribe la imagen en el disco `public` y registra su `Firma`.
+     *
+     * La extensión sale de una lista cerrada y no de partir el mime, a
+     * propósito: `MovimientoCSAEController` sí lo parte y arrastra ese
+     * defecto (un SVG quedaba como `.svg+xml`). Aquí no se copia; no lo
+     * «unifiques» con ese módulo.
+     */
     private function guardarFirmaArchivoBase64(string $base64, string $folder): Firma
     {
         [$meta, $content] = explode(',', $base64);
         preg_match('/data:(.*?);base64/', $meta, $matches);
 
         $mime = $matches[1] ?? 'image/png';
-        $extension = explode('/', $mime)[1] ?? 'png';
+        $extension = match ($mime) {
+            'image/jpeg', 'image/jpg' => 'jpg',
+            'image/webp' => 'webp',
+            default => 'png',
+        };
 
         $fileName = Str::uuid().'.'.$extension;
         $path = $folder.'/'.$fileName;

@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\EntregaTurnoSeguridad;
-use App\Models\Role;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -10,15 +9,6 @@ use Illuminate\Support\Facades\Storage;
  * Crear un relevo. Está abierto a cualquiera con sesión: editar y
  * eliminar son los que piden rol.
  */
-
-function usuarioConRolDeSeguridad(string $slug, string $nombre): User
-{
-    $usuario = User::factory()->create();
-    $rol = Role::firstOrCreate(['slug' => $slug], ['nombre' => $nombre]);
-    $usuario->roles()->attach($rol->id);
-
-    return $usuario;
-}
 
 /** Un PNG de un pixel, en base64, con el prefijo que el servidor espera. */
 function firmaBase64(): string
@@ -120,12 +110,23 @@ test('las casillas marcadas se guardan y las demás quedan apagadas', function (
 test('se guarda con la firma de quien entrega y sin la del FBO', function () {
     $this->actingAs(User::factory()->create())
         ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo())
-        ->assertSuccessful();
+        ->assertCreated();
 
     $relevo = EntregaTurnoSeguridad::with('firmas')->sole();
 
     expect($relevo->tieneFirmaDe(EntregaTurnoSeguridad::ROL_QUIEN_ENTREGA))->toBeTrue()
         ->and($relevo->tieneFirmaDe(EntregaTurnoSeguridad::ROL_FBO))->toBeFalse();
+
+    // El renglón del pivote no prueba que el archivo exista. Sin esto, un
+    // fallo al escribir en el disco dejaría la firma «guardada» apuntando a
+    // una ruta vacía, y la vista previa pintaría una imagen rota.
+    $firma = $relevo->firmas->first();
+
+    Storage::disk('public')->assertExists($firma->path);
+
+    expect($firma->path)->toStartWith('firmas/EntregaTurnoSeguridad/')
+        ->and($firma->path)->toEndWith('.png')
+        ->and(Storage::disk('public')->size($firma->path))->toBeGreaterThan(0);
 });
 
 test('sin la firma de quien entrega no se guarda', function () {
@@ -143,6 +144,33 @@ test('un texto que no es una firma se rechaza y no crea nada', function () {
     // El fallo era silencioso: 201 y un relevo sin firmar.
     $this->actingAs(User::factory()->create())
         ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['firma_quien_entrega' => 'abc']))
+        ->assertJsonValidationErrorFor('firma_quien_entrega');
+
+    expect(EntregaTurnoSeguridad::count())->toBe(0);
+});
+
+test('un SVG se rechaza aunque sea una imagen', function (string $firma) {
+    // El archivo se guarda en el disco `public`. Un SVG servido por su URL
+    // directa corre su propio script en el origen de la aplicación, y crear
+    // un relevo está abierto a cualquiera con sesión: sería XSS almacenado.
+    // Un `text/html` se rechaza por lo mismo.
+    $this->actingAs(User::factory()->create())
+        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['firma_quien_entrega' => $firma]))
+        ->assertJsonValidationErrorFor('firma_quien_entrega');
+
+    expect(EntregaTurnoSeguridad::count())->toBe(0);
+})->with([
+    'svg' => 'data:image/svg+xml;base64,PHN2Zz48c2NyaXB0PmFsZXJ0KDEpPC9zY3JpcHQ+PC9zdmc+',
+    'html' => 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==',
+]);
+
+test('una cabecera de imagen sin cuerpo se rechaza', function () {
+    // `data:image/png;base64,` a secas pasaba la regla anterior y escribía un
+    // archivo de cero bytes: una firma que existe en la base y no se ve.
+    $this->actingAs(User::factory()->create())
+        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo([
+            'firma_quien_entrega' => 'data:image/png;base64,',
+        ]))
         ->assertJsonValidationErrorFor('firma_quien_entrega');
 
     expect(EntregaTurnoSeguridad::count())->toBe(0);
