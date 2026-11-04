@@ -56,7 +56,8 @@ const POR_PAGINA = 100;
 const TOPE_FILAS = 5000;
 
 export interface ResultadoExportacion {
-    filas: number;
+    filas: FilaExcelHistorico[];
+    /** El tope recortó el resultado: hay más filas de las que caben. */
     truncado: boolean;
 }
 
@@ -83,13 +84,17 @@ const aFilaExcel = (prestamo: Prestamo, numero: number): FilaExcelHistorico => (
 });
 
 /**
- * Trae TODOS los préstamos que casan con los filtros, recorriendo páginas.
+ * Trae TODAS las filas que casan con los filtros, recorriendo páginas.
  *
  * El histórico se pagina en el servidor, así que lo que hay en pantalla es una
  * página: exportar solo eso daría veinte filas cuando el filtro casa con
  * cientos, y la diferencia no se vería hasta abrir el archivo.
+ *
+ * Está separada de la descarga a propósito: la vista previa necesita las filas
+ * ANTES de que exista el archivo, y así lo que se enseña y lo que se descarga
+ * son literalmente el mismo arreglo.
  */
-async function traerTodos(filtros: FiltrosHistorico): Promise<ResultadoExportacion & { prestamos: Prestamo[] }> {
+export async function traerFilasHistorico(filtros: FiltrosHistorico): Promise<ResultadoExportacion> {
     const prestamos: Prestamo[] = [];
     let pagina = 1;
     let ultima = 1;
@@ -108,19 +113,14 @@ async function traerTodos(filtros: FiltrosHistorico): Promise<ResultadoExportaci
         }
     }
 
-    return { prestamos, filas: prestamos.length, truncado };
+    return {
+        filas: prestamos.map((prestamo, indice) => aFilaExcel(prestamo, indice + 1)),
+        truncado,
+    };
 }
 
-/**
- * Descarga el histórico filtrado como `.xlsx`.
- *
- * Devuelve cuántas filas salieron y si el tope las recortó, para que la
- * pantalla lo diga en vez de dejar al usuario con un archivo incompleto que
- * parece completo.
- */
-export async function descargarExcelHistoricoPlanta(filtros: FiltrosHistorico): Promise<ResultadoExportacion> {
-    const { prestamos, filas, truncado } = await traerTodos(filtros);
-
+/** Construye el `.xlsx` y lo descarga, a partir de filas ya traídas. */
+export async function descargarExcelHistorico(filas: FilaExcelHistorico[]): Promise<void> {
     const libro = new ExcelJS.Workbook();
     const hoja = libro.addWorksheet('Relación de planta');
 
@@ -130,8 +130,7 @@ export async function descargarExcelHistoricoPlanta(filtros: FiltrosHistorico): 
         width: columna.ancho,
     }));
 
-    prestamos.forEach((prestamo, indice) => {
-        const fila = aFilaExcel(prestamo, indice + 1);
+    filas.forEach(fila => {
         const valores: Record<string, unknown> = {};
 
         COLUMNAS_EXCEL_HISTORICO.forEach(columna => {
@@ -175,6 +174,4 @@ export async function descargarExcelHistoricoPlanta(filtros: FiltrosHistorico): 
         }),
         nombreDelArchivo(),
     );
-
-    return { filas, truncado };
 }

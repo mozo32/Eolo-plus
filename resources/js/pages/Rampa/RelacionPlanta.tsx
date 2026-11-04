@@ -4,8 +4,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
 import { AlertCircle, Download, Filter } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import Swal from 'sweetalert2';
-import { descargarExcelHistoricoPlanta } from './relacionPlanta/excelHistoricoService';
+import ExcelHistoricoModal from './relacionPlanta/ExcelHistoricoModal';
 import EntregaModal from './relacionPlanta/EntregaModal';
 import PrestamoModal from './relacionPlanta/PrestamoModal';
 import TablaHistorico from './relacionPlanta/TablaHistorico';
@@ -15,8 +14,6 @@ import { useHistoricoPlanta } from './relacionPlanta/useHistoricoPlanta';
 import { useRelacionPlanta } from './relacionPlanta/useRelacionPlanta';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Relación de planta' }];
-
-const toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, timerProgressBar: true });
 
 /**
  * Control de préstamo de la GPU N.115: tarjeta con el estado actual arriba y
@@ -32,48 +29,10 @@ export default function RelacionPlanta() {
 
     const [modal, setModal] = useState<'prestamo' | 'entrega' | null>(null);
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
-    const [exportando, setExportando] = useState(false);
+    // El Excel no se descarga de golpe: primero se enseña cómo va a quedar.
+    const [excelAbierto, setExcelAbierto] = useState(false);
 
     const prestamoAbierto = gpu.actual;
-
-    /**
-     * Exporta el histórico con los filtros puestos.
-     *
-     * No exporta lo que hay en pantalla: el histórico se pagina en el servidor,
-     * así que el servicio recorre páginas hasta agotar el resultado del filtro.
-     * Por eso el botón se bloquea mientras tanto.
-     */
-    const exportar = async () => {
-        if (exportando) {
-            return;
-        }
-
-        setExportando(true);
-
-        try {
-            const { filas, truncado } = await descargarExcelHistoricoPlanta(historico.filtros);
-
-            if (filas === 0) {
-                toast.fire({ icon: 'info', title: 'No hay préstamos que casen con los filtros.' });
-            } else if (truncado) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Exportación recortada',
-                    text: `El archivo trae las primeras ${filas} filas. Acota el filtro para exportar el resto.`,
-                });
-            } else {
-                toast.fire({ icon: 'success', title: `${filas} ${filas === 1 ? 'préstamo' : 'préstamos'} exportados.` });
-            }
-        } catch (error) {
-            Swal.fire({
-                icon: 'error',
-                title: 'No se pudo exportar',
-                text: error instanceof Error ? error.message : 'No se pudo conectar con el servidor.',
-            });
-        } finally {
-            setExportando(false);
-        }
-    };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -100,12 +59,12 @@ export default function RelacionPlanta() {
                             {/* Mismo botón de Excel que Operaciones Diarias. */}
                             <button
                                 type="button"
-                                onClick={exportar}
-                                disabled={exportando || historico.cargando}
+                                onClick={() => setExcelAbierto(true)}
+                                disabled={historico.cargando}
                                 className="flex items-center gap-2 rounded border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-600 shadow-sm transition-all hover:bg-slate-50 active:scale-95 disabled:opacity-50"
                             >
                                 <Download size={14} />
-                                <span>{exportando ? 'GENERANDO…' : 'EXCEL'}</span>
+                                <span>EXCEL</span>
                             </button>
                         </div>
                     </div>
@@ -152,6 +111,8 @@ export default function RelacionPlanta() {
                     }}
                 />
             )}
+
+            <ExcelHistoricoModal abierto={excelAbierto} filtros={historico.filtros} onCerrar={() => setExcelAbierto(false)} />
         </AppLayout>
     );
 }
