@@ -215,7 +215,18 @@ renglón mintiera sobre lo que pasó ese día.
 registros adicionales de la misma sección ese día — cero casi siempre.
 
 Cuando `extras` no es cero, el renglón enseña **el registro más
-reciente** de esa sección, y el selector de acciones lista todos.
+reciente** de esa sección y dice cuántos hay.
+
+**Limitación conocida, y conviene decirla:** los registros más viejos de
+esa sección quedan visibles como número pero **no se pueden editar ni
+eliminar desde la pantalla**. Una versión anterior de esta spec prometía
+que el selector los listaría, y el diseño no lo permite: el renglón del
+listado lleva un solo id por sección. Listarlos pediría que la API
+devolviera también los ids de los extras.
+
+Se deja así porque el caso es raro por construcción —la propia spec dice
+«cero casi siempre»— y cerrarlo bien es trabajo de API, tipos, selector y
+pruebas. Queda anotado para decidirlo con el módulo en uso.
 
 ## 6. La tabla en pantalla
 
@@ -257,11 +268,18 @@ Una fila por día:
 |---|---|---|---|---|
 | 04/11/2026 | Juan Pérez · 07:30 ✓ | Luis Gómez · 19:00 ⏳ | Sin revisar | 👁 ✏ 🗑 |
 
-El distintivo de cada sección:
+El distintivo de cada sección es una etiqueta de texto:
 
-- **✓** el FBO ya firmó,
-- **⏳** falta la firma del FBO,
+- **Firmado** — el FBO ya firmó,
+- **Falta FBO** — falta su firma,
 - **—** esa sección no entregó.
+
+Van en texto y no en símbolos (✓ / ⏳), que es lo que decía una versión
+anterior de esta spec, por tres razones: las tablas del proyecto usan
+etiquetas de texto —`prestado` y `devuelto` en Préstamo de chalecos—, un
+reloj de arena no dice **qué** falta mientras «Falta FBO» sí, y un símbolo
+solo no se lee en voz alta. Los símbolos eran taquigrafía para explicar
+tres estados en una tabla de markdown, no una decisión de pantalla.
 
 La columna de pernocta mensual imprime una sola etiqueta cuando las dos
 secciones coinciden. **Si discrepan, imprime las dos**, el frente
