@@ -249,8 +249,19 @@ test('el detalle fija el contrato que lee la vista previa', function () {
         expect($datos)->toHaveKey($clave);
     }
 
+    foreach (EntregaTurnoSeguridad::CASILLAS as $casilla) {
+        expect($datos[$casilla])->toBeBool();
+    }
+
     expect($datos['firmas'][0])->toHaveKeys(['id', 'rol', 'tag', 'url'])
-        ->and($datos['observaciones'])->toBe('Quedó una camioneta sin resguardo.');
+        ->and($datos['firmas'][0]['url'])->toBeString()
+        ->and($datos['observaciones'])->toBe('Quedó una camioneta sin resguardo.')
+        ->and($datos['pernocta_mensual'])->toBeIn([
+            EntregaTurnoSeguridad::PERNOCTA_HECHA,
+            EntregaTurnoSeguridad::PERNOCTA_NO_HECHA,
+            EntregaTurnoSeguridad::PERNOCTA_SIN_REVISAR,
+        ])
+        ->and($datos['hora'])->toMatch('/^\d{2}:\d{2}$/');
 });
 
 test('el detalle lo puede ver cualquiera con sesión', function () {

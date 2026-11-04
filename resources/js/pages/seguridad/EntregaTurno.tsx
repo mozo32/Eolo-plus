@@ -51,7 +51,8 @@ export default function EntregaTurno() {
         if (volverALaCola) setPendientesAbierto(true);
     };
 
-    const editar = async (id: number) => {
+    // `desdeLaCola` va como argumento: leer la bandera del estado aquí daría el valor del render anterior.
+    const editar = async (id: number, desdeLaCola = false) => {
         try {
             const { data } = await fetchRelevo(id);
             setRelevoEnEdicion(data);
@@ -68,10 +69,9 @@ export default function EntregaTurno() {
             }
 
             // Si venía de la cola, se la devuelve: así desaparece el pendiente que ya no existe.
-            if (veniaDeLaCola) {
-                setVeniaDeLaCola(false);
-                setPendientesAbierto(true);
-            }
+            setVeniaDeLaCola(false);
+
+            if (desdeLaCola) setPendientesAbierto(true);
         }
     };
 
@@ -129,7 +129,7 @@ export default function EntregaTurno() {
                     onFirmar={id => {
                         setPendientesAbierto(false);
                         setVeniaDeLaCola(true);
-                        editar(id);
+                        editar(id, true);
                     }}
                 />
             )}

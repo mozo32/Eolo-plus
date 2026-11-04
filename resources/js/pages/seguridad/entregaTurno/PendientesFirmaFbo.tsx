@@ -16,10 +16,14 @@ export default function PendientesFirmaFbo({ abierto, onCerrar, onFirmar }: Prop
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!abierto) return;
+        if (!abierto) {
+            // Se vacía al cerrar: así al reabrir no asoma la lista vieja, con el relevo recién firmado.
+            setPendientes(null);
+
+            return;
+        }
 
         let vigente = true;
-        setPendientes(null);
         setCargando(true);
         setError(null);
 
