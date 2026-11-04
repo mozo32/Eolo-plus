@@ -209,7 +209,7 @@ class EntregaTurnoSeguridadController extends Controller
 
         return response()->json([
             'message' => 'Relevo registrado correctamente',
-            'data' => $relevo->load(['usuario:id,name', 'firmas']),
+            'data' => $this->detalle($relevo->load(['usuario:id,name', 'firmas'])),
         ], 201);
     }
 

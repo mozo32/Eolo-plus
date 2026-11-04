@@ -65,8 +65,7 @@ export async function fetchPendientesRelevo(): Promise<{ data: PendienteRelevo[]
     return leerJson(res, 'No se pudieron cargar los pendientes');
 }
 
-/** El POST devuelve el modelo tal cual, NO el `DetalleRelevo`: no leer campos de `data`. */
-export async function guardarRelevo(form: Record<string, unknown>): Promise<{ message: string; data: unknown }> {
+export async function guardarRelevo(form: Record<string, unknown>): Promise<{ message: string; data: DetalleRelevo }> {
     const res = await fetch(BASE, {
         method: 'POST',
         headers: {

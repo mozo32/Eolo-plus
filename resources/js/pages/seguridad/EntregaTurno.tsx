@@ -17,6 +17,7 @@ export default function EntregaTurno() {
         (user?.roles ?? []).map(role => role.slug.trim().toLowerCase()),
     );
     const tieneRol = (...roles: string[]) => roles.some(role => rolesUsuario.has(role));
+    // Lo consumen las tareas 7 y 9.
     const puedeEditar = tieneRol('fbo', 'admin');
 
     return (
@@ -30,7 +31,6 @@ export default function EntregaTurno() {
                     </div>
 
                     {/* Las tareas 9 y 10 llenan la tabla y el formulario. */}
-                    <div data-puede-editar={puedeEditar} />
                 </div>
             </div>
         </AppLayout>

@@ -67,7 +67,6 @@ export type FirmaRelevo = {
     id: number;
     rol: string;
     tag: string | null;
-    orden: number;
     url: string;
 };
 
