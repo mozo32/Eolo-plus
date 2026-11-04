@@ -22,22 +22,18 @@ class UpdateEntregaTurnoSeguridadRequest extends FormRequest
         return $this->user() !== null;
     }
 
-    /**
-     * Una firma vacía es «no mandé firma», no una firma mal formada.
+    /*
+     * NO hace falta un `prepareForValidation` que pase `''` a `null`.
      *
-     * `nullable` solo se salta las reglas siguientes cuando el valor es
-     * `null`, no cuando es `''`. Un formulario de React que arranque con
-     * `useState('')` manda la cadena vacía, y sin esto chocaría con la regex
-     * y devolvería 422 por no haber firmado, que no es un error.
+     * Una versión anterior de este plan lo mandaba, razonando que `nullable`
+     * solo se salta las reglas siguientes con `null` y no con `''`, y que un
+     * formulario de React que arranque con `useState('')` chocaría con la
+     * regex. El razonamiento es correcto en abstracto y falso aquí: Laravel
+     * registra `ConvertEmptyStringsToNull` en su pila global de middleware
+     * (`Foundation\Configuration\Middleware`) y `bootstrap/app.php` no lo
+     * quita, así que la cadena vacía llega ya como `null`. El método era
+     * código inalcanzable y su prueba pasaba sin él.
      */
-    protected function prepareForValidation(): void
-    {
-        foreach (['firma_quien_entrega', 'firma_fbo'] as $campo) {
-            if ($this->input($campo) === '') {
-                $this->merge([$campo => null]);
-            }
-        }
-    }
 
     /** @return array<string, mixed> */
     public function rules(): array

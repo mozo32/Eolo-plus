@@ -134,9 +134,9 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('ChecklistEquipoSeguridad')->
 Route::middleware(['api', 'auth:sanctum'])->prefix('EntregaTurnoSeguridad')->group(function () {
     Route::get('/', [EntregaTurnoSeguridadController::class, 'index']);
     Route::post('/', [EntregaTurnoSeguridadController::class, 'store']);
-    Route::get('/eliminar/{id}', [EntregaTurnoSeguridadController::class, 'eliminar']);
-    Route::get('/{id}', [EntregaTurnoSeguridadController::class, 'show']);
-    Route::put('/{id}', [EntregaTurnoSeguridadController::class, 'update']);
+    Route::get('/eliminar/{id}', [EntregaTurnoSeguridadController::class, 'eliminar'])->whereNumber('id');
+    Route::get('/{id}', [EntregaTurnoSeguridadController::class, 'show'])->whereNumber('id');
+    Route::put('/{id}', [EntregaTurnoSeguridadController::class, 'update'])->whereNumber('id');
 });
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('EntregaTurnoR')->group(function () {

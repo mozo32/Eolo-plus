@@ -166,9 +166,14 @@ test('un texto que no es una firma se rechaza también al editar', function () {
 });
 
 test('una firma vacía al editar significa «no firmé», no un error', function () {
-    // `nullable` no se salta la regex con `''`, solo con null, así que sin el
-    // prepareForValidation un formulario que arranque con useState('')
-    // recibiría 422 por no haber firmado.
+    // Lo que hace que esto funcione NO es código de este módulo: Laravel
+    // registra `ConvertEmptyStringsToNull` en su pila global, así que el `''`
+    // llega al Form Request ya como `null` y `nullable` se salta la regex.
+    //
+    // La prueba se queda porque el comportamiento importa: un formulario que
+    // arranque con `useState('')` no debe recibir 422 por no haber firmado.
+    // Pero vigila el comportamiento de punta a punta, no un guardia propio;
+    // si alguien desactivara ese middleware, esta prueba lo diría.
     $relevo = relevoGuardado();
 
     $this->actingAs(usuarioCon('fbo'))
@@ -179,6 +184,26 @@ test('una firma vacía al editar significa «no firmé», no un error', function
         ->assertSuccessful();
 
     expect($relevo->fresh()->combustible)->toBeTrue();
+});
+
+test('un relevo eliminado deja de poder verse y de poder editarse', function () {
+    // Sin estas dos, quitar el `activas()` de `show` o de `update` no rompería
+    // ninguna prueba: la de «solo cambia el status» comprueba el scope del
+    // modelo, no que los endpoints lo usen. Un relevo borrado que se pueda
+    // seguir editando es un borrado que no borra.
+    $relevo = relevoGuardado(['status' => 'N']);
+
+    $this->actingAs(usuarioCon('empleado'))
+        ->getJson("/api/EntregaTurnoSeguridad/{$relevo->id}")
+        ->assertNotFound()
+        ->assertJson(['message' => 'El relevo no existe.']);
+
+    $this->actingAs(usuarioCon('fbo'))
+        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", ['combustible' => true])
+        ->assertNotFound()
+        ->assertJson(['message' => 'El relevo no existe.']);
+
+    expect($relevo->fresh()->combustible)->toBeFalse();
 });
 
 test('el detalle trae el nombre, la hora en 24 horas y las firmas', function () {
