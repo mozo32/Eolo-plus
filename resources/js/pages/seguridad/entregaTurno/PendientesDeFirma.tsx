@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, ClipboardCheck, UserCheck, X } from 'lucide-react';
 import { ErrorDeApi, fetchPendientesRelevo } from '@/stores/apiEntregaTurnoSeguridad';
-import { ETIQUETA_SECCION, formatearFecha, type PendienteRelevo } from './types';
+import { ETIQUETA_ROL, ETIQUETA_SECCION, formatearFecha, type PendienteRelevo } from './types';
 
 interface Props {
     abierto: boolean;
@@ -9,8 +9,8 @@ interface Props {
     onFirmar: (id: number) => void;
 }
 
-/** Cola de relevos sin firma del FBO. Lo más viejo va primero, tal como lo manda el servidor: no se reordena aquí. */
-export default function PendientesFirmaFbo({ abierto, onCerrar, onFirmar }: Props) {
+/** Cola de relevos que a quien pregunta le falta firmar. Lo más viejo va primero, tal como lo manda el servidor: no se reordena aquí. */
+export default function PendientesDeFirma({ abierto, onCerrar, onFirmar }: Props) {
     const [pendientes, setPendientes] = useState<PendienteRelevo[] | null>(null);
     const [cargando, setCargando] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -53,7 +53,7 @@ export default function PendientesFirmaFbo({ abierto, onCerrar, onFirmar }: Prop
                 <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 p-6">
                     <div>
                         <h3 className="text-base font-black uppercase tracking-tighter text-slate-800">Pendientes de firma</h3>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Relevos sin firma del FBO</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Relevos que te falta firmar</p>
                     </div>
                     <button type="button" onClick={onCerrar} className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-200">
                         <X size={18} />
@@ -73,7 +73,7 @@ export default function PendientesFirmaFbo({ abierto, onCerrar, onFirmar }: Prop
                         <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-6 py-20 text-center">
                             <UserCheck size={32} className="mx-auto mb-2 text-emerald-500" />
                             <p className="text-xs font-black uppercase tracking-tighter text-emerald-800">¡Al día!</p>
-                            <p className="mt-1 text-[10px] font-semibold uppercase text-emerald-600">Todos los relevos tienen la firma del FBO.</p>
+                            <p className="mt-1 text-[10px] font-semibold uppercase text-emerald-600">No tienes relevos por firmar.</p>
                         </div>
                     ) : (
                         (pendientes ?? []).map(pendiente => (
@@ -82,6 +82,9 @@ export default function PendientesFirmaFbo({ abierto, onCerrar, onFirmar }: Prop
                                     <p className="truncate text-xs font-black uppercase tracking-tight text-slate-800">{pendiente.nombre}</p>
                                     <p className="text-[10px] font-medium text-slate-400">
                                         {formatearFecha(pendiente.fecha)} {pendiente.hora} · {ETIQUETA_SECCION[pendiente.seccion]}
+                                    </p>
+                                    <p className="text-[9px] font-black uppercase tracking-wider text-amber-600">
+                                        Falta: {pendiente.falta.map(rol => ETIQUETA_ROL[rol] ?? rol).join(' y ')}
                                     </p>
                                 </div>
                                 <button

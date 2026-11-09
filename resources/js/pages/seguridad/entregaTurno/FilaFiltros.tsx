@@ -52,9 +52,9 @@ export default function FilaFiltros({ filtros, etiquetaFecha, abierto, onAbrirFe
                     value={filtros.seccion}
                     onChange={e => onCambiar({ seccion: e.target.value as FiltrosRelevo['seccion'] })}
                 >
-                    <option value="">AMBAS SECCIONES</option>
-                    <option value="frente">FRENTE</option>
-                    <option value="atras">ATRÁS</option>
+                    <option value="">AMBOS PUESTOS</option>
+                    <option value="caseta">CASETA</option>
+                    <option value="plataforma">PLATAFORMA</option>
                 </select>
             </td>
             <td className="border-b border-slate-200 px-2 py-2">
@@ -64,6 +64,7 @@ export default function FilaFiltros({ filtros, etiquetaFecha, abierto, onAbrirFe
                     onChange={e => onCambiar({ estado: e.target.value as FiltrosRelevo['estado'] })}
                 >
                     <option value="">TODOS</option>
+                    <option value="falta_jefe_area">FALTA JEFE DE ÁREA</option>
                     <option value="falta_fbo">FALTA FBO</option>
                     <option value="completas">COMPLETAS</option>
                 </select>

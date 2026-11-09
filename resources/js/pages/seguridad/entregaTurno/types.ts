@@ -26,13 +26,13 @@ export const ETIQUETA_CASILLA: Record<Casilla, string> = {
     visitantes: 'Visitantes',
 };
 
-export const SECCIONES = ['frente', 'atras'] as const;
+export const SECCIONES = ['caseta', 'plataforma'] as const;
 
 export type Seccion = (typeof SECCIONES)[number];
 
 export const ETIQUETA_SECCION: Record<Seccion, string> = {
-    frente: 'Frente',
-    atras: 'Atrás',
+    caseta: 'Caseta',
+    plataforma: 'Plataforma',
 };
 
 /**
@@ -54,15 +54,17 @@ export type SeccionRelevo = {
     id: number;
     nombre: string;
     hora: string;
-    firmado_fbo: boolean;
-    pernocta_mensual: Pernocta;
+    /** Los roles de cierre que faltan. Vacío quiere decir cerrado. */
+    firmas_faltantes: string[];
+    /** Aeronaves que pernoctaron ese día: congelada si el relevo lo está. */
+    pernocta: number;
     extras: number;
 };
 
 export type FilaRelevo = {
     fecha: string;
-    frente: SeccionRelevo | null;
-    atras: SeccionRelevo | null;
+    caseta: SeccionRelevo | null;
+    plataforma: SeccionRelevo | null;
 };
 
 /**
@@ -77,6 +79,17 @@ export type FilaRelevo = {
 export const ROL_QUIEN_ENTREGA = 'quien_entrega';
 
 export const ROL_FBO = 'fbo';
+
+export const ROL_JEFE_AREA = 'jefe_area';
+
+/** Los dos roles que cierran el relevo, en el orden en que los manda el servidor. */
+export const ROLES_DE_CIERRE = [ROL_JEFE_AREA, ROL_FBO] as const;
+
+export const ETIQUETA_ROL: Record<string, string> = {
+    quien_entrega: 'Quien entrega',
+    jefe_area: 'Jefe de área',
+    fbo: 'FBO',
+};
 
 export type FirmaRelevo = {
     id: number;
@@ -103,6 +116,8 @@ export type PendienteRelevo = {
     fecha: string;
     hora: string;
     seccion: Seccion;
+    /** Lo que a QUIEN PREGUNTA le falta firmar de ese relevo. */
+    falta: string[];
 };
 
 /**
@@ -132,7 +147,7 @@ export type FiltrosRelevo = {
     seccion?: '' | Seccion;
     fecha_inicio?: string;
     fecha_fin?: string;
-    estado?: '' | 'falta_fbo' | 'completas';
+    estado?: '' | 'falta_jefe_area' | 'falta_fbo' | 'completas';
 };
 
 /** `dd/mm/aaaa` a partir de `aaaa-mm-dd`, sin pasar por Date. */

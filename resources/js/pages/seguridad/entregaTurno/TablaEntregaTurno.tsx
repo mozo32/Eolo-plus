@@ -169,7 +169,7 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
 
         if (id !== null) {
             actuar(accion, id);
-        } else if (fila.frente !== null || fila.atras !== null) {
+        } else if (fila.caseta !== null || fila.plataforma !== null) {
             setEligiendo({ fila, accion });
         }
     };
@@ -196,9 +196,9 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
                         <thead>
                             <tr className="border-b border-slate-100 bg-white">
                                 <th className={TH}>Fecha</th>
-                                <th className={TH}>Frente</th>
-                                <th className={TH}>Atrás</th>
-                                <th className={TH}>Pernocta mensual</th>
+                                <th className={TH}>Caseta</th>
+                                <th className={TH}>Plataforma</th>
+                                <th className={TH}>Pernocta del día</th>
                                 <th className="px-6 py-4 text-right text-[9px] font-black uppercase text-slate-400">Acciones</th>
                             </tr>
 
@@ -220,8 +220,8 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
                                         <td className="px-6 py-4 text-center">
                                             <span className="text-[10px] font-bold text-slate-800">{formatearFecha(fila.fecha)}</span>
                                         </td>
-                                        <td className="px-6 py-4 text-center"><CeldaSeccion seccion={fila.frente} /></td>
-                                        <td className="px-6 py-4 text-center"><CeldaSeccion seccion={fila.atras} /></td>
+                                        <td className="px-6 py-4 text-center"><CeldaSeccion seccion={fila.caseta} /></td>
+                                        <td className="px-6 py-4 text-center"><CeldaSeccion seccion={fila.plataforma} /></td>
                                         <td className="px-6 py-4 text-center">
                                             <span className="text-[10px] font-bold uppercase text-slate-600">{pernoctaDelDia(fila)}</span>
                                         </td>

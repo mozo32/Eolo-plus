@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import Swal from 'sweetalert2';
 import { ErrorDeApi, fetchPendientesRelevo, fetchRelevo } from '@/stores/apiEntregaTurnoSeguridad';
 import FormEntregaTurno from './entregaTurno/FormEntregaTurno';
-import PendientesFirmaFbo from './entregaTurno/PendientesFirmaFbo';
+import PendientesDeFirma from './entregaTurno/PendientesDeFirma';
 import TablaEntregaTurno from './entregaTurno/TablaEntregaTurno';
 import VistaPreviaEntregaTurno from './entregaTurno/VistaPreviaEntregaTurno';
 import type { DetalleRelevo, FilaRelevo } from './entregaTurno/types';
@@ -26,7 +26,10 @@ export default function EntregaTurno() {
         (user?.roles ?? []).map(role => role.slug.trim().toLowerCase()),
     );
     const tieneRol = (...roles: string[]) => roles.some(role => rolesUsuario.has(role));
-    const puedeEditar = tieneRol('fbo', 'admin');
+    const puedeEditar = tieneRol('fbo', 'jefe_area', 'admin');
+    // Qué firma de cierre puede poner ESTE usuario. El administrador las dos.
+    const puedeFirmarJefe = tieneRol('jefe_area', 'admin');
+    const puedeFirmarFbo = tieneRol('fbo', 'admin');
     const [formAbierto, setFormAbierto] = useState(false);
     const [relevoEnEdicion, setRelevoEnEdicion] = useState<DetalleRelevo | null>(null);
 
@@ -173,7 +176,7 @@ export default function EntregaTurno() {
             <VistaPreviaEntregaTurno fila={previa} onCerrar={() => setPrevia(null)} />
 
             {puedeEditar && (
-                <PendientesFirmaFbo
+                <PendientesDeFirma
                     abierto={pendientesAbierto}
                     onCerrar={() => setPendientesAbierto(false)}
                     onFirmar={id => {
@@ -188,7 +191,7 @@ export default function EntregaTurno() {
                 abierto={formAbierto || relevoEnEdicion !== null}
                 relevo={relevoEnEdicion}
                 nombreUsuario={user?.name ?? ''}
-                puedeFirmarComoFbo={puedeEditar}
+                puedeFirmarComoFbo={puedeFirmarFbo}
                 onCerrar={cerrarForm}
                 onGuardado={guardado}
             />
