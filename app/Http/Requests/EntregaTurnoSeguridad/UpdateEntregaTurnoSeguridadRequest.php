@@ -45,15 +45,6 @@ class UpdateEntregaTurnoSeguridadRequest extends FormRequest
                 ? ['sometimes', 'date', new DentroDeLaVentana('seguridad.entrega_turno')]
                 : ['sometimes', 'date'],
             'seccion' => ['sometimes', Rule::in(EntregaTurnoSeguridad::SECCIONES)],
-            'aviones_csae' => ['sometimes', 'boolean'],
-            'combustible' => ['sometimes', 'boolean'],
-            'resguardo_vehicular' => ['sometimes', 'boolean'],
-            'estacionamiento' => ['sometimes', 'boolean'],
-            'posiciones' => ['sometimes', 'boolean'],
-            'vehiculos' => ['sometimes', 'boolean'],
-            'operaciones' => ['sometimes', 'boolean'],
-            'visitantes' => ['sometimes', 'boolean'],
-            'pernocta_mensual' => ['sometimes', Rule::in(EntregaTurnoSeguridad::PERNOCTA_ESTADOS)],
             'observaciones' => ['sometimes', 'nullable', 'string'],
             /*
              * La misma regla de forma que al crear, y por lo mismo: sin ella
@@ -73,6 +64,12 @@ class UpdateEntregaTurnoSeguridadRequest extends FormRequest
              * propósito: si se cambia una, se cambian las tres.
              */
             'firma_quien_entrega' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'regex:/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+\/]{16,}={0,2}\z/',
+            ],
+            'firma_jefe_area' => [
                 'sometimes',
                 'nullable',
                 'string',
@@ -122,9 +119,9 @@ class UpdateEntregaTurnoSeguridadRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'seccion.in' => 'La sección solo puede ser frente o atrás.',
-            'pernocta_mensual.in' => 'La pernocta mensual solo puede estar hecha, no hecha o sin revisar.',
+            'seccion.in' => 'La sección solo puede ser caseta o plataforma.',
             'firma_quien_entrega.regex' => 'La firma de quien entrega no llegó en un formato válido.',
+            'firma_jefe_area.regex' => 'La firma del jefe de área no llegó en un formato válido.',
             'firma_fbo.regex' => 'La firma del FBO no llegó en un formato válido.',
         ];
     }

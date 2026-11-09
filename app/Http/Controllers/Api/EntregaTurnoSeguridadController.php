@@ -293,6 +293,7 @@ class EntregaTurnoSeguridadController extends Controller
     {
         return match ($rol) {
             EntregaTurnoSeguridad::ROL_QUIEN_ENTREGA => 'Firma de quien entrega',
+            EntregaTurnoSeguridad::ROL_JEFE_AREA => 'Firma del jefe de área',
             EntregaTurnoSeguridad::ROL_FBO => 'Firma del FBO',
             default => ucfirst(str_replace('_', ' ', $rol)),
         };
@@ -342,9 +343,11 @@ class EntregaTurnoSeguridadController extends Controller
 
     public function update(UpdateEntregaTurnoSeguridadRequest $request, int $id): JsonResponse
     {
-        if (! $request->user()->hasAnyRole(['fbo', 'admin'])) {
+        $usuario = $request->user();
+
+        if (! $usuario->hasAnyRole(['fbo', 'jefe_area', 'admin'])) {
             return response()->json([
-                'message' => 'Solo el FBO y el administrador pueden editar un relevo.',
+                'message' => 'Solo el jefe de área, el FBO y el administrador pueden editar un relevo.',
             ], 403);
         }
 
@@ -356,10 +359,27 @@ class EntregaTurnoSeguridadController extends Controller
 
         $validado = $request->validated();
         $firmaEntrega = $validado['firma_quien_entrega'] ?? null;
+        $firmaJefe = $validado['firma_jefe_area'] ?? null;
         $firmaFbo = $validado['firma_fbo'] ?? null;
-        unset($validado['firma_quien_entrega'], $validado['firma_fbo']);
+        unset($validado['firma_quien_entrega'], $validado['firma_jefe_area'], $validado['firma_fbo']);
 
-        DB::transaction(function () use ($relevo, $validado, $firmaEntrega, $firmaFbo): void {
+        /*
+         * Tener permiso para EDITAR no es tener permiso para firmar por otro.
+         * Sin esta guardia, un jefe de área podría poner la firma del FBO y
+         * cerrar el relevo él solo, que es justo lo que las tres firmas
+         * vienen a impedir.
+         */
+        $esAdmin = $usuario->hasRole('admin');
+
+        if (is_string($firmaJefe) && ! $esAdmin && ! $usuario->hasRole(EntregaTurnoSeguridad::ROL_JEFE_AREA)) {
+            return response()->json(['message' => 'Solo el jefe de área puede poner su firma.'], 403);
+        }
+
+        if (is_string($firmaFbo) && ! $esAdmin && ! $usuario->hasRole(EntregaTurnoSeguridad::ROL_FBO)) {
+            return response()->json(['message' => 'Solo el FBO puede poner su firma.'], 403);
+        }
+
+        DB::transaction(function () use ($relevo, $validado, $firmaEntrega, $firmaJefe, $firmaFbo): void {
             if ($validado !== []) {
                 $relevo->update($validado);
             }
@@ -368,9 +388,15 @@ class EntregaTurnoSeguridadController extends Controller
                 $this->guardarFirmaBase64($firmaEntrega, EntregaTurnoSeguridad::ROL_QUIEN_ENTREGA, $relevo);
             }
 
+            if (is_string($firmaJefe)) {
+                $this->guardarFirmaBase64($firmaJefe, EntregaTurnoSeguridad::ROL_JEFE_AREA, $relevo);
+            }
+
             if (is_string($firmaFbo)) {
                 $this->guardarFirmaBase64($firmaFbo, EntregaTurnoSeguridad::ROL_FBO, $relevo);
             }
+
+            $this->congelarSiCerro($relevo);
         });
 
         return response()->json([
@@ -379,11 +405,37 @@ class EntregaTurnoSeguridadController extends Controller
         ]);
     }
 
+    /**
+     * Guarda el resumen del día en cuanto el relevo queda cerrado.
+     *
+     * Se llama DESPUÉS de adjuntar las firmas y dentro de la misma
+     * transacción. El `load` es obligatorio: la relación que trae el modelo
+     * es la de antes de adjuntar, así que sin releerla la firma recién
+     * puesta no contaría y el relevo nunca se cerraría.
+     *
+     * No recalcula lo ya congelado. Un relevo cerrado es un documento:
+     * reponer una firma no cambia el día que describe.
+     */
+    private function congelarSiCerro(EntregaTurnoSeguridad $relevo): void
+    {
+        if ($relevo->resumen !== null) {
+            return;
+        }
+
+        $relevo->load('firmas');
+
+        if (! $relevo->estaCerrado()) {
+            return;
+        }
+
+        $relevo->update(['resumen' => ResumenDelDiaSeguridad::para($relevo->fecha_hora)]);
+    }
+
     public function eliminar(Request $request, int $id): JsonResponse
     {
-        if (! $request->user()->hasAnyRole(['fbo', 'admin'])) {
+        if (! $request->user()->hasAnyRole(['fbo', 'jefe_area', 'admin'])) {
             return response()->json([
-                'message' => 'Solo el FBO y el administrador pueden eliminar un relevo.',
+                'message' => 'Solo el jefe de área, el FBO y el administrador pueden eliminar un relevo.',
             ], 403);
         }
 

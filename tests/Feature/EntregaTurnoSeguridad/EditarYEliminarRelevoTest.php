@@ -6,7 +6,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Storage;
 
 /*
- * Editar y eliminar son de `fbo` y `admin`. El front esconde los botones,
+ * Editar y eliminar son de `jefe_area`, `fbo` y `admin`. El front esconde los botones,
  * pero eso no es un permiso: el servidor es el que decide.
  *
  * La firma del FBO llega por este mismo PUT, en `firma_fbo`.
@@ -26,7 +26,7 @@ function relevoGuardado(array $extra = []): EntregaTurnoSeguridad
     return EntregaTurnoSeguridad::create(array_merge([
         'user_id' => User::factory()->create()->id,
         'fecha_hora' => '2026-11-04 07:30:00',
-        'seccion' => EntregaTurnoSeguridad::SECCION_FRENTE,
+        'seccion' => EntregaTurnoSeguridad::SECCION_CASETA,
     ], $extra));
 }
 
@@ -44,10 +44,10 @@ test('un empleado no puede editar', function () {
     $relevo = relevoGuardado();
 
     $this->actingAs(usuarioCon('empleado'))
-        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", ['combustible' => true])
+        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", ['observaciones' => 'Nota nueva'])
         ->assertForbidden();
 
-    expect($relevo->fresh()->combustible)->toBeFalse();
+    expect($relevo->fresh()->observaciones)->toBeNull();
 });
 
 test('un empleado no puede eliminar', function () {
@@ -60,15 +60,15 @@ test('un empleado no puede eliminar', function () {
     expect($relevo->fresh()->status)->toBe('A');
 });
 
-test('el fbo y el admin sí pueden editar', function (string $slug) {
+test('el fbo, el jefe de área y el admin sí pueden editar', function (string $slug) {
     $relevo = relevoGuardado();
 
     $this->actingAs(usuarioCon($slug))
-        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", ['combustible' => true])
+        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", ['observaciones' => 'Nota nueva'])
         ->assertSuccessful();
 
-    expect($relevo->fresh()->combustible)->toBeTrue();
-})->with(['fbo', 'admin']);
+    expect($relevo->fresh()->observaciones)->toBe('Nota nueva');
+})->with(['fbo', 'jefe_area', 'admin']);
 
 test('el fbo y el admin sí pueden eliminar', function (string $slug) {
     $relevo = relevoGuardado();
@@ -114,7 +114,7 @@ test('el detalle de algo que no existe devuelve el 404 del controlador', functio
 
 test('editar algo que no existe devuelve el 404 del controlador', function () {
     $this->actingAs(usuarioCon('fbo'))
-        ->putJson('/api/EntregaTurnoSeguridad/999', ['combustible' => true])
+        ->putJson('/api/EntregaTurnoSeguridad/999', ['observaciones' => 'Nota nueva'])
         ->assertNotFound()
         ->assertJson(['message' => 'El relevo no existe.']);
 });
@@ -179,11 +179,11 @@ test('una firma vacía al editar significa «no firmé», no un error', function
     $this->actingAs(usuarioCon('fbo'))
         ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
             'firma_fbo' => '',
-            'combustible' => true,
+            'observaciones' => 'Nota nueva',
         ])
         ->assertSuccessful();
 
-    expect($relevo->fresh()->combustible)->toBeTrue();
+    expect($relevo->fresh()->observaciones)->toBe('Nota nueva');
 });
 
 test('un relevo eliminado deja de poder verse y de poder editarse', function () {
@@ -199,11 +199,11 @@ test('un relevo eliminado deja de poder verse y de poder editarse', function () 
         ->assertJson(['message' => 'El relevo no existe.']);
 
     $this->actingAs(usuarioCon('fbo'))
-        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", ['combustible' => true])
+        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", ['observaciones' => 'Nota nueva'])
         ->assertNotFound()
         ->assertJson(['message' => 'El relevo no existe.']);
 
-    expect($relevo->fresh()->combustible)->toBeFalse();
+    expect($relevo->fresh()->observaciones)->toBeNull();
 });
 
 test('el detalle trae el nombre, la hora en 24 horas y las firmas', function () {
@@ -248,23 +248,10 @@ test('el detalle fija el contrato que lee la vista previa', function () {
         ->assertSuccessful()
         ->json('data');
 
-    $esperadas = array_merge(
-        ['id', 'nombre', 'fecha', 'hora', 'fecha_hora', 'seccion', 'pernocta_mensual', 'observaciones', 'firmas'],
-        EntregaTurnoSeguridad::CASILLAS,
-    );
-
-    foreach ($esperadas as $clave) {
+    foreach (['id', 'nombre', 'fecha', 'hora', 'fecha_hora', 'seccion', 'resumen', 'observaciones', 'firmas'] as $clave) {
         expect($datos)->toHaveKey($clave);
     }
 
-    foreach (EntregaTurnoSeguridad::CASILLAS as $casilla) {
-        expect($datos[$casilla])->toBeBool();
-    }
-
-    // La lista de estados sale de la constante y no escrita a mano: es la
-    // misma que usan los dos Form Request en su `Rule::in`, así que si
-    // alguien agrega un cuarto estado la validación y esta prueba siguen de
-    // acuerdo.
     expect($datos['firmas'][0])->toHaveKeys(['id', 'rol', 'tag', 'url'])
         ->and($datos['firmas'][0]['url'])->toBeString()
         ->and(array_column($datos['firmas'], 'rol'))->toContain(
@@ -272,7 +259,6 @@ test('el detalle fija el contrato que lee la vista previa', function () {
             EntregaTurnoSeguridad::ROL_FBO,
         )
         ->and($datos['observaciones'])->toBe('Quedó una camioneta sin resguardo.')
-        ->and($datos['pernocta_mensual'])->toBeIn(EntregaTurnoSeguridad::PERNOCTA_ESTADOS)
         ->and($datos['hora'])->toMatch('/^\d{2}:\d{2}$/');
 });
 
@@ -294,17 +280,6 @@ test('la edición no deja cambiar de dueño', function () {
         ->assertSuccessful();
 
     expect($relevo->fresh()->user_id)->toBe($dueno);
-});
-
-test('la edición respeta las tres letras de la pernocta mensual', function () {
-    $relevo = relevoGuardado();
-
-    $this->actingAs(usuarioCon('fbo'))
-        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", ['pernocta_mensual' => 'X'])
-        ->assertJsonValidationErrorFor('pernocta_mensual');
-
-    expect($relevo->fresh()->pernocta_mensual)
-        ->toBe(EntregaTurnoSeguridad::PERNOCTA_SIN_REVISAR);
 });
 
 test('un id que no es un número no llega al controlador', function (string $metodo, string $ruta) {
