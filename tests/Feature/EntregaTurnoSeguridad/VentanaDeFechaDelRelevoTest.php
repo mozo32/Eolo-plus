@@ -30,7 +30,7 @@ function intentarRelevoEl(string $dia): \Illuminate\Testing\TestResponse
     return test()->actingAs(User::factory()->create())
         ->postJson('/api/EntregaTurnoSeguridad', [
             'fecha_hora' => "{$dia} 07:30:00",
-            'seccion' => EntregaTurnoSeguridad::SECCION_FRENTE,
+            'seccion' => EntregaTurnoSeguridad::SECCION_CASETA,
             'firma_quien_entrega' => firmaPngMinima(),
         ]);
 }
@@ -70,7 +70,7 @@ function relevoViejo(): EntregaTurnoSeguridad
     return EntregaTurnoSeguridad::create([
         'user_id' => User::factory()->create()->id,
         'fecha_hora' => $hace3->copy()->setTime(7, 30)->format('Y-m-d H:i:s'),
-        'seccion' => EntregaTurnoSeguridad::SECCION_FRENTE,
+        'seccion' => EntregaTurnoSeguridad::SECCION_CASETA,
     ]);
 }
 

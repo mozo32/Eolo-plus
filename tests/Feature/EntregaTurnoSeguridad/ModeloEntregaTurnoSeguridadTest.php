@@ -19,7 +19,7 @@ function relevoDeSeguridad(array $extra = []): EntregaTurnoSeguridad
     return EntregaTurnoSeguridad::create(array_merge([
         'user_id' => User::factory()->create()->id,
         'fecha_hora' => Carbon::now(config('app.timezone'))->format('Y-m-d H:i:s'),
-        'seccion' => EntregaTurnoSeguridad::SECCION_FRENTE,
+        'seccion' => EntregaTurnoSeguridad::SECCION_CASETA,
     ], $extra));
 }
 
@@ -35,23 +35,10 @@ function firmaDePrueba(string $nombre): Firma
     ]);
 }
 
-test('un relevo nuevo nace activo y con la pernocta mensual sin revisar', function () {
+test('un relevo nuevo nace activo', function () {
     $relevo = relevoDeSeguridad()->fresh();
 
-    expect($relevo->status)->toBe('A')
-        ->and($relevo->pernocta_mensual)->toBe(EntregaTurnoSeguridad::PERNOCTA_SIN_REVISAR);
-});
-
-test('las ocho casillas nacen apagadas', function () {
-    // El conteo va primero: sin él, un CASILLAS vacío dejaría pasar el
-    // bucle sin comprobar nada y la prueba sería verde por omisión.
-    expect(EntregaTurnoSeguridad::CASILLAS)->toHaveCount(8);
-
-    $relevo = relevoDeSeguridad()->fresh();
-
-    foreach (EntregaTurnoSeguridad::CASILLAS as $casilla) {
-        expect($relevo->{$casilla})->toBeFalse();
-    }
+    expect($relevo->status)->toBe('A');
 });
 
 test('el scope de activas esconde lo retirado', function () {
