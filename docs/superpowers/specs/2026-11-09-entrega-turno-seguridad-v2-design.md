@@ -66,10 +66,22 @@ público:
 public static function para(CarbonInterface $dia): array
 ```
 
-Seis consultas de conteo por llamada, no una por renglón y por relevo. La
-zona horaria de la aplicación ya es `America/Mexico_City`, así que las fechas
-guardadas están en hora de México y las comparaciones son directas, sin
-conversión.
+**Nueve** consultas de conteo por llamada, no una por renglón y por relevo.
+Son nueve y no seis porque tres de las tablas guardan la entrada y la salida
+en columnas distintas —`movimientos_csae`, `estacionamiento_subterraneos` y
+`registro_visitantes`— y cada lado necesita su propio `COUNT`; las otras tres
+salen en una sola consulta agrupada. Juntar los pares en una sola consulta
+con sumas condicionales pediría `DATE()` en crudo, que es justo la clase de
+SQL que se comporta distinto en MySQL y en el sqlite de las pruebas.
+
+La zona horaria de la aplicación ya es `America/Mexico_City`, así que las
+fechas guardadas están en hora de México y las comparaciones son directas,
+sin conversión.
+
+Las consultas salen de los modelos, no de `DB::table()`, como pide el
+CLAUDE.md del proyecto, y usan el scope de cada módulo donde existe:
+`OperacionDiaria::activas()` ya significa «no canceladas» (`status` cierto).
+`MovimientoCSAE` no tiene scope: su estatus es `A`/`N` y se filtra a mano.
 
 El servicio devuelve **solo los renglones**. El envoltorio con `congelado`
 —el de §8— lo arma el controlador, que es quien sabe si el relevo está
@@ -87,7 +99,7 @@ filas.
 | `aviones_csae` | Aviones de CSAE | `movimientos_csae` | `DATE(fecha_hora_entrada)` | `DATE(fecha_hora_salida)` | `status <> 'A'` |
 | `resguardo_vehicular` | Resguardo vehicular | `estacionamiento_subterraneos` | `DATE(fecha_ingreso)` | `DATE(fecha_salida)` | — |
 | `vehiculos` | Vehículos | `movimientos_vehiculos` | `tipo = 'Entrada'` | `tipo = 'Salida'` | — |
-| `operaciones` | Operaciones | `operaciones_diarias` | `tipo = 'llegada'` | `tipo = 'salida'` | `status` falso |
+| `operaciones` | Operaciones | `operaciones_diarias` | `tipo = 'llegada'` | `tipo = 'salida'` | lo que descarte `activas()` |
 | `visitantes` | Visitantes | `registro_visitantes` | `DATE(fecha_entrada)` | `DATE(fecha_salida)` | — |
 | `pernocta` | Pernocta del día | `pernocta_dia` | — | — | — |
 
