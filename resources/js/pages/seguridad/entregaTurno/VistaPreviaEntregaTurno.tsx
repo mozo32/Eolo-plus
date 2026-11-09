@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, Check, LoaderCircle, X } from 'lucide-react';
+import { AlertCircle, LoaderCircle, X } from 'lucide-react';
 import { ErrorDeApi, fetchRelevo } from '@/stores/apiEntregaTurnoSeguridad';
 import {
-    CASILLAS,
-    ETIQUETA_CASILLA,
-    ETIQUETA_PERNOCTA,
     ETIQUETA_SECCION,
     ROL_FBO,
+    ROL_JEFE_AREA,
     ROL_QUIEN_ENTREGA,
     SECCIONES,
     formatearFecha,
@@ -54,27 +52,20 @@ function Columna({ seccion, detalle }: { seccion: Seccion; detalle: DetalleRelev
                         {detalle.nombre} · {detalle.hora}
                     </p>
                     <ul className="divide-y divide-slate-100">
-                        {CASILLAS.map(casilla => (
-                            <li key={casilla} className="flex items-center justify-between py-1.5 text-xs text-slate-700">
-                                <span>{ETIQUETA_CASILLA[casilla]}</span>
-                                {detalle[casilla] ? (
-                                    <Check size={14} className="text-emerald-600" aria-label="Sí" />
-                                ) : (
-                                    <X size={14} className="text-red-500" aria-label="No" />
-                                )}
+                        {detalle.resumen.renglones.map(renglon => (
+                            <li key={renglon.clave} className="flex items-center justify-between gap-3 py-1.5 text-xs text-slate-700">
+                                <span className="font-bold">{renglon.titulo}</span>
+                                <span className="text-right">{renglon.texto}</span>
                             </li>
                         ))}
                     </ul>
-                    <p className="text-xs text-slate-700">
-                        <span className="font-bold">Pernocta mensual: </span>
-                        {ETIQUETA_PERNOCTA[detalle.pernocta_mensual]}
-                    </p>
                     <div>
                         <p className="text-[10px] font-bold uppercase text-slate-400">Observaciones</p>
                         <p className="whitespace-pre-wrap text-xs text-slate-700">{detalle.observaciones?.trim() || '—'}</p>
                     </div>
-                    <div className="grid grid-cols-2 gap-4 pt-2">
+                    <div className="grid grid-cols-3 gap-3 pt-2">
                         <Firma firma={firmaPorRol(detalle, ROL_QUIEN_ENTREGA)} titulo="Quien entrega" />
+                        <Firma firma={firmaPorRol(detalle, ROL_JEFE_AREA)} titulo="Jefe de área" />
                         <Firma firma={firmaPorRol(detalle, ROL_FBO)} titulo="FBO" />
                     </div>
                 </div>

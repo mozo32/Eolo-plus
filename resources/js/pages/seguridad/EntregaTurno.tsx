@@ -191,7 +191,8 @@ export default function EntregaTurno() {
                 abierto={formAbierto || relevoEnEdicion !== null}
                 relevo={relevoEnEdicion}
                 nombreUsuario={user?.name ?? ''}
-                puedeFirmarComoFbo={puedeFirmarFbo}
+                puedeFirmarJefe={puedeFirmarJefe}
+                puedeFirmarFbo={puedeFirmarFbo}
                 onCerrar={cerrarForm}
                 onGuardado={guardado}
             />

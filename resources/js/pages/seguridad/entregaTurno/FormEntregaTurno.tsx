@@ -6,21 +6,16 @@ import { X } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import Swal from 'sweetalert2';
 import {
-    CASILLAS,
-    ETIQUETA_CASILLA,
-    ETIQUETA_PERNOCTA,
     ETIQUETA_SECCION,
     horaAhora,
-    PERNOCTA,
     ROL_FBO,
+    ROL_JEFE_AREA,
     ROL_QUIEN_ENTREGA,
     SECCIONES,
-    type Casilla,
     type DetalleRelevo,
     type FirmaRelevo,
     type PayloadRelevo,
     type PayloadRelevoNuevo,
-    type Pernocta,
     type Seccion,
 } from './types';
 import FirmaActual from './FirmaActual';
@@ -29,7 +24,8 @@ type Props = {
     abierto: boolean;
     relevo: DetalleRelevo | null;
     nombreUsuario: string;
-    puedeFirmarComoFbo: boolean;
+    puedeFirmarJefe: boolean;
+    puedeFirmarFbo: boolean;
     onCerrar: () => void;
     onGuardado: () => void;
 };
@@ -56,16 +52,15 @@ export default function FormEntregaTurno(props: Props) {
     return <Formulario key={props.relevo?.id ?? 'nuevo'} {...props} />;
 }
 
-function Formulario({ relevo, nombreUsuario, puedeFirmarComoFbo, onCerrar, onGuardado }: Props) {
+function Formulario({ relevo, nombreUsuario, puedeFirmarJefe, puedeFirmarFbo, onCerrar, onGuardado }: Props) {
     const [datos, setDatos] = useState({
         fecha: relevo?.fecha ?? fechaHoy(),
         hora: relevo?.hora ?? horaAhora(),
-        seccion: relevo?.seccion ?? ('frente' as Seccion),
-        pernocta_mensual: relevo?.pernocta_mensual ?? ('R' as Pernocta),
+        seccion: relevo?.seccion ?? ('caseta' as Seccion),
         observaciones: relevo?.observaciones ?? '',
-        casillas: Object.fromEntries(CASILLAS.map((casilla) => [casilla, relevo?.[casilla] ?? false])) as Record<Casilla, boolean>,
     });
     const [firmaQuienEntrega, setFirmaQuienEntrega] = useState('');
+    const [firmaJefe, setFirmaJefe] = useState('');
     const [firmaFbo, setFirmaFbo] = useState('');
     const [errores, setErrores] = useState<Record<string, string[]>>({});
     const [guardando, setGuardando] = useState(false);
@@ -82,9 +77,6 @@ function Formulario({ relevo, nombreUsuario, puedeFirmarComoFbo, onCerrar, onGua
     /** La firma vigente de un rol, o null si ese rol no ha firmado. */
     const firmaGuardada = (rol: string): FirmaRelevo | null => relevo?.firmas.find((firma) => firma.rol === rol) ?? null;
 
-    const alternar = (casilla: Casilla) =>
-        setDatos((previo) => ({ ...previo, casillas: { ...previo.casillas, [casilla]: !previo.casillas[casilla] } }));
-
     const enviar = async (evento: FormEvent) => {
         evento.preventDefault();
 
@@ -98,10 +90,8 @@ function Formulario({ relevo, nombreUsuario, puedeFirmarComoFbo, onCerrar, onGua
         try {
             if (relevo === null) {
                 const payload: PayloadRelevoNuevo = {
-                    ...datos.casillas,
                     fecha_hora: `${datos.fecha} ${datos.hora}:00`,
                     seccion: datos.seccion,
-                    pernocta_mensual: datos.pernocta_mensual,
                     observaciones: datos.observaciones.trim() || null,
                     firma_quien_entrega: firmaQuienEntrega,
                 };
@@ -109,13 +99,12 @@ function Formulario({ relevo, nombreUsuario, puedeFirmarComoFbo, onCerrar, onGua
                 await guardarRelevo(payload);
             } else {
                 const payload: PayloadRelevo = {
-                    ...datos.casillas,
                     fecha_hora: `${datos.fecha} ${datos.hora}:00`,
                     seccion: datos.seccion,
-                    pernocta_mensual: datos.pernocta_mensual,
                     observaciones: datos.observaciones.trim() || null,
                     ...(firmaQuienEntrega ? { firma_quien_entrega: firmaQuienEntrega } : {}),
-                    ...(puedeFirmarComoFbo && firmaFbo ? { firma_fbo: firmaFbo } : {}),
+                    ...(puedeFirmarJefe && firmaJefe ? { firma_jefe_area: firmaJefe } : {}),
+                    ...(puedeFirmarFbo && firmaFbo ? { firma_fbo: firmaFbo } : {}),
                 };
 
                 await actualizarRelevo(relevo.id, payload);
@@ -215,41 +204,26 @@ function Formulario({ relevo, nombreUsuario, puedeFirmarComoFbo, onCerrar, onGua
                         <MensajeError mensajes={errores.seccion} />
                     </div>
 
-                    <div>
-                        <label className={ETIQUETA}>Apartados</label>
-                        <div className="grid grid-cols-2 gap-2">
-                            {CASILLAS.map((casilla) => (
-                                <label key={casilla} className="inline-flex items-center gap-2 text-xs text-gray-800">
-                                    <input
-                                        type="checkbox"
-                                        checked={datos.casillas[casilla]}
-                                        onChange={() => alternar(casilla)}
-                                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                                    />
-                                    <span>{ETIQUETA_CASILLA[casilla]}</span>
-                                </label>
-                            ))}
+                    {relevo !== null && (
+                        <div>
+                            <label className={ETIQUETA}>
+                                Resumen del día{relevo.resumen.congelado ? ' (cerrado)' : ''}
+                            </label>
+                            <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+                                {relevo.resumen.renglones.map((renglon) => (
+                                    <li key={renglon.clave} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                                        <span className="font-bold text-slate-600">{renglon.titulo}</span>
+                                        <span className="text-right text-slate-700">{renglon.texto}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                            <p className="mt-1 text-[10px] text-slate-500">
+                                {relevo.resumen.congelado
+                                    ? 'El relevo está firmado por los tres: estas cifras ya no cambian.'
+                                    : 'Se cuenta solo, de los registros del día. Se congela cuando entre la tercera firma.'}
+                            </p>
                         </div>
-                    </div>
-
-                    <div>
-                        <label className={ETIQUETA}>Pernocta mensual</label>
-                        <div className="flex gap-4">
-                            {PERNOCTA.map((estado) => (
-                                <label key={estado} className="inline-flex items-center gap-2 text-xs text-gray-800">
-                                    <input
-                                        type="radio"
-                                        name="pernocta_mensual"
-                                        checked={datos.pernocta_mensual === estado}
-                                        onChange={() => setDatos({ ...datos, pernocta_mensual: estado })}
-                                        className="h-4 w-4 border-gray-300 text-primary focus:ring-primary"
-                                    />
-                                    <span>{ETIQUETA_PERNOCTA[estado]}</span>
-                                </label>
-                            ))}
-                        </div>
-                        <MensajeError mensajes={errores.pernocta_mensual} />
-                    </div>
+                    )}
 
                     <div>
                         <label className={ETIQUETA}>Observaciones</label>
@@ -268,8 +242,15 @@ function Formulario({ relevo, nombreUsuario, puedeFirmarComoFbo, onCerrar, onGua
                         {editando && <p className="mt-1 text-[10px] text-slate-500">Déjala en blanco para conservar la firma actual.</p>}
                         <MensajeError mensajes={errores.firma_quien_entrega} />
                     </div>
-                    {/* §4 de la spec: al crear se guarda la firma de quien entrega NADA MÁS; el FBO firma después, por la cola de pendientes. Ofrecer aquí su pad le hacía dibujar una firma que `store` descartaba al validar, con un 201 de «relevo registrado correctamente» encima. */}
-                    {editando && puedeFirmarComoFbo && (
+                    {/* §5 de la spec: al crear se guarda la firma de quien entrega NADA MÁS. Las dos de cierre entran al editar, sin orden entre ellas, y cada quien ve solo la suya: ofrecer la ajena hace dibujar una firma que el servidor rechaza con 403. */}
+                    {editando && puedeFirmarJefe && (
+                        <div>
+                            <FirmaActual firma={firmaGuardada(ROL_JEFE_AREA)} />
+                            <SignaturePad title="Firma del jefe de área" value={firmaJefe} onChange={setFirmaJefe} compact />
+                            <MensajeError mensajes={errores.firma_jefe_area} />
+                        </div>
+                    )}
+                    {editando && puedeFirmarFbo && (
                         <div>
                             <FirmaActual firma={firmaGuardada(ROL_FBO)} />
                             <SignaturePad title="Firma del FBO" value={firmaFbo} onChange={setFirmaFbo} compact />
