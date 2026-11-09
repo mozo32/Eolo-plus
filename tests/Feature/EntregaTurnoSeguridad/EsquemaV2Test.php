@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\EntregaTurnoSeguridad;
+use App\Models\Firma;
 use App\Models\User;
 use Illuminate\Support\Facades\Schema;
 
@@ -21,6 +22,21 @@ function relevoDeEsquema(array $extra = []): EntregaTurnoSeguridad
         'fecha_hora' => '2026-11-09 08:00:00',
         'seccion' => EntregaTurnoSeguridad::SECCION_CASETA,
     ], $extra));
+}
+
+/** Adjunta una firma vigente con el rol dado. Quien la use debe volver a hacer `load('firmas')`. */
+function firmaDeEsquema(EntregaTurnoSeguridad $relevo, string $rol): void
+{
+    $firma = Firma::create([
+        'disk' => 'public',
+        'path' => 'firmas/prueba/'.$rol.'-'.$relevo->id.'.png',
+        'original_name' => $rol.'.png',
+        'mime' => 'image/png',
+        'size' => 10,
+        'sha1' => sha1($rol.$relevo->id),
+    ]);
+
+    $relevo->firmas()->attach($firma->id, ['rol' => $rol, 'orden' => 0, 'status' => 'A']);
 }
 
 test('la tabla ya no guarda casillas ni pernocta mensual', function (string $columna) {
@@ -78,5 +94,42 @@ test('firmasFaltantes nombra los dos roles de cierre cuando nadie firmo', functi
     $relevo = relevoDeEsquema()->load('firmas');
 
     expect($relevo->firmasFaltantes())->toBe(['jefe_area', 'fbo'])
+        ->and($relevo->estaCerrado())->toBeFalse();
+});
+
+test('firmasFaltantes solo nombra al fbo cuando firmo el jefe de area', function () {
+    $relevo = relevoDeEsquema();
+    firmaDeEsquema($relevo, EntregaTurnoSeguridad::ROL_JEFE_AREA);
+
+    expect($relevo->load('firmas')->firmasFaltantes())->toBe(['fbo']);
+});
+
+test('firmasFaltantes solo nombra al jefe de area cuando firmo el fbo', function () {
+    $relevo = relevoDeEsquema();
+    firmaDeEsquema($relevo, EntregaTurnoSeguridad::ROL_FBO);
+
+    expect($relevo->load('firmas')->firmasFaltantes())->toBe(['jefe_area']);
+});
+
+test('el relevo esta cerrado con las tres firmas', function () {
+    $relevo = relevoDeEsquema();
+    firmaDeEsquema($relevo, EntregaTurnoSeguridad::ROL_QUIEN_ENTREGA);
+    firmaDeEsquema($relevo, EntregaTurnoSeguridad::ROL_JEFE_AREA);
+    firmaDeEsquema($relevo, EntregaTurnoSeguridad::ROL_FBO);
+
+    $relevo->load('firmas');
+
+    expect($relevo->firmasFaltantes())->toBe([])
+        ->and($relevo->estaCerrado())->toBeTrue();
+});
+
+test('sin la firma de quien entrega el relevo no esta cerrado aunque firmen los dos de cierre', function () {
+    $relevo = relevoDeEsquema();
+    firmaDeEsquema($relevo, EntregaTurnoSeguridad::ROL_JEFE_AREA);
+    firmaDeEsquema($relevo, EntregaTurnoSeguridad::ROL_FBO);
+
+    $relevo->load('firmas');
+
+    expect($relevo->firmasFaltantes())->toBe([])
         ->and($relevo->estaCerrado())->toBeFalse();
 });
