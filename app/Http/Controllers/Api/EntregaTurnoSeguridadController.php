@@ -8,6 +8,7 @@ use App\Http\Requests\EntregaTurnoSeguridad\StoreEntregaTurnoSeguridadRequest;
 use App\Http\Requests\EntregaTurnoSeguridad\UpdateEntregaTurnoSeguridadRequest;
 use App\Models\EntregaTurnoSeguridad;
 use App\Models\Firma;
+use App\Support\ResumenDelDiaSeguridad;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -420,12 +421,6 @@ class EntregaTurnoSeguridadController extends Controller
             ->values()
             ->all();
 
-        $casillas = [];
-
-        foreach (EntregaTurnoSeguridad::CASILLAS as $casilla) {
-            $casillas[$casilla] = (bool) $relevo->{$casilla};
-        }
-
         return [
             'id' => $relevo->id,
             'nombre' => $relevo->usuario?->name ?? '',
@@ -433,8 +428,16 @@ class EntregaTurnoSeguridadController extends Controller
             'hora' => $relevo->fecha_hora->format('H:i'),
             'fecha_hora' => $relevo->fecha_hora->format('Y-m-d H:i:s'),
             'seccion' => $relevo->seccion,
-            ...$casillas,
-            'pernocta_mensual' => $relevo->pernocta_mensual,
+            'resumen' => [
+                /*
+                 * `congelado` sale de si la columna tiene algo, no de un
+                 * campo dentro del JSON: un relevo cerrado guarda sus
+                 * renglones y deja de consultar; uno abierto los recalcula
+                 * en cada lectura y sus números crecen con el día.
+                 */
+                'congelado' => $relevo->resumen !== null,
+                'renglones' => $relevo->resumen ?? ResumenDelDiaSeguridad::para($relevo->fecha_hora),
+            ],
             'observaciones' => $relevo->observaciones,
             'firmas' => $firmas,
         ];

@@ -22,7 +22,7 @@ function datosDeRelevo(array $extra = []): array
 {
     return array_merge([
         'fecha_hora' => Carbon::now(config('app.timezone'))->format('Y-m-d H:i:s'),
-        'seccion' => EntregaTurnoSeguridad::SECCION_FRENTE,
+        'seccion' => EntregaTurnoSeguridad::SECCION_CASETA,
         'firma_quien_entrega' => firmaBase64(),
     ], $extra);
 }
@@ -48,63 +48,6 @@ test('sin sesión no se crea nada', function () {
         ->assertUnauthorized();
 
     expect(EntregaTurnoSeguridad::count())->toBe(0);
-});
-
-test('la pernocta mensual se queda en sin revisar cuando no se manda', function () {
-    $this->actingAs(User::factory()->create())
-        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo())
-        ->assertSuccessful();
-
-    expect(EntregaTurnoSeguridad::sole()->pernocta_mensual)
-        ->toBe(EntregaTurnoSeguridad::PERNOCTA_SIN_REVISAR);
-});
-
-test('la pernocta mensual acepta sus tres letras', function (string $letra) {
-    $this->actingAs(User::factory()->create())
-        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['pernocta_mensual' => $letra]))
-        ->assertSuccessful();
-
-    expect(EntregaTurnoSeguridad::sole()->pernocta_mensual)->toBe($letra);
-})->with(['S', 'N', 'R']);
-
-test('la pernocta mensual rechaza cualquier otra letra', function () {
-    $this->actingAs(User::factory()->create())
-        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['pernocta_mensual' => 'X']))
-        ->assertJsonValidationErrorFor('pernocta_mensual');
-
-    expect(EntregaTurnoSeguridad::count())->toBe(0);
-});
-
-test('la sección acepta frente y atras y rechaza lo demás', function () {
-    $usuario = User::factory()->create();
-
-    foreach (EntregaTurnoSeguridad::SECCIONES as $seccion) {
-        $this->actingAs($usuario)
-            ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['seccion' => $seccion]))
-            ->assertSuccessful();
-    }
-
-    $this->actingAs($usuario)
-        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['seccion' => 'arriba']))
-        ->assertJsonValidationErrorFor('seccion');
-
-    expect(EntregaTurnoSeguridad::count())->toBe(2);
-});
-
-test('las casillas marcadas se guardan y las demás quedan apagadas', function () {
-    $this->actingAs(User::factory()->create())
-        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo([
-            'aviones_csae' => true,
-            'visitantes' => true,
-        ]))
-        ->assertSuccessful();
-
-    $relevo = EntregaTurnoSeguridad::sole();
-
-    expect($relevo->aviones_csae)->toBeTrue()
-        ->and($relevo->visitantes)->toBeTrue()
-        ->and($relevo->combustible)->toBeFalse()
-        ->and($relevo->posiciones)->toBeFalse();
 });
 
 test('se guarda con la firma de quien entrega y sin la del FBO', function () {
@@ -206,4 +149,59 @@ test('las observaciones se guardan tal como se escribieron', function () {
         ->assertSuccessful();
 
     expect(EntregaTurnoSeguridad::sole()->observaciones)->toBe($texto);
+});
+
+test('la seccion solo admite caseta y plataforma', function (string $seccion) {
+    $this->actingAs(User::factory()->create())
+        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['seccion' => $seccion]))
+        ->assertSuccessful();
+})->with(['caseta', 'plataforma']);
+
+test('la seccion ya no admite los nombres viejos', function (string $seccion) {
+    $this->actingAs(User::factory()->create())
+        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['seccion' => $seccion]))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('seccion');
+})->with(['frente', 'atras']);
+
+test('el detalle del alta trae el resumen del dia, en vivo', function () {
+    $respuesta = $this->actingAs(User::factory()->create())
+        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo());
+
+    $respuesta->assertSuccessful();
+
+    $resumen = $respuesta->json('data.resumen');
+
+    expect($resumen['congelado'])->toBeFalse()
+        ->and(collect($resumen['renglones'])->pluck('clave')->all())->toBe([
+            'aviones_csae',
+            'resguardo_vehicular',
+            'vehiculos',
+            'operaciones',
+            'visitantes',
+            'pernocta',
+        ]);
+});
+
+test('el detalle ya no trae casillas ni pernocta mensual', function () {
+    $respuesta = $this->actingAs(User::factory()->create())
+        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo());
+
+    $datos = $respuesta->json('data');
+
+    expect($datos)->not->toHaveKey('pernocta_mensual')
+        ->and($datos)->not->toHaveKey('aviones_csae')
+        ->and($datos)->not->toHaveKey('combustible')
+        ->and($datos)->not->toHaveKey('posiciones');
+});
+
+test('mandar casillas en el alta no crea columnas ni revienta', function () {
+    $this->actingAs(User::factory()->create())
+        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo([
+            'aviones_csae' => true,
+            'pernocta_mensual' => 'S',
+        ]))
+        ->assertSuccessful();
+
+    expect(EntregaTurnoSeguridad::sole()->resumen)->toBeNull();
 });

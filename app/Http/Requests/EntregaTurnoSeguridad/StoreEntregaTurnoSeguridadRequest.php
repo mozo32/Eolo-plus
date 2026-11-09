@@ -29,15 +29,6 @@ class StoreEntregaTurnoSeguridadRequest extends FormRequest
         return [
             'fecha_hora' => ['required', 'date', new DentroDeLaVentana('seguridad.entrega_turno')],
             'seccion' => ['required', Rule::in(EntregaTurnoSeguridad::SECCIONES)],
-            'aviones_csae' => ['sometimes', 'boolean'],
-            'combustible' => ['sometimes', 'boolean'],
-            'resguardo_vehicular' => ['sometimes', 'boolean'],
-            'estacionamiento' => ['sometimes', 'boolean'],
-            'posiciones' => ['sometimes', 'boolean'],
-            'vehiculos' => ['sometimes', 'boolean'],
-            'operaciones' => ['sometimes', 'boolean'],
-            'visitantes' => ['sometimes', 'boolean'],
-            'pernocta_mensual' => ['sometimes', Rule::in(EntregaTurnoSeguridad::PERNOCTA_ESTADOS)],
             'observaciones' => ['nullable', 'string'],
             /*
              * El `=` solo se admite como relleno FINAL, y el cierre es `\z` y
@@ -53,8 +44,8 @@ class StoreEntregaTurnoSeguridadRequest extends FormRequest
              * El `\z` cierra además que `$` en PHP, sin el modificador `D`,
              * acepta un salto de línea final.
              *
-             * La MISMA regla va en UpdateEntregaTurnoSeguridadRequest, dos
-             * veces: si se cambia una, se cambian las tres.
+             * La MISMA regla va en UpdateEntregaTurnoSeguridadRequest, tres
+             * veces: si se cambia una, se cambian las cuatro.
              */
             'firma_quien_entrega' => [
                 'required',
@@ -68,9 +59,8 @@ class StoreEntregaTurnoSeguridadRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'seccion.required' => 'Hay que decir si el relevo es del frente o de atrás.',
-            'seccion.in' => 'La sección solo puede ser frente o atrás.',
-            'pernocta_mensual.in' => 'La pernocta mensual solo puede estar hecha, no hecha o sin revisar.',
+            'seccion.required' => 'Hay que decir si el relevo es de la caseta o de la plataforma.',
+            'seccion.in' => 'La sección solo puede ser caseta o plataforma.',
             'firma_quien_entrega.required' => 'Falta la firma de quien entrega el turno.',
             'firma_quien_entrega.regex' => 'La firma de quien entrega no llegó como una imagen válida.',
         ];
