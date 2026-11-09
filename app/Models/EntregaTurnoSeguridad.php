@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 /**
  * El relevo de turno de UN puesto de Seguridad.
  *
- * Un día normal tiene dos filas, una del frente y una de atrás. No hay
+ * Un día normal tiene dos filas, una de caseta y una de plataforma. No hay
  * índice único sobre día y sección a propósito: un relevo extra —un turno
  * partido, una emergencia— es un dato verdadero y el sistema no debe
  * negarse a guardarlo. Quien agrupe por día tiene que saber que una
@@ -20,63 +20,36 @@ class EntregaTurnoSeguridad extends Model
 {
     protected $table = 'entregas_turno_seguridad';
 
-    public const SECCION_FRENTE = 'frente';
+    public const SECCION_CASETA = 'caseta';
 
-    public const SECCION_ATRAS = 'atras';
-
-    /** @var list<string> */
-    public const SECCIONES = [self::SECCION_FRENTE, self::SECCION_ATRAS];
-
-    public const PERNOCTA_HECHA = 'S';
-
-    public const PERNOCTA_NO_HECHA = 'N';
-
-    public const PERNOCTA_SIN_REVISAR = 'R';
+    public const SECCION_PLATAFORMA = 'plataforma';
 
     /** @var list<string> */
-    public const PERNOCTA_ESTADOS = [
-        self::PERNOCTA_HECHA,
-        self::PERNOCTA_NO_HECHA,
-        self::PERNOCTA_SIN_REVISAR,
-    ];
+    public const SECCIONES = [self::SECCION_CASETA, self::SECCION_PLATAFORMA];
 
     public const ROL_QUIEN_ENTREGA = 'quien_entrega';
+
+    public const ROL_JEFE_AREA = 'jefe_area';
 
     public const ROL_FBO = 'fbo';
 
     /**
-     * Los ocho apartados que se contestan con una casilla.
+     * Los dos roles que CIERRAN el relevo, en el orden en que se enseñan.
      *
-     * La pernocta mensual NO está aquí: lleva tres estados porque es una
-     * tarea mensual y «hoy no la hice» es lo normal casi todos los días.
+     * `quien_entrega` no está: esa firma entra al crear y sin ella no hay
+     * relevo. Estos dos son los que pueden faltar, los que alimentan la cola
+     * de pendientes y los que, al completarse, congelan el resumen.
      *
      * @var list<string>
      */
-    public const CASILLAS = [
-        'aviones_csae',
-        'combustible',
-        'resguardo_vehicular',
-        'estacionamiento',
-        'posiciones',
-        'vehiculos',
-        'operaciones',
-        'visitantes',
-    ];
+    public const ROLES_DE_CIERRE = [self::ROL_JEFE_AREA, self::ROL_FBO];
 
     /** @var list<string> */
     protected $fillable = [
         'user_id',
         'fecha_hora',
         'seccion',
-        'aviones_csae',
-        'combustible',
-        'resguardo_vehicular',
-        'estacionamiento',
-        'posiciones',
-        'vehiculos',
-        'operaciones',
-        'visitantes',
-        'pernocta_mensual',
+        'resumen',
         'observaciones',
         'status',
     ];
@@ -86,14 +59,7 @@ class EntregaTurnoSeguridad extends Model
     {
         return [
             'fecha_hora' => 'datetime',
-            'aviones_csae' => 'boolean',
-            'combustible' => 'boolean',
-            'resguardo_vehicular' => 'boolean',
-            'estacionamiento' => 'boolean',
-            'posiciones' => 'boolean',
-            'vehiculos' => 'boolean',
-            'operaciones' => 'boolean',
-            'visitantes' => 'boolean',
+            'resumen' => 'array',
         ];
     }
 
@@ -135,5 +101,35 @@ class EntregaTurnoSeguridad extends Model
         return $this->firmas->contains(
             fn (Firma $firma): bool => $firma->pivot->rol === $rol
         );
+    }
+
+    /**
+     * Los roles de cierre que todavía no han firmado, en el orden de
+     * `ROLES_DE_CIERRE`.
+     *
+     * Lee la relación YA CARGADA, igual que `tieneFirmaDe`: quien la llame
+     * tiene que haber hecho `load('firmas')` o `with('firmas')`.
+     *
+     * @return list<string>
+     */
+    public function firmasFaltantes(): array
+    {
+        return array_values(array_filter(
+            self::ROLES_DE_CIERRE,
+            fn (string $rol): bool => ! $this->tieneFirmaDe($rol),
+        ));
+    }
+
+    /**
+     * Las tres firmas están puestas: el relevo es un documento cerrado.
+     *
+     * Incluye la de quien entrega aunque `store` siempre la adjunte: si
+     * alguna vez se retirara, el relevo dejaría de estar cerrado y el
+     * resumen no debería congelarse.
+     */
+    public function estaCerrado(): bool
+    {
+        return $this->tieneFirmaDe(self::ROL_QUIEN_ENTREGA)
+            && $this->firmasFaltantes() === [];
     }
 }
