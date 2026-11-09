@@ -36,7 +36,7 @@ class IndexEntregaTurnoSeguridadRequest extends FormRequest
             'per_page' => ['sometimes', 'integer'],
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
             'seccion' => ['sometimes', 'nullable', Rule::in(EntregaTurnoSeguridad::SECCIONES)],
-            'estado' => ['sometimes', 'nullable', Rule::in(['falta_fbo', 'completas'])],
+            'estado' => ['sometimes', 'nullable', Rule::in(['falta_jefe_area', 'falta_fbo', 'completas'])],
             'fecha_inicio' => ['sometimes', 'nullable', 'date'],
             'fecha_fin' => ['sometimes', 'nullable', 'date'],
         ];
@@ -46,8 +46,8 @@ class IndexEntregaTurnoSeguridadRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'seccion.in' => 'La sección solo puede ser frente o atrás.',
-            'estado.in' => 'El estado solo puede ser «falta la firma del FBO» o «completas».',
+            'seccion.in' => 'La sección solo puede ser caseta o plataforma.',
+            'estado.in' => 'El estado solo puede ser «falta la firma del jefe de área», «falta la firma del FBO» o «completas».',
             'search.max' => 'El texto que se busca es demasiado largo.',
         ];
     }

@@ -2,8 +2,10 @@
 
 use App\Models\EntregaTurnoSeguridad;
 use App\Models\Firma;
+use App\Models\PernoctaDia;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /*
  * El listado combina las dos secciones de un día en UN renglón, y pagina
@@ -20,19 +22,26 @@ function relevoDelDia(string $dia, string $seccion, string $hora = '07:30', arra
     ], $extra));
 }
 
-function firmarComoFbo(EntregaTurnoSeguridad $relevo): void
+/**
+ * Firma un relevo con el rol que se le diga.
+ *
+ * El rol es un parámetro y no una constante escondida: con un ayudante que
+ * solo supiera firmar como FBO, el distintivo de «falta jefe de área» no
+ * tendría quien lo vigilara.
+ */
+function firmarRelevoDelDia(EntregaTurnoSeguridad $relevo, string $rol): void
 {
     $firma = Firma::create([
         'disk' => 'public',
-        'path' => 'firmas/prueba/fbo-'.$relevo->id.'.png',
-        'original_name' => 'fbo.png',
+        'path' => 'firmas/prueba/'.$rol.'-'.$relevo->id.'.png',
+        'original_name' => $rol.'.png',
         'mime' => 'image/png',
         'size' => 10,
-        'sha1' => sha1('fbo'.$relevo->id),
+        'sha1' => sha1($rol.$relevo->id),
     ]);
 
     $relevo->firmas()->attach($firma->id, [
-        'rol' => EntregaTurnoSeguridad::ROL_FBO,
+        'rol' => $rol,
         'orden' => 0,
         'status' => 'A',
     ]);
@@ -45,48 +54,48 @@ function listado(array $parametros = []): \Illuminate\Testing\TestResponse
 }
 
 test('las dos secciones del mismo día salen en un solo renglón', function () {
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE, '07:30');
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_ATRAS, '19:00');
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA, '07:30');
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_PLATAFORMA, '19:00');
 
     $datos = listado()->assertSuccessful()->json('data');
 
     expect($datos)->toHaveCount(1)
         ->and($datos[0]['fecha'])->toBe('2026-11-04')
-        ->and($datos[0]['frente']['hora'])->toBe('07:30')
-        ->and($datos[0]['atras']['hora'])->toBe('19:00');
+        ->and($datos[0]['caseta']['hora'])->toBe('07:30')
+        ->and($datos[0]['plataforma']['hora'])->toBe('19:00');
 });
 
 test('la hora viene en 24 horas', function () {
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_ATRAS, '19:45');
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_PLATAFORMA, '19:45');
 
     $fila = listado()->json('data.0');
 
-    expect($fila['atras']['hora'])->toBe('19:45');
+    expect($fila['plataforma']['hora'])->toBe('19:45');
 });
 
 test('un día con una sola sección deja la otra en null', function () {
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE);
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA);
 
     $fila = listado()->json('data.0');
 
-    expect($fila['frente'])->not->toBeNull()
-        ->and($fila['atras'])->toBeNull();
+    expect($fila['caseta'])->not->toBeNull()
+        ->and($fila['plataforma'])->toBeNull();
 });
 
 test('tres registros de la misma sección dan un renglón con dos extras', function () {
     // El de las 23:00 se crea PRIMERO a propósito. Creándolos en orden de
     // hora, el id mayor coincide con la hora mayor y la prueba no
     // distinguiría `sortByDesc('fecha_hora')` de «el último que se creó».
-    $ultimo = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE, '23:00');
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE, '07:00');
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE, '15:00');
+    $ultimo = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA, '23:00');
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA, '07:00');
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA, '15:00');
 
     $datos = listado()->json('data');
 
     expect($datos)->toHaveCount(1)
-        ->and($datos[0]['frente']['extras'])->toBe(2)
-        ->and($datos[0]['frente']['id'])->toBe($ultimo->id)
-        ->and($datos[0]['frente']['hora'])->toBe('23:00');
+        ->and($datos[0]['caseta']['extras'])->toBe(2)
+        ->and($datos[0]['caseta']['id'])->toBe($ultimo->id)
+        ->and($datos[0]['caseta']['hora'])->toBe('23:00');
 });
 
 test('la paginación cuenta días y no parte ninguno', function () {
@@ -94,8 +103,8 @@ test('la paginación cuenta días y no parte ninguno', function () {
     // diez por página cortarían el quinto día a la mitad.
     foreach (range(1, 11) as $dia) {
         $fecha = Carbon::parse('2026-11-01')->addDays($dia - 1)->toDateString();
-        relevoDelDia($fecha, EntregaTurnoSeguridad::SECCION_FRENTE, '07:00');
-        relevoDelDia($fecha, EntregaTurnoSeguridad::SECCION_ATRAS, '19:00');
+        relevoDelDia($fecha, EntregaTurnoSeguridad::SECCION_CASETA, '07:00');
+        relevoDelDia($fecha, EntregaTurnoSeguridad::SECCION_PLATAFORMA, '19:00');
     }
 
     $respuesta = listado(['per_page' => 10])->assertSuccessful();
@@ -105,50 +114,24 @@ test('la paginación cuenta días y no parte ninguno', function () {
         ->and($respuesta->json('meta.last_page'))->toBe(2);
 
     foreach ($respuesta->json('data') as $fila) {
-        expect($fila['frente'])->not->toBeNull()
-            ->and($fila['atras'])->not->toBeNull();
+        expect($fila['caseta'])->not->toBeNull()
+            ->and($fila['plataforma'])->not->toBeNull();
     }
 });
 
 test('los días salen del más reciente al más viejo', function () {
-    relevoDelDia('2026-11-01', EntregaTurnoSeguridad::SECCION_FRENTE);
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE);
-    relevoDelDia('2026-11-02', EntregaTurnoSeguridad::SECCION_FRENTE);
+    relevoDelDia('2026-11-01', EntregaTurnoSeguridad::SECCION_CASETA);
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA);
+    relevoDelDia('2026-11-02', EntregaTurnoSeguridad::SECCION_CASETA);
 
     expect(array_column(listado()->json('data'), 'fecha'))
         ->toBe(['2026-11-04', '2026-11-02', '2026-11-01']);
 });
 
 test('un relevo retirado no aparece en el listado', function () {
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE, '07:30', ['status' => 'N']);
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA, '07:30', ['status' => 'N']);
 
     expect(listado()->json('data'))->toBe([]);
-});
-
-test('firmado_fbo dice si el FBO ya firmó esa sección', function () {
-    $frente = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE);
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_ATRAS, '19:00');
-
-    firmarComoFbo($frente);
-
-    $fila = listado()->json('data.0');
-
-    expect($fila['frente']['firmado_fbo'])->toBeTrue()
-        ->and($fila['atras']['firmado_fbo'])->toBeFalse();
-});
-
-test('la pernocta mensual de cada sección viaja por separado', function () {
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE, '07:30', [
-        'pernocta_mensual' => EntregaTurnoSeguridad::PERNOCTA_HECHA,
-    ]);
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_ATRAS, '19:00', [
-        'pernocta_mensual' => EntregaTurnoSeguridad::PERNOCTA_SIN_REVISAR,
-    ]);
-
-    $fila = listado()->json('data.0');
-
-    expect($fila['frente']['pernocta_mensual'])->toBe('S')
-        ->and($fila['atras']['pernocta_mensual'])->toBe('R');
 });
 
 test('el buscador filtra por el nombre de quien entregó', function () {
@@ -156,7 +139,7 @@ test('el buscador filtra por el nombre de quien entregó', function () {
     EntregaTurnoSeguridad::create([
         'user_id' => $ana->id,
         'fecha_hora' => '2026-11-04 07:30:00',
-        'seccion' => EntregaTurnoSeguridad::SECCION_FRENTE,
+        'seccion' => EntregaTurnoSeguridad::SECCION_CASETA,
     ]);
 
     // El nombre del otro va explícito: con el que invente la factory hay
@@ -166,7 +149,7 @@ test('el buscador filtra por el nombre de quien entregó', function () {
     EntregaTurnoSeguridad::create([
         'user_id' => $otro->id,
         'fecha_hora' => '2026-11-03 07:30:00',
-        'seccion' => EntregaTurnoSeguridad::SECCION_FRENTE,
+        'seccion' => EntregaTurnoSeguridad::SECCION_CASETA,
     ]);
 
     expect(array_column(listado(['search' => 'Robles'])->json('data'), 'fecha'))
@@ -187,7 +170,7 @@ function dosRelevosConNombres(string $nombre, string $otroNombre): void
         EntregaTurnoSeguridad::create([
             'user_id' => User::factory()->create(['name' => $quien])->id,
             'fecha_hora' => "{$dia} 07:30:00",
-            'seccion' => EntregaTurnoSeguridad::SECCION_FRENTE,
+            'seccion' => EntregaTurnoSeguridad::SECCION_CASETA,
         ]);
     }
 }
@@ -231,17 +214,17 @@ test('un filtro en forma de arreglo se rechaza con 422, no con 500', function (s
 })->with(['search', 'seccion', 'estado', 'fecha_inicio', 'fecha_fin']);
 
 test('el filtro de sección deja solo los días con esa sección', function () {
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE);
-    relevoDelDia('2026-11-03', EntregaTurnoSeguridad::SECCION_ATRAS, '19:00');
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA);
+    relevoDelDia('2026-11-03', EntregaTurnoSeguridad::SECCION_PLATAFORMA, '19:00');
 
-    expect(array_column(listado(['seccion' => 'atras'])->json('data'), 'fecha'))
+    expect(array_column(listado(['seccion' => 'plataforma'])->json('data'), 'fecha'))
         ->toBe(['2026-11-03']);
 });
 
 test('el rango de fechas acota los días', function () {
-    relevoDelDia('2026-11-01', EntregaTurnoSeguridad::SECCION_FRENTE);
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE);
-    relevoDelDia('2026-11-08', EntregaTurnoSeguridad::SECCION_FRENTE);
+    relevoDelDia('2026-11-01', EntregaTurnoSeguridad::SECCION_CASETA);
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA);
+    relevoDelDia('2026-11-08', EntregaTurnoSeguridad::SECCION_CASETA);
 
     $fechas = array_column(
         listado(['fecha_inicio' => '2026-11-02', 'fecha_fin' => '2026-11-05'])->json('data'),
@@ -258,29 +241,31 @@ test('falta_fbo excluye los días ya firmados y el renglón sigue completo', fun
     // «completas». Lo que se comprueba aquí es otra cosa, y sí importa: que
     // el filtro decida qué DÍAS salen y no qué secciones se ven, y que un
     // día enteramente firmado no aparezca.
-    $frente = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE);
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_ATRAS, '19:00');
-    firmarComoFbo($frente);
+    $frente = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA);
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_PLATAFORMA, '19:00');
+    firmarRelevoDelDia($frente, EntregaTurnoSeguridad::ROL_FBO);
 
-    firmarComoFbo(relevoDelDia('2026-11-03', EntregaTurnoSeguridad::SECCION_FRENTE));
+    firmarRelevoDelDia(relevoDelDia('2026-11-03', EntregaTurnoSeguridad::SECCION_CASETA), EntregaTurnoSeguridad::ROL_FBO);
 
     $datos = listado(['estado' => 'falta_fbo'])->json('data');
 
     expect(array_column($datos, 'fecha'))->toBe(['2026-11-04'])
-        ->and($datos[0]['frente'])->not->toBeNull()
-        ->and($datos[0]['atras'])->not->toBeNull();
+        ->and($datos[0]['caseta'])->not->toBeNull()
+        ->and($datos[0]['plataforma'])->not->toBeNull();
 });
 
 test('completas excluye el día en que una sección no está firmada', function () {
     // El día 4 tiene el frente firmado y atrás sin firmar: NO está
     // completo. Filtrar registro por registro lo daría por completo a
     // través del frente, que es el error que esta prueba vigila.
-    $frente4 = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE);
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_ATRAS, '19:00');
-    firmarComoFbo($frente4);
+    $frente4 = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA);
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_PLATAFORMA, '19:00');
+    firmarRelevoDelDia($frente4, EntregaTurnoSeguridad::ROL_JEFE_AREA);
+    firmarRelevoDelDia($frente4, EntregaTurnoSeguridad::ROL_FBO);
 
-    $frente3 = relevoDelDia('2026-11-03', EntregaTurnoSeguridad::SECCION_FRENTE);
-    firmarComoFbo($frente3);
+    $frente3 = relevoDelDia('2026-11-03', EntregaTurnoSeguridad::SECCION_CASETA);
+    firmarRelevoDelDia($frente3, EntregaTurnoSeguridad::ROL_JEFE_AREA);
+    firmarRelevoDelDia($frente3, EntregaTurnoSeguridad::ROL_FBO);
 
     expect(array_column(listado(['estado' => 'completas'])->json('data'), 'fecha'))
         ->toBe(['2026-11-03']);
@@ -296,7 +281,7 @@ test('sin registros el listado viene vacío y no revienta', function () {
 test('per_page tiene techo: no se puede pedir la tabla entera de un jalón', function () {
     // Sin techo, un per_page=100000 pide cien mil días y arrastra toda la
     // tabla con sus firmas.
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE);
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA);
 
     expect(listado(['per_page' => 100000])->json('meta.per_page'))->toBe(100);
 });
@@ -309,14 +294,14 @@ test('un retirado no cuenta como el más reciente ni infla los extras', function
     // Aquí el día lleva un activo y un retirado MÁS RECIENTE. Sin el filtro,
     // el retirado saldría como «el más reciente», `extras` valdría 1 y el día
     // se marcaría como incompleto por una firma que nadie debe esperar.
-    $activo = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE, '07:30');
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE, '23:00', ['status' => 'N']);
+    $activo = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA, '07:30');
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA, '23:00', ['status' => 'N']);
 
     $fila = listado()->json('data.0');
 
-    expect($fila['frente']['id'])->toBe($activo->id)
-        ->and($fila['frente']['hora'])->toBe('07:30')
-        ->and($fila['frente']['extras'])->toBe(0);
+    expect($fila['caseta']['id'])->toBe($activo->id)
+        ->and($fila['caseta']['hora'])->toBe('07:30')
+        ->and($fila['caseta']['extras'])->toBe(0);
 });
 
 test('el rango de fechas incluye sus dos bordes', function () {
@@ -324,9 +309,9 @@ test('el rango de fechas incluye sus dos bordes', function () {
     // contra `'2026-11-05'` como cadena excluye el día entero, y con todos
     // los registros a media mañana y ninguno en el borde ese fallo no se
     // vería: la prueba pasaría con `where` en vez de `whereDate`.
-    relevoDelDia('2026-11-02', EntregaTurnoSeguridad::SECCION_FRENTE, '00:00');
-    relevoDelDia('2026-11-05', EntregaTurnoSeguridad::SECCION_ATRAS, '23:59');
-    relevoDelDia('2026-11-06', EntregaTurnoSeguridad::SECCION_FRENTE, '07:30');
+    relevoDelDia('2026-11-02', EntregaTurnoSeguridad::SECCION_CASETA, '00:00');
+    relevoDelDia('2026-11-05', EntregaTurnoSeguridad::SECCION_PLATAFORMA, '23:59');
+    relevoDelDia('2026-11-06', EntregaTurnoSeguridad::SECCION_CASETA, '07:30');
 
     $fechas = array_column(
         listado(['fecha_inicio' => '2026-11-02', 'fecha_fin' => '2026-11-05'])->json('data'),
@@ -337,8 +322,109 @@ test('el rango de fechas incluye sus dos bordes', function () {
 });
 
 test('per_page tiene piso: el cero y los negativos dan uno', function (int $pedido) {
-    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_FRENTE);
-    relevoDelDia('2026-11-03', EntregaTurnoSeguridad::SECCION_FRENTE);
+    relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA);
+    relevoDelDia('2026-11-03', EntregaTurnoSeguridad::SECCION_CASETA);
 
     expect(listado(['per_page' => $pedido])->json('meta.per_page'))->toBe(1);
 })->with([0, -5]);
+
+test('la fila del dia se llama caseta y plataforma', function () {
+    relevoDelDia('2026-11-09', EntregaTurnoSeguridad::SECCION_CASETA);
+
+    $fila = listado()->json('data.0');
+
+    expect($fila)->toHaveKeys(['fecha', 'caseta', 'plataforma'])
+        ->and($fila)->not->toHaveKey('frente')
+        ->and($fila)->not->toHaveKey('atras');
+});
+
+test('la seccion dice que firmas le faltan, en orden', function () {
+    relevoDelDia('2026-11-09', EntregaTurnoSeguridad::SECCION_CASETA);
+
+    expect(listado()->json('data.0.caseta.firmas_faltantes'))->toBe(['jefe_area', 'fbo']);
+});
+
+test('con solo la firma del jefe queda faltando la del fbo', function () {
+    $relevo = relevoDelDia('2026-11-09', EntregaTurnoSeguridad::SECCION_CASETA);
+    firmarRelevoDelDia($relevo, EntregaTurnoSeguridad::ROL_JEFE_AREA);
+
+    expect(listado()->json('data.0.caseta.firmas_faltantes'))->toBe(['fbo']);
+});
+
+test('con las dos firmas de cierre la lista de faltantes queda vacia', function () {
+    $relevo = relevoDelDia('2026-11-09', EntregaTurnoSeguridad::SECCION_CASETA);
+    firmarRelevoDelDia($relevo, EntregaTurnoSeguridad::ROL_JEFE_AREA);
+    firmarRelevoDelDia($relevo, EntregaTurnoSeguridad::ROL_FBO);
+
+    expect(listado()->json('data.0.caseta.firmas_faltantes'))->toBe([]);
+});
+
+test('la seccion trae la pernocta del dia en vivo', function () {
+    PernoctaDia::create(['fecha' => '2026-11-09', 'matricula' => 'XA-UNO']);
+    PernoctaDia::create(['fecha' => '2026-11-09', 'matricula' => 'XA-DOS']);
+    PernoctaDia::create(['fecha' => '2026-11-08', 'matricula' => 'XA-TRE']);
+
+    relevoDelDia('2026-11-09', EntregaTurnoSeguridad::SECCION_CASETA);
+
+    expect(listado()->json('data.0.caseta.pernocta'))->toBe(2);
+});
+
+test('la seccion congelada trae la pernocta que se guardo, no la de hoy', function () {
+    $relevo = relevoDelDia('2026-11-09', EntregaTurnoSeguridad::SECCION_CASETA);
+    $relevo->update(['resumen' => [
+        ['clave' => 'pernocta', 'titulo' => 'Pernocta del día', 'texto' => '9 aeronaves', 'total' => 9],
+    ]]);
+
+    PernoctaDia::create(['fecha' => '2026-11-09', 'matricula' => 'XA-UNO']);
+
+    expect(listado()->json('data.0.caseta.pernocta'))->toBe(9);
+});
+
+test('el listado no pide el resumen completo por renglon', function () {
+    // Diez días con sus dos puestos. Si el controlador llamara al servicio
+    // del resumen por sección, serían ciento ochenta consultas para pintar
+    // diez renglones, y nadie lo vería hasta que la tabla creciera.
+    for ($dia = 1; $dia <= 10; $dia++) {
+        $fecha = sprintf('2026-11-%02d', $dia);
+        relevoDelDia($fecha, EntregaTurnoSeguridad::SECCION_CASETA, '07:30');
+        relevoDelDia($fecha, EntregaTurnoSeguridad::SECCION_PLATAFORMA, '19:00');
+    }
+
+    $usuario = User::factory()->create();
+
+    DB::enableQueryLog();
+
+    $this->actingAs($usuario)
+        ->getJson('/api/EntregaTurnoSeguridad?per_page=10')
+        ->assertSuccessful();
+
+    $consultas = count(DB::getQueryLog());
+    DB::disableQueryLog();
+
+    expect($consultas)->toBeLessThan(15);
+});
+
+test('el filtro de estado distingue a quien le falta', function () {
+    $soloJefe = relevoDelDia('2026-11-09', EntregaTurnoSeguridad::SECCION_CASETA);
+    firmarRelevoDelDia($soloJefe, EntregaTurnoSeguridad::ROL_JEFE_AREA);
+
+    $completo = relevoDelDia('2026-11-07', EntregaTurnoSeguridad::SECCION_CASETA);
+    firmarRelevoDelDia($completo, EntregaTurnoSeguridad::ROL_JEFE_AREA);
+    firmarRelevoDelDia($completo, EntregaTurnoSeguridad::ROL_FBO);
+
+    expect(listado(['estado' => 'falta_fbo'])->json('meta.total'))->toBe(1)
+        ->and(listado(['estado' => 'falta_jefe_area'])->json('meta.total'))->toBe(0)
+        ->and(listado(['estado' => 'completas'])->json('meta.total'))->toBe(1);
+});
+
+test('el estado solo admite sus tres valores', function () {
+    listado(['estado' => 'cualquiera'])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('estado');
+});
+
+test('la seccion solo admite los nombres nuevos', function () {
+    listado(['seccion' => 'frente'])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('seccion');
+});
