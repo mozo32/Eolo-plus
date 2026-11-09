@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\EntregaTurnoSeguridad;
+use App\Models\Firma;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Support\Facades\Storage;
@@ -230,15 +231,35 @@ test('el detalle fija el contrato que lee la vista previa', function () {
     // alguien las renombre en el servidor: no hay corredor de pruebas de
     // JavaScript. Esta prueba es la única red de ese contrato.
     //
-    // Las DOS firmas van en el PUT porque las dos pantallas buscan la suya
-    // por el `rol` del pivote: `VistaPreviaEntregaTurno` pinta las dos
-    // columnas y `FormEntregaTurno` enseña la firma vigente de cada rol. Con
-    // solo la del FBO vigilado, un renombre de `quien_entrega` pasaba.
+    // Las DOS firmas tienen que estar en el detalle porque las dos pantallas
+    // buscan la suya por el `rol` del pivote: `VistaPreviaEntregaTurno` pinta
+    // las dos columnas y `FormEntregaTurno` enseña la firma vigente de cada
+    // rol. Con solo la del FBO vigilado, un renombre de `quien_entrega` pasaba.
+    //
+    // La de quien entrega se adjunta por el modelo, con su archivo en el disco
+    // falso (el detalle omite las firmas sin archivo): sustituirla por el PUT
+    // de un FBO ajeno ya no se permite, y esta prueba no trata de eso.
     $relevo = relevoGuardado(['observaciones' => 'Quedó una camioneta sin resguardo.']);
+
+    $ruta = 'firmas/prueba/quien_entrega-'.$relevo->id.'.png';
+    Storage::disk('public')->put($ruta, base64_decode(explode(',', firmaBase64Valida())[1]));
+    $entrega = Firma::create([
+        'disk' => 'public',
+        'path' => $ruta,
+        'original_name' => 'quien_entrega.png',
+        'mime' => 'image/png',
+        'size' => 10,
+        'sha1' => sha1($ruta),
+    ]);
+    $relevo->firmas()->attach($entrega->id, [
+        'rol' => EntregaTurnoSeguridad::ROL_QUIEN_ENTREGA,
+        'tag' => 'Firma de quien entrega',
+        'orden' => 0,
+        'status' => 'A',
+    ]);
 
     $this->actingAs(usuarioCon('fbo'))
         ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
-            'firma_quien_entrega' => firmaBase64Valida(),
             'firma_fbo' => firmaBase64Valida(),
         ])
         ->assertSuccessful();
