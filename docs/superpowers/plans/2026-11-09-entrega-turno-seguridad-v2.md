@@ -353,8 +353,20 @@ El resto de la suite del módulo **va a fallar** en este punto, porque el contro
 
 - [ ] **Step 6: Comprobar que la migración se deshace**
 
-Run: `php artisan migrate:fresh --env=testing && php artisan migrate:rollback --step=1 --env=testing && php artisan migrate --env=testing`
+La comprobación va contra una base sqlite **desechable**, nunca contra la del proyecto:
+
+```bash
+touch .superpowers/sdd/2026-11-09-entrega-turno-seguridad-v2/rollback.sqlite
+DB_CONNECTION=sqlite DB_DATABASE=.superpowers/sdd/2026-11-09-entrega-turno-seguridad-v2/rollback.sqlite php artisan migrate --force --no-interaction
+DB_CONNECTION=sqlite DB_DATABASE=.superpowers/sdd/2026-11-09-entrega-turno-seguridad-v2/rollback.sqlite php artisan migrate:rollback --step=1 --force --no-interaction
+DB_CONNECTION=sqlite DB_DATABASE=.superpowers/sdd/2026-11-09-entrega-turno-seguridad-v2/rollback.sqlite php artisan migrate --force --no-interaction
+```
+
 Expected: los tres comandos terminan sin error. Si `down()` falla, se arregla antes de seguir: una migración que no se deshace no se puede probar dos veces.
+
+**Nunca `migrate:fresh`, `migrate:refresh` ni `db:wipe`, y nunca sin `DB_DATABASE` apuntando a ese archivo desechable.** No hay `.env.testing` en el proyecto: la base de pruebas se configura SOLO desde `phpunit.xml`, así que un `--env=testing` no cambia la conexión y el comando acabaría ejecutándose contra `eolo_plus`, que es la base real del usuario. Un `migrate:fresh` ahí la borraría entera.
+
+Borrar el archivo al terminar el paso: `rm .superpowers/sdd/2026-11-09-entrega-turno-seguridad-v2/rollback.sqlite`.
 
 - [ ] **Step 7: Commit**
 
@@ -1072,7 +1084,7 @@ function usuarioDeCongelado(string $slug): User
 }
 
 /** Un relevo recién creado por la API: ya trae la firma de quien entrega. */
-function relevoReciénCreado(): EntregaTurnoSeguridad
+function relevoRecienCreado(): EntregaTurnoSeguridad
 {
     test()->actingAs(User::factory()->create())
         ->postJson('/api/EntregaTurnoSeguridad', [
@@ -1089,7 +1101,7 @@ beforeEach(function () {
 });
 
 test('con dos firmas el resumen sigue sin congelar', function () {
-    $relevo = relevoReciénCreado();
+    $relevo = relevoRecienCreado();
 
     $this->actingAs(usuarioDeCongelado('jefe_area'))
         ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
@@ -1103,7 +1115,7 @@ test('con dos firmas el resumen sigue sin congelar', function () {
 test('la tercera firma congela el resumen', function () {
     PernoctaDia::create(['fecha' => now()->toDateString(), 'matricula' => 'XA-UNO']);
 
-    $relevo = relevoReciénCreado();
+    $relevo = relevoRecienCreado();
 
     $this->actingAs(usuarioDeCongelado('jefe_area'))
         ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
@@ -1124,7 +1136,7 @@ test('la tercera firma congela el resumen', function () {
 });
 
 test('el orden de las dos firmas de cierre da igual', function () {
-    $relevo = relevoReciénCreado();
+    $relevo = relevoRecienCreado();
 
     $this->actingAs(usuarioDeCongelado('fbo'))
         ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
@@ -1144,7 +1156,7 @@ test('el orden de las dos firmas de cierre da igual', function () {
 });
 
 test('un relevo congelado no cambia aunque despues se registre mas movimiento', function () {
-    $relevo = relevoReciénCreado();
+    $relevo = relevoRecienCreado();
 
     foreach (['jefe_area', 'fbo'] as $rol) {
         $this->actingAs(usuarioDeCongelado($rol))
@@ -1165,7 +1177,7 @@ test('un relevo congelado no cambia aunque despues se registre mas movimiento', 
 });
 
 test('reponer una firma no recalcula un resumen ya congelado', function () {
-    $relevo = relevoReciénCreado();
+    $relevo = relevoRecienCreado();
 
     foreach (['jefe_area', 'fbo'] as $rol) {
         $this->actingAs(usuarioDeCongelado($rol))
@@ -1187,7 +1199,7 @@ test('reponer una firma no recalcula un resumen ya congelado', function () {
 });
 
 test('el jefe de area no puede poner la firma del fbo', function () {
-    $relevo = relevoReciénCreado();
+    $relevo = relevoRecienCreado();
 
     $this->actingAs(usuarioDeCongelado('jefe_area'))
         ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
@@ -1199,7 +1211,7 @@ test('el jefe de area no puede poner la firma del fbo', function () {
 });
 
 test('el fbo no puede poner la firma del jefe de area', function () {
-    $relevo = relevoReciénCreado();
+    $relevo = relevoRecienCreado();
 
     $this->actingAs(usuarioDeCongelado('fbo'))
         ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
@@ -1211,7 +1223,7 @@ test('el fbo no puede poner la firma del jefe de area', function () {
 });
 
 test('el administrador puede poner las dos firmas de cierre', function () {
-    $relevo = relevoReciénCreado();
+    $relevo = relevoRecienCreado();
 
     $this->actingAs(usuarioDeCongelado('admin'))
         ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
@@ -1224,7 +1236,7 @@ test('el administrador puede poner las dos firmas de cierre', function () {
 });
 
 test('la firma del jefe de area se guarda con su etiqueta', function () {
-    $relevo = relevoReciénCreado();
+    $relevo = relevoRecienCreado();
 
     $this->actingAs(usuarioDeCongelado('jefe_area'))
         ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
