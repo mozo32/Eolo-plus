@@ -59,9 +59,10 @@ class UpdateEntregaTurnoSeguridadRequest extends FormRequest
              * El `=` solo se admite como relleno FINAL y el cierre es `\z`:
              * con `[A-Za-z0-9+\/=]{16,}$` dieciséis `=` pasaban y dejaban un
              * archivo de cero bytes con su renglón de `Firma`, o sea un
-             * relevo «firmado» sin firma. Las tres reglas de forma del módulo
-             * —ésta, la de `firma_fbo` y la de `Store`— son la MISMA a
-             * propósito: si se cambia una, se cambian las tres.
+             * relevo «firmado» sin firma. Las cuatro reglas de forma del módulo
+             * —`firma_quien_entrega`, `firma_jefe_area` y `firma_fbo` aquí, y
+             * `firma_quien_entrega` en `Store`— son la MISMA a propósito: si
+             * se cambia una, se cambian las cuatro.
              */
             'firma_quien_entrega' => [
                 'sometimes',

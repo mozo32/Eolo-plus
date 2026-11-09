@@ -70,7 +70,7 @@ test('el fbo, el jefe de área y el admin sí pueden editar', function (string $
     expect($relevo->fresh()->observaciones)->toBe('Nota nueva');
 })->with(['fbo', 'jefe_area', 'admin']);
 
-test('el fbo y el admin sí pueden eliminar', function (string $slug) {
+test('el fbo, el jefe de área y el admin sí pueden eliminar', function (string $slug) {
     $relevo = relevoGuardado();
 
     $this->actingAs(usuarioCon($slug))
@@ -78,7 +78,7 @@ test('el fbo y el admin sí pueden eliminar', function (string $slug) {
         ->assertSuccessful();
 
     expect($relevo->fresh()->status)->toBe('N');
-})->with(['fbo', 'admin']);
+})->with(['fbo', 'jefe_area', 'admin']);
 
 test('eliminar solo cambia el status: el renglón sigue en la base', function () {
     $relevo = relevoGuardado();
