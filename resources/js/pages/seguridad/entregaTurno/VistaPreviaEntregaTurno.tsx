@@ -100,9 +100,9 @@ export default function VistaPreviaEntregaTurno({ fila, onCerrar }: Props) {
         const pedir = (seccion: Seccion) =>
             fila[seccion] ? fetchRelevo(fila[seccion].id).then(respuesta => respuesta.data) : Promise.resolve(null);
 
-        Promise.all([pedir('frente'), pedir('atras')])
-            .then(([frente, atras]) => {
-                if (vigente) setDetalles({ frente, atras });
+        Promise.all([pedir('caseta'), pedir('plataforma')])
+            .then(([caseta, plataforma]) => {
+                if (vigente) setDetalles({ caseta, plataforma });
             })
             .catch((e: unknown) => {
                 if (vigente) setError(e instanceof ErrorDeApi ? e.message : 'No se pudo conectar con el servidor.');
