@@ -6,7 +6,9 @@ use App\Models\Role;
 use App\Models\User;
 
 /*
- * El botón de pendientes del FBO: qué relevos le faltan por firmar.
+ * El botón de pendientes: qué relevos le faltan por firmar a QUIEN PREGUNTA
+ * (el jefe de área ve los que no tienen su firma, el FBO los suyos y el
+ * administrador los que no tienen alguna de las dos).
  *
  * Son por SECCIÓN, no por día: si la caseta entregó y la plataforma no,
  * pendientes enseña solo el de la caseta.
@@ -113,7 +115,7 @@ test('un relevo retirado no sale como pendiente', function () {
     expect(pendientes()->json('data'))->toBe([]);
 });
 
-test('lo más viejo va primero: es la cola de trabajo del FBO', function () {
+test('lo más viejo va primero: es la cola de trabajo de quien firma', function () {
     $nuevo = relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_CASETA);
     $viejo = relevoEn('2026-11-01 19:00:00', EntregaTurnoSeguridad::SECCION_PLATAFORMA);
 

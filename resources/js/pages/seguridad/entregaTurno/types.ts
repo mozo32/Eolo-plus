@@ -43,22 +43,19 @@ export type FilaRelevo = {
 };
 
 /**
- * Los dos roles del pivote de firmas, como los escribe el servidor en
- * `EntregaTurnoSeguridad::ROL_QUIEN_ENTREGA` y `::ROL_FBO`.
+ * Los tres roles del pivote de firmas, como los escribe el servidor en
+ * `EntregaTurnoSeguridad::ROL_QUIEN_ENTREGA`, `::ROL_JEFE_AREA` y `::ROL_FBO`.
  *
  * Están aquí para que las pantallas no repitan el literal: `tsc` no atrapa un
  * renombre del lado servidor, así que un literal suelto en un componente
  * seguiría compilando y dejaría de encontrar la firma en silencio. La prueba
- * de contrato del detalle vigila los dos valores.
+ * de contrato del detalle vigila los valores.
  */
 export const ROL_QUIEN_ENTREGA = 'quien_entrega';
 
 export const ROL_FBO = 'fbo';
 
 export const ROL_JEFE_AREA = 'jefe_area';
-
-/** Los dos roles que cierran el relevo, en el orden en que los manda el servidor. */
-export const ROLES_DE_CIERRE = [ROL_JEFE_AREA, ROL_FBO] as const;
 
 export const ETIQUETA_ROL: Record<string, string> = {
     quien_entrega: 'Quien entrega',

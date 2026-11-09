@@ -34,6 +34,27 @@ final class ResumenDelDiaSeguridad
     {
         $fecha = $dia->toDateString();
 
+        /*
+         * `where` y `whereDate` conviven a propósito: lo decide el TIPO de la
+         * columna, y no se deben «unificar».
+         *
+         * DATETIME (`whereDate` es imprescindible: una igualdad con
+         * `'2026-11-09'` solo atraparía las 00:00:00 y perdería el día):
+         * `movimientos_csae.fecha_hora_entrada` / `fecha_hora_salida`,
+         * `estacionamiento_subterraneos.fecha_ingreso` / `fecha_salida` y
+         * `movimientos_vehiculos.created_at`.
+         *
+         * DATE (una igualdad directa con `where` basta y deja usar el índice;
+         * `whereDate` envuelve la columna en `DATE()` y lo anula):
+         * `pernocta_dia.fecha`, que es la única que hoy usa `where`, y
+         * `operaciones_diarias.fecha` y `registro_visitantes.fecha_entrada` /
+         * `fecha_salida`, que hoy usan `whereDate` sin necesitarlo (da el
+         * mismo conteo; solo pierde el índice).
+         *
+         * Cambiar un DATETIME a `where` rompe el conteo; cambiar un DATE a
+         * `whereDate` solo cuesta el índice. Por eso el criterio es el tipo.
+         */
+
         $vehiculos = movimientoVehiculo::query()
             ->whereDate('created_at', $fecha)
             ->selectRaw('tipo, COUNT(*) as total')

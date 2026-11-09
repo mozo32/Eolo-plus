@@ -194,3 +194,114 @@ test('la firma del jefe de area se guarda con su etiqueta', function () {
     expect($firma)->not->toBeNull()
         ->and($firma->pivot->tag)->toBe('Firma del jefe de área');
 });
+
+/** Los tres cierres por la API: devuelve el relevo ya congelado. */
+function relevoCongeladoPorLaApi(): EntregaTurnoSeguridad
+{
+    $relevo = relevoRecienCreado();
+
+    foreach (['jefe_area', 'fbo'] as $rol) {
+        test()->actingAs(usuarioDeCongelado($rol))
+            ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
+                'fecha_hora' => $relevo->fecha_hora->format('Y-m-d H:i:s'),
+                'firma_'.$rol => firmaDeCongelado(),
+            ])->assertSuccessful();
+    }
+
+    expect($relevo->fresh()->resumen)->toBeArray();
+
+    return $relevo->fresh();
+}
+
+test('un relevo congelado no puede cambiar de dia', function () {
+    $relevo = relevoCongeladoPorLaApi();
+    $original = $relevo->fecha_hora->format('Y-m-d H:i:s');
+
+    $this->actingAs(usuarioDeCongelado('admin'))
+        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
+            'fecha_hora' => now()->subDay()->format('Y-m-d H:i:s'),
+        ])->assertStatus(422);
+
+    expect($relevo->fresh()->fecha_hora->format('Y-m-d H:i:s'))->toBe($original);
+});
+
+test('un relevo congelado si puede cambiar la hora dentro del mismo dia', function () {
+    $relevo = relevoCongeladoPorLaApi();
+    $nueva = $relevo->fecha_hora->copy()->setTime(3, 15, 0)->format('Y-m-d H:i:s');
+
+    $this->actingAs(usuarioDeCongelado('admin'))
+        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
+            'fecha_hora' => $nueva,
+        ])->assertSuccessful();
+
+    expect($relevo->fresh()->fecha_hora->format('Y-m-d H:i:s'))->toBe($nueva);
+});
+
+test('un relevo sin congelar si puede cambiar de dia', function () {
+    $relevo = relevoRecienCreado();
+    $nueva = now()->subDay()->format('Y-m-d H:i:s');
+
+    $this->actingAs(usuarioDeCongelado('admin'))
+        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
+            'fecha_hora' => $nueva,
+        ])->assertSuccessful();
+
+    expect($relevo->fresh()->fecha_hora->format('Y-m-d H:i:s'))->toBe($nueva);
+});
+
+/** Cuántas firmas vigentes (`A`) de quien entrega tiene el relevo, y el id de la primera. */
+function firmaVigenteDeQuienEntrega(EntregaTurnoSeguridad $relevo): array
+{
+    $vigentes = $relevo->fresh()->load('firmas')->firmas
+        ->filter(fn ($firma) => $firma->pivot->rol === EntregaTurnoSeguridad::ROL_QUIEN_ENTREGA);
+
+    return [$vigentes->count(), $vigentes->first()?->id];
+}
+
+test('un fbo que no es el dueño no puede reponer la firma de quien entrega', function () {
+    $relevo = relevoRecienCreado();
+    [, $idOriginal] = firmaVigenteDeQuienEntrega($relevo);
+
+    $this->actingAs(usuarioDeCongelado('fbo'))
+        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
+            'fecha_hora' => $relevo->fecha_hora->format('Y-m-d H:i:s'),
+            'firma_quien_entrega' => firmaDeCongelado(),
+        ])->assertForbidden();
+
+    expect(firmaVigenteDeQuienEntrega($relevo))->toBe([1, $idOriginal]);
+});
+
+test('el dueño del relevo puede reponer su firma de quien entrega', function () {
+    $relevo = relevoRecienCreado();
+    [, $idOriginal] = firmaVigenteDeQuienEntrega($relevo);
+
+    // Para llegar al guardia de la firma hay que poder editar: el dueño
+    // lo es porque además es jefe de área.
+    $dueno = $relevo->usuario;
+    $dueno->roles()->attach(Role::firstOrCreate(['slug' => 'jefe_area'], ['nombre' => 'Jefe_area'])->id);
+
+    $this->actingAs($dueno)
+        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
+            'fecha_hora' => $relevo->fecha_hora->format('Y-m-d H:i:s'),
+            'firma_quien_entrega' => firmaDeCongelado(),
+        ])->assertSuccessful();
+
+    [$cuantas, $idNuevo] = firmaVigenteDeQuienEntrega($relevo);
+
+    expect($cuantas)->toBe(1)->and($idNuevo)->not->toBe($idOriginal);
+});
+
+test('un administrador puede reponer la firma de quien entrega', function () {
+    $relevo = relevoRecienCreado();
+    [, $idOriginal] = firmaVigenteDeQuienEntrega($relevo);
+
+    $this->actingAs(usuarioDeCongelado('admin'))
+        ->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", [
+            'fecha_hora' => $relevo->fecha_hora->format('Y-m-d H:i:s'),
+            'firma_quien_entrega' => firmaDeCongelado(),
+        ])->assertSuccessful();
+
+    [$cuantas, $idNuevo] = firmaVigenteDeQuienEntrega($relevo);
+
+    expect($cuantas)->toBe(1)->and($idNuevo)->not->toBe($idOriginal);
+});

@@ -16,7 +16,6 @@ import {
     type FirmaRelevo,
     type PayloadRelevo,
     type PayloadRelevoNuevo,
-    type Seccion,
 } from './types';
 import FirmaActual from './FirmaActual';
 
@@ -56,7 +55,7 @@ function Formulario({ relevo, nombreUsuario, puedeFirmarJefe, puedeFirmarFbo, on
     const [datos, setDatos] = useState({
         fecha: relevo?.fecha ?? fechaHoy(),
         hora: relevo?.hora ?? horaAhora(),
-        seccion: relevo?.seccion ?? ('caseta' as Seccion),
+        seccion: relevo?.seccion ?? SECCIONES[0],
         observaciones: relevo?.observaciones ?? '',
     });
     const [firmaQuienEntrega, setFirmaQuienEntrega] = useState('');

@@ -10,6 +10,7 @@ use App\Models\EntregaTurnoSeguridad;
 use App\Models\Firma;
 use App\Models\PernoctaDia;
 use App\Support\ResumenDelDiaSeguridad;
+use App\Support\VentanasDeFecha;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -447,12 +448,50 @@ class EntregaTurnoSeguridadController extends Controller
          */
         $esAdmin = $usuario->hasRole('admin');
 
-        if (is_string($firmaJefe) && ! $esAdmin && ! $usuario->hasRole(EntregaTurnoSeguridad::ROL_JEFE_AREA)) {
+        /*
+         * Una cadena vacía es el «no firmé» que `guardarFirmaBase64` ignora:
+         * los tres guardias juzgan lo mismo que ese método, o sea que solo
+         * cuenta como intento de firmar lo que trae contenido.
+         */
+        $intentaJefe = is_string($firmaJefe) && trim($firmaJefe) !== '';
+        $intentaFbo = is_string($firmaFbo) && trim($firmaFbo) !== '';
+        $intentaEntrega = is_string($firmaEntrega) && trim($firmaEntrega) !== '';
+
+        if ($intentaJefe && ! $esAdmin && ! $usuario->hasRole(EntregaTurnoSeguridad::ROL_JEFE_AREA)) {
             return response()->json(['message' => 'Solo el jefe de área puede poner su firma.'], 403);
         }
 
-        if (is_string($firmaFbo) && ! $esAdmin && ! $usuario->hasRole(EntregaTurnoSeguridad::ROL_FBO)) {
+        if ($intentaFbo && ! $esAdmin && ! $usuario->hasRole(EntregaTurnoSeguridad::ROL_FBO)) {
             return response()->json(['message' => 'Solo el FBO puede poner su firma.'], 403);
+        }
+
+        /*
+         * Reponer la firma de quien entrega RETIRA la original, así que sin
+         * esta guardia cualquier editor sustituiría en silencio la firma de
+         * quien entregó el turno. Va después del `find` porque necesita al
+         * dueño del relevo.
+         */
+        if ($intentaEntrega && ! $esAdmin && $relevo->user_id !== $usuario->id) {
+            return response()->json([
+                'message' => 'Solo quien entregó el turno o el administrador puede reponer su firma.',
+            ], 403);
+        }
+
+        /*
+         * Un relevo con las tres firmas es un documento que describe UN día:
+         * si cambiara de día, `fecha` diría hoy y las cifras congeladas
+         * seguirían siendo las de ayer. Cambiar la hora dentro del mismo día
+         * sí se permite, y cambiar el día de un relevo sin congelar también
+         * (así se firman desde la cola los relevos viejos).
+         */
+        if (
+            $relevo->resumen !== null
+            && isset($validado['fecha_hora'])
+            && VentanasDeFecha::diaQueGuardaElModelo($validado['fecha_hora']) !== $relevo->fecha_hora->toDateString()
+        ) {
+            return response()->json([
+                'message' => 'Un relevo ya firmado por los tres no puede cambiar de día.',
+            ], 422);
         }
 
         DB::transaction(function () use ($relevo, $validado, $firmaEntrega, $firmaJefe, $firmaFbo): void {
