@@ -354,19 +354,40 @@ class EntregaTurnoSeguridadController extends Controller
     }
 
     /**
-     * Los relevos a los que les falta la firma del FBO.
+     * Los relevos que a QUIEN PREGUNTA le falta firmar.
+     *
+     * No es una lista fija: un jefe de área ve los que no tienen su firma,
+     * un FBO los que no tienen la suya, y un administrador los que no tienen
+     * alguna de las dos. Quien no pueda firmar ninguna recibe la cola vacía,
+     * porque una cola de trabajo ajena no es información, es ruido.
      *
      * De lo más viejo a lo más nuevo a propósito: es una cola de trabajo, y
      * lo que lleva días sin firmar es lo que corre prisa.
      */
-    public function pendientes(): JsonResponse
+    public function pendientes(Request $request): JsonResponse
     {
+        $usuario = $request->user();
+        $esAdmin = $usuario->hasRole('admin');
+
+        $roles = array_values(array_filter(
+            EntregaTurnoSeguridad::ROLES_DE_CIERRE,
+            static fn (string $rol): bool => $esAdmin || $usuario->hasRole($rol),
+        ));
+
+        if ($roles === []) {
+            return response()->json(['data' => []]);
+        }
+
         $relevos = EntregaTurnoSeguridad::activas()
-            ->with('usuario:id,name')
-            ->whereDoesntHave(
-                'firmas',
-                static fn (Builder $firma): Builder => $firma->where('firmables.rol', EntregaTurnoSeguridad::ROL_FBO)
-            )
+            ->with(['usuario:id,name', 'firmas'])
+            ->where(function (Builder $query) use ($roles): void {
+                foreach ($roles as $rol) {
+                    $query->orWhereDoesntHave(
+                        'firmas',
+                        static fn (Builder $firma): Builder => $firma->where('firmables.rol', $rol)
+                    );
+                }
+            })
             ->orderBy('fecha_hora')
             ->orderBy('id')
             ->get()
@@ -376,6 +397,7 @@ class EntregaTurnoSeguridadController extends Controller
                 'fecha' => $relevo->fecha_hora->toDateString(),
                 'hora' => $relevo->fecha_hora->format('H:i'),
                 'seccion' => $relevo->seccion,
+                'falta' => array_values(array_intersect($relevo->firmasFaltantes(), $roles)),
             ])
             ->all();
 
