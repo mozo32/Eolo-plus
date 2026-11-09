@@ -252,9 +252,19 @@ Por cada sección (`caseta`, `plataforma`), en lugar de `firmado_fbo` y
 `firmas_faltantes` lista los roles que faltan, de los dos que cierran
 (`jefe_area`, `fbo`); vacío quiere decir cerrado. `pernocta` es el número del
 renglón de pernocta del resumen de ESE relevo —congelado si lo está, en vivo
-si no—, que es lo que pinta la columna de la tabla. Cuando el día tiene las
-dos secciones, la columna enseña el de la más reciente, que es la misma sobre
-la que actúan los botones de la fila.
+si no—, que es lo que pinta la columna de la tabla.
+
+Cuando el día tiene los dos puestos y sus números difieren —pasa si uno se
+congeló antes que el otro—, la columna enseña **los dos**, la caseta primero.
+Quedarse con uno obligaría a decidir cuál gana, y cualquier elección borraría
+lo que dice el otro documento.
+
+> Una versión anterior de esta sección decía que la columna enseñaba «el de la
+> más reciente, que es la misma sobre la que actúan los botones de la fila».
+> Era incoherente consigo misma: `idUnicoDe` devuelve `null` justamente cuando
+> el día trae los dos puestos, para preguntar sobre cuál se actúa, así que no
+> existe «la misma sobre la que actúan los botones». Lo detectó la revisión
+> final de la rama.
 
 ### `GET /api/EntregaTurnoSeguridad/{id}` — detalle
 
