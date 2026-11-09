@@ -351,7 +351,7 @@ class EntregaTurnoSeguridadController extends Controller
             ], 403);
         }
 
-        $relevo = EntregaTurnoSeguridad::activas()->find($id);
+        $relevo = EntregaTurnoSeguridad::activas()->with('firmas')->find($id);
 
         if ($relevo === null) {
             return response()->json(['message' => 'El relevo no existe.'], 404);
@@ -412,6 +412,8 @@ class EntregaTurnoSeguridadController extends Controller
      * transacción. El `load` es obligatorio: la relación que trae el modelo
      * es la de antes de adjuntar, así que sin releerla la firma recién
      * puesta no contaría y el relevo nunca se cerraría.
+     * El `load` es obligatorio y no redundante: `update` trae el relevo con las
+     * firmas ya cargadas, y sin él la colección sería la de antes de adjuntar.
      *
      * No recalcula lo ya congelado. Un relevo cerrado es un documento:
      * reponer una firma no cambia el día que describe.
