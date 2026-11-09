@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 /*
  * El listado combina las dos secciones de un día en UN renglón, y pagina
  * días y no registros: si paginara registros, una página podría partir un
- * día y dejar el frente en una hoja y el de atrás en la siguiente.
+ * día y dejar la caseta en una hoja y la plataforma en la siguiente.
  */
 
 function relevoDelDia(string $dia, string $seccion, string $hora = '07:30', array $extra = []): EntregaTurnoSeguridad
@@ -241,9 +241,9 @@ test('falta_fbo excluye los días ya firmados y el renglón sigue completo', fun
     // «completas». Lo que se comprueba aquí es otra cosa, y sí importa: que
     // el filtro decida qué DÍAS salen y no qué secciones se ven, y que un
     // día enteramente firmado no aparezca.
-    $frente = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA);
+    $caseta = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA);
     relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_PLATAFORMA, '19:00');
-    firmarRelevoDelDia($frente, EntregaTurnoSeguridad::ROL_FBO);
+    firmarRelevoDelDia($caseta, EntregaTurnoSeguridad::ROL_FBO);
 
     firmarRelevoDelDia(relevoDelDia('2026-11-03', EntregaTurnoSeguridad::SECCION_CASETA), EntregaTurnoSeguridad::ROL_FBO);
 
@@ -255,17 +255,17 @@ test('falta_fbo excluye los días ya firmados y el renglón sigue completo', fun
 });
 
 test('completas excluye el día en que una sección no está firmada', function () {
-    // El día 4 tiene el frente firmado y atrás sin firmar: NO está
+    // El día 4 tiene la caseta firmada y la plataforma sin firmar: NO está
     // completo. Filtrar registro por registro lo daría por completo a
-    // través del frente, que es el error que esta prueba vigila.
-    $frente4 = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA);
+    // través de la caseta, que es el error que esta prueba vigila.
+    $caseta4 = relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_CASETA);
     relevoDelDia('2026-11-04', EntregaTurnoSeguridad::SECCION_PLATAFORMA, '19:00');
-    firmarRelevoDelDia($frente4, EntregaTurnoSeguridad::ROL_JEFE_AREA);
-    firmarRelevoDelDia($frente4, EntregaTurnoSeguridad::ROL_FBO);
+    firmarRelevoDelDia($caseta4, EntregaTurnoSeguridad::ROL_JEFE_AREA);
+    firmarRelevoDelDia($caseta4, EntregaTurnoSeguridad::ROL_FBO);
 
-    $frente3 = relevoDelDia('2026-11-03', EntregaTurnoSeguridad::SECCION_CASETA);
-    firmarRelevoDelDia($frente3, EntregaTurnoSeguridad::ROL_JEFE_AREA);
-    firmarRelevoDelDia($frente3, EntregaTurnoSeguridad::ROL_FBO);
+    $caseta3 = relevoDelDia('2026-11-03', EntregaTurnoSeguridad::SECCION_CASETA);
+    firmarRelevoDelDia($caseta3, EntregaTurnoSeguridad::ROL_JEFE_AREA);
+    firmarRelevoDelDia($caseta3, EntregaTurnoSeguridad::ROL_FBO);
 
     expect(array_column(listado(['estado' => 'completas'])->json('data'), 'fecha'))
         ->toBe(['2026-11-03']);
@@ -401,7 +401,7 @@ test('el listado no pide el resumen completo por renglon', function () {
     $consultas = count(DB::getQueryLog());
     DB::disableQueryLog();
 
-    expect($consultas)->toBeLessThan(15);
+    expect($consultas)->toBeLessThan(10);
 });
 
 test('el filtro de estado distingue a quien le falta', function () {
@@ -415,6 +415,22 @@ test('el filtro de estado distingue a quien le falta', function () {
     expect(listado(['estado' => 'falta_fbo'])->json('meta.total'))->toBe(1)
         ->and(listado(['estado' => 'falta_jefe_area'])->json('meta.total'))->toBe(0)
         ->and(listado(['estado' => 'completas'])->json('meta.total'))->toBe(1);
+});
+
+test('falta_jefe_area encuentra el dia con solo la firma del fbo', function () {
+    $soloFbo = relevoDelDia('2026-11-09', EntregaTurnoSeguridad::SECCION_CASETA);
+    firmarRelevoDelDia($soloFbo, EntregaTurnoSeguridad::ROL_FBO);
+
+    expect(array_column(listado(['estado' => 'falta_jefe_area'])->json('data'), 'fecha'))->toBe(['2026-11-09'])
+        ->and(listado(['estado' => 'falta_fbo'])->json('meta.total'))->toBe(0);
+});
+
+test('un dia sin ninguna firma de cierre sale en falta_jefe_area y en falta_fbo', function () {
+    relevoDelDia('2026-11-09', EntregaTurnoSeguridad::SECCION_CASETA);
+
+    expect(listado(['estado' => 'falta_jefe_area'])->json('meta.total'))->toBe(1)
+        ->and(listado(['estado' => 'falta_fbo'])->json('meta.total'))->toBe(1)
+        ->and(listado(['estado' => 'completas'])->json('meta.total'))->toBe(0);
 });
 
 test('el estado solo admite sus tres valores', function () {
