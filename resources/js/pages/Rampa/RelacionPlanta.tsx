@@ -38,8 +38,7 @@ export default function RelacionPlanta() {
                 <div className="space-y-4 animate-in fade-in duration-500">
                     <div className="flex flex-col justify-between gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center">
                         <div>
-                            <h2 className="text-xl font-black uppercase tracking-tighter text-slate-800">Relación de planta</h2>
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Control de préstamo · {EQUIPO_GPU}</p>
+                            <h2 className="text-xl font-black uppercase tracking-tighter text-slate-800">Planta {EQUIPO_GPU}</h2>
                         </div>
                         <button
                             type="button"
