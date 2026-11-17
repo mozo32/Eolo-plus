@@ -11,12 +11,14 @@ import {
     Edit2,
     Calendar,
     CreditCard,
+    Eye,
     Plane,
     Filter,
     X,
     ChevronDown
 } from 'lucide-react';
 import PdfComisariato from './servicioComisariato/PdfComisariato';
+import VistaPreviaComisariato from './servicioComisariato/VistaPreviaComisariato';
 import Swal from 'sweetalert2';
 import { fechaHoy } from '@/lib/fechaHoy';
 
@@ -53,6 +55,7 @@ export default function ServicioComisariato() {
     const [isEdit, setIsEdit] = useState(false);
     const [detalle, setDetalle] = useState<any>(null);
     const [pdfId, setPdfId] = useState<number | null>(null);
+    const [previaId, setPreviaId] = useState<number | null>(null);
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
     const [filtros, setFiltros] = useState<FiltrosComisariato>(() => filtrosIniciales());
@@ -514,6 +517,15 @@ export default function ServicioComisariato() {
 
                                                         <button
                                                             type="button"
+                                                            className="p-2 rounded transition-colors text-slate-400 hover:text-emerald-600"
+                                                            title="Vista previa"
+                                                            onClick={() => setPreviaId(row.id)}
+                                                        >
+                                                            <Eye size={16} />
+                                                        </button>
+
+                                                        <button
+                                                            type="button"
                                                             className="p-2 text-slate-400 hover:text-amber-600 font-black text-[10px]"
                                                             title="Exportar PDF"
                                                             onClick={() => setPdfId(row.id)}
@@ -777,6 +789,15 @@ export default function ServicioComisariato() {
                     </div>
                 </div>
             )}
+
+            <VistaPreviaComisariato
+                id={previaId}
+                onCerrar={() => setPreviaId(null)}
+                onDescargar={(id) => {
+                    setPreviaId(null);
+                    setPdfId(id);
+                }}
+            />
 
             <PdfComisariato
                 id={pdfId}
