@@ -1,3 +1,4 @@
+import { conMiles, soloDigitos } from "@/lib/miles";
 import React from "react";
 import {
     CheckCircle2,
@@ -166,7 +167,56 @@ const esHora24Valida = (hora: string): boolean => {
     return /^([01]\d|2[0-3]):[0-5]\d$/.test(hora);
 };
 
+/**
+ * Deja el cursor después del mismo dígito que tenía antes de formatear.
+ *
+ * Se cuentan dígitos y no posiciones de texto: al entrar o salir una coma la
+ * posición se recorre, pero el dígito sigue siendo el mismo. Sin esto, el
+ * cursor brinca al escribir en medio de la cifra.
+ */
+const colocarCursorTrasDigitos = (input: HTMLInputElement, digitos: number): void => {
+    const texto = input.value;
+    let vistos = 0;
+    let indice = 0;
+
+    while (indice < texto.length && vistos < digitos) {
+        if (/\d/.test(texto[indice])) {
+            vistos += 1;
+        }
+
+        indice += 1;
+    }
+
+    input.setSelectionRange(indice, indice);
+};
+
 const VehiculosSection: React.FC<Props> = ({ vehiculos, onChange }) => {
+    /**
+     * Guarda el kilometraje en dígitos pelados y lo repinta con coma.
+     *
+     * El repintado se hace sobre el nodo porque si lo tecleado no cambia los
+     * dígitos (una letra, por ejemplo) el estado no cambia, React no vuelve a
+     * renderizar y el campo se quedaría mostrando lo que el usuario tecleó.
+     */
+    const capturarKilometraje = (id: string, event: React.ChangeEvent<HTMLInputElement>): void => {
+        const input = event.target;
+        const hastaElCursor = input.selectionStart ?? input.value.length;
+        const digitosALaIzquierda = soloDigitos(input.value.slice(0, hastaElCursor)).length;
+        const limpio = soloDigitos(input.value);
+
+        onChange(id, "kilometraje", limpio);
+
+        requestAnimationFrame(() => {
+            const formateado = conMiles(limpio);
+
+            if (input.value !== formateado) {
+                input.value = formateado;
+            }
+
+            colocarCursorTrasDigitos(input, digitosALaIzquierda);
+        });
+    };
+
     const optionsBienMal = ["Bien", "Mal"];
     const optionsLimpieza = ["Limpio", "Sucio"];
     const nombresUnidades: Record<string, string> = {
@@ -360,11 +410,11 @@ const VehiculosSection: React.FC<Props> = ({ vehiculos, onChange }) => {
                                                 </label>
 
                                                 <input
-                                                    type="number"
-                                                    min="0"
-                                                    value={data.kilometraje ?? ""}
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={conMiles(data.kilometraje)}
                                                     onChange={(event) =>
-                                                        onChange(id, "kilometraje", event.target.value)
+                                                        capturarKilometraje(id, event)
                                                     }
                                                     placeholder="0"
                                                     className="w-full rounded-xl border-none bg-gray-50 p-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
