@@ -155,6 +155,36 @@ const TablaJefeArea: React.FC<TablaProps> = ({ onSeleccionar, onNuevoRegistro })
     };
     const [filtrosEdicion, setFiltrosEdicion] = useState({ ...filtros });
 
+    /** Último día del mes indicado (mes 1-12). Evita inventar un 31 de febrero. */
+    const ultimoDiaDelMes = (anio: number, mes: number) => new Date(anio, mes, 0).getDate();
+
+    /**
+     * Al elegir «mes» o «año» el periodo se rellena con el mes y el año de hoy.
+     *
+     * Sin esto el modal conservaba las fechas del modo anterior, así que el
+     * botón decía «MES» mientras el filtro seguía aplicando un solo día.
+     */
+    const cambiarPeriodo = (modo: string) => {
+        const hoy = new Date();
+        const anio = hoy.getFullYear();
+        const numeroMes = hoy.getMonth() + 1;
+        const mes = String(numeroMes).padStart(2, '0');
+
+        if (modo === 'mes') {
+            const ultimo = String(ultimoDiaDelMes(anio, numeroMes)).padStart(2, '0');
+
+            setFiltrosEdicion({ ...filtrosEdicion, periodo: modo, fechaInicio: `${anio}-${mes}-01`, fechaFin: `${anio}-${mes}-${ultimo}` });
+            return;
+        }
+
+        if (modo === 'año') {
+            setFiltrosEdicion({ ...filtrosEdicion, periodo: modo, fechaInicio: `${anio}-01-01`, fechaFin: `${anio}-12-31` });
+            return;
+        }
+
+        setFiltrosEdicion({ ...filtrosEdicion, periodo: modo });
+    };
+
     useEffect(() => {
         fetchReportesPendientes();
         verificarEstadoTurno();
@@ -474,7 +504,7 @@ const TablaJefeArea: React.FC<TablaProps> = ({ onSeleccionar, onNuevoRegistro })
                                 {['dia', 'rango', 'mes', 'año'].map((modo) => (
                                     <button
                                         key={modo}
-                                        onClick={() => setFiltrosEdicion({ ...filtrosEdicion, periodo: modo })}
+                                        onClick={() => cambiarPeriodo(modo)}
                                         className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all uppercase ${filtrosEdicion.periodo === modo ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
                                     >
                                         {modo}
@@ -499,17 +529,34 @@ const TablaJefeArea: React.FC<TablaProps> = ({ onSeleccionar, onNuevoRegistro })
                                 )}
                                 {filtrosEdicion.periodo === 'mes' && (
                                     <input type="month" className="w-full border border-slate-200 p-2 rounded-lg text-sm outline-none focus:border-indigo-500"
+                                        value={filtrosEdicion.fechaInicio.substring(0, 7)}
                                         onChange={(e) => {
                                             const val = e.target.value;
-                                            if (!val) return;
+
+                                            if (!val) {
+                                                setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: '', fechaFin: '' });
+                                                return;
+                                            }
+
                                             const [y, m] = val.split('-');
-                                            setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${y}-${m}-01`, fechaFin: `${y}-${m}-31` });
+                                            const ultimo = String(ultimoDiaDelMes(Number(y), Number(m))).padStart(2, '0');
+
+                                            setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${val}-01`, fechaFin: `${val}-${ultimo}` });
                                         }} />
                                 )}
                                 {filtrosEdicion.periodo === 'año' && (
                                     <input type="number" min="2020" max="2030" placeholder="Año"
                                         className="w-full border border-slate-200 p-2 rounded-lg text-sm outline-none focus:border-indigo-500"
-                                        onChange={(e) => setFiltrosEdicion({ ...filtrosEdicion, fechaInicio: `${e.target.value}-01-01`, fechaFin: `${e.target.value}-12-31` })} />
+                                        value={filtrosEdicion.fechaInicio ? filtrosEdicion.fechaInicio.split('-')[0] : ''}
+                                        onChange={(e) => {
+                                            const anio = e.target.value;
+
+                                            setFiltrosEdicion({
+                                                ...filtrosEdicion,
+                                                fechaInicio: anio ? `${anio}-01-01` : '',
+                                                fechaFin: anio ? `${anio}-12-31` : '',
+                                            });
+                                        }} />
                                 )}
                             </div>
                             <button
