@@ -2,7 +2,7 @@ import { fetchShowServicioComisariato } from '@/stores/apiServicioComisariato';
 import { PDFViewer } from '@react-pdf/renderer';
 import { AlertCircle, Download, LoaderCircle, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { ComisariatoPdfDoc } from './PdfComisariato';
+import { ComisariatoPdfDoc, evidenciasEnDataUrl } from './PdfComisariato';
 
 interface Props {
     /** Renglón a previsualizar, o null si la ventana está cerrada. */
@@ -21,11 +21,13 @@ interface Props {
  */
 export default function VistaPreviaComisariato({ id, onCerrar, onDescargar }: Props) {
     const [datos, setDatos] = useState<any>(null);
+    const [fotos, setFotos] = useState<string[]>([]);
     const [cargando, setCargando] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         setDatos(null);
+        setFotos([]);
         setError(null);
 
         if (id === null) {
@@ -36,9 +38,15 @@ export default function VistaPreviaComisariato({ id, onCerrar, onDescargar }: Pr
         setCargando(true);
 
         fetchShowServicioComisariato(id)
-            .then((respuesta: any) => {
+            .then(async (respuesta: any) => {
+                const recibo = respuesta?.data ?? respuesta;
+                // Las fotos se preparan aquí, bajo la misma bandera, para que
+                // una respuesta tardía no pinte un documento ya abandonado.
+                const evidencias = await evidenciasEnDataUrl(recibo);
+
                 if (vigente) {
-                    setDatos(respuesta?.data ?? respuesta);
+                    setFotos(evidencias);
+                    setDatos(recibo);
                 }
             })
             .catch(() => {
@@ -100,7 +108,7 @@ export default function VistaPreviaComisariato({ id, onCerrar, onDescargar }: Pr
                         </div>
                     ) : (
                         <PDFViewer showToolbar={false} className="h-full w-full border-0">
-                            <ComisariatoPdfDoc data={datos} />
+                            <ComisariatoPdfDoc data={datos} fotos={fotos} />
                         </PDFViewer>
                     )}
                 </div>

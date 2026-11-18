@@ -38,11 +38,13 @@ const styles = StyleSheet.create({
     signatureLabel: { fontSize: 7, fontWeight: "bold", textTransform: "uppercase", marginTop: 5, color: GRAY_TEXT },
     totalSection: { marginTop: 10, alignItems: 'flex-end', paddingRight: 10 },
     totalLabel: { fontSize: 8, color: GRAY_TEXT },
-    totalValue: { fontSize: 12, fontWeight: "bold", color: GREEN }
+    totalValue: { fontSize: 12, fontWeight: "bold", color: GREEN },
+    evidenciasGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6 },
+    evidenciaFoto: { width: "48%", height: 150, objectFit: "cover", borderWidth: 1, borderColor: BORDER },
 });
 
 // Función para manejar CORS si las firmas vienen de la API
-async function urlToDataUrl(url: string): Promise<string> {
+export async function urlToDataUrl(url: string): Promise<string> {
     try {
         const u = new URL(url);
         const sameOriginUrl = `${window.location.origin}${u.pathname}`;
@@ -61,11 +63,35 @@ async function urlToDataUrl(url: string): Promise<string> {
 }
 
 /**
+ * Las fotos de evidencia del servicio, ya convertidas a data URL: el renderer
+ * del PDF se atraganta con imágenes remotas.
+ *
+ * `urlToDataUrl` nunca lanza: si no logra leer el archivo devuelve la URL
+ * original. Por eso una foto convertida con éxito se reconoce por empezar con
+ * `data:`; cualquier otra se omite en vez de romper el PDF entero (el mismo
+ * criterio que usan las firmas en Seguridad). Se convierte en paralelo porque
+ * leer no asigna ningún número.
+ */
+export async function evidenciasEnDataUrl(data: any): Promise<string[]> {
+    const evidencias: Array<{ url: string }> = data?.evidencias ?? [];
+
+    const convertidas = await Promise.all(
+        evidencias.map(evidencia =>
+            urlToDataUrl(evidencia.url).catch(() => null)
+        )
+    );
+
+    return convertidas.filter(
+        (foto): foto is string => foto !== null && foto.startsWith("data:")
+    );
+}
+
+/**
  * El recibo en sí. Se exporta porque lo comparten dos pantallas: la descarga
  * de este archivo y la vista previa. Mientras sea el mismo componente, lo que
  * se ve en pantalla no puede desfasarse de lo que se imprime.
  */
-export function ComisariatoPdfDoc({ data }: { data: any }) {
+export function ComisariatoPdfDoc({ data, fotos = [] }: { data: any; fotos?: string[] }) {
     const watermarkUrl = `${window.location.origin}/1c463caa-e3a1-4093-a00b-1c0da40795f6.jpg`;
 
     return (
@@ -111,6 +137,17 @@ export function ComisariatoPdfDoc({ data }: { data: any }) {
                         <Text style={styles.signatureLabel}>Sello / Firma FBO</Text>
                     </View>
                 </View>
+
+                {fotos.length > 0 && (
+                    <View break>
+                        <Text style={styles.sectionTitle}>Evidencias fotográficas</Text>
+                        <View style={styles.evidenciasGrid}>
+                            {fotos.map((foto, indice) => (
+                                <Image key={indice} src={foto} style={styles.evidenciaFoto} />
+                            ))}
+                        </View>
+                    </View>
+                )}
             </Page>
         </Document>
     );
@@ -133,7 +170,9 @@ export default function PdfComisariato({ id, onDone }: { id: number | null; onDo
                 // Si la respuesta viene anidada en data, la extraemos
                 const finalData = response?.data ? response.data : response;
 
-                const blob = await pdf(<ComisariatoPdfDoc data={finalData} />).toBlob();
+                const fotos = await evidenciasEnDataUrl(finalData);
+
+                const blob = await pdf(<ComisariatoPdfDoc data={finalData} fotos={fotos} />).toBlob();
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
