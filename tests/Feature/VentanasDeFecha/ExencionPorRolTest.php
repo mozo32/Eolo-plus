@@ -12,8 +12,11 @@ use Inertia\Testing\AssertableInertia as Assert;
  * prop que alimenta el calendario. Las pruebas de `VentanasDeFechaTest` cubren
  * el predicado; éstas cubren que llega.
  *
- * Los nombres de los ayudantes no deben repetirse en otros archivos: los
- * ayudantes de Pest son funciones globales y repetirlos sería un fatal.
+ * Los ayudantes de Pest son funciones globales de PHP, así que su nombre no
+ * puede repetirse en NINGÚN otro archivo de la suite. `usuarioExentoConRol` se
+ * llama así y no `usuarioConRol` porque ese nombre ya existe en
+ * `tests/Feature/OperacionesDiarias/CancelarOperacionTest.php`, con otra firma:
+ * acortarlo es un fatal de redeclaración en cuanto los dos archivos se cargan.
  */
 
 function usuarioExentoConRol(string $slug): User
