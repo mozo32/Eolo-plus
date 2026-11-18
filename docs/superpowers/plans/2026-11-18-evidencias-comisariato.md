@@ -903,10 +903,18 @@ git commit -m "feat(comisariato): las evidencias se toman desde el formulario y 
 
 **Files:**
 - Modify: `resources/js/pages/Trafico/servicioComisariato/PdfComisariato.tsx`
+- Modify: `resources/js/pages/Trafico/servicioComisariato/VistaPreviaComisariato.tsx`
 
 **Interfaces:**
 - Consumes: `data.evidencias` del `show` (Tarea 1).
-- Produces: el documento con la rejilla; `VistaPreviaComisariato` lo hereda sin tocarlo.
+- Produces: el documento con la rejilla.
+
+**`ComisariatoPdfDoc` cambia de firma y tiene DOS llamadores.** Hoy recibe solo
+`{ data }`; pasa a recibir también las fotos ya convertidas. `PdfComisariato`
+es uno de los dos; el otro es `VistaPreviaComisariato.tsx:  <PDFViewer>
+<ComisariatoPdfDoc data={datos} /></PDFViewer>`, que **hay que tocar también** o
+la vista previa se queda sin evidencias mientras el PDF descargado sí las trae.
+Los dos preparan las fotos con el mismo ayudante antes de montar el documento.
 
 - [ ] **Step 1: Convertir las fotos antes de pintarlas**
 
@@ -930,7 +938,12 @@ const evidenciasEnDataUrl = async (data: any): Promise<string[]> => {
 };
 ```
 
-En paralelo con `Promise.all` y no en serie: veinte peticiones encadenadas se notan.
+En paralelo con `Promise.all` y no en serie: veinte peticiones encadenadas se notan. Aquí sí vale el paralelo —a diferencia de la subida de la Tarea 4— porque leer no asigna ningún número.
+
+El ayudante se **exporta**, porque lo usan los dos llamadores. En
+`VistaPreviaComisariato` se prepara junto al `fetchShowServicioComisariato` que
+ya hace, dentro del mismo efecto y bajo la misma bandera `vigente`, para que una
+respuesta tardía no pinte un documento que ya no se está mirando.
 
 - [ ] **Step 2: La rejilla**
 
@@ -969,8 +982,8 @@ Esperado: el único error de base.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add resources/js/pages/Trafico/servicioComisariato/PdfComisariato.tsx
-git commit -m "feat(comisariato): el pdf imprime las evidencias en rejilla"
+git add resources/js/pages/Trafico/servicioComisariato/PdfComisariato.tsx resources/js/pages/Trafico/servicioComisariato/VistaPreviaComisariato.tsx
+git commit -m "feat(comisariato): el pdf y la vista previa imprimen las evidencias"
 ```
 
 ---
