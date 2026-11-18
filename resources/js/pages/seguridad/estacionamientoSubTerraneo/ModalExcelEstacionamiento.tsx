@@ -224,16 +224,19 @@ export default function ModalExcelEstacionamiento({ meses, onClose }: Props) {
                                                         {fila[columna.clave] ?? ''}
                                                     </td>
                                                 ))}
+                                                {/* Los hex son los MISMOS que el libro (C6E0B4 / BDD7EE), no
+                                                    un verde parecido: si la previa y el Excel no coinciden,
+                                                    la previa deja de servir para lo que existe. */}
                                                 {dias.map(dia => (
                                                     <td
                                                         key={dia}
-                                                        className={`p-1 text-center border border-slate-200 ${
+                                                        className={`p-1 text-center border border-slate-400 text-slate-900 ${
                                                             presentes.has(dia)
-                                                                ? 'bg-emerald-100 text-emerald-700 font-bold'
-                                                                : ''
+                                                                ? 'bg-[#C6E0B4] font-bold'
+                                                                : 'bg-[#BDD7EE]'
                                                         }`}
                                                     >
-                                                        {presentes.has(dia) ? 1 : ''}
+                                                        {presentes.has(dia) ? 1 : 0}
                                                     </td>
                                                 ))}
                                                 <td className="p-2 text-center font-bold text-slate-800 border border-slate-200">

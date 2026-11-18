@@ -54,6 +54,33 @@ const nombreDeHoja = (mes: string): string => {
     return `${MESES[Number(numero) - 1].substring(0, 3)}-${anio}`;
 };
 
+/**
+ * Los dos rellenos de la rejilla, los mismos que usa `ExcelPernoctaDia`.
+ *
+ * El ausente va en azul y no en rojo a propósito: una celda vacía de un día no
+ * es una alarma, es un día en que el coche no estuvo. El rojo se reserva para
+ * lo que de verdad va mal.
+ */
+const VERDE_PRESENTE = 'FFC6E0B4';
+
+const AZUL_AUSENTE = 'FFBDD7EE';
+
+const GRIS_BORDE = 'FF64748B';
+
+/** 1 → 'A', 27 → 'AA'. Lo necesita la fórmula SUM del total. */
+const numeroAColumnaExcel = (numero: number): string => {
+    let resto = numero;
+    let letras = '';
+
+    while (resto > 0) {
+        const modulo = (resto - 1) % 26;
+        letras = String.fromCharCode(65 + modulo) + letras;
+        resto = Math.floor((resto - modulo) / 26);
+    }
+
+    return letras;
+};
+
 /** Añade al libro una hoja con la rejilla de UN mes. */
 function crearHojaMes(libro: ExcelJS.Workbook, rejilla: RejillaExcelEstacionamiento): void {
     const titulo = tituloDelMes(rejilla.mes);
@@ -117,14 +144,42 @@ function crearHojaMes(libro: ExcelJS.Workbook, rejilla: RejillaExcelEstacionamie
 
         for (let dia = 1; dia <= rejilla.dias; dia++) {
             const celda = renglon.getCell(COLUMNAS_FIJAS.length + dia);
-            celda.value = presentes.has(dia) ? 1 : null;
-            celda.alignment = { horizontal: 'center' };
+            const estuvo = presentes.has(dia);
+
+            // Un 0 explícito y no una celda vacía: en blanco no se distingue «no
+            // estuvo» de «nadie lo anotó», y el total suma sobre lo escrito.
+            celda.value = estuvo ? 1 : 0;
+            celda.font = { name: 'Arial', size: 9, color: { argb: 'FF000000' } };
+            celda.alignment = { horizontal: 'center', vertical: 'middle' };
+            celda.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: estuvo ? VERDE_PRESENTE : AZUL_AUSENTE },
+            };
+            celda.border = {
+                top: { style: 'thin', color: { argb: GRIS_BORDE } },
+                left: { style: 'thin', color: { argb: GRIS_BORDE } },
+                bottom: { style: 'thin', color: { argb: GRIS_BORDE } },
+                right: { style: 'thin', color: { argb: GRIS_BORDE } },
+            };
         }
 
+        /*
+         * El total es una fórmula viva con su resultado precalculado, como en
+         * Pernocta: si alguien corrige un día a mano en Excel, el total se
+         * recalcula en vez de quedarse mintiendo.
+         */
+        const primeraLetra = numeroAColumnaExcel(COLUMNAS_FIJAS.length + 1);
+        const ultimaLetra = numeroAColumnaExcel(COLUMNAS_FIJAS.length + rejilla.dias);
+        const numeroDeFila = 3 + indice;
+
         const celdaTotal = renglon.getCell(totalColumnas);
-        celdaTotal.value = fila.total;
-        celdaTotal.font = { bold: true };
-        celdaTotal.alignment = { horizontal: 'center' };
+        celdaTotal.value = {
+            formula: `SUM(${primeraLetra}${numeroDeFila}:${ultimaLetra}${numeroDeFila})`,
+            result: fila.total,
+        };
+        celdaTotal.font = { name: 'Arial', size: 10, bold: true };
+        celdaTotal.alignment = { horizontal: 'center', vertical: 'middle' };
     });
 
     // Fija el encabezado y las cinco columnas de identificación: al llegar al día 28 se
