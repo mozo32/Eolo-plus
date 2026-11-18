@@ -220,7 +220,7 @@ test('la pernocta del dia cuenta sus aeronaves', function () {
 
 test('el texto de un renglon de dos lados', function (int $entradas, int $salidas, string $esperado) {
     // `for` y no `range()`: `range(1, 0)` devuelve `[1, 0]`, así que el caso
-    // de cero sembraría una fila y la prueba del «Sin registros» nunca se
+    // de cero sembraría una fila y la prueba del «No hay movimientos» nunca se
     // cumpliría.
     for ($i = 0; $i < $entradas; $i++) {
         visitanteDeResumen(DIA_DEL_RESUMEN);
@@ -232,7 +232,7 @@ test('el texto de un renglon de dos lados', function (int $entradas, int $salida
 
     expect(renglonDelResumen('visitantes')['texto'])->toBe($esperado);
 })->with([
-    'ninguno' => [0, 0, 'Sin registros'],
+    'ninguno' => [0, 0, 'No hay movimientos'],
     'uno de cada' => [1, 1, '1 entrada y 1 salida'],
     'varios' => [3, 2, '3 entradas y 2 salidas'],
     'solo entradas' => [2, 0, '2 entradas y 0 salidas'],
@@ -253,7 +253,7 @@ test('el texto de la pernocta distingue ninguna, una y varias', function (int $c
 
     expect(renglonDelResumen('pernocta')['texto'])->toBe($esperado);
 })->with([
-    'ninguna' => [0, 'Sin pernoctas'],
+    'ninguna' => [0, 'No hay pernoctas'],
     'una' => [1, '1 aeronave'],
     'varias' => [4, '4 aeronaves'],
 ]);

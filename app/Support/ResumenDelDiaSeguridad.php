@@ -131,7 +131,7 @@ final class ResumenDelDiaSeguridad
             'clave' => $clave,
             'titulo' => $titulo,
             'texto' => $entradas === 0 && $salidas === 0
-                ? 'Sin registros'
+                ? 'No hay movimientos'
                 : sprintf(
                     '%d %s y %d %s',
                     $entradas,
@@ -150,8 +150,9 @@ final class ResumenDelDiaSeguridad
         return [
             'clave' => 'pernocta',
             'titulo' => 'Pernocta del día',
+            // A una aeronave que pasa la noche no se le llama "movimiento": no se mueve.
             'texto' => match (true) {
-                $total === 0 => 'Sin pernoctas',
+                $total === 0 => 'No hay pernoctas',
                 $total === 1 => '1 aeronave',
                 default => $total.' aeronaves',
             },
