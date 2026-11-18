@@ -176,9 +176,10 @@ test('el mismo día con otra hora pasa en un relevo viejo', function () {
 
 test('un PUT sin fecha_hora no se juzga', function () {
     // Es el caso de la cola de pendientes: el FBO manda solo su firma.
-    // Un campo ausente no se juzga: ni `date` ni la regla de ventana son
-    // implícitas, así que Laravel las salta cuando `fecha_hora` no llega.
-    // Si no, firmar un relevo viejo daría 422 sin que nadie haya tocado una fecha.
+    // Lo que esta prueba demuestra es que la firma se guarda y que la fecha no
+    // se mueve. Que un campo ausente NO se juzgue lo demuestra la de abajo, con
+    // un jefe de área: desde que el FBO está exento, aquí la regla no corre de
+    // todas formas y un verde no diría nada de `sometimes`.
     $relevo = relevoViejo();
     $suDia = $relevo->fecha_hora->toDateString();
 
@@ -188,6 +189,24 @@ test('un PUT sin fecha_hora no se juzga', function () {
 
     expect($relevo->tieneFirmaDe(EntregaTurnoSeguridad::ROL_FBO))->toBeTrue()
         ->and($relevo->fecha_hora->toDateString())->toBe($suDia);
+});
+
+test('un PUT sin fecha_hora no se juzga ni para quien no esta exento', function () {
+    /*
+     * El par honesto de `un PUT sin fecha_hora no se juzga`. Ni `date` ni la
+     * regla de ventana son implícitas: Laravel las salta cuando `fecha_hora` no
+     * llega. Con el FBO eso ya no se puede demostrar —está exento—, así que lo
+     * demuestra el jefe de área, que sí está sujeto: si alguien volviera esas
+     * reglas implícitas, editar un relevo viejo sin tocar su fecha daría 422.
+     */
+    $relevo = relevoViejo();
+    $suDia = $relevo->fecha_hora->toDateString();
+
+    editarComoJefeDeArea($relevo, ['observaciones' => 'Sin tocar la fecha'])
+        ->assertSuccessful();
+
+    expect($relevo->fresh()->observaciones)->toBe('Sin tocar la fecha')
+        ->and($relevo->fresh()->fecha_hora->toDateString())->toBe($suDia);
 });
 
 test('el jefe de area puede dejar la fecha vieja tal como estaba', function () {
