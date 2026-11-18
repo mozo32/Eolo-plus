@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Save, Radio, Truck, Plane, Layout, Info, Link, ClipboardCheck, Wrench, Zap } from 'lucide-react';
 import RampaSignaturesSection from './RampaSignaturesSection';
 import { actualizarEntregaTurnoRFirmasApi } from '@/stores/apiEntregaTurnoR';
+import { conMiles } from '@/lib/miles';
 import Swal from 'sweetalert2';
 
 interface VistaFirmasProps {
@@ -147,7 +148,7 @@ const VistaFirmas: React.FC<VistaFirmasProps> = ({ reporteData, onClose, onSucce
                                     <div className="text-[10px] flex justify-between items-center gap-1"><span className="text-slate-400 font-bold uppercase">Luces:</span> <StatusBadge status={info.luces} /></div>
                                     <div className="text-[10px] col-span-2 pt-1 border-t border-slate-50 flex justify-between uppercase font-black">
                                         <span className="text-slate-400 uppercase">Km / Nivel:</span>
-                                        <span className="text-indigo-600">{info.kilometraje || (info.nivel ? `${info.nivel}%` : '---')}</span>
+                                        <span className="text-indigo-600">{conMiles(info.kilometraje) || (info.nivel ? `${info.nivel}%` : '---')}</span>
                                     </div>
                                     {info.suministros?.map((s: any, idx: number) => (
                                         <div key={idx} className="col-span-2 bg-emerald-50 text-emerald-700 p-2 rounded-xl font-bold text-[9px] mt-1">

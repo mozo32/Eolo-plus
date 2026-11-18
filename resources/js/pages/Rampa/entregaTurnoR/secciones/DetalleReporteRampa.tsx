@@ -1,5 +1,6 @@
 
 import { X, Radio, Truck, Box, Zap, Layout, CheckCircle2, AlertCircle, Shield, UserCheck, Plane, Wrench } from 'lucide-react';
+import { conMiles } from '@/lib/miles';
 
 interface DetalleProps {
     data: any;
@@ -181,7 +182,7 @@ const DetalleReporteRampa: React.FC<DetalleProps> = ({ data, onClose }) => {
                                                             </div>
                                                             {val.kilometraje && (
                                                                 <span className="text-xs font-mono font-black bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-lg">
-                                                                    KM: {val.kilometraje}
+                                                                    KM: {conMiles(val.kilometraje)}
                                                                 </span>
                                                             )}
                                                         </div>

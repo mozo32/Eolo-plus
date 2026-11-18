@@ -60,7 +60,12 @@ async function urlToDataUrl(url: string): Promise<string> {
     }
 }
 
-function ComisariatoPdfDoc({ data }: { data: any }) {
+/**
+ * El recibo en sí. Se exporta porque lo comparten dos pantallas: la descarga
+ * de este archivo y la vista previa. Mientras sea el mismo componente, lo que
+ * se ve en pantalla no puede desfasarse de lo que se imprime.
+ */
+export function ComisariatoPdfDoc({ data }: { data: any }) {
     const watermarkUrl = `${window.location.origin}/1c463caa-e3a1-4093-a00b-1c0da40795f6.jpg`;
 
     return (

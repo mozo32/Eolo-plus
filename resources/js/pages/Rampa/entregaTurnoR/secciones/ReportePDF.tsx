@@ -9,11 +9,25 @@ import {
     Svg,
     Path
 } from '@react-pdf/renderer';
+import { conMiles } from '@/lib/miles';
 
 // Configuración de colores institucional (Eolo Plus)
 const GREEN_INST = "#003E51";
 const BORDER = "#111111";
 const GRAY_TEXT = "#374151";
+
+/**
+ * Lo que va en la columna «Nivel/KM».
+ *
+ * Antes era `nivel || kilometraje`, y como el nivel siempre trae valor en las
+ * unidades que capturan kilometraje, el kilometraje no se imprimía nunca.
+ * Ahora salen los dos, en el orden del encabezado, y se omite el que falte.
+ *
+ * El nivel va tal cual, sin «%»: en los lektro es un campo de texto libre.
+ */
+const nivelYKilometraje = (vehiculo: any): string => {
+    return [vehiculo.nivel, conMiles(vehiculo.kilometraje)].filter(Boolean).join(' / ') || '-';
+};
 
 const styles = StyleSheet.create({
     page: {
@@ -230,7 +244,7 @@ const ReportePDF = ({ data }: { data: any }) => {
                         <View key={name} style={styles.row}>
                             <Text style={[styles.cell, { width: '18%', fontWeight: 'bold' }]}>{name.toUpperCase()}</Text>
                             <Text style={[styles.cell, { width: '15%', color: v.estado === 'Mantenimiento' ? '#ef4444' : GREEN_INST }]}>{v.estado}</Text>
-                            <Text style={[styles.cell, { width: '12%' }]}>{v.nivel || v.kilometraje || '-'}</Text>
+                            <Text style={[styles.cell, { width: '12%' }]}>{nivelYKilometraje(v)}</Text>
                             <Text style={[styles.cell, { width: '15%' }]}>{v.limpieza || '-'}/{v.llantas || '-'}</Text>
                             <View style={[styles.cell, { flex: 1, borderRightWidth: 0 }]}>
                                 {v.obs && <Text style={{ fontSize: 7, marginBottom: 2 }}>{v.obs}</Text>}
