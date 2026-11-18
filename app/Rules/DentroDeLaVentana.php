@@ -12,6 +12,12 @@ use Illuminate\Support\Carbon;
  * DECIDE: un `min`/`max` en un input se salta con las herramientas del navegador o con una
  * petición directa, así que sin esto la regla sería decoración.
  *
+ * Desde que `fbo` y `admin` quedaron exentos, esta regla DEPENDE de quién manda la
+ * petición: pide la ventana del usuario autenticado. Deja de ser pura a propósito, y
+ * conviene saberlo: su trabajo es validar UNA PETICIÓN, y quién la firma es parte de
+ * la petición. Sin usuario —una consola, un job— no hay exención y la ventana se
+ * aplica entera.
+ *
  * EXIGE ir acompañada de `date` y delante de ella: esta regla no valida el formato. Una
  * fecha ilegible se deja pasar (para que el error no salga dos veces, con dos mensajes) y
  * eso incluye cualquier valor que no sea una fecha, como un arreglo. Sin `date` en la
@@ -23,7 +29,7 @@ class DentroDeLaVentana implements ValidationRule
 
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
-        ['min' => $min, 'max' => $max] = VentanasDeFecha::para($this->clave);
+        ['min' => $min, 'max' => $max] = VentanasDeFecha::para($this->clave, auth()->user());
 
         // Se juzga el dia que GUARDARIA el modelo, no el que `Carbon::parse` leeria: difieren con
         // una cadena numerica (`"20261007"` se guarda como timestamp) y con un desfase de zona.

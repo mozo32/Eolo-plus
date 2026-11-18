@@ -60,6 +60,12 @@ test('rechaza un relevo de mañana', function () {
  * Al editar: no puedes PONER una fecha fuera de ventana, pero puedes DEJAR
  * la que ya estaba. Sin esto, el FBO no podría firmar un relevo de hace tres
  * días, que es justo lo que la cola de pendientes saca a flote.
+ *
+ * Desde que `fbo` y `admin` quedaron exentos de la ventana, esa regla solo se
+ * le aplica al jefe de área, que es el tercer editor que admite `update()` y el
+ * único de los tres que sigue sujeto. Las pruebas de ventana de abajo editan
+ * como él a propósito; las dos que mandan `firma_fbo` siguen con el FBO porque
+ * solo él puede guardar su firma.
  */
 
 function relevoViejo(): EntregaTurnoSeguridad
@@ -81,9 +87,27 @@ function editarComoFbo(EntregaTurnoSeguridad $relevo, array $datos): \Illuminate
     return test()->actingAs($fbo)->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", $datos);
 }
 
+/*
+ * El OTRO editor de un relevo. `update()` admite `fbo`, `jefe_area` y `admin`
+ * (EntregaTurnoSeguridadController:352), y de los tres el jefe de área es el
+ * único que NO está exento de la ventana de fecha. Por eso las pruebas de
+ * ventana de aquí abajo editan como él: con un FBO pasarían por estar exento y
+ * dejarían de demostrar nada.
+ */
+function editarComoJefeDeArea(EntregaTurnoSeguridad $relevo, array $datos): \Illuminate\Testing\TestResponse
+{
+    $jefe = User::factory()->create();
+    $rol = \App\Models\Role::firstOrCreate(['slug' => 'jefe_area'], ['nombre' => 'Jefe de Área']);
+    $jefe->roles()->attach($rol->id);
+
+    return test()->actingAs($jefe)->putJson("/api/EntregaTurnoSeguridad/{$relevo->id}", $datos);
+}
+
 test('el FBO puede firmar un relevo viejo dejando su fecha', function () {
     // Éste es el caso que la cola de pendientes necesita. Si falla, el botón
     // de pendientes enseña relevos que nadie puede firmar.
+    // Ya no es la ventana lo que la deja pasar —el FBO está exento—, sino que
+    // la firma llegue a guardarse, que es lo que el aserto mira.
     $relevo = relevoViejo();
     $suFecha = $relevo->fecha_hora->format('Y-m-d H:i:s');
 
@@ -95,7 +119,7 @@ test('el FBO puede firmar un relevo viejo dejando su fecha', function () {
     expect($relevo->tieneFirmaDe(EntregaTurnoSeguridad::ROL_FBO))->toBeTrue();
 });
 
-test('no se puede mover un relevo viejo a otra fecha vieja', function () {
+test('el jefe de area no puede mover un relevo viejo a otra fecha vieja', function () {
     $relevo = relevoViejo();
     // El día de antes se guarda en una variable, igual que `$suFecha` en la
     // prueba de arriba: comparar `$relevo->fresh()` contra `$relevo` discrimina
@@ -104,23 +128,23 @@ test('no se puede mover un relevo viejo a otra fecha vieja', function () {
     $suDia = $relevo->fecha_hora->toDateString();
     $otraVieja = Carbon::today(config('app.timezone'))->subDays(5)->format('Y-m-d H:i:s');
 
-    editarComoFbo($relevo, ['fecha_hora' => $otraVieja])
+    editarComoJefeDeArea($relevo, ['fecha_hora' => $otraVieja])
         ->assertJsonValidationErrorFor('fecha_hora');
 
     expect($relevo->fresh()->fecha_hora->toDateString())->toBe($suDia);
 });
 
-test('sí se puede traer un relevo viejo a hoy', function () {
+test('el jefe de area si puede traer un relevo viejo a hoy', function () {
     $relevo = relevoViejo();
     $hoy = Carbon::today(config('app.timezone'))->setTime(8, 0)->format('Y-m-d H:i:s');
 
-    editarComoFbo($relevo, ['fecha_hora' => $hoy])->assertSuccessful();
+    editarComoJefeDeArea($relevo, ['fecha_hora' => $hoy])->assertSuccessful();
 
     expect($relevo->fresh()->fecha_hora->toDateString())
         ->toBe(Carbon::today(config('app.timezone'))->toDateString());
 });
 
-test('una fecha no se puede lavar pasando por una válida', function () {
+test('el jefe de area no puede lavar una fecha pasando por una valida', function () {
     // Cada petición se juzga contra lo guardado EN ESE MOMENTO. Traer el
     // relevo a hoy y devolverlo a su fecha vieja debe fallar en el segundo
     // paso: si pasara, la ventana no serviría de nada.
@@ -128,9 +152,9 @@ test('una fecha no se puede lavar pasando por una válida', function () {
     $vieja = $relevo->fecha_hora->format('Y-m-d H:i:s');
     $hoy = Carbon::today(config('app.timezone'))->setTime(8, 0)->format('Y-m-d H:i:s');
 
-    editarComoFbo($relevo, ['fecha_hora' => $hoy])->assertSuccessful();
+    editarComoJefeDeArea($relevo, ['fecha_hora' => $hoy])->assertSuccessful();
 
-    editarComoFbo($relevo, ['fecha_hora' => $vieja])
+    editarComoJefeDeArea($relevo, ['fecha_hora' => $vieja])
         ->assertJsonValidationErrorFor('fecha_hora');
 
     expect($relevo->fresh()->fecha_hora->toDateString())
@@ -138,14 +162,14 @@ test('una fecha no se puede lavar pasando por una válida', function () {
 });
 
 test('el mismo día con otra hora pasa en un relevo viejo', function () {
-    // La comparación es por DÍA, no por instante: el FBO que firma un relevo
+    // La comparación es por DÍA, no por instante: quien firma un relevo
     // de hace tres días puede además corregirle la hora. Sin esta prueba,
     // nadie nota si alguien cambia `cambiaElDia()` para comparar el datetime
     // completo y deja ese caso en 422.
     $relevo = relevoViejo();
     $mismoDiaOtraHora = $relevo->fecha_hora->copy()->setTime(19, 45)->format('Y-m-d H:i:s');
 
-    editarComoFbo($relevo, ['fecha_hora' => $mismoDiaOtraHora])->assertSuccessful();
+    editarComoJefeDeArea($relevo, ['fecha_hora' => $mismoDiaOtraHora])->assertSuccessful();
 
     expect($relevo->fresh()->fecha_hora->format('H:i'))->toBe('19:45');
 });
@@ -164,4 +188,38 @@ test('un PUT sin fecha_hora no se juzga', function () {
 
     expect($relevo->tieneFirmaDe(EntregaTurnoSeguridad::ROL_FBO))->toBeTrue()
         ->and($relevo->fecha_hora->toDateString())->toBe($suDia);
+});
+
+test('el jefe de area puede dejar la fecha vieja tal como estaba', function () {
+    /*
+     * Ésta es la prueba de `cambiaElDia()` que antes cargaba la del FBO. Desde
+     * que `fbo` está exento, su verde ya no demuestra que la ventana se
+     * ensanche con la fecha guardada: pasaría igual sin ensanchar nada. El jefe
+     * de área sí está sujeto, así que aquí el ensanchamiento es lo único que
+     * puede hacer pasar la petición.
+     */
+    $relevo = relevoViejo();
+    $suFecha = $relevo->fecha_hora->format('Y-m-d H:i:s');
+
+    editarComoJefeDeArea($relevo, ['fecha_hora' => $suFecha, 'observaciones' => 'Revisado'])
+        ->assertSuccessful();
+
+    expect($relevo->fresh()->observaciones)->toBe('Revisado');
+});
+
+test('el FBO si puede mover un relevo viejo a otra fecha vieja', function () {
+    /*
+     * El par de `el jefe de area no puede mover un relevo viejo a otra fecha
+     * vieja`, y lo que este cambio vino a hacer: el FBO está exento, así que
+     * puede corregir la fecha de un registro viejo. MISMA fecha y MISMO
+     * endpoint que el 422 del jefe de área: sin ese par, un 200 aquí podría
+     * venir de que la fecha estaba dentro de la ventana y nadie se enteraría.
+     */
+    $relevo = relevoViejo();
+    $otraVieja = Carbon::today(config('app.timezone'))->subDays(5);
+
+    editarComoFbo($relevo, ['fecha_hora' => $otraVieja->format('Y-m-d H:i:s')])
+        ->assertSuccessful();
+
+    expect($relevo->fresh()->fecha_hora->toDateString())->toBe($otraVieja->toDateString());
 });

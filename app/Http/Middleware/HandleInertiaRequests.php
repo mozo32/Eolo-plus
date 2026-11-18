@@ -40,7 +40,7 @@ class HandleInertiaRequests extends Middleware
                     : null,
             ],
 
-            'ventanasDeFecha' => VentanasDeFecha::todas(),
+            'ventanasDeFecha' => VentanasDeFecha::todas($user),
 
             // El día que el SERVIDOR considera hoy (zona de `config('app.timezone')`, México). Es el
             // mismo reloj con el que `DentroDeLaVentana` valida: así el formulario no ofrece un día
