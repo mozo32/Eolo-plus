@@ -68,22 +68,34 @@ export async function urlToDataUrl(url: string): Promise<string> {
  *
  * `urlToDataUrl` nunca lanza: si no logra leer el archivo devuelve la URL
  * original. Por eso una foto convertida con éxito se reconoce por empezar con
- * `data:`; cualquier otra se omite en vez de romper el PDF entero (el mismo
+ * `data:image/`; cualquier otra se omite en vez de romper el PDF entero (el mismo
  * criterio que usan las firmas en Seguridad). Se convierte en paralelo porque
  * leer no asigna ningún número.
  */
-export async function evidenciasEnDataUrl(data: any): Promise<string[]> {
+export async function evidenciasEnDataUrl(
+    data: any
+): Promise<{ fotos: string[]; omitidas: number }> {
     const evidencias: Array<{ url: string }> = data?.evidencias ?? [];
 
     const convertidas = await Promise.all(
-        evidencias.map(evidencia =>
-            urlToDataUrl(evidencia.url).catch(() => null)
-        )
+        evidencias.map(evidencia => urlToDataUrl(evidencia.url))
     );
 
-    return convertidas.filter(
-        (foto): foto is string => foto !== null && foto.startsWith("data:")
-    );
+    // Solo vale lo que quedó como imagen: una respuesta 200 que no lo sea
+    // (por ejemplo una página de error en HTML) rompería el PDF entero.
+    const fotos = convertidas.filter(foto => foto.startsWith("data:image/"));
+    const omitidas = evidencias.length - fotos.length;
+
+    if (omitidas > 0) {
+        console.warn(
+            "Evidencias que no se pudieron incluir en el recibo:",
+            evidencias
+                .filter((_, indice) => !convertidas[indice].startsWith("data:image/"))
+                .map(evidencia => evidencia.url)
+        );
+    }
+
+    return { fotos, omitidas };
 }
 
 /**
@@ -170,7 +182,7 @@ export default function PdfComisariato({ id, onDone }: { id: number | null; onDo
                 // Si la respuesta viene anidada en data, la extraemos
                 const finalData = response?.data ? response.data : response;
 
-                const fotos = await evidenciasEnDataUrl(finalData);
+                const { fotos, omitidas } = await evidenciasEnDataUrl(finalData);
 
                 const blob = await pdf(<ComisariatoPdfDoc data={finalData} fotos={fotos} />).toBlob();
                 const url = URL.createObjectURL(blob);
@@ -180,7 +192,15 @@ export default function PdfComisariato({ id, onDone }: { id: number | null; onDo
                 a.click();
                 URL.revokeObjectURL(url);
 
-                Swal.fire({ icon: "success", title: "Recibo Descargado", timer: 1500, showConfirmButton: false });
+                if (omitidas > 0) {
+                    Swal.fire({
+                        icon: "warning",
+                        title: "Recibo Descargado",
+                        text: `${omitidas === 1 ? "1 foto no se pudo incluir" : `${omitidas} fotos no se pudieron incluir`} en el recibo.`,
+                    });
+                } else {
+                    Swal.fire({ icon: "success", title: "Recibo Descargado", timer: 1500, showConfirmButton: false });
+                }
             } catch (e) {
                 console.error(e);
                 Swal.fire("Error", "No se pudo generar el PDF", "error");

@@ -22,12 +22,14 @@ interface Props {
 export default function VistaPreviaComisariato({ id, onCerrar, onDescargar }: Props) {
     const [datos, setDatos] = useState<any>(null);
     const [fotos, setFotos] = useState<string[]>([]);
+    const [omitidas, setOmitidas] = useState(0);
     const [cargando, setCargando] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         setDatos(null);
         setFotos([]);
+        setOmitidas(0);
         setError(null);
 
         if (id === null) {
@@ -42,10 +44,11 @@ export default function VistaPreviaComisariato({ id, onCerrar, onDescargar }: Pr
                 const recibo = respuesta?.data ?? respuesta;
                 // Las fotos se preparan aquí, bajo la misma bandera, para que
                 // una respuesta tardía no pinte un documento ya abandonado.
-                const evidencias = await evidenciasEnDataUrl(recibo);
+                const conversion = await evidenciasEnDataUrl(recibo);
 
                 if (vigente) {
-                    setFotos(evidencias);
+                    setFotos(conversion.fotos);
+                    setOmitidas(conversion.omitidas);
                     setDatos(recibo);
                 }
             })
@@ -93,6 +96,12 @@ export default function VistaPreviaComisariato({ id, onCerrar, onDescargar }: Pr
                         <X size={18} />
                     </button>
                 </div>
+
+                {omitidas > 0 && !cargando && !error && (
+                    <p className="border-b border-amber-200 bg-amber-50 px-5 py-2 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                        {omitidas === 1 ? '1 foto no se pudo incluir' : `${omitidas} fotos no se pudieron incluir`} en el recibo.
+                    </p>
+                )}
 
                 <div className="flex-1 overflow-hidden bg-slate-100">
                     {cargando || (!error && !datos) ? (
