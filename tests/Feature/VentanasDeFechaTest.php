@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Role;
+use App\Models\User;
 use App\Support\VentanasDeFecha;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\File;
@@ -471,4 +473,76 @@ test('diaQueGuardaElModelo devuelve null para lo vacio y lo que no es un valor e
     foreach (['0', 0, 0.0, true, false, '', null, [], ['2026-10-07']] as $valor) {
         expect(VentanasDeFecha::diaQueGuardaElModelo($valor))->toBeNull(json_encode($valor));
     }
+});
+
+test('fbo y admin quedan exentos de la ventana', function (string $slug) {
+    $usuario = User::factory()->create();
+    $rol = Role::firstOrCreate(['slug' => $slug], ['nombre' => ucfirst($slug)]);
+    $usuario->roles()->attach($rol->id);
+
+    expect(VentanasDeFecha::exentoDeVentana($usuario))->toBeTrue();
+})->with(['fbo', 'admin']);
+
+test('los demas roles siguen sujetos a la ventana', function (string $slug) {
+    $usuario = User::factory()->create();
+    $rol = Role::firstOrCreate(['slug' => $slug], ['nombre' => ucfirst($slug)]);
+    $usuario->roles()->attach($rol->id);
+
+    expect(VentanasDeFecha::exentoDeVentana($usuario))->toBeFalse();
+})->with(['empleado', 'jefe_area', 'admin2', 'fac']);
+
+test('sin usuario no hay exencion', function () {
+    // Falla cerrada: la única forma segura de equivocarse.
+    expect(VentanasDeFecha::exentoDeVentana(null))->toBeFalse();
+});
+
+test('un usuario sin ningun rol no esta exento', function () {
+    expect(VentanasDeFecha::exentoDeVentana(User::factory()->create()))->toBeFalse();
+});
+
+test('para un exento la ventana no tiene limites', function () {
+    $usuario = User::factory()->create();
+    $rol = Role::firstOrCreate(['slug' => 'fbo'], ['nombre' => 'FBO']);
+    $usuario->roles()->attach($rol->id);
+
+    expect(VentanasDeFecha::para('csae.entrada', $usuario))
+        ->toBe(['min' => null, 'max' => null]);
+});
+
+test('para quien no esta exento la ventana sigue igual que sin usuario', function () {
+    $usuario = User::factory()->create();
+
+    expect(VentanasDeFecha::para('csae.entrada', $usuario))
+        ->toBe(VentanasDeFecha::para('csae.entrada'));
+});
+
+test('una clave desconocida sigue lanzando aunque el usuario este exento', function () {
+    // Que alguien sea administrador no convierte un error de programación en
+    // silencio: la clave mal escrita tiene que doler igual.
+    $usuario = User::factory()->create();
+    $rol = Role::firstOrCreate(['slug' => 'admin'], ['nombre' => 'Administrador']);
+    $usuario->roles()->attach($rol->id);
+
+    expect(fn () => VentanasDeFecha::para('clave.que.no.existe', $usuario))
+        ->toThrow(InvalidArgumentException::class);
+});
+
+test('todas devuelve las dieciocho claves sin limites para un exento', function () {
+    $usuario = User::factory()->create();
+    $rol = Role::firstOrCreate(['slug' => 'admin'], ['nombre' => 'Administrador']);
+    $usuario->roles()->attach($rol->id);
+
+    $ventanas = VentanasDeFecha::todas($usuario);
+
+    expect($ventanas)->toHaveCount(count(VentanasDeFecha::todas()));
+
+    foreach ($ventanas as $clave => $ventana) {
+        expect($ventana)->toBe(['min' => null, 'max' => null], "la clave {$clave}");
+    }
+});
+
+test('todas conserva los limites para quien no esta exento', function () {
+    $ventanas = VentanasDeFecha::todas(User::factory()->create());
+
+    expect($ventanas['csae.entrada']['max'])->not->toBeNull();
 });

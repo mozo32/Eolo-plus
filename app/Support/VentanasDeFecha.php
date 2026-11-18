@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
@@ -61,15 +62,39 @@ final class VentanasDeFecha
     ];
 
     /**
+     * Si este usuario puede escribir cualquier fecha, saltándose la ventana.
+     *
+     * Son `fbo` y `admin`: quienes corrigen registros viejos. `jefe_area` y
+     * `admin2` NO están, aunque el segundo se llame «Administrativo» y se
+     * confunda con el primero a simple vista.
+     *
+     * Sin usuario responde que no. Falla cerrada a propósito: la única forma
+     * segura de equivocarse con un permiso es negándolo.
+     */
+    public static function exentoDeVentana(?User $usuario): bool
+    {
+        return $usuario !== null && $usuario->hasAnyRole(['fbo', 'admin']);
+    }
+
+    /**
      * @return array{min: ?string, max: ?string} fechas `Y-m-d`, o null donde no hay límite
      */
-    public static function para(string $clave): array
+    public static function para(string $clave, ?User $usuario = null): array
     {
         // Lanza en vez de asumir: un valor por omisión silencioso dejaría un formulario sin
         // restricción, o restringido de más, y nadie lo sabría hasta que alguien no pudiera
         // trabajar.
         if (! array_key_exists($clave, self::CLAVES)) {
             throw new InvalidArgumentException("Ventana de fecha desconocida: '{$clave}'.");
+        }
+
+        /*
+         * La exención va DESPUÉS de comprobar la clave: que quien pregunta sea
+         * administrador no debe convertir una clave mal escrita en un formulario
+         * sin límites.
+         */
+        if (self::exentoDeVentana($usuario)) {
+            return ['min' => null, 'max' => null];
         }
 
         ['atras' => $atras, 'futuro' => $futuro] = self::CLAVES[$clave];
@@ -123,12 +148,12 @@ final class VentanasDeFecha
     }
 
     /** @return array<string, array{min: ?string, max: ?string}> */
-    public static function todas(): array
+    public static function todas(?User $usuario = null): array
     {
         $ventanas = [];
 
         foreach (array_keys(self::CLAVES) as $clave) {
-            $ventanas[$clave] = self::para($clave);
+            $ventanas[$clave] = self::para($clave, $usuario);
         }
 
         return $ventanas;
