@@ -75,11 +75,14 @@ export default function MovimientoCSAEEditarCompleto({
                 <div className="h-px flex-1 bg-slate-200" />
             </div>
 
+            {/* La salida NO es obligatoria aquí: un avión que sigue en tierra no
+                la tiene, y exigirla impedía guardar correcciones de su entrada. */}
             <MovimientoCSAESalida
                 data={data}
                 onChange={onChange}
                 updateField={updateField}
                 fechaOriginal={fechaOriginalSalida}
+                obligatorio={false}
             />
         </div>
     );

@@ -241,42 +241,92 @@ class MovimientoCSAEController extends Controller
 
         return response()->json($movimientoCSAE);
     }
-    public function salida(Request $request, MovimientoCSAE $movimientoCSAE)
+    /**
+     * Actualiza un movimiento: la entrada, la salida, o las dos.
+     *
+     * Antes se llamaba `salida` y solo escribía los tres campos de salida. La
+     * pantalla de edición completa mandaba la matrícula y el transportista y el
+     * servidor los tiraba en silencio; el `required` del formulario lo tapaba
+     * impidiendo guardar un movimiento que aún no había salido.
+     */
+    public function actualizar(Request $request, MovimientoCSAE $movimientoCSAE)
     {
         DB::beginTransaction();
 
         try {
             $validated = $request->validate([
+                /*
+                 * `sometimes` en todo lo de entrada: la pantalla de registrar
+                 * salida no manda estos campos y no debe empezar a hacerlo.
+                 *
+                 * La ventana solo se juzga cuando el día CAMBIA, igual que en la
+                 * salida. `csae.entrada` son tres días hacia atrás, así que
+                 * aplicarla siempre haría incorregible cualquier movimiento de la
+                 * semana pasada: el formulario reenvía su propia fecha vieja.
+                 */
+                'fecha_hora_entrada'    => $this->cambiaElDiaDeEntrada($request, $movimientoCSAE)
+                    ? ['sometimes', 'required', 'date', new DentroDeLaVentana('csae.entrada')]
+                    : ['sometimes', 'required', 'date'],
+                'matricula'             => 'sometimes|required|string|max:20',
+                'tipo_aeronave'         => 'sometimes|required|string|max:50',
+                'como_llega'            => 'sometimes|required|string|max:50',
+                'transportista'         => 'sometimes|required|string|max:100',
+                'observaciones_entrada' => 'sometimes|nullable|string',
+                'firma_entrada'         => 'sometimes|nullable|string',
+
                 'fecha_hora_salida'    => $this->cambiaElDiaDeSalida($request, $movimientoCSAE)
                     ? ['nullable', 'date', new DentroDeLaVentana('csae.salida')]
                     : ['nullable', 'date'],
                 'firma_salida'         => 'sometimes|nullable|string',
-                'observaciones_salida' => 'nullable|string',
+                'observaciones_salida' => 'sometimes|nullable|string',
             ]);
 
-            $movimientoCSAE->update([
-                'fecha_hora_salida'    => $validated['fecha_hora_salida'] ?? null,
-                'observaciones_salida' => $validated['observaciones_salida'] ?? null,
-                'user_salida_id'       => Auth::id(),
-            ]);
+            /*
+             * Se escribe SOLO lo que llegó. Con `?? null` una salida ya
+             * registrada se borraba por omitir el campo, y la edición completa
+             * no tiene por qué mandar lo que no toca.
+             */
+            $cambios = [];
 
-            $firmaSalida = $validated['firma_salida'] ?? null;
+            foreach ([
+                'fecha_hora_entrada',
+                'matricula',
+                'tipo_aeronave',
+                'como_llega',
+                'transportista',
+                'observaciones_entrada',
+                'fecha_hora_salida',
+                'observaciones_salida',
+            ] as $campo) {
+                if ($request->has($campo)) {
+                    $cambios[$campo] = $validated[$campo] ?? null;
+                }
+            }
 
-            if (
-                is_string($firmaSalida) &&
-                str_contains($firmaSalida, 'base64,')
-            ) {
-                $this->guardarFirmaBase64(
-                    $firmaSalida,
-                    'firma_salida',
-                    $movimientoCSAE
-                );
+            /*
+             * `user_salida_id` responde a «quién lo despachó», así que solo se
+             * sella cuando de verdad queda una salida registrada. Antes se
+             * sellaba en cada guardado, y corregir la matrícula de un avión que
+             * seguía en tierra le inventaba un responsable de salida.
+             */
+            if (($cambios['fecha_hora_salida'] ?? $movimientoCSAE->fecha_hora_salida) !== null) {
+                $cambios['user_salida_id'] = Auth::id();
+            }
+
+            $movimientoCSAE->update($cambios);
+
+            foreach (['firma_entrada', 'firma_salida'] as $rol) {
+                $firma = $validated[$rol] ?? null;
+
+                if (is_string($firma) && str_contains($firma, 'base64,')) {
+                    $this->guardarFirmaBase64($firma, $rol, $movimientoCSAE);
+                }
             }
 
             DB::commit();
 
             return response()->json([
-                'message' => 'Salida registrada correctamente',
+                'message' => 'Movimiento actualizado correctamente',
                 'data' => $movimientoCSAE,
             ]);
 
@@ -287,7 +337,7 @@ class MovimientoCSAEController extends Controller
             DB::rollBack();
 
             return response()->json([
-                'message' => 'Error al actualizar salida',
+                'message' => 'Error al actualizar el movimiento',
                 'error' => $e->getMessage(),
             ], 500);
         }
@@ -309,6 +359,23 @@ class MovimientoCSAEController extends Controller
         $recibido = VentanasDeFecha::diaQueGuardaElModelo($request->input('fecha_hora_salida'));
 
         return $recibido !== $movimiento->fecha_hora_salida?->toDateString();
+    }
+
+    /**
+     * Si la fecha de entrada recibida es un día DISTINTO del guardado.
+     *
+     * Una petición que no manda `fecha_hora_entrada` —la pantalla de registrar
+     * salida— no cambia nada, así que no se le aplica la ventana.
+     */
+    private function cambiaElDiaDeEntrada(Request $request, MovimientoCSAE $movimiento): bool
+    {
+        if (! $request->has('fecha_hora_entrada')) {
+            return false;
+        }
+
+        $recibido = VentanasDeFecha::diaQueGuardaElModelo($request->input('fecha_hora_entrada'));
+
+        return $recibido !== $movimiento->fecha_hora_entrada?->toDateString();
     }
 
     private function guardarFirmaBase64(string $value, string $rol, MovimientoCSAE $movimiento): void

@@ -30,6 +30,15 @@ interface Props {
 
     /** Día con el que la salida ya estaba guardada, si se edita. */
     fechaOriginal?: string;
+
+    /**
+     * Si la fecha y la hora de salida son obligatorias.
+     *
+     * Verdadero al REGISTRAR la salida, que es de lo que va esa pantalla. Falso
+     * en la edición completa: un avión que sigue en tierra no tiene salida, y
+     * exigirla ahí impedía guardar cualquier corrección de su entrada.
+     */
+    obligatorio?: boolean;
 }
 
 const formatFechaHora = (
@@ -60,6 +69,7 @@ export default function MovimientoCSAESalida({
     onChange,
     updateField,
     fechaOriginal,
+    obligatorio = true,
 }: Props) {
     const { min, max } = useVentanaDeFecha(
         'csae.salida',
@@ -285,7 +295,7 @@ export default function MovimientoCSAESalida({
                                                     max={max}
                                                     value={data.fecha_salida}
                                                     onChange={onChange}
-                                                    required
+                                                    required={obligatorio}
                                                     className={`${inputStyle} pl-10`}
                                                 />
                                             </div>
@@ -316,7 +326,7 @@ export default function MovimientoCSAESalida({
                                                     placeholder="HH:MM"
                                                     pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$"
                                                     title="Escriba una hora válida en formato de 24 horas, por ejemplo 21:45"
-                                                    required
+                                                    required={obligatorio}
                                                     onChange={(event) => {
                                                         const horaFormateada = formatearHora24(
                                                             event.target.value,

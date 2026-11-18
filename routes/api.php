@@ -208,7 +208,7 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('MovimientosCSAE')->group(fun
     Route::post('/',[MovimientoCSAEController::class, 'store']);
     Route::get('/',[MovimientoCSAEController::class, 'index']);
     Route::get('/{movimientoCSAE}', [MovimientoCSAEController::class, 'show']);
-    Route::put('/{movimientoCSAE}',[MovimientoCSAEController::class, 'salida']);
+    Route::put('/{movimientoCSAE}',[MovimientoCSAEController::class, 'actualizar']);
     Route::get('eliminar/{id}', [MovimientoCSAEController::class, 'eliminar']);
 });
 Route::middleware(['api', 'auth:sanctum'])->prefix('VehiculoEolo')->group(function () {
