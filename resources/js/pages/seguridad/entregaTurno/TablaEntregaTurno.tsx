@@ -3,10 +3,9 @@ import { useEffect, useState } from 'react';
 import Swal from 'sweetalert2';
 import ModalPeriodo, { type RangoPeriodo } from '@/components/ModalPeriodo';
 import { eliminarRelevo, ErrorDeApi, fetchRelevos } from '@/stores/apiEntregaTurnoSeguridad';
-import { CeldaSeccion, idUnicoDe, pernoctaDelDia } from './CeldasRelevo';
+import { DistintivoFirmas } from './CeldasRelevo';
 import FilaFiltros from './FilaFiltros';
 import PaginadorRelevos from './PaginadorRelevos';
-import SelectorSeccion from './SelectorSeccion';
 import { etiquetaPeriodo, formatearFecha, type FilaRelevo, type FiltrosRelevo } from './types';
 
 interface Props {
@@ -16,17 +15,15 @@ interface Props {
     /** La tabla lo llama cuando necesita que la página incremente `recargar`. */
     onRecargar: () => void;
     onEditar: (id: number) => void;
-    onVerPrevia: (fila: FilaRelevo) => void;
+    onVerPrevia: (id: number) => void;
 }
 
 const TH = 'px-6 py-4 text-[9px] font-black uppercase text-slate-400 text-center';
 
 const toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, timerProgressBar: true });
 
-const FILTROS_INICIALES: FiltrosRelevo = { search: '', seccion: '', estado: '', fecha_inicio: '', fecha_fin: '' };
+const FILTROS_INICIALES: FiltrosRelevo = { search: '', estado: '', fecha_inicio: '', fecha_fin: '' };
 const PERIODO_INICIAL: RangoPeriodo = { periodo: 'mes', fecha_inicio: '', fecha_fin: '' };
-
-type Accion = 'editar' | 'eliminar';
 
 export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, onEditar, onVerPrevia }: Props) {
     const [filtros, setFiltros] = useState<FiltrosRelevo>(FILTROS_INICIALES);
@@ -42,7 +39,6 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
     const [cargando, setCargando] = useState(false);
     // Lo que el buscador ya aplicó: se retrasa 300 ms para no pedir por tecla.
     const [busqueda, setBusqueda] = useState('');
-    const [eligiendo, setEligiendo] = useState<{ fila: FilaRelevo; accion: Accion } | null>(null);
 
     useEffect(() => {
         const temporizador = setTimeout(() => {
@@ -54,7 +50,7 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
         return () => clearTimeout(temporizador);
     }, [filtros.search]);
 
-    const { seccion, estado, fecha_inicio, fecha_fin } = filtros;
+    const { estado, fecha_inicio, fecha_fin } = filtros;
 
     useEffect(() => {
         let vigente = true;
@@ -65,7 +61,6 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
             try {
                 const respuesta = await fetchRelevos({
                     search: busqueda,
-                    seccion,
                     estado,
                     fecha_inicio,
                     fecha_fin,
@@ -105,7 +100,7 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
         return () => {
             vigente = false;
         };
-    }, [busqueda, seccion, estado, fecha_inicio, fecha_fin, pagina, porPagina, recargar]);
+    }, [busqueda, estado, fecha_inicio, fecha_fin, pagina, porPagina, recargar]);
 
     const cambiarFiltros = (cambio: Partial<FiltrosRelevo>) => {
         setFiltros(actual => ({ ...actual, ...cambio }));
@@ -124,7 +119,7 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
     const eliminar = async (id: number) => {
         const confirmacion = await Swal.fire({
             title: '¿Estás seguro?',
-            text: 'Se eliminará el registro de esta sección.',
+            text: 'Se eliminará este relevo.',
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#4f46e5',
@@ -154,31 +149,11 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
         onRecargar();
     };
 
-    const actuar = (accion: Accion, id: number) => {
-        setEligiendo(null);
-
-        if (accion === 'editar') {
-            onEditar(id);
-        } else {
-            void eliminar(id);
-        }
-    };
-
-    const pedirAccion = (accion: Accion, fila: FilaRelevo) => {
-        const id = idUnicoDe(fila);
-
-        if (id !== null) {
-            actuar(accion, id);
-        } else if (fila.caseta !== null || fila.plataforma !== null) {
-            setEligiendo({ fila, accion });
-        }
-    };
-
     return (
         <div className="space-y-4">
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-col justify-between gap-2 border-b border-slate-100 px-6 py-4 md:flex-row md:items-center">
-                    <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Relevos por día</h3>
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Relevos</h3>
 
                     {/* Mismo botón que en Operaciones Diarias: la fila de filtros nace oculta. */}
                     <button
@@ -196,9 +171,10 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
                         <thead>
                             <tr className="border-b border-slate-100 bg-white">
                                 <th className={TH}>Fecha</th>
-                                <th className={TH}>Caseta</th>
-                                <th className={TH}>Plataforma</th>
+                                <th className={TH}>Hora</th>
+                                <th className={TH}>Quien entrega</th>
                                 <th className={TH}>Pernocta del día</th>
+                                <th className={TH}>Estado</th>
                                 <th className="px-6 py-4 text-right text-[9px] font-black uppercase text-slate-400">Acciones</th>
                             </tr>
 
@@ -216,26 +192,33 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
                         <tbody className={cargando ? 'opacity-60' : ''}>
                             {filas.length > 0 ? (
                                 filas.map(fila => (
-                                    <tr key={fila.fecha} className="border-b border-slate-50 transition-colors hover:bg-slate-50/80">
+                                    <tr key={fila.id} className="border-b border-slate-50 transition-colors hover:bg-slate-50/80">
                                         <td className="px-6 py-4 text-center">
                                             <span className="text-[10px] font-bold text-slate-800">{formatearFecha(fila.fecha)}</span>
                                         </td>
-                                        <td className="px-6 py-4 text-center"><CeldaSeccion seccion={fila.caseta} /></td>
-                                        <td className="px-6 py-4 text-center"><CeldaSeccion seccion={fila.plataforma} /></td>
                                         <td className="px-6 py-4 text-center">
-                                            <span className="text-[10px] font-bold uppercase text-slate-600">{pernoctaDelDia(fila)}</span>
+                                            <span className="text-[10px] text-slate-500">{fila.hora}</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className="text-[11px] font-bold text-slate-700">{fila.nombre}</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className="text-[10px] font-bold uppercase text-slate-600">{fila.pernocta}</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <DistintivoFirmas faltantes={fila.firmas_faltantes} />
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center justify-end gap-1">
-                                                <button type="button" onClick={() => onVerPrevia(fila)} title="Vista previa del día" className="p-2 text-slate-400 transition-colors hover:text-indigo-600">
+                                                <button type="button" onClick={() => onVerPrevia(fila.id)} title="Vista previa" className="p-2 text-slate-400 transition-colors hover:text-indigo-600">
                                                     <Eye size={16} />
                                                 </button>
                                                 {puedeEditar && (
                                                     <>
-                                                        <button type="button" onClick={() => pedirAccion('editar', fila)} title="Editar" className="p-2 text-slate-400 transition-colors hover:text-indigo-600">
+                                                        <button type="button" onClick={() => onEditar(fila.id)} title="Editar" className="p-2 text-slate-400 transition-colors hover:text-indigo-600">
                                                             <Pencil size={16} />
                                                         </button>
-                                                        <button type="button" onClick={() => pedirAccion('eliminar', fila)} title="Eliminar" className="p-2 text-slate-400 transition-colors hover:text-red-500">
+                                                        <button type="button" onClick={() => void eliminar(fila.id)} title="Eliminar" className="p-2 text-slate-400 transition-colors hover:text-red-500">
                                                             <Trash2 size={16} />
                                                         </button>
                                                     </>
@@ -246,7 +229,7 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-20 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                    <td colSpan={6} className="px-6 py-20 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">
                                         {cargando ? 'Cargando...' : 'No se encontraron relevos'}
                                     </td>
                                 </tr>
@@ -267,15 +250,6 @@ export default function TablaEntregaTurno({ puedeEditar, recargar, onRecargar, o
                     setPagina(1);
                 }}
             />
-
-            {eligiendo && (
-                <SelectorSeccion
-                    fila={eligiendo.fila}
-                    accion={eligiendo.accion}
-                    onElegir={id => actuar(eligiendo.accion, id)}
-                    onCerrar={() => setEligiendo(null)}
-                />
-            )}
 
             {modalPeriodoAbierto && (
                 <ModalPeriodo

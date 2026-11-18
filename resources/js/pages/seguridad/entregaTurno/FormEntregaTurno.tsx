@@ -6,12 +6,10 @@ import { X } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import Swal from 'sweetalert2';
 import {
-    ETIQUETA_SECCION,
     horaAhora,
     ROL_FBO,
     ROL_JEFE_AREA,
     ROL_QUIEN_ENTREGA,
-    SECCIONES,
     type DetalleRelevo,
     type FirmaRelevo,
     type PayloadRelevo,
@@ -55,7 +53,6 @@ function Formulario({ relevo, nombreUsuario, puedeFirmarJefe, puedeFirmarFbo, on
     const [datos, setDatos] = useState({
         fecha: relevo?.fecha ?? fechaHoy(),
         hora: relevo?.hora ?? horaAhora(),
-        seccion: relevo?.seccion ?? SECCIONES[0],
         observaciones: relevo?.observaciones ?? '',
     });
     const [firmaQuienEntrega, setFirmaQuienEntrega] = useState('');
@@ -90,7 +87,6 @@ function Formulario({ relevo, nombreUsuario, puedeFirmarJefe, puedeFirmarFbo, on
             if (relevo === null) {
                 const payload: PayloadRelevoNuevo = {
                     fecha_hora: `${datos.fecha} ${datos.hora}:00`,
-                    seccion: datos.seccion,
                     observaciones: datos.observaciones.trim() || null,
                     firma_quien_entrega: firmaQuienEntrega,
                 };
@@ -99,7 +95,6 @@ function Formulario({ relevo, nombreUsuario, puedeFirmarJefe, puedeFirmarFbo, on
             } else {
                 const payload: PayloadRelevo = {
                     fecha_hora: `${datos.fecha} ${datos.hora}:00`,
-                    seccion: datos.seccion,
                     observaciones: datos.observaciones.trim() || null,
                     ...(firmaQuienEntrega ? { firma_quien_entrega: firmaQuienEntrega } : {}),
                     ...(puedeFirmarJefe && firmaJefe ? { firma_jefe_area: firmaJefe } : {}),
@@ -182,25 +177,6 @@ function Formulario({ relevo, nombreUsuario, puedeFirmarJefe, puedeFirmarFbo, on
                         <div className="col-span-2">
                             <MensajeError mensajes={errores.fecha_hora} />
                         </div>
-                    </div>
-
-                    <div>
-                        <label className={ETIQUETA}>Puesto</label>
-                        <div className="flex rounded-lg bg-slate-100 p-1">
-                            {SECCIONES.map((seccion) => (
-                                <button
-                                    key={seccion}
-                                    type="button"
-                                    onClick={() => setDatos({ ...datos, seccion })}
-                                    className={`flex-1 rounded-md py-2 text-[10px] font-bold uppercase transition-all ${
-                                        datos.seccion === seccion ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'
-                                    }`}
-                                >
-                                    {ETIQUETA_SECCION[seccion]}
-                                </button>
-                            ))}
-                        </div>
-                        <MensajeError mensajes={errores.seccion} />
                     </div>
 
                     {relevo !== null && (

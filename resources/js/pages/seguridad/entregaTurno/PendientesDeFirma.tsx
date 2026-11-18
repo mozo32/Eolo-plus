@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, ClipboardCheck, UserCheck, X } from 'lucide-react';
 import { ErrorDeApi, fetchPendientesRelevo } from '@/stores/apiEntregaTurnoSeguridad';
-import { ETIQUETA_ROL, ETIQUETA_SECCION, formatearFecha, type PendienteRelevo } from './types';
+import { ETIQUETA_ROL, formatearFecha, type PendienteRelevo } from './types';
 
 interface Props {
     abierto: boolean;
@@ -81,7 +81,7 @@ export default function PendientesDeFirma({ abierto, onCerrar, onFirmar }: Props
                                 <div className="mr-2 min-w-0">
                                     <p className="truncate text-xs font-black uppercase tracking-tight text-slate-800">{pendiente.nombre}</p>
                                     <p className="text-[10px] font-medium text-slate-400">
-                                        {formatearFecha(pendiente.fecha)} {pendiente.hora} · {ETIQUETA_SECCION[pendiente.seccion]}
+                                        {formatearFecha(pendiente.fecha)} {pendiente.hora}
                                     </p>
                                     <p className="text-[9px] font-black uppercase tracking-wider text-amber-600">
                                         Falta: {pendiente.falta.map(rol => ETIQUETA_ROL[rol] ?? rol).join(' y ')}

@@ -19,8 +19,7 @@ function getXsrfToken(): string {
  * Un error que conserva el estado y los errores por campo.
  *
  * Un `Error` pelado con solo el mensaje no sirve: el formulario no podría
- * pintar «la pernocta mensual solo puede estar hecha, no hecha o sin
- * revisar» junto a su campo, ni distinguir un 403 —no tienes permiso— de
+ * pintar «la firma no llegó en un formato válido» junto a su campo, ni distinguir un 403 —no tienes permiso— de
  * un 404 —alguien ya lo borró— de un 422. Y el servidor manda los tres con
  * la misma forma `{ message }`, así que sin el estado son indistinguibles.
  */

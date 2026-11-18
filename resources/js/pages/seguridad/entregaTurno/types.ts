@@ -1,14 +1,5 @@
 import type { RangoPeriodo } from '@/components/ModalPeriodo';
 
-export const SECCIONES = ['caseta', 'plataforma'] as const;
-
-export type Seccion = (typeof SECCIONES)[number];
-
-export const ETIQUETA_SECCION: Record<Seccion, string> = {
-    caseta: 'Caseta',
-    plataforma: 'Plataforma',
-};
-
 /** Un renglón del resumen del día, con su texto ya armado por el servidor. */
 export type RenglonResumen = {
     clave: string;
@@ -25,21 +16,16 @@ export type ResumenRelevo = {
     renglones: RenglonResumen[];
 };
 
-export type SeccionRelevo = {
+/** Un renglón de la tabla: un relevo. */
+export type FilaRelevo = {
     id: number;
-    nombre: string;
+    fecha: string;
     hora: string;
+    nombre: string;
     /** Los roles de cierre que faltan. Vacío quiere decir cerrado. */
     firmas_faltantes: string[];
     /** Aeronaves que pernoctaron ese día: congelada si el relevo lo está. */
     pernocta: number;
-    extras: number;
-};
-
-export type FilaRelevo = {
-    fecha: string;
-    caseta: SeccionRelevo | null;
-    plataforma: SeccionRelevo | null;
 };
 
 /**
@@ -76,7 +62,6 @@ export type DetalleRelevo = {
     fecha: string;
     hora: string;
     fecha_hora: string;
-    seccion: Seccion;
     resumen: ResumenRelevo;
     observaciones: string | null;
     firmas: FirmaRelevo[];
@@ -87,7 +72,6 @@ export type PendienteRelevo = {
     nombre: string;
     fecha: string;
     hora: string;
-    seccion: Seccion;
     /** Lo que a QUIEN PREGUNTA le falta firmar de ese relevo. */
     falta: string[];
 };
@@ -98,17 +82,15 @@ export type PendienteRelevo = {
  */
 export type PayloadRelevo = {
     fecha_hora?: string;
-    seccion?: Seccion;
     observaciones?: string | null;
     firma_quien_entrega?: string;
     firma_jefe_area?: string;
     firma_fbo?: string;
 };
 
-/** Lo que manda al CREAR, donde tres campos son obligatorios. */
+/** Lo que manda al CREAR, donde dos campos son obligatorios. */
 export type PayloadRelevoNuevo = PayloadRelevo & {
     fecha_hora: string;
-    seccion: Seccion;
     firma_quien_entrega: string;
 };
 
@@ -116,7 +98,6 @@ export type FiltrosRelevo = {
     page?: number;
     per_page?: number;
     search?: string;
-    seccion?: '' | Seccion;
     fecha_inicio?: string;
     fecha_fin?: string;
     estado?: '' | 'falta_jefe_area' | 'falta_fbo' | 'completas';

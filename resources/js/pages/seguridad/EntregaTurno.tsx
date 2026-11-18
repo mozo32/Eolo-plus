@@ -9,7 +9,7 @@ import FormEntregaTurno from './entregaTurno/FormEntregaTurno';
 import PendientesDeFirma from './entregaTurno/PendientesDeFirma';
 import TablaEntregaTurno from './entregaTurno/TablaEntregaTurno';
 import VistaPreviaEntregaTurno from './entregaTurno/VistaPreviaEntregaTurno';
-import type { DetalleRelevo, FilaRelevo } from './entregaTurno/types';
+import type { DetalleRelevo } from './entregaTurno/types';
 
 type Role = { slug: string; nombre: string; };
 type AuthUser = { id: number; name: string; email: string; isAdmin: boolean; roles: Role[]; };
@@ -34,7 +34,7 @@ export default function EntregaTurno() {
     const [relevoEnEdicion, setRelevoEnEdicion] = useState<DetalleRelevo | null>(null);
 
     const [recargar, setRecargar] = useState(0);
-    const [previa, setPrevia] = useState<FilaRelevo | null>(null);
+    const [previa, setPrevia] = useState<number | null>(null);
     const [pendientesAbierto, setPendientesAbierto] = useState(false);
     const [pendientes, setPendientes] = useState(0);
     // El FBO vacía la cola: si el formulario se abrió desde ella, al guardar vuelve a ella.
@@ -173,7 +173,7 @@ export default function EntregaTurno() {
                 </div>
             </div>
 
-            <VistaPreviaEntregaTurno fila={previa} onCerrar={() => setPrevia(null)} />
+            <VistaPreviaEntregaTurno id={previa} onCerrar={() => setPrevia(null)} />
 
             {puedeEditar && (
                 <PendientesDeFirma

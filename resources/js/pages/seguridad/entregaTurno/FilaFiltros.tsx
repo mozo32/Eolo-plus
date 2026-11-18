@@ -37,6 +37,7 @@ export default function FilaFiltros({ filtros, etiquetaFecha, abierto, onAbrirFe
                     <ChevronDown size={14} className="shrink-0 text-slate-400" />
                 </button>
             </td>
+            <td className="border-b border-slate-200 px-2 py-2" />
             <td className="border-b border-slate-200 px-2 py-2">
                 <input
                     type="text"
@@ -46,17 +47,7 @@ export default function FilaFiltros({ filtros, etiquetaFecha, abierto, onAbrirFe
                     onChange={e => onBuscar(e.target.value.toUpperCase())}
                 />
             </td>
-            <td className="border-b border-slate-200 px-2 py-2">
-                <select
-                    className={FILTRO}
-                    value={filtros.seccion}
-                    onChange={e => onCambiar({ seccion: e.target.value as FiltrosRelevo['seccion'] })}
-                >
-                    <option value="">AMBOS PUESTOS</option>
-                    <option value="caseta">CASETA</option>
-                    <option value="plataforma">PLATAFORMA</option>
-                </select>
-            </td>
+            <td className="border-b border-slate-200 px-2 py-2" />
             <td className="border-b border-slate-200 px-2 py-2">
                 <select
                     className={FILTRO}
