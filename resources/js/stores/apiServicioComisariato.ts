@@ -106,3 +106,46 @@ export async function eliminar(id: number) {
         ...data,
     };
 }
+
+export type EvidenciaComisariato = {
+    id: number;
+    url: string;
+    orden: number;
+};
+
+export async function subirEvidenciaComisariato(servicioId: number, foto: string): Promise<EvidenciaComisariato> {
+    const res = await fetch(`/api/ServicioComisariato/${servicioId}/evidencias`, {
+        method: "POST",
+        headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "X-XSRF-TOKEN": getXsrfToken(),
+        },
+        body: JSON.stringify({ foto }),
+        credentials: "same-origin",
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+        throw new Error(data?.message || "No se pudo guardar la evidencia");
+    }
+
+    return data.data;
+}
+
+export async function eliminarEvidenciaComisariato(servicioId: number, imagenId: number): Promise<void> {
+    const res = await fetch(`/api/ServicioComisariato/${servicioId}/evidencias/${imagenId}`, {
+        method: "DELETE",
+        headers: {
+            Accept: "application/json",
+            "X-XSRF-TOKEN": getXsrfToken(),
+        },
+        credentials: "same-origin",
+    });
+
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.message || "No se pudo eliminar la evidencia");
+    }
+}
