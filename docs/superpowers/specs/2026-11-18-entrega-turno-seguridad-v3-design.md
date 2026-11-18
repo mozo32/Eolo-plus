@@ -341,14 +341,16 @@ Lo que el listado nuevo tiene que demostrar:
 
 Las pruebas corren **en serie** (`php artisan test`), nunca con `--parallel`.
 
-### Lo que no se puede probar automáticamente
+### La reescritura del texto congelado sí se prueba
 
-La reescritura del texto congelado **no lleva prueba**, y no por descuido: las
-pruebas arrancan con la base recreada y vacía, así que la migración de datos
-no encuentra nada que reescribir y una prueba sobre ella afirmaría que cero
-renglones quedaron bien. Se verifica leyendo los cinco relevos reales después
-de correr la migración, y eso queda como un paso del plan con su evidencia,
-no como una prueba de la suite.
+Las pruebas arrancan con la base vacía, así que la migración de datos no
+encuentra nada que reescribir por sí sola. `EsquemaV2Test` lo resuelve
+sembrando filas crudas con resúmenes congelados, haciendo un rollback de un
+solo paso sobre esta migración y volviendo a migrar. Prueba las dos
+direcciones (frases viejas al bajar, nuevas al subir), que las cifras quedan
+byte a byte idénticas y que una fila sin frases de cero no se toca. Leer los
+cinco relevos reales tras la migración sigue siendo un paso del plan, como
+confirmación, no como sustituto.
 
 ## 12. Riesgos y limitaciones conocidas
 

@@ -15,6 +15,10 @@ use Illuminate\Support\Facades\Schema;
  * Los relevos que ya existen conservan fecha, firmas, observaciones y
  * resumen; solo pierden la etiqueta del puesto. El `down()` devuelve la
  * columna pero NO sus valores: eso se pierde de verdad, y está aceptado.
+ *
+ * Ojo con `main`: su código todavía espera la columna `seccion` y las dos
+ * ramas comparten una sola base. Tras correr esta migración, abrir el módulo
+ * desde `main` falla con «Unknown column 'seccion'».
  */
 return new class extends Migration
 {
@@ -53,37 +57,56 @@ return new class extends Migration
          * Van en tres llamadas separadas porque dentro de un mismo Blueprint
          * no está garantizado que el dropIndex corra antes del dropColumn.
          */
-        Schema::table('entregas_turno_seguridad', function (Blueprint $table) {
-            $table->dropIndex(self::INDICE_VIEJO);
-        });
+        /*
+         * Cada paso se salta si ya está hecho. La migración corre una vez y a
+         * mano contra datos vivos, y un estado a medias es el único en el que
+         * crear un relevo falla: `seccion` es NOT NULL sin valor por omisión y
+         * el código ya no la envía. Con las guardas, reintentar la termina.
+         */
+        if (Schema::hasIndex('entregas_turno_seguridad', self::INDICE_VIEJO)) {
+            Schema::table('entregas_turno_seguridad', function (Blueprint $table) {
+                $table->dropIndex(self::INDICE_VIEJO);
+            });
+        }
 
-        Schema::table('entregas_turno_seguridad', function (Blueprint $table) {
-            $table->dropColumn('seccion');
-        });
+        if (Schema::hasColumn('entregas_turno_seguridad', 'seccion')) {
+            Schema::table('entregas_turno_seguridad', function (Blueprint $table) {
+                $table->dropColumn('seccion');
+            });
+        }
 
-        Schema::table('entregas_turno_seguridad', function (Blueprint $table) {
-            $table->index(['fecha_hora'], self::INDICE_NUEVO);
-        });
+        if (! Schema::hasIndex('entregas_turno_seguridad', self::INDICE_NUEVO)) {
+            Schema::table('entregas_turno_seguridad', function (Blueprint $table) {
+                $table->index(['fecha_hora'], self::INDICE_NUEVO);
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('entregas_turno_seguridad', function (Blueprint $table) {
-            $table->dropIndex(self::INDICE_NUEVO);
-        });
+        // Mismas guardas que en up(): un rollback a medias también se reanuda.
+        if (Schema::hasIndex('entregas_turno_seguridad', self::INDICE_NUEVO)) {
+            Schema::table('entregas_turno_seguridad', function (Blueprint $table) {
+                $table->dropIndex(self::INDICE_NUEVO);
+            });
+        }
 
         /*
          * El valor por omisión es `caseta` para que la columna pueda volver a
          * ser NOT NULL sobre filas que ya existen. Los puestos originales no
          * vuelven.
          */
-        Schema::table('entregas_turno_seguridad', function (Blueprint $table) {
-            $table->string('seccion', 16)->default('caseta');
-        });
+        if (! Schema::hasColumn('entregas_turno_seguridad', 'seccion')) {
+            Schema::table('entregas_turno_seguridad', function (Blueprint $table) {
+                $table->string('seccion', 16)->default('caseta');
+            });
+        }
 
-        Schema::table('entregas_turno_seguridad', function (Blueprint $table) {
-            $table->index(['fecha_hora', 'seccion'], self::INDICE_VIEJO);
-        });
+        if (! Schema::hasIndex('entregas_turno_seguridad', self::INDICE_VIEJO)) {
+            Schema::table('entregas_turno_seguridad', function (Blueprint $table) {
+                $table->index(['fecha_hora', 'seccion'], self::INDICE_VIEJO);
+            });
+        }
 
         $this->reescribirTextos(array_flip(self::TEXTOS));
     }

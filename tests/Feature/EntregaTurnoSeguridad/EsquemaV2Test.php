@@ -12,9 +12,9 @@ use Illuminate\Support\Facades\Schema;
  * sin pernocta mensual, sin puesto, con el resumen congelado y con el índice
  * sobre la fecha sola.
  *
- * Lo que sqlite NO puede ver desde aquí: que el índice nuevo exista y
- * funcione igual en MySQL, ni que su nombre quepa en los 64 caracteres que
- * MySQL admite (eso lo vigila la prueba de nombres del modelo). La
+ * Lo que sqlite NO puede ver desde aquí: que el índice se comporte igual en
+ * MySQL, ni que su nombre quepa en los 64 caracteres que MySQL admite (eso lo
+ * vigila la prueba de nombres del modelo). La
  * comprobación contra MySQL se hace a mano al cerrar la tarea, que es la
  * misma clase de defecto que una vez dejó un índice de 69 caracteres pasar
  * toda la suite.
@@ -167,7 +167,9 @@ test('la migracion v3 reescribe el texto congelado en las dos direcciones y no t
     $antes = $cifras(json_decode($leer()[0], true));
 
     // down() devuelve la columna y las frases viejas.
-    expect(Artisan::call('migrate:rollback', ['--step' => 1]))->toBe(0);
+    expect(Artisan::call('migrate:rollback', [
+        '--path' => 'database/migrations/2026_11_18_120000_v3_entrega_turno_seguridad_sin_seccion.php',
+    ]))->toBe(0);
 
     $enRollback = json_decode($leer()[0], true);
 

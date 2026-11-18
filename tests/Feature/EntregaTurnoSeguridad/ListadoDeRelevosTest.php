@@ -152,9 +152,49 @@ test('el buscador filtra por el nombre de quien entrego', function () {
     expect(array_column(listado(['search' => 'Ana'])->json('data'), 'nombre'))->toBe(['Ana López']);
 });
 
+test('el buscador encuentra en mayúsculas, que es lo que la pantalla manda', function () {
+    // `FilaFiltros.tsx` manda `e.target.value.toUpperCase()`, así que el
+    // servidor NUNCA recibe lo que el usuario escribió tal cual. La prueba
+    // hermana busca «Ana» con su mayúscula inicial, que es lo que nadie manda.
+    $ana = User::factory()->create(['name' => 'Ana López']);
+    $beto = User::factory()->create(['name' => 'Beto Ruiz']);
+
+    relevoDeListado('2026-11-09', '07:30', ['user_id' => $ana->id]);
+    relevoDeListado('2026-11-08', '07:30', ['user_id' => $beto->id]);
+
+    expect(array_column(listado(['search' => 'ANA'])->json('data'), 'nombre'))->toBe(['Ana López']);
+});
+
+test('el buscador encuentra un nombre acentuado en mayúsculas', function () {
+    // HALLAZGO, no un detalle de la prueba: en sqlite esto NO encuentra nada.
+    // El `LIKE` de sqlite solo pliega mayúsculas del ASCII, así que la `Á`
+    // que manda la pantalla no empareja con la `á` guardada y el nombre
+    // entero deja de encontrarse. En producción sí funciona —la collation
+    // configurada es `utf8mb4_unicode_ci`, que pliega caso Y acentos
+    // (config/database.php:56)—, por eso está `skip` y no borrada: el defecto
+    // es latente y depende de la collation, no del código.
+    //
+    // El `.toUpperCase()` es convención del proyecto: los filtros por nombre
+    // de `despacho/EntregaTurno.tsx` y de `Rampa/.../TablaJefeArea.tsx` hacen
+    // lo mismo y comparten la misma dependencia. Quitarlo solo aquí dejaría
+    // este buscador distinto de los otros tres.
+    $sanchez = User::factory()->create(['name' => 'Beto Sánchez']);
+    $robles = User::factory()->create(['name' => 'Ana Robles']);
+
+    relevoDeListado('2026-11-04', '07:30', ['user_id' => $sanchez->id]);
+    relevoDeListado('2026-11-03', '07:30', ['user_id' => $robles->id]);
+
+    expect(array_column(listado(['search' => 'SÁNCHEZ'])->json('data'), 'fecha'))
+        ->toBe(['2026-11-04']);
+})->skip('El LIKE de sqlite no pliega la Á; en MySQL utf8mb4_unicode_ci sí. Defecto latente que comparten otros tres buscadores por nombre.');
+
 test('el rango de fechas incluye sus dos bordes', function () {
-    relevoDeListado('2026-11-01');
-    relevoDeListado('2026-11-04');
+    // Las horas de los bordes no son 07:30 a propósito. Comparar un datetime
+    // contra `'2026-11-04'` como cadena excluye el día entero, y con todos
+    // los registros a media mañana y ninguno en el borde ese fallo no se
+    // vería: la prueba pasaría con `where` en vez de `whereDate`.
+    relevoDeListado('2026-11-01', '00:00');
+    relevoDeListado('2026-11-04', '23:59');
     relevoDeListado('2026-11-08');
 
     $fechas = array_column(
@@ -222,7 +262,8 @@ test('una firma retirada no cuenta como puesta', function () {
         ->update(['status' => 'N']);
 
     expect(listado()->json('data.0.firmas_faltantes'))->toBe(['fbo'])
-        ->and(listado(['estado' => 'completas'])->json('meta.total'))->toBe(0);
+        ->and(listado(['estado' => 'completas'])->json('meta.total'))->toBe(0)
+        ->and(listado(['estado' => 'falta_fbo'])->json('meta.total'))->toBe(1);
 });
 
 test('el estado solo admite sus tres valores', function () {
@@ -235,7 +276,7 @@ test('un filtro en forma de arreglo se rechaza con 422, no con 500', function (s
     test()->actingAs(User::factory()->create())
         ->getJson("/api/EntregaTurnoSeguridad?{$campo}[]=x")
         ->assertStatus(422);
-})->with(['search', 'estado']);
+})->with(['search', 'estado', 'fecha_inicio', 'fecha_fin']);
 
 test('el relevo trae la pernocta del dia en vivo', function () {
     PernoctaDia::create(['fecha' => '2026-11-09', 'matricula' => 'XA-UNO']);
@@ -276,10 +317,29 @@ test('la pernocta de la pagina se pide en una sola consulta', function () {
         ->getJson('/api/EntregaTurnoSeguridad?per_page=10')
         ->assertSuccessful();
 
-    $consultas = count(DB::getQueryLog());
+    $log = DB::getQueryLog();
     DB::disableQueryLog();
 
-    expect($consultas)->toBeLessThan(10);
+    $deLaPernocta = array_filter($log, fn (array $q) => str_contains($q['query'], 'pernocta_dia'));
+
+    expect($deLaPernocta)->toHaveCount(1)
+        ->and(count($log))->toBeLessThan(10);
+});
+
+test('una pagina vacia no consulta la pernocta', function () {
+    $usuario = User::factory()->create();
+
+    DB::enableQueryLog();
+
+    test()->actingAs($usuario)
+        ->getJson('/api/EntregaTurnoSeguridad')
+        ->assertSuccessful()
+        ->assertJsonPath('data', []);
+
+    $log = DB::getQueryLog();
+    DB::disableQueryLog();
+
+    expect(array_filter($log, fn (array $q) => str_contains($q['query'], 'pernocta_dia')))->toBeEmpty();
 });
 
 test('un seccion en el query string ya no filtra nada ni revienta', function () {

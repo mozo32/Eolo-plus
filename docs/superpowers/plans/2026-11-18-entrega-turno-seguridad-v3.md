@@ -1293,7 +1293,7 @@ git commit -m "feat(seguridad): la pantalla del relevo ensena un renglon por reg
 
 ### Task 5: La suite entera, la migración real y el navegador
 
-Lo que las pruebas no pueden demostrar: que la reescritura del texto congelado dejó bien los cinco relevos de verdad, y que la pantalla funciona.
+La reescritura del texto congelado SÍ está probada: `EsquemaV2Test` siembra filas crudas, hace un rollback de un paso sobre esta migración y vuelve a migrar, y comprueba ambas direcciones y que las cifras quedan byte a byte idénticas. Lo que las pruebas no pueden demostrar es que esos cinco relevos de verdad quedaron bien, y que la pantalla funciona.
 
 **Files:** ninguno. Es verificación.
 
