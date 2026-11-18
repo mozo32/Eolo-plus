@@ -3,12 +3,17 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ServicioComisariato\GuardarEvidenciaComisariatoRequest;
+use App\Models\Imagen;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Models\ServicioComisariato;
 use App\Rules\DentroDeLaVentana;
 use App\Support\VentanasDeFecha;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class ServicioComisariatoController extends Controller
@@ -128,8 +133,117 @@ class ServicioComisariatoController extends Controller
     }
     public function show(ServicioComisariato $servicioComisariato)
     {
+        /*
+         * La relación NO se carga con `load()` a propósito: `toArray()`
+         * serializaría la colección entera de imágenes con sus columnas
+         * internas, y la pantalla solo necesita tres campos.
+         */
+        $evidencias = $servicioComisariato->evidencias()
+            ->orderBy('imageables.orden')
+            ->get()
+            ->map(static fn (Imagen $imagen): array => [
+                'id' => $imagen->id,
+                'url' => $imagen->url,
+                'orden' => (int) $imagen->pivot->orden,
+            ])
+            ->values()
+            ->all();
 
-        return response()->json($servicioComisariato);
+        return response()->json([
+            ...$servicioComisariato->toArray(),
+            'evidencias' => $evidencias,
+        ]);
+    }
+
+    /**
+     * Guarda UNA evidencia del servicio.
+     *
+     * El `orden` sale del máximo de TODAS —también las retiradas— más uno:
+     * dos evidencias distintas no pueden haber ocupado nunca el mismo sitio.
+     */
+    public function guardarEvidencia(
+        GuardarEvidenciaComisariatoRequest $request,
+        ServicioComisariato $servicioComisariato
+    ): JsonResponse {
+        $imagen = $this->guardarImagenBase64(
+            $request->validated()['foto'],
+            'evidencias/ServicioComisariato/'.now()->format('Y/m')
+        );
+
+        $maximo = $servicioComisariato->evidenciasAll()->max('imageables.orden');
+        $orden = $maximo === null ? 0 : (int) $maximo + 1;
+
+        $servicioComisariato->evidencias()->attach($imagen->id, [
+            'tag' => 'evidencia',
+            'orden' => $orden,
+            'status' => 'A',
+        ]);
+
+        return response()->json([
+            'message' => 'Evidencia guardada correctamente',
+            'data' => [
+                'id' => $imagen->id,
+                'url' => $imagen->url,
+                'orden' => $orden,
+            ],
+        ], 201);
+    }
+
+    /**
+     * Retira una evidencia de ESTE servicio.
+     *
+     * Pide los dos ids a propósito. `imageables` es polimórfica y una misma
+     * imagen puede colgar de más de un dueño; sin el servicio por delante, un
+     * id equivocado despegaría la foto de otro registro —de un Walk Around,
+     * por ejemplo— sin que nadie se enterara.
+     */
+    public function eliminarEvidencia(ServicioComisariato $servicioComisariato, int $imagenId): JsonResponse
+    {
+        $retiradas = $servicioComisariato->evidencias()
+            ->newPivotStatement()
+            ->where('imageable_type', ServicioComisariato::class)
+            ->where('imageable_id', $servicioComisariato->id)
+            ->where('imagen_id', $imagenId)
+            ->where('status', 'A')
+            ->update(['status' => 'N']);
+
+        if ($retiradas === 0) {
+            return response()->json(['message' => 'La evidencia no existe o no es de este servicio.'], 404);
+        }
+
+        return response()->json(['message' => 'Evidencia eliminada correctamente']);
+    }
+
+    /**
+     * Escribe la imagen en el disco `public` y registra su `Imagen`.
+     *
+     * La extensión sale de una lista cerrada y no de partir el mime, a
+     * propósito: `MovimientoCSAEController` sí lo parte y arrastra ese defecto
+     * (un SVG quedaba como `.svg+xml`). Aquí no se copia.
+     */
+    private function guardarImagenBase64(string $base64, string $carpeta): Imagen
+    {
+        [$meta, $contenido] = explode(',', $base64);
+        preg_match('/data:(.*?);base64/', $meta, $coincidencias);
+
+        $mime = $coincidencias[1] ?? 'image/jpeg';
+        $extension = match ($mime) {
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            default => 'jpg',
+        };
+
+        $ruta = $carpeta.'/'.Str::uuid().'.'.$extension;
+
+        Storage::disk('public')->put($ruta, base64_decode($contenido));
+
+        return Imagen::create([
+            'disk' => 'public',
+            'path' => $ruta,
+            'original_name' => basename($ruta),
+            'mime' => $mime,
+            'size' => Storage::disk('public')->size($ruta),
+        ]);
     }
     public function update(Request $request, ServicioComisariato $servicioComisariato)
     {
