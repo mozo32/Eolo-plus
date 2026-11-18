@@ -39,6 +39,9 @@ class GuardarEvidenciaComisariatoRequest extends FormRequest
             'foto' => [
                 'required',
                 'string',
+                // ~375 KB decodificados: el doble de lo que produce el compresor del cliente (~200 KB).
+                // La compresión es solo del lado del cliente; sin tope, el servidor confía en él por completo.
+                'max:500000',
                 'regex:/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+\/]{16,}={0,2}\z/',
             ],
         ];
@@ -49,6 +52,7 @@ class GuardarEvidenciaComisariatoRequest extends FormRequest
     {
         return [
             'foto.required' => 'No llegó ninguna fotografía.',
+            'foto.max' => 'La fotografía pesa demasiado.',
             'foto.regex' => 'La fotografía no llegó como una imagen válida.',
         ];
     }

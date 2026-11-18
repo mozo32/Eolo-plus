@@ -75,6 +75,56 @@ test('el archivo aterriza en la carpeta del mes', function () {
         ->toEndWith('.jpg');
 });
 
+test('cada tipo de imagen admitido se guarda con su extension y su mime', function (string $mime, string $extension) {
+    // El cliente solo manda JPEG; estas ramas son para quien llame a la API directo.
+    $foto = str_replace('data:image/jpeg;', "data:{$mime};", fotoBase64());
+
+    subirEvidencia(servicioDeEvidencias(), $foto)->assertCreated();
+
+    $imagen = Imagen::sole();
+
+    expect($imagen->mime)->toBe($mime)
+        ->and($imagen->path)->toEndWith('.'.$extension);
+
+    Storage::disk('public')->assertExists($imagen->path);
+})->with([
+    'jpeg' => ['image/jpeg', 'jpg'],
+    'png' => ['image/png', 'png'],
+    'webp' => ['image/webp', 'webp'],
+]);
+
+test('una foto que excede el tope se rechaza y no deja imagen ni archivo', function () {
+    $servicio = servicioDeEvidencias();
+    $foto = 'data:image/jpeg;base64,'.str_repeat('A', 500001);
+
+    subirEvidencia($servicio, $foto)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('foto');
+
+    expect(Imagen::count())->toBe(0)
+        ->and(DB::table('imageables')->count())->toBe(0)
+        ->and(Storage::disk('public')->allFiles())->toBe([]);
+});
+
+test('un id de imagen que no es numerico da 404, no 500', function () {
+    $servicio = servicioDeEvidencias();
+
+    test()->deleteJson("/api/ServicioComisariato/{$servicio->id}/evidencias/abc")
+        ->assertNotFound();
+});
+
+test('borrar deja constancia de cuando se retiro la evidencia', function () {
+    $servicio = servicioDeEvidencias();
+    $imagenId = subirEvidencia($servicio)->json('data.id');
+
+    DB::table('imageables')->where('imagen_id', $imagenId)->update(['updated_at' => '2020-01-01 00:00:00']);
+
+    test()->deleteJson("/api/ServicioComisariato/{$servicio->id}/evidencias/{$imagenId}")->assertSuccessful();
+
+    expect(DB::table('imageables')->where('imagen_id', $imagenId)->value('updated_at'))
+        ->not->toStartWith('2020-01-01');
+});
+
 test('dos subidas dan orden cero y uno', function () {
     $servicio = servicioDeEvidencias();
 

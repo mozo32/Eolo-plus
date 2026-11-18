@@ -140,6 +140,7 @@ class ServicioComisariatoController extends Controller
          */
         $evidencias = $servicioComisariato->evidencias()
             ->orderBy('imageables.orden')
+            ->orderBy('imagens.id')
             ->get()
             ->map(static fn (Imagen $imagen): array => [
                 'id' => $imagen->id,
@@ -205,7 +206,7 @@ class ServicioComisariatoController extends Controller
             ->where('imageable_id', $servicioComisariato->id)
             ->where('imagen_id', $imagenId)
             ->where('status', 'A')
-            ->update(['status' => 'N']);
+            ->update(['status' => 'N', 'updated_at' => now()]);
 
         if ($retiradas === 0) {
             return response()->json(['message' => 'La evidencia no existe o no es de este servicio.'], 404);

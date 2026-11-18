@@ -131,7 +131,19 @@ export async function subirEvidenciaComisariato(servicioId: number, foto: string
         throw new Error(data?.message || "No se pudo guardar la evidencia");
     }
 
+    // Una 2xx sin cuerpo no es una subida: ningún llamador debe darla por buena.
+    if (!data?.data || typeof data.data.id !== 'number') {
+        throw new Error("El servidor no confirmó la fotografía. Inténtalo de nuevo.");
+    }
+
     return data.data;
+}
+
+/** Error de la baja de una evidencia, con el status HTTP para que el llamador distinga el 404. */
+export class ErrorEvidenciaComisariato extends Error {
+    constructor(message: string, readonly status: number) {
+        super(message);
+    }
 }
 
 export async function eliminarEvidenciaComisariato(servicioId: number, imagenId: number): Promise<void> {
@@ -146,6 +158,6 @@ export async function eliminarEvidenciaComisariato(servicioId: number, imagenId:
 
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.message || "No se pudo eliminar la evidencia");
+        throw new ErrorEvidenciaComisariato(data?.message || "No se pudo eliminar la evidencia", res.status);
     }
 }

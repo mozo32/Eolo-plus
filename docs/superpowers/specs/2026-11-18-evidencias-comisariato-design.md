@@ -144,9 +144,10 @@ el servicio por delante, el controlador actúa sobre **ese** pivote y devuelve
 
 El `orden` de una evidencia nueva es el mayor de las vigentes del servicio más
 uno, contando también las retiradas, para que borrar la última y subir otra no
-reutilice un número ya usado. En el pivote, `tag` queda en `'evidencia'`: hoy
-no lo lee nadie, pero `imageables` lo comparte con Walk Around y un día habrá
-que distinguir de dónde viene cada imagen.
+reutilice un número ya usado. En el pivote, `tag` queda en `'evidencia'`, el
+mismo valor que escriben los módulos hermanos (Walk Around y Turno de
+Autotanque). No distingue al dueño: eso lo hace `imageable_type`, que ya
+funciona.
 
 El `show` de hoy devuelve el modelo pelado (`response()->json($servicio)`).
 Pasa a cargar la relación y a devolver:

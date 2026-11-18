@@ -183,8 +183,8 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('ControlMedicamento')->group(
 Route::middleware(['api', 'auth:sanctum'])->prefix('ServicioComisariato')->group(function () {
     Route::post('/',[ServicioComisariatoController::class, 'store']);
     Route::get('/',[ServicioComisariatoController::class, 'index']);
-    Route::post('{servicioComisariato}/evidencias', [ServicioComisariatoController::class, 'guardarEvidencia']);
-    Route::delete('{servicioComisariato}/evidencias/{imagenId}', [ServicioComisariatoController::class, 'eliminarEvidencia']);
+    Route::post('{servicioComisariato}/evidencias', [ServicioComisariatoController::class, 'guardarEvidencia'])->middleware('throttle:60,1');
+    Route::delete('{servicioComisariato}/evidencias/{imagenId}', [ServicioComisariatoController::class, 'eliminarEvidencia'])->whereNumber('imagenId')->middleware('throttle:60,1');
     Route::get('/{servicioComisariato}', [ServicioComisariatoController::class, 'show']);
     Route::put('/{servicioComisariato}',[ServicioComisariatoController::class, 'update']);
     Route::get('eliminar/{id}', [ServicioComisariatoController::class, 'eliminar']);

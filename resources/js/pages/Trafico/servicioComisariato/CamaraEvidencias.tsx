@@ -1,6 +1,6 @@
 import { Camera, ImagePlus, Loader2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { eliminarEvidenciaComisariato, subirEvidenciaComisariato } from '@/stores/apiServicioComisariato';
+import { eliminarEvidenciaComisariato, ErrorEvidenciaComisariato, subirEvidenciaComisariato } from '@/stores/apiServicioComisariato';
 import { comprimirImagen } from './comprimirImagen';
 
 export type FotoEvidencia = {
@@ -48,6 +48,14 @@ export default function CamaraEvidencias({ abierto, servicioId, fotos, onCerrar,
     useEffect(() => {
         fotosRef.current = fotos;
     }, [fotos]);
+
+    // El componente sigue montado al cerrarse: sin esto, el error de una fila se vería al abrir otra.
+    useEffect(() => {
+        if (abierto) {
+            setError('');
+            setErrorCamara('');
+        }
+    }, [abierto, servicioId]);
 
     const camaraDisponible = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
     // Cerrar el modal apaga la cámara aunque camaraAbierta siga en true.
@@ -119,11 +127,6 @@ export default function CamaraEvidencias({ abierto, servicioId, fotos, onCerrar,
 
             const guardada = await subirEvidenciaComisariato(servicioId, dataUrl);
 
-            // El store devuelve data.data sin guardia: una respuesta 2xx sin cuerpo llegaría como undefined.
-            if (!guardada || typeof guardada.id !== 'number') {
-                throw new Error('El servidor no confirmó la fotografía. Inténtalo de nuevo.');
-            }
-
             onCambio([...fotosRef.current, { id: guardada.id, url: guardada.url }]);
         } catch (e) {
             setError(e instanceof Error ? e.message : 'No se pudo guardar la fotografía.');
@@ -147,6 +150,11 @@ export default function CamaraEvidencias({ abierto, servicioId, fotos, onCerrar,
 
             onCambio(fotosRef.current.filter(f => f !== foto));
         } catch (e) {
+            // Un 404 significa que la foto ya no está ligada a este servicio (otro usuario o pestaña la retiró): no se sigue mostrando.
+            if (e instanceof ErrorEvidenciaComisariato && e.status === 404) {
+                onCambio(fotosRef.current.filter(f => f !== foto));
+            }
+
             setError(e instanceof Error ? e.message : 'No se pudo eliminar la fotografía.');
         } finally {
             ocupadoRef.current = false;
