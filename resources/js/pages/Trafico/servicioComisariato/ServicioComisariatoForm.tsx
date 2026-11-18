@@ -1,8 +1,10 @@
 import { validarServicioComisariato } from "./validacion";
 import { useState, useEffect } from "react";
-import { guardarServicioComisariatoApi, actualizarServicioComisariatoApi } from "@/stores/apiServicioComisariato";
+import { guardarServicioComisariatoApi, actualizarServicioComisariatoApi, subirEvidenciaComisariato } from "@/stores/apiServicioComisariato";
+import type { EvidenciaComisariato } from "@/stores/apiServicioComisariato";
+import CamaraEvidencias, { type FotoEvidencia } from "./CamaraEvidencias";
 import Swal from "sweetalert2";
-import { Package } from "lucide-react";
+import { Package, Camera } from "lucide-react";
 import { useVentanaDeFecha } from "@/lib/ventanasDeFecha";
 import { fechaHoy } from '@/lib/fechaHoy';
 
@@ -84,12 +86,18 @@ const getInitialForm = (data?: any) => ({
     total: formatearMonto(data?.total ?? ""),
 });
 
+const getInitialFotos = (data?: any): FotoEvidencia[] =>
+    (data?.evidencias ?? []).map((evidencia: EvidenciaComisariato) => ({ id: evidencia.id, url: evidencia.url }));
+
 export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Props) {
     const { min, max } = useVentanaDeFecha("comisariato.entrega", isEdit ? data?.fecha_entrega : undefined);
     const [form, setForm] = useState(() => getInitialForm(data));
+    const [fotos, setFotos] = useState<FotoEvidencia[]>(() => (isEdit ? getInitialFotos(data) : []));
+    const [camaraAbierta, setCamaraAbierta] = useState(false);
 
     useEffect(() => {
         setForm(getInitialForm(isEdit ? data : undefined));
+        setFotos(isEdit ? getInitialFotos(data) : []);
     }, [data, isEdit]);
 
     const updateField = (key: string, value: any, forceUpper: boolean = false) => {
@@ -141,16 +149,40 @@ export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Pro
                 horaEntrega: normalizarHora24(form.horaEntrega),
             };
 
-            if (isEdit && data?.id) {
-                await actualizarServicioComisariatoApi(data.id, payload);
-            } else {
-                await guardarServicioComisariatoApi(payload);
+            const respuesta = isEdit && data?.id
+                ? await actualizarServicioComisariatoApi(data.id, payload)
+                : await guardarServicioComisariatoApi(payload);
+
+            const servicioId = isEdit && data?.id ? data.id : respuesta?.data?.id;
+
+            const pendientes = fotos.filter(foto => foto.id === null);
+            const fallidas: number[] = [];
+
+            if (pendientes.length > 0 && !servicioId) {
+                throw new Error("El servicio se guardó, pero el servidor no devolvió su id para adjuntar las fotografías; puedes volver a tomarlas desde la tabla.");
             }
 
-            Swal.fire({
-                icon: "success",
-                title: isEdit ? "Servicio actualizado" : "Servicio Guardado",
-            });
+            // Una por una: el servidor asigna `orden` leyendo el máximo, y en paralelo dos peticiones pedirían el mismo sitio.
+            for (const [indice, foto] of pendientes.entries()) {
+                try {
+                    await subirEvidenciaComisariato(servicioId, foto.url);
+                } catch {
+                    fallidas.push(indice + 1);
+                }
+            }
+
+            if (fallidas.length > 0) {
+                await Swal.fire({
+                    icon: "warning",
+                    title: isEdit ? "Servicio actualizado" : "Servicio guardado",
+                    text: `El servicio se guardó, pero ${fallidas.length} fotografía(s) no subieron (${fallidas.join(", ")}); puedes volver a tomarlas desde la tabla.`,
+                });
+            } else {
+                Swal.fire({
+                    icon: "success",
+                    title: isEdit ? "Servicio actualizado" : "Servicio Guardado",
+                });
+            }
 
             onSuccess?.();
         } catch (error: any) {
@@ -306,6 +338,23 @@ export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Pro
                     </div>
                 </div>
 
+                <div className="px-8 pb-2">
+                    <h2 className={sectionTitle}>Evidencias fotográficas (opcional)</h2>
+                    <div className="flex items-center gap-4">
+                        <button
+                            type="button"
+                            onClick={() => setCamaraAbierta(true)}
+                            className="flex items-center gap-2 rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-xs font-extrabold uppercase text-slate-600 transition-colors hover:border-[#00677F] hover:text-[#00677F]"
+                        >
+                            <Camera size={16} />
+                            Tomar fotografías
+                        </button>
+                        <span className="text-xs font-semibold text-slate-500">
+                            {fotos.length === 0 ? "Sin fotografías" : `${fotos.length} fotografía(s)`}
+                        </span>
+                    </div>
+                </div>
+
                 <div className="flex justify-end p-5">
                     <button
                         type="submit"
@@ -315,6 +364,14 @@ export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Pro
                     </button>
                 </div>
             </form>
+
+            <CamaraEvidencias
+                abierto={camaraAbierta}
+                servicioId={isEdit && data?.id ? data.id : null}
+                fotos={fotos}
+                onCerrar={() => setCamaraAbierta(false)}
+                onCambio={setFotos}
+            />
         </div>
     );
 }

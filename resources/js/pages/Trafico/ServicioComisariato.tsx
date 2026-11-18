@@ -4,6 +4,8 @@ import { Head } from '@inertiajs/react';
 import ServicioComisariatoForm from './servicioComisariato/ServicioComisariatoForm';
 import { useState, useEffect, useCallback } from 'react';
 import { fetchServicioComisariato, fetchShowServicioComisariato, eliminar } from '@/stores/apiServicioComisariato';
+import type { EvidenciaComisariato } from '@/stores/apiServicioComisariato';
+import CamaraEvidencias, { type FotoEvidencia } from './servicioComisariato/CamaraEvidencias';
 import {
     Plus,
     ChevronLeft,
@@ -14,7 +16,8 @@ import {
     Plane,
     Filter,
     X,
-    ChevronDown
+    ChevronDown,
+    Camera
 } from 'lucide-react';
 import PdfComisariato from './servicioComisariato/PdfComisariato';
 import Swal from 'sweetalert2';
@@ -53,6 +56,8 @@ export default function ServicioComisariato() {
     const [isEdit, setIsEdit] = useState(false);
     const [detalle, setDetalle] = useState<any>(null);
     const [pdfId, setPdfId] = useState<number | null>(null);
+    const [evidenciasId, setEvidenciasId] = useState<number | null>(null);
+    const [fotosEvidencias, setFotosEvidencias] = useState<FotoEvidencia[]>([]);
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [mostrarModalFecha, setMostrarModalFecha] = useState(false);
     const [filtros, setFiltros] = useState<FiltrosComisariato>(() => filtrosIniciales());
@@ -276,6 +281,25 @@ export default function ServicioComisariato() {
         } catch (error) {
             console.error(error);
         }
+    };
+
+    const abrirEvidencias = async (id: number) => {
+        try {
+            const detalleServicio = await fetchShowServicioComisariato(id);
+            const fotos: FotoEvidencia[] = (detalleServicio?.evidencias ?? []).map(
+                (evidencia: EvidenciaComisariato) => ({ id: evidencia.id, url: evidencia.url }),
+            );
+            setFotosEvidencias(fotos);
+            setEvidenciasId(id);
+        } catch (error: any) {
+            Swal.fire('Error', error.message || 'No se pudieron cargar las evidencias', 'error');
+        }
+    };
+
+    const cerrarEvidencias = () => {
+        setEvidenciasId(null);
+        setFotosEvidencias([]);
+        cargarDatos();
     };
 
     const cerrarModalFormulario = () => {
@@ -510,6 +534,15 @@ export default function ServicioComisariato() {
                                                             title="Editar Registro"
                                                         >
                                                             <Edit2 size={16} />
+                                                        </button>
+
+                                                        <button
+                                                            type="button"
+                                                            className="p-2 rounded transition-colors text-slate-400 hover:text-indigo-600"
+                                                            title="Evidencias fotográficas"
+                                                            onClick={() => abrirEvidencias(row.id)}
+                                                        >
+                                                            <Camera size={16} />
                                                         </button>
 
                                                         <button
@@ -781,6 +814,14 @@ export default function ServicioComisariato() {
             <PdfComisariato
                 id={pdfId}
                 onDone={handlePdfDone}
+            />
+
+            <CamaraEvidencias
+                abierto={evidenciasId !== null}
+                servicioId={evidenciasId}
+                fotos={fotosEvidencias}
+                onCerrar={cerrarEvidencias}
+                onCambio={setFotosEvidencias}
             />
         </AppLayout>
     );
