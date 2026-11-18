@@ -117,13 +117,26 @@ plantilla y el caso que esas pruebas describen de verdad— mediante un ayudante
 `usuarioEmpleado()` en `tests/Pest.php`, hermano del `usuarioAdmin()` que ya
 existe.
 
-**Comprobado que el cambio de usuario no provoca 403.** El riesgo era que alguna
-de esas pruebas usara `usuarioAdmin()` porque el endpoint exige rol, no por
-casualidad; entonces un `empleado` recibiría 403 en vez del 422 que la prueba
-espera, y el arreglo sería mentir sobre la causa. El único guardia de rol de
-todo el proyecto está en `ControlMedicamentoController::reabastecer`, y este
-archivo golpea `POST /api/ControlMedicamento` y `PUT /api/ControlMedicamento/{id}`,
-nunca `reabastecer`. Ninguno de los quince endpoints que toca comprueba roles.
+**CORREGIDO DURANTE LA EJECUCIÓN: sí hay endpoints que exigen rol, y el cambio
+de usuario SÍ provocó 403.** Esta sección afirmaba que ninguno de los quince
+endpoints comprueba roles, porque la búsqueda miró los CONTROLADORES. La puerta
+no está ahí: es un middleware de RUTA, `subdep:`
+(`CheckSubDepartamento.php:19`), que deja pasar a `admin` y aborta con 403 a los
+demás. Cinco rutas de `routes/api.php` lo usan. Al cambiar de sujeto
+aparecieron 37 fallos, todos 403. Las pruebas de esos endpoints usan
+`usuarioConSubdepartamento()`, que ya existía y pone rol `empleado`.
+
+Lo que sí sigue siendo cierto: el único guardia de rol en un CONTROLADOR que
+toca este archivo es `ControlMedicamentoController::reabastecer`, al que no
+llama.
+
+**Y hubo un segundo descuido del mismo tipo, fuera de este archivo.**
+`tests/Feature/EntregaTurnoSeguridad/VentanaDeFechaDelRelevoTest.php` edita
+relevos como `fbo`, porque editar un relevo es trabajo del FBO. Al encender la
+exención, dos de sus pruebas se pusieron rojas —conducta nueva y pedida— y otras
+cuatro se quedaron verdes por el motivo equivocado. Sus pruebas de ventana
+pasaron a editar como `jefe_area`, el tercer editor que admite `update()` y el
+único de los tres que sigue sujeto a la ventana.
 
 `tests/Feature/VentanasDeFechaTest.php` (24 pruebas) trabaja sobre la clase de
 soporte y un usuario sin roles; **no le afecta**.

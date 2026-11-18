@@ -30,6 +30,12 @@ use Illuminate\Support\Facades\Storage;
  * El navegador guía con `min`/`max`; el servidor decide. Cada prueba de este fichero es una
  * petición REAL con una fecha fuera de ventana: el estado es 422, el mensaje nombra las dos
  * fechas y no se escribió nada. Un test de la regla suelta no prueba que el endpoint la use.
+ *
+ * SU SUJETO TIENE QUE SER UN USUARIO NO EXENTO. `fbo` y `admin` se saltan la ventana, así
+ * que con uno de ellos los 422 de aquí dejarían de ocurrir y los éxitos pasarían por
+ * saltarse la regla en vez de por estar la fecha dentro: un verde que no demuestra nada.
+ * Por eso se usa `usuarioEmpleado()`, y `usuarioConSubdepartamento()` donde la ruta lo
+ * exige —que también pone rol `empleado`—. NO devolver aquí un `usuarioAdmin()`.
  */
 
 /**

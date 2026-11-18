@@ -4,6 +4,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Support\VentanasDeFecha;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Validator;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -545,4 +546,41 @@ test('todas conserva los limites para quien no esta exento', function () {
     $ventanas = VentanasDeFecha::todas(User::factory()->create());
 
     expect($ventanas['csae.entrada']['max'])->not->toBeNull();
+});
+
+test('todas pregunta por los roles UNA vez, no una por clave', function () {
+    /*
+     * `hasAnyRole()` consulta la base cada vez que se le llama, y a la exención
+     * se le pregunta una vez POR CLAVE: dieciocho consultas en cada petición de
+     * Inertia, con la respuesta ya en memoria. Esta prueba fija el arreglo
+     * —cargar la relación una sola vez— para que no se deshaga sin que nadie lo
+     * note: no se ve en pantalla y ninguna otra prueba fallaría.
+     */
+    $usuario = User::factory()->create();
+    $rol = Role::firstOrCreate(['slug' => 'fbo'], ['nombre' => 'FBO']);
+    $usuario->roles()->attach($rol->id);
+
+    $consultas = 0;
+    DB::listen(function () use (&$consultas): void {
+        $consultas++;
+    });
+
+    $ventanas = VentanasDeFecha::todas($usuario);
+
+    expect($consultas)->toBe(1)
+        ->and($ventanas['csae.entrada'])->toBe(['min' => null, 'max' => null]);
+});
+
+test('a un usuario no exento tampoco se le pregunta dieciocho veces', function () {
+    $usuario = User::factory()->create();
+
+    $consultas = 0;
+    DB::listen(function () use (&$consultas): void {
+        $consultas++;
+    });
+
+    $ventanas = VentanasDeFecha::todas($usuario);
+
+    expect($consultas)->toBe(1)
+        ->and($ventanas['csae.entrada']['max'])->not->toBeNull();
 });

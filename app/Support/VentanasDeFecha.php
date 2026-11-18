@@ -14,6 +14,11 @@ use InvalidArgumentException;
  * que `HandleInertiaRequests` publica al navegador. Si cada capa tuviera su copia podrían
  * divergir, y entonces el calendario ofrecería una fecha que el servidor rechaza.
  *
+ * La ventana depende de la clave Y DE QUIÉN PREGUNTA: `fbo` y `admin` están exentos y
+ * para ellos no hay límite ninguno (ver `exentoDeVentana()`). Las llamadas que no pasan
+ * usuario reciben la ventana entera, que es lo que quiere quien no tiene a nadie a quien
+ * preguntar.
+ *
  * Es código y no configuración en base de datos a propósito: cambiar una ventana es una
  * decisión sobre la integridad de los datos, y así queda con su diff y su revisión en vez
  * de aparecer como una fila editada que nadie recuerda.
@@ -70,13 +75,29 @@ final class VentanasDeFecha
      *
      * Sin usuario responde que no. Falla cerrada a propósito: la única forma
      * segura de equivocarse con un permiso es negándolo.
+     *
+     * Carga la relación en vez de llamar a `hasAnyRole()`, que consulta la base
+     * CADA vez: a esta función se le pregunta una vez por clave —dieciocho en
+     * `todas()`, en cada petición de Inertia— y una vez por elemento cuando la
+     * regla valida un arreglo de fechas. Laravel reutiliza la MISMA instancia
+     * de usuario en toda la petición, así que con `loadMissing` la primera
+     * pregunta consulta y las demás se responden en memoria.
      */
     public static function exentoDeVentana(?User $usuario): bool
     {
-        return $usuario !== null && $usuario->hasAnyRole(['fbo', 'admin']);
+        if ($usuario === null) {
+            return false;
+        }
+
+        $usuario->loadMissing('roles');
+
+        return $usuario->roles->whereIn('slug', ['fbo', 'admin'])->isNotEmpty();
     }
 
     /**
+     * La ventana de una clave PARA UN USUARIO. Sin usuario, o con uno que no
+     * esté exento, es la ventana de siempre; con un exento no hay límites.
+     *
      * @return array{min: ?string, max: ?string} fechas `Y-m-d`, o null donde no hay límite
      */
     public static function para(string $clave, ?User $usuario = null): array
