@@ -62,6 +62,25 @@ function usuarioAdmin(): App\Models\User
 }
 
 /**
+ * Usuario con rol `empleado`: NO está exento de las ventanas de fecha.
+ *
+ * Lo usan las pruebas que existen para demostrar que la ventana muerde. Su
+ * sujeto tiene que ser alguien a quien muerda, y `usuarioAdmin()` dejó de
+ * serlo cuando `fbo` y `admin` quedaron exentos.
+ */
+function usuarioEmpleado(): App\Models\User
+{
+    $usuario = App\Models\User::factory()->create();
+    $rol = App\Models\Role::firstOrCreate(
+        ['slug' => 'empleado'],
+        ['nombre' => 'Empleado']
+    );
+    $usuario->roles()->attach($rol->id);
+
+    return $usuario;
+}
+
+/**
  * Usuario de Despacho con acceso al subdepartamento indicado.
  */
 function usuarioConSubdepartamento(

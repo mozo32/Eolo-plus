@@ -118,7 +118,7 @@ function cargaDeOperacion(string $movimiento, string $fecha): array
 }
 
 it('rechaza con 422 y no escribe una llegada o una salida con fecha fuera de ventana', function (string $clave, string $movimiento, int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $fecha = Carbon::today()->addDays($desplazamiento)->toDateString();
     $antes = OperacionDiaria::count();
 
@@ -136,7 +136,7 @@ it('rechaza con 422 y no escribe una llegada o una salida con fecha fuera de ven
 ]);
 
 it('no deja pasar una fecha vacia, ausente o ilegible en el alta', function (?string $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = OperacionDiaria::count();
     $carga = cargaDeOperacion('Llegada', (string) $fecha);
     if (! $enviarFecha) {
@@ -155,7 +155,7 @@ it('no deja pasar una fecha vacia, ausente o ilegible en el alta', function (?st
 ]);
 
 it('una regla que rechazara todo no pasa: el alta dentro de ventana escribe', function (int $desplazamiento, string $movimiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $fecha = Carbon::today()->addDays($desplazamiento)->toDateString();
     $antes = OperacionDiaria::count();
 
@@ -173,7 +173,7 @@ it('una regla que rechazara todo no pasa: el alta dentro de ventana escribe', fu
 it('rechaza una fecha con zona que se guardaria como un dia fuera de ventana, y no escribe', function () {
     // Con zona +14, las 00:30 del dia de manana son todavia «hoy» en Mexico, pero el modelo
     // guarda el dia tal como viene escrito: manana. La regla juzga lo que se guarda.
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $manana = Carbon::today()->addDay()->toDateString();
     $antes = OperacionDiaria::count();
 
@@ -204,7 +204,7 @@ function operacionParaEditar(string $tipo, string $fecha): OperacionDiaria
 }
 
 it('rechaza con 422 y no modifica la fecha de una edicion fuera de ventana', function (string $clave, string $tipo) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = Carbon::today()->toDateString();
     $operacion = operacionParaEditar($tipo, $original);
 
@@ -226,7 +226,7 @@ it('rechaza con 422 y no modifica la fecha de una edicion fuera de ventana', fun
 ]);
 
 it('deja corregir otros campos de un registro antiguo si no se toca su fecha', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $operacion = operacionParaEditar('llegada', $antigua);
 
@@ -245,7 +245,7 @@ it('deja corregir otros campos de un registro antiguo si no se toca su fecha', f
 it('no deja pasar de una fecha antigua a OTRA antigua distinta, y la guardada no cambia', function () {
     // La excepcion de `update` solo cubre la fecha SIN cambios; si dejara pasar cualquier
     // fecha vieja, esta edicion colaria una fecha fuera de ventana.
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $operacion = operacionParaEditar('llegada', $antigua);
 
@@ -262,7 +262,7 @@ it('no deja pasar de una fecha antigua a OTRA antigua distinta, y la guardada no
 });
 
 it('no deja que una edicion lleve una fecha ausente o ilegible', function (?string $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = Carbon::today()->toDateString();
     $operacion = operacionParaEditar('llegada', $original);
     $carga = [
@@ -287,7 +287,7 @@ it('no deja que una edicion lleve una fecha ausente o ilegible', function (?stri
 ]);
 
 it('la edicion tampoco acepta una fecha con zona que se guardaria como manana', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = Carbon::today()->toDateString();
     $operacion = operacionParaEditar('llegada', $original);
     $manana = Carbon::today()->addDay()->toDateString();
@@ -305,7 +305,7 @@ it('la edicion tampoco acepta una fecha con zona que se guardaria como manana', 
 });
 
 it('una edicion con una fecha valida de hoy escribe la fecha (la edicion tiene camino feliz)', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $hoy = Carbon::today()->toDateString();
     $operacion = operacionParaEditar('llegada', Carbon::today()->subDays(10)->toDateString());
 
@@ -322,7 +322,7 @@ it('una edicion con una fecha valida de hoy escribe la fecha (la edicion tiene c
 });
 
 it('reenviar la misma fecha en otro formato cuenta como sin cambios', function (string $formato) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $operacion = operacionParaEditar('llegada', $antigua);
 
@@ -418,7 +418,7 @@ function enLaVentana(string $dia, string $clave): bool
 }
 
 it('ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = OperacionDiaria::count();
     $carga = cargaDeOperacion('Llegada', '');
     $carga['fecha'] = $valor;
@@ -437,7 +437,7 @@ it('ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea
 })->with(fn () => fechasHostiles());
 
 it('EDICION: lo que la regla deja pasar deja la columna dentro de la ventana, o como estaba', function (mixed $valor, string $partida) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = $partida === 'hoy'
         ? Carbon::today()->toDateString()
         : Carbon::today()->subDays(10)->toDateString();
@@ -538,7 +538,7 @@ function urlDeEdicionDeChecklist(string $puerta, int $id): string
 }
 
 it('CHECKLIST alta: rechaza con 422 y no escribe una fecha fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = ChecklistTurno::count();
 
     $respuesta = $this->postJson('/api/CheckListTurno', cargaDeChecklist(Carbon::today()->addDays($desplazamiento)->toDateString()));
@@ -553,7 +553,7 @@ it('CHECKLIST alta: rechaza con 422 y no escribe una fecha fuera de ventana', fu
 ]);
 
 it('CHECKLIST alta: no deja pasar una fecha vacia, ausente o ilegible', function (?string $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = ChecklistTurno::count();
     $carga = cargaDeChecklist($fecha);
     if (! $enviarFecha) {
@@ -570,7 +570,7 @@ it('CHECKLIST alta: no deja pasar una fecha vacia, ausente o ilegible', function
 ]);
 
 it('CHECKLIST alta: una fecha dentro de ventana escribe (la regla no rechaza todo)', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $fecha = Carbon::today()->addDays($desplazamiento)->toDateString();
     $antes = ChecklistTurno::count();
 
@@ -584,7 +584,7 @@ it('CHECKLIST alta: una fecha dentro de ventana escribe (la regla no rechaza tod
 ]);
 
 it('CHECKLIST edicion: rechaza con 422 y no modifica la fecha, por las dos puertas', function (string $puerta, int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = Carbon::today()->toDateString();
     $checklist = checklistParaEditar($original);
 
@@ -606,7 +606,7 @@ it('CHECKLIST edicion: rechaza con 422 y no modifica la fecha, por las dos puert
 ]);
 
 it('CHECKLIST edicion: deja corregir otros campos de un registro antiguo si no se toca su fecha', function (string $puerta) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $checklist = checklistParaEditar($antigua);
 
@@ -617,7 +617,7 @@ it('CHECKLIST edicion: deja corregir otros campos de un registro antiguo si no s
 })->with(['actualizar', 'aprobar']);
 
 it('CHECKLIST edicion: no deja pasar de una fecha antigua a OTRA antigua distinta', function (string $puerta) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $checklist = checklistParaEditar($antigua);
 
@@ -630,7 +630,7 @@ it('CHECKLIST edicion: no deja pasar de una fecha antigua a OTRA antigua distint
 })->with(['actualizar', 'aprobar']);
 
 it('CHECKLIST edicion: no deja que lleve una fecha ausente o ilegible', function (string $puerta, ?string $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = Carbon::today()->toDateString();
     $checklist = checklistParaEditar($original);
     $carga = cargaDeEdicionDeChecklist($fecha);
@@ -651,7 +651,7 @@ it('CHECKLIST edicion: no deja que lleve una fecha ausente o ilegible', function
 });
 
 it('CHECKLIST edicion: una fecha valida de hoy escribe la fecha (la edicion tiene camino feliz)', function (string $puerta) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $hoy = Carbon::today()->toDateString();
     $checklist = checklistParaEditar(Carbon::today()->subDays(10)->toDateString());
 
@@ -661,7 +661,7 @@ it('CHECKLIST edicion: una fecha valida de hoy escribe la fecha (la edicion tien
 })->with(['actualizar', 'aprobar']);
 
 it('CHECKLIST edicion: reenviar la misma fecha en otro formato cuenta como sin cambios', function (string $puerta, string $formato) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $checklist = checklistParaEditar($antigua);
 
@@ -680,7 +680,7 @@ it('CHECKLIST edicion: reenviar la misma fecha en otro formato cuenta como sin c
 });
 
 it('CHECKLIST ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = ChecklistTurno::count();
 
     $this->postJson('/api/CheckListTurno', cargaDeChecklist($valor));
@@ -697,7 +697,7 @@ it('CHECKLIST ALTA: lo que la regla deja pasar queda guardado dentro de la venta
 })->with(fn () => fechasHostiles());
 
 it('CHECKLIST EDICION: lo que la regla deja pasar deja la columna dentro de la ventana, o como estaba, por las dos puertas', function (string $puerta, mixed $valor, string $partida) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = fechaDePartida($partida);
     $checklist = checklistParaEditar($original);
 
@@ -739,7 +739,7 @@ function cargaDePrestamoChaleco(mixed $fecha): array
 
 it('CHALECOS alta: rechaza con 422 y no escribe una fecha fuera de ventana', function (int $desplazamiento) {
     Storage::fake('local');
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioConSubdepartamento('prestamoChalecos', 'Trafico'), 'sanctum');
     $antes = PrestamoChaleco::count();
 
     $respuesta = $this->post(
@@ -760,7 +760,7 @@ it('CHALECOS alta: rechaza con 422 y no escribe una fecha fuera de ventana', fun
 
 it('CHALECOS alta: no deja pasar una fecha vacia, ausente o ilegible', function (?string $fecha, bool $enviarFecha) {
     Storage::fake('local');
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioConSubdepartamento('prestamoChalecos', 'Trafico'), 'sanctum');
     $antes = PrestamoChaleco::count();
     $carga = cargaDePrestamoChaleco($fecha);
     if (! $enviarFecha) {
@@ -787,7 +787,7 @@ it('CHALECOS alta: sigue exigiendo date_format:Y-m-d, no se sustituyo por date',
     $this->travelTo(Carbon::parse('2026-03-05 12:00:00', 'America/Mexico_City'));
     // Cualquiera de estas se lee como el dia de hoy con `date`, pero no es `Y-m-d`.
     Storage::fake('local');
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioConSubdepartamento('prestamoChalecos', 'Trafico'), 'sanctum');
     $antes = PrestamoChaleco::count();
 
     $this->post(
@@ -806,7 +806,7 @@ it('CHALECOS alta: sigue exigiendo date_format:Y-m-d, no se sustituyo por date',
 
 it('CHALECOS alta: una fecha dentro de ventana escribe (la regla no rechaza todo)', function (int $desplazamiento) {
     Storage::fake('local');
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioConSubdepartamento('prestamoChalecos', 'Trafico'), 'sanctum');
     $fecha = Carbon::today()->addDays($desplazamiento)->toDateString();
     $antes = PrestamoChaleco::count();
 
@@ -821,7 +821,7 @@ it('CHALECOS alta: una fecha dentro de ventana escribe (la regla no rechaza todo
 
 it('CHALECOS ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
     Storage::fake('local');
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioConSubdepartamento('prestamoChalecos', 'Trafico'), 'sanctum');
     $antes = PrestamoChaleco::count();
 
     $this->post('/api/PrestamoChalecos', cargaDePrestamoChaleco($valor), ['Accept' => 'application/json']);
@@ -869,7 +869,7 @@ function comisariatoParaEditar(string $fecha): ServicioComisariato
 }
 
 it('COMISARIATO alta: rechaza con 422 y no escribe una fecha de entrega fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = ServicioComisariato::count();
 
     $respuesta = $this->postJson('/api/ServicioComisariato', cargaDeComisariato(Carbon::today()->addDays($desplazamiento)->toDateString()));
@@ -889,7 +889,7 @@ it('COMISARIATO alta: rechaza con 422 y no escribe una fecha de entrega fuera de
 ]);
 
 it('COMISARIATO alta: no deja pasar una fecha vacia, ausente o ilegible', function (?string $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = ServicioComisariato::count();
     $carga = cargaDeComisariato($fecha);
     if (! $enviarFecha) {
@@ -906,7 +906,7 @@ it('COMISARIATO alta: no deja pasar una fecha vacia, ausente o ilegible', functi
 ]);
 
 it('COMISARIATO alta: una fecha dentro de ventana escribe (la regla no rechaza todo)', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $fecha = Carbon::today()->addDays($desplazamiento)->toDateString();
     $antes = ServicioComisariato::count();
 
@@ -924,7 +924,7 @@ it('COMISARIATO alta: una fecha dentro de ventana escribe (la regla no rechaza t
 ]);
 
 it('COMISARIATO edicion: rechaza con 422 y no modifica la fecha de una edicion fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = Carbon::today()->toDateString();
     $servicio = comisariatoParaEditar($original);
 
@@ -947,7 +947,7 @@ it('COMISARIATO edicion: una fecha FUTURA si se acepta, y queda guardada', funct
     // La excepcion que pidio el departamento: una entrega de catering se agenda antes de
     // que ocurra, asi que el comisariato no lleva techo. Es la segunda clave con
     // `futuro => true`, junto a Operaciones Programadas.
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $servicio = comisariatoParaEditar(Carbon::today()->toDateString());
     $futura = Carbon::today()->addDays($desplazamiento)->toDateString();
 
@@ -961,7 +961,7 @@ it('COMISARIATO edicion: una fecha FUTURA si se acepta, y queda guardada', funct
 ]);
 
 it('COMISARIATO edicion: deja corregir otros campos de un registro antiguo si no se toca su fecha', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $servicio = comisariatoParaEditar($antigua);
 
@@ -972,7 +972,7 @@ it('COMISARIATO edicion: deja corregir otros campos de un registro antiguo si no
 });
 
 it('COMISARIATO edicion: no deja pasar de una fecha antigua a OTRA antigua distinta', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $servicio = comisariatoParaEditar($antigua);
 
@@ -984,7 +984,7 @@ it('COMISARIATO edicion: no deja pasar de una fecha antigua a OTRA antigua disti
 });
 
 it('COMISARIATO edicion: no deja que lleve una fecha ausente o ilegible', function (?string $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = Carbon::today()->toDateString();
     $servicio = comisariatoParaEditar($original);
     $carga = cargaDeComisariato($fecha);
@@ -1003,7 +1003,7 @@ it('COMISARIATO edicion: no deja que lleve una fecha ausente o ilegible', functi
 ]);
 
 it('COMISARIATO edicion: una fecha valida de hoy escribe la fecha (la edicion tiene camino feliz)', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $hoy = Carbon::today()->toDateString();
     $servicio = comisariatoParaEditar(Carbon::today()->subDays(10)->toDateString());
 
@@ -1013,7 +1013,7 @@ it('COMISARIATO edicion: una fecha valida de hoy escribe la fecha (la edicion ti
 });
 
 it('COMISARIATO edicion: reenviar la misma fecha en otro formato cuenta como sin cambios', function (string $formato) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $servicio = comisariatoParaEditar($antigua);
 
@@ -1027,7 +1027,7 @@ it('COMISARIATO edicion: reenviar la misma fecha en otro formato cuenta como sin
 ]);
 
 it('COMISARIATO ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = ServicioComisariato::count();
 
     $this->postJson('/api/ServicioComisariato', cargaDeComisariato($valor));
@@ -1044,7 +1044,7 @@ it('COMISARIATO ALTA: lo que la regla deja pasar queda guardado dentro de la ven
 })->with(fn () => fechasHostiles());
 
 it('COMISARIATO EDICION: lo que la regla deja pasar deja la columna dentro de la ventana, o como estaba', function (mixed $valor, string $partida) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = fechaDePartida($partida);
     $servicio = comisariatoParaEditar($original);
 
@@ -1085,7 +1085,7 @@ function controlMedicamentoParaEditar(string $fecha): ControlMedicamento
 }
 
 it('MEDICAMENTO alta: rechaza con 422 y no escribe una fecha fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = ControlMedicamento::count();
 
     $respuesta = $this->postJson('/api/ControlMedicamento', cargaDeControlMedicamento(Carbon::today()->addDays($desplazamiento)->toDateString()));
@@ -1100,7 +1100,7 @@ it('MEDICAMENTO alta: rechaza con 422 y no escribe una fecha fuera de ventana', 
 ]);
 
 it('MEDICAMENTO alta: no deja pasar una fecha vacia, ausente o ilegible', function (?string $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = ControlMedicamento::count();
     $carga = cargaDeControlMedicamento($fecha);
     if (! $enviarFecha) {
@@ -1117,7 +1117,7 @@ it('MEDICAMENTO alta: no deja pasar una fecha vacia, ausente o ilegible', functi
 ]);
 
 it('MEDICAMENTO alta: una fecha dentro de ventana escribe (la regla no rechaza todo)', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $fecha = Carbon::today()->addDays($desplazamiento)->toDateString();
     $antes = ControlMedicamento::count();
 
@@ -1131,7 +1131,7 @@ it('MEDICAMENTO alta: una fecha dentro de ventana escribe (la regla no rechaza t
 ]);
 
 it('MEDICAMENTO edicion: rechaza con 422 y no modifica la fecha de una edicion fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = Carbon::today()->toDateString();
     $control = controlMedicamentoParaEditar($original);
 
@@ -1151,7 +1151,7 @@ it('MEDICAMENTO edicion: rechaza con 422 y no modifica la fecha de una edicion f
 ]);
 
 it('MEDICAMENTO edicion: deja corregir otros campos de un registro antiguo si no se toca su fecha', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $control = controlMedicamentoParaEditar($antigua);
 
@@ -1162,7 +1162,7 @@ it('MEDICAMENTO edicion: deja corregir otros campos de un registro antiguo si no
 });
 
 it('MEDICAMENTO edicion: no deja pasar de una fecha antigua a OTRA antigua distinta', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $control = controlMedicamentoParaEditar($antigua);
 
@@ -1174,7 +1174,7 @@ it('MEDICAMENTO edicion: no deja pasar de una fecha antigua a OTRA antigua disti
 });
 
 it('MEDICAMENTO edicion: no deja que lleve una fecha ausente o ilegible', function (?string $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = Carbon::today()->toDateString();
     $control = controlMedicamentoParaEditar($original);
     $carga = cargaDeControlMedicamento($fecha);
@@ -1193,7 +1193,7 @@ it('MEDICAMENTO edicion: no deja que lleve una fecha ausente o ilegible', functi
 ]);
 
 it('MEDICAMENTO edicion: una fecha valida de hoy escribe la fecha (la edicion tiene camino feliz)', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $hoy = Carbon::today()->toDateString();
     $control = controlMedicamentoParaEditar(Carbon::today()->subDays(10)->toDateString());
 
@@ -1203,7 +1203,7 @@ it('MEDICAMENTO edicion: una fecha valida de hoy escribe la fecha (la edicion ti
 });
 
 it('MEDICAMENTO edicion: reenviar la misma fecha en otro formato cuenta como sin cambios', function (string $formato) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $control = controlMedicamentoParaEditar($antigua);
 
@@ -1217,7 +1217,7 @@ it('MEDICAMENTO edicion: reenviar la misma fecha en otro formato cuenta como sin
 ]);
 
 it('MEDICAMENTO ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = ControlMedicamento::count();
 
     $this->postJson('/api/ControlMedicamento', cargaDeControlMedicamento($valor));
@@ -1234,7 +1234,7 @@ it('MEDICAMENTO ALTA: lo que la regla deja pasar queda guardado dentro de la ven
 })->with(fn () => fechasHostiles());
 
 it('MEDICAMENTO EDICION: lo que la regla deja pasar deja la columna dentro de la ventana, o como estaba', function (mixed $valor, string $partida) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = fechaDePartida($partida);
     $control = controlMedicamentoParaEditar($original);
 
@@ -1309,7 +1309,7 @@ function mensajeDeEncabezado($respuesta): string
 }
 
 it('RAMPA entrega alta: rechaza con 422 y no escribe una fecha fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = EntregaTurnoR::count();
 
     $respuesta = $this->postJson('/api/EntregaTurnoR', cargaDeEntregaRampa(Carbon::today()->addDays($desplazamiento)->toDateString()));
@@ -1324,7 +1324,7 @@ it('RAMPA entrega alta: rechaza con 422 y no escribe una fecha fuera de ventana'
 ]);
 
 it('RAMPA entrega alta: no deja pasar una fecha vacia, ausente o ilegible (el required es nuevo)', function (mixed $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = EntregaTurnoR::count();
 
     $this->postJson('/api/EntregaTurnoR', cargaDeEntregaRampa($fecha, 'Jefe Uno', $enviarFecha))
@@ -1346,7 +1346,7 @@ it('RAMPA entrega alta: exige date_format:Y-m-d, no date (la cadena se guarda LI
     // servidor la aceptaba con razon y la prueba se ponia roja sola. Es el mismo remedio que ya
     // usaba la de PERNOCTA.
     $this->travelTo(Carbon::parse('2026-03-05 12:00:00', 'America/Mexico_City'));
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = EntregaTurnoR::count();
 
     $this->postJson('/api/EntregaTurnoR', cargaDeEntregaRampa(Carbon::today()->format($formato)))
@@ -1357,7 +1357,7 @@ it('RAMPA entrega alta: exige date_format:Y-m-d, no date (la cadena se guarda LI
 })->with(formatosQueNoSonSoloElDia());
 
 it('RAMPA entrega alta: una fecha dentro de ventana escribe (la regla no rechaza todo)', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $fecha = Carbon::today()->addDays($desplazamiento)->toDateString();
     $antes = EntregaTurnoR::count();
 
@@ -1371,7 +1371,7 @@ it('RAMPA entrega alta: una fecha dentro de ventana escribe (la regla no rechaza
 ]);
 
 it('RAMPA entrega alta: no valida nada mas del cuerpo (sigue siendo de forma libre)', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $carga = cargaDeEntregaRampa(Carbon::today()->toDateString());
     $carga['formData']['encabezado']['cualquierCosa'] = ['x' => 1];
 
@@ -1379,7 +1379,7 @@ it('RAMPA entrega alta: no valida nada mas del cuerpo (sigue siendo de forma lib
 });
 
 it('RAMPA entrega edicion: rechaza con 422 y no modifica la fecha de una edicion fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = Carbon::today()->toDateString();
     $entrega = entregaRampaParaEditar($original);
 
@@ -1395,7 +1395,7 @@ it('RAMPA entrega edicion: rechaza con 422 y no modifica la fecha de una edicion
 ]);
 
 it('RAMPA entrega edicion: deja corregir otros campos de un reporte antiguo si no se toca su fecha', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $entrega = entregaRampaParaEditar($antigua);
 
@@ -1405,7 +1405,7 @@ it('RAMPA entrega edicion: deja corregir otros campos de un reporte antiguo si n
 });
 
 it('RAMPA entrega edicion: no deja pasar de una fecha antigua a OTRA antigua distinta', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $entrega = entregaRampaParaEditar($antigua);
 
@@ -1417,7 +1417,7 @@ it('RAMPA entrega edicion: no deja pasar de una fecha antigua a OTRA antigua dis
 });
 
 it('RAMPA entrega edicion: no deja que lleve una fecha ausente o ilegible', function (mixed $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = Carbon::today()->toDateString();
     $entrega = entregaRampaParaEditar($original);
 
@@ -1433,7 +1433,7 @@ it('RAMPA entrega edicion: no deja que lleve una fecha ausente o ilegible', func
 ]);
 
 it('RAMPA entrega edicion: una fecha valida de hoy escribe la fecha (la edicion tiene camino feliz)', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $hoy = Carbon::today()->toDateString();
     $entrega = entregaRampaParaEditar(Carbon::today()->subDays(10)->toDateString());
 
@@ -1443,7 +1443,7 @@ it('RAMPA entrega edicion: una fecha valida de hoy escribe la fecha (la edicion 
 });
 
 it('RAMPA ENTREGA ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = EntregaTurnoR::count();
 
     $this->postJson('/api/EntregaTurnoR', cargaDeEntregaRampa($valor));
@@ -1462,7 +1462,7 @@ it('RAMPA ENTREGA ALTA: lo que la regla deja pasar queda guardado dentro de la v
 })->with(fn () => fechasHostiles());
 
 it('RAMPA ENTREGA EDICION: lo que la regla deja pasar deja la clave dentro de la ventana, o como estaba', function (mixed $valor, string $partida) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = fechaDePartida($partida);
     $entrega = entregaRampaParaEditar($original);
 
@@ -1524,7 +1524,7 @@ function turnoParaEditar(string $dia, ?string $diaCierre = null): TurnoAutotanqu
 }
 
 it('AUTOTANQUE turno alta: rechaza con 422 y no escribe un inicio fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = TurnoAutotanque::count();
 
     $respuesta = $this->postJson('/api/TurnoAutoTanque', cargaDeTurno(diaYHora($desplazamiento)));
@@ -1539,7 +1539,7 @@ it('AUTOTANQUE turno alta: rechaza con 422 y no escribe un inicio fuera de venta
 ]);
 
 it('AUTOTANQUE turno alta: rechaza con 422 y no escribe un cierre fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = TurnoAutotanque::count();
 
     $respuesta = $this->postJson('/api/TurnoAutoTanque', cargaDeTurno(diaYHora(0), ['fechaCierre' => diaYHora($desplazamiento)]));
@@ -1554,7 +1554,7 @@ it('AUTOTANQUE turno alta: rechaza con 422 y no escribe un cierre fuera de venta
 ]);
 
 it('AUTOTANQUE turno alta: la fecha de inicio no puede faltar ni ser ilegible', function (?string $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = TurnoAutotanque::count();
     $carga = cargaDeTurno($fecha);
     if (! $enviarFecha) {
@@ -1571,7 +1571,7 @@ it('AUTOTANQUE turno alta: la fecha de inicio no puede faltar ni ser ilegible', 
 ]);
 
 it('AUTOTANQUE turno alta: la fecha de cierre sigue siendo opcional (un turno sin cerrar no tiene cierre)', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = TurnoAutotanque::count();
 
     $this->postJson('/api/TurnoAutoTanque', cargaDeTurno(diaYHora(0)))->assertCreated();
@@ -1588,7 +1588,7 @@ it('AUTOTANQUE turno alta: exige fecha y hora exactas, no cualquier cosa que dat
     // usaba la de PERNOCTA.
     $this->travelTo(Carbon::parse('2026-03-05 12:00:00', 'America/Mexico_City'));
     // Todas se leen como hoy con `date`, pero ninguna es `Y-m-d\TH:i` ni `Y-m-d\TH:i:s`.
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = TurnoAutotanque::count();
 
     $this->postJson('/api/TurnoAutoTanque', cargaDeTurno(Carbon::today()->setTime(8, 30)->format($formato)))
@@ -1610,7 +1610,7 @@ it('AUTOTANQUE turno alta: exige fecha y hora exactas, no cualquier cosa que dat
 ]);
 
 it('AUTOTANQUE turno alta: una fecha y hora dentro de ventana escriben, con y sin segundos (la regla no rechaza todo)', function (int $desplazamiento, string $hora) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = TurnoAutotanque::count();
     $dia = Carbon::today()->addDays($desplazamiento)->toDateString();
 
@@ -1626,7 +1626,7 @@ it('AUTOTANQUE turno alta: una fecha y hora dentro de ventana escriben, con y si
 ]);
 
 it('AUTOTANQUE turno edicion: cerrar un turno de hace dias reenvia su inicio intacto y no se bloquea', function (string $reenvio) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $turno = turnoParaEditar($antigua);
 
@@ -1648,7 +1648,7 @@ it('AUTOTANQUE turno edicion: cerrar un turno de hace dias reenvia su inicio int
 ]);
 
 it('AUTOTANQUE turno edicion: un turno antiguo cuyo cierre tambien es antiguo conserva ambas fechas', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $turno = turnoParaEditar($antigua, $antigua);
 
@@ -1662,7 +1662,7 @@ it('AUTOTANQUE turno edicion: un turno antiguo cuyo cierre tambien es antiguo co
 });
 
 it('AUTOTANQUE turno edicion: no deja mover el inicio ni el cierre a un dia fuera de ventana, y no escribe nada', function (string $campo, int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = Carbon::today()->toDateString();
     $turno = turnoParaEditar($original);
     $carga = cargaDeTurno(diaYHora(0), ['id' => $turno->id, 'nombre' => 'Cambiado', 'fechaCierre' => diaYHora(0)]);
@@ -1683,7 +1683,7 @@ it('AUTOTANQUE turno edicion: no deja mover el inicio ni el cierre a un dia fuer
 ]);
 
 it('AUTOTANQUE turno edicion: mover el inicio o el cierre a un dia DENTRO de ventana escribe (la edicion no rechaza todo cambio)', function (string $campo, int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $turno = turnoParaEditar($antigua);
     $carga = cargaDeTurno($antigua.'T08:30:00', ['id' => $turno->id, 'nombre' => 'Corregido', 'fechaCierre' => $antigua.'T08:30:00']);
@@ -1705,7 +1705,7 @@ it('AUTOTANQUE turno edicion: mover el inicio o el cierre a un dia DENTRO de ven
 ]);
 
 it('AUTOTANQUE turno edicion: no deja pasar de un inicio antiguo a OTRO antiguo distinto', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $turno = turnoParaEditar($antigua);
 
@@ -1717,7 +1717,7 @@ it('AUTOTANQUE turno edicion: no deja pasar de un inicio antiguo a OTRO antiguo 
 });
 
 it('AUTOTANQUE turno edicion: un id que no existe es un alta, y un alta no hereda fechas antiguas', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = TurnoAutotanque::count();
 
     $this->postJson('/api/TurnoAutoTanque', cargaDeTurno(Carbon::today()->subDays(10)->toDateString().'T08:30', ['id' => 99999]))
@@ -1729,7 +1729,7 @@ it('AUTOTANQUE turno edicion: un id que no existe es un alta, y un alta no hered
 
 it('AUTOTANQUE turno edicion: un desfase en una fecha antigua no se cuela como "sin cambios"', function () {
     // El dia (diez primeros caracteres) es el mismo, pero MySQL convertiria de zona esa cadena.
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $turno = turnoParaEditar($antigua);
 
@@ -1744,7 +1744,7 @@ it('AUTOTANQUE turno edicion: el mismo dia con un sufijo relativo no se cuela co
     // `cambiaElDia` compara los diez primeros caracteres como texto. Eso solo es seguro porque
     // `date_format` va SIEMPRE en el mismo arreglo: con `date`, "2026-10-07 +1 day" empieza por el
     // dia guardado, contaria como "sin cambios", se saltaria la ventana y MySQL guardaria otro dia.
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = fechaDePartida($partida);
     $turno = turnoParaEditar($original);
 
@@ -1766,7 +1766,7 @@ it('AUTOTANQUE turno edicion: el mismo dia con un sufijo relativo no se cuela co
 it('AUTOTANQUE turno: a las 19:00 de Mexico (ya es manana en UTC) hoy sigue siendo hoy y manana se rechaza', function () {
     // Cubre el servidor. El calculo del dia por omision en el navegador (`toLocaleDateString` en
     // lugar de `toISOString`) NO tiene prueba: no hay corredor de pruebas JS en este proyecto.
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $this->travelTo(Carbon::parse('2026-10-07 19:00:00', 'America/Mexico_City'));
     $antes = TurnoAutotanque::count();
 
@@ -1781,7 +1781,7 @@ it('AUTOTANQUE turno: a las 19:00 de Mexico (ya es manana en UTC) hoy sigue sien
 });
 
 it('AUTOTANQUE TURNO ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (string $campo, mixed $valor) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = TurnoAutotanque::count();
     $carga = cargaDeTurno(diaYHora(0), ['fechaCierre' => diaYHora(0)]);
     $carga[$campo] = $valor;
@@ -1813,7 +1813,7 @@ it('AUTOTANQUE TURNO ALTA: lo que la regla deja pasar queda guardado dentro de l
 });
 
 it('AUTOTANQUE TURNO EDICION: lo que la regla deja pasar deja las columnas dentro de la ventana, o como estaban', function (string $campo, mixed $valor, string $partida) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = fechaDePartida($partida);
     $turno = turnoParaEditar($original);
     $carga = cargaDeTurno($original.'T08:30:00', ['id' => $turno->id, 'fechaCierre' => $original.'T08:30:00']);
@@ -1872,7 +1872,7 @@ function remisionParaEditar(string $fecha): Remision
 }
 
 it('AUTOTANQUE servicio alta: rechaza con 422 y no escribe una fecha fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = Remision::count();
 
     $respuesta = $this->postJson('/api/Remision/remisiones', cargaDeRemision(Carbon::today()->addDays($desplazamiento)->toDateString()));
@@ -1887,7 +1887,7 @@ it('AUTOTANQUE servicio alta: rechaza con 422 y no escribe una fecha fuera de ve
 ]);
 
 it('AUTOTANQUE servicio alta: no deja pasar una fecha vacia, ausente o ilegible', function (?string $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = Remision::count();
     $carga = cargaDeRemision($fecha);
     if (! $enviarFecha) {
@@ -1910,7 +1910,7 @@ it('AUTOTANQUE servicio alta: exige date_format:Y-m-d, no date (la columna no ti
     // servidor la aceptaba con razon y la prueba se ponia roja sola. Es el mismo remedio que ya
     // usaba la de PERNOCTA.
     $this->travelTo(Carbon::parse('2026-03-05 12:00:00', 'America/Mexico_City'));
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = Remision::count();
 
     $this->postJson('/api/Remision/remisiones', cargaDeRemision(Carbon::today()->format($formato)))
@@ -1921,7 +1921,7 @@ it('AUTOTANQUE servicio alta: exige date_format:Y-m-d, no date (la columna no ti
 })->with(formatosQueNoSonSoloElDia());
 
 it('AUTOTANQUE servicio alta: una fecha dentro de ventana escribe (la regla no rechaza todo)', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $fecha = Carbon::today()->addDays($desplazamiento)->toDateString();
     $antes = Remision::count();
 
@@ -1935,7 +1935,7 @@ it('AUTOTANQUE servicio alta: una fecha dentro de ventana escribe (la regla no r
 ]);
 
 it('AUTOTANQUE servicio edicion: rechaza con 422 y no modifica nada con una fecha fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = Carbon::today()->toDateString();
     $remision = remisionParaEditar($original);
 
@@ -1952,7 +1952,7 @@ it('AUTOTANQUE servicio edicion: rechaza con 422 y no modifica nada con una fech
 ]);
 
 it('AUTOTANQUE servicio edicion: deja corregir otros campos de una remision antigua si no se toca su fecha', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $remision = remisionParaEditar($antigua);
 
@@ -1963,7 +1963,7 @@ it('AUTOTANQUE servicio edicion: deja corregir otros campos de una remision anti
 });
 
 it('AUTOTANQUE servicio edicion: no deja pasar de una fecha antigua a OTRA antigua distinta', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $remision = remisionParaEditar($antigua);
 
@@ -1975,7 +1975,7 @@ it('AUTOTANQUE servicio edicion: no deja pasar de una fecha antigua a OTRA antig
 });
 
 it('AUTOTANQUE servicio edicion: no deja que lleve una fecha ausente o ilegible', function (?string $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = Carbon::today()->toDateString();
     $remision = remisionParaEditar($original);
     $carga = cargaDeRemision($fecha);
@@ -1992,7 +1992,7 @@ it('AUTOTANQUE servicio edicion: no deja que lleve una fecha ausente o ilegible'
 ]);
 
 it('AUTOTANQUE servicio edicion: una fecha valida de hoy escribe la fecha (la edicion tiene camino feliz)', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $hoy = Carbon::today()->toDateString();
     $remision = remisionParaEditar(Carbon::today()->subDays(10)->toDateString());
 
@@ -2002,7 +2002,7 @@ it('AUTOTANQUE servicio edicion: una fecha valida de hoy escribe la fecha (la ed
 });
 
 it('AUTOTANQUE SERVICIO ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = Remision::count();
 
     $this->postJson('/api/Remision/remisiones', cargaDeRemision($valor));
@@ -2020,7 +2020,7 @@ it('AUTOTANQUE SERVICIO ALTA: lo que la regla deja pasar queda guardado dentro d
 })->with(fn () => fechasHostiles());
 
 it('AUTOTANQUE SERVICIO EDICION: lo que la regla deja pasar deja la columna dentro de la ventana, o como estaba', function (mixed $valor, string $partida) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = fechaDePartida($partida);
     $remision = remisionParaEditar($original);
 
@@ -2040,7 +2040,7 @@ function cargaDePrestamoPlanta(mixed $fecha): array
 }
 
 it('PLANTA prestamo: rechaza con 422 y no escribe una fecha fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioConSubdepartamento('relacionPlanta', 'Rampa'), 'sanctum');
     $antes = RelacionPlanta::count();
 
     $respuesta = $this->postJson('/api/RelacionPlanta/prestar', cargaDePrestamoPlanta(Carbon::today()->addDays($desplazamiento)->toDateString()));
@@ -2055,7 +2055,7 @@ it('PLANTA prestamo: rechaza con 422 y no escribe una fecha fuera de ventana', f
 ]);
 
 it('PLANTA prestamo: no deja pasar una fecha vacia, ausente o ilegible', function (?string $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioConSubdepartamento('relacionPlanta', 'Rampa'), 'sanctum');
     $antes = RelacionPlanta::count();
     $carga = cargaDePrestamoPlanta($fecha);
     if (! $enviarFecha) {
@@ -2078,7 +2078,7 @@ it('PLANTA prestamo: sigue exigiendo date_format:Y-m-d, no se sustituyo por date
     // servidor la aceptaba con razon y la prueba se ponia roja sola. Es el mismo remedio que ya
     // usaba la de PERNOCTA.
     $this->travelTo(Carbon::parse('2026-03-05 12:00:00', 'America/Mexico_City'));
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioConSubdepartamento('relacionPlanta', 'Rampa'), 'sanctum');
     $antes = RelacionPlanta::count();
 
     $this->postJson('/api/RelacionPlanta/prestar', cargaDePrestamoPlanta(Carbon::today()->format($formato)))
@@ -2089,7 +2089,7 @@ it('PLANTA prestamo: sigue exigiendo date_format:Y-m-d, no se sustituyo por date
 })->with(formatosQueNoSonSoloElDia());
 
 it('PLANTA prestamo: una fecha dentro de ventana escribe (la regla no rechaza todo)', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioConSubdepartamento('relacionPlanta', 'Rampa'), 'sanctum');
     $fecha = Carbon::today()->addDays($desplazamiento)->toDateString();
     $antes = RelacionPlanta::count();
 
@@ -2103,7 +2103,7 @@ it('PLANTA prestamo: una fecha dentro de ventana escribe (la regla no rechaza to
 ]);
 
 it('PLANTA PRESTAMO: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioConSubdepartamento('relacionPlanta', 'Rampa'), 'sanctum');
     $antes = RelacionPlanta::count();
 
     $this->postJson('/api/RelacionPlanta/prestar', cargaDePrestamoPlanta($valor));
@@ -2183,7 +2183,7 @@ function hostilesConHoraCsae(): iterable
 // --- CSAE entrada: POST /api/MovimientosCSAE ---
 
 it('CSAE entrada: rechaza con 422 y no escribe una fecha fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = MovimientoCSAE::count();
 
     $respuesta = $this->postJson('/api/MovimientosCSAE', cargaDeEntradaCsae(fechaHoraCsae($desplazamiento)));
@@ -2199,7 +2199,7 @@ it('CSAE entrada: rechaza con 422 y no escribe una fecha fuera de ventana', func
 ]);
 
 it('CSAE entrada: no deja pasar una fecha vacia, ausente o ilegible (y es un 422, no un 500)', function (?string $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = MovimientoCSAE::count();
     $carga = cargaDeEntradaCsae($fecha);
     if (! $enviarFecha) {
@@ -2216,7 +2216,7 @@ it('CSAE entrada: no deja pasar una fecha vacia, ausente o ilegible (y es un 422
 ]);
 
 it('CSAE entrada: una fecha y hora dentro de ventana escriben, y la hora se conserva (la regla no rechaza todo)', function (int $desplazamiento, string $hora) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = MovimientoCSAE::count();
     $enviada = fechaHoraCsae($desplazamiento, $hora);
 
@@ -2232,7 +2232,7 @@ it('CSAE entrada: una fecha y hora dentro de ventana escriben, y la hora se cons
 ]);
 
 it('CSAE ENTRADA ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = MovimientoCSAE::count();
 
     $this->postJson('/api/MovimientosCSAE', cargaDeEntradaCsae($valor));
@@ -2251,7 +2251,7 @@ it('CSAE ENTRADA ALTA: lo que la regla deja pasar queda guardado dentro de la ve
 // --- CSAE salida: PUT /api/MovimientosCSAE/{id} ---
 
 it('CSAE salida: rechaza con 422 y no escribe una salida fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $movimiento = movimientoCsaeParaEditar(null);
 
     $respuesta = $this->putJson("/api/MovimientosCSAE/{$movimiento->id}", [
@@ -2272,7 +2272,7 @@ it('CSAE salida: rechaza con 422 y no escribe una salida fuera de ventana', func
 ]);
 
 it('CSAE salida: una fecha ilegible es un 422 y no escribe', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $movimiento = movimientoCsaeParaEditar(null);
 
     $this->putJson("/api/MovimientosCSAE/{$movimiento->id}", ['fecha_hora_salida' => 'no-es-una-fecha', 'observaciones_salida' => 'Nueva'])
@@ -2282,7 +2282,7 @@ it('CSAE salida: una fecha ilegible es un 422 y no escribe', function () {
 });
 
 it('CSAE salida: la fecha sigue siendo opcional (nullable): sin ella el movimiento queda sin salida', function (bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $movimiento = movimientoCsaeParaEditar(null);
     $carga = ['fecha_hora_salida' => null, 'observaciones_salida' => 'Nueva'];
     if (! $enviarFecha) {
@@ -2300,7 +2300,7 @@ it('CSAE salida: la fecha sigue siendo opcional (nullable): sin ella el movimien
 ]);
 
 it('CSAE salida: una fecha y hora dentro de ventana escriben, y la hora se conserva (la regla no rechaza todo)', function (int $desplazamiento, string $hora) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $movimiento = movimientoCsaeParaEditar(null);
     $enviada = fechaHoraCsae($desplazamiento, $hora);
 
@@ -2315,7 +2315,7 @@ it('CSAE salida: una fecha y hora dentro de ventana escriben, y la hora se conse
 ]);
 
 it('CSAE salida edicion: corregir otro campo de un movimiento antiguo reenviando su salida no se bloquea', function (string $reenvio) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $movimiento = movimientoCsaeParaEditar($antigua);
     $fecha = str_replace('{dia}', $antigua, $reenvio);
@@ -2333,7 +2333,7 @@ it('CSAE salida edicion: corregir otro campo de un movimiento antiguo reenviando
 ]);
 
 it('CSAE salida edicion: no deja mover una salida guardada a un dia fuera de ventana, y no escribe', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $movimiento = movimientoCsaeParaEditar($antigua);
 
@@ -2350,7 +2350,7 @@ it('CSAE salida edicion: no deja mover una salida guardada a un dia fuera de ven
 ]);
 
 it('CSAE salida edicion: mover una salida antigua a un dia DENTRO de ventana escribe (la edicion no rechaza todo cambio)', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $movimiento = movimientoCsaeParaEditar(Carbon::today()->subDays(10)->toDateString());
     $enviada = fechaHoraCsae($desplazamiento, '20:00:00');
 
@@ -2363,7 +2363,7 @@ it('CSAE salida edicion: mover una salida antigua a un dia DENTRO de ventana esc
 ]);
 
 it('CSAE salida edicion: el mismo dia con un sufijo relativo no cuenta como «sin cambios» (la columna tiene cast)', function (string $partida, string $sufijo) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $dia = fechaDePartida($partida);
     $movimiento = movimientoCsaeParaEditar($dia);
 
@@ -2381,7 +2381,7 @@ it('CSAE salida edicion: el mismo dia con un sufijo relativo no cuenta como «si
 ]);
 
 it('CSAE salida edicion: una fecha ilegible no se toma por «sin cambios»', function (string $partida) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $dia = fechaDePartida($partida);
     $movimiento = movimientoCsaeParaEditar($dia);
 
@@ -2392,7 +2392,7 @@ it('CSAE salida edicion: una fecha ilegible no se toma por «sin cambios»', fun
 })->with(['hoy', 'antigua']);
 
 it('CSAE SALIDA ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $movimiento = movimientoCsaeParaEditar(null);
 
     $this->putJson("/api/MovimientosCSAE/{$movimiento->id}", ['fecha_hora_salida' => $valor]);
@@ -2403,7 +2403,7 @@ it('CSAE SALIDA ALTA: lo que la regla deja pasar queda guardado dentro de la ven
 })->with(fn () => hostilesConHoraCsae());
 
 it('CSAE SALIDA EDICION: lo que la regla deja pasar deja la columna dentro de la ventana, o como estaba', function (mixed $valor, string $partida) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = fechaDePartida($partida);
     $movimiento = movimientoCsaeParaEditar($original);
 
@@ -2461,7 +2461,7 @@ function errorDeFilaPernocta($respuesta, int $fila): ?string
 }
 
 it('PERNOCTA: rechaza con el 422 propio y no escribe ninguna fila si UNA fecha esta fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     aeronaveDentroDelHangar();
     $antes = PernoctaDia::count();
     $hoy = Carbon::today()->toDateString();
@@ -2485,7 +2485,7 @@ it('PERNOCTA: rechaza con el 422 propio y no escribe ninguna fila si UNA fecha e
 ]);
 
 it('PERNOCTA: no deja pasar una fecha vacia, ausente o ilegible en ninguna fila', function (mixed $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     aeronaveDentroDelHangar();
     $antes = PernoctaDia::count();
     $fila = filaDePernocta($fecha);
@@ -2506,7 +2506,7 @@ it('PERNOCTA: no deja pasar una fecha vacia, ausente o ilegible en ninguna fila'
 ]);
 
 it('PERNOCTA: exige date_format:Y-m-d, no date (la columna no tiene cast y la cadena se guarda LITERAL)', function (string $formato) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     // Un dia de un solo digito en mes y dia: `Y-n-j` solo se distingue de `Y-m-d` en esas fechas.
     $this->travelTo(Carbon::parse('2026-03-05 12:00:00', 'America/Mexico_City'));
     aeronaveDentroDelHangar();
@@ -2520,7 +2520,7 @@ it('PERNOCTA: exige date_format:Y-m-d, no date (la columna no tiene cast y la ca
 })->with(formatosQueNoSonSoloElDia());
 
 it('PERNOCTA: varias filas dentro de ventana escriben todas, con su dia exacto (la regla no rechaza todo)', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     aeronaveDentroDelHangar();
     aeronaveDentroDelHangar('XA-PE2');
     $antes = PernoctaDia::count();
@@ -2537,7 +2537,7 @@ it('PERNOCTA: varias filas dentro de ventana escriben todas, con su dia exacto (
 ]);
 
 it('PERNOCTA: a las 19:00 de Mexico (ya es manana en UTC) hoy sigue siendo hoy y manana se rechaza', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $this->travelTo(Carbon::parse('2026-10-07 19:00:00', 'America/Mexico_City'));
     aeronaveDentroDelHangar();
     $antes = PernoctaDia::count();
@@ -2550,7 +2550,7 @@ it('PERNOCTA: a las 19:00 de Mexico (ya es manana en UTC) hoy sigue siendo hoy y
 });
 
 it('PERNOCTA: lo que la regla deja pasar queda guardado dentro de la ventana, fila por fila, se lea como se lea', function (mixed $valor) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     aeronaveDentroDelHangar();
     aeronaveDentroDelHangar('XA-PE2');
     $antes = PernoctaDia::count();
@@ -2594,7 +2594,7 @@ function cargaDeRonda(mixed $fecha, int $vehiculos = 3): array
 }
 
 it('ESTACIONAMIENTO ronda: rechaza con 422 y no escribe NINGUNA de las filas con una fecha fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = EstacionamientoSubterraneo::count();
 
     $respuesta = $this->postJson('/api/EstacionamientoSubTerraneo', cargaDeRonda(Carbon::today()->addDays($desplazamiento)->toDateString()));
@@ -2610,7 +2610,7 @@ it('ESTACIONAMIENTO ronda: rechaza con 422 y no escribe NINGUNA de las filas con
 ]);
 
 it('ESTACIONAMIENTO ronda: la fecha ahora es obligatoria (antes no se validaba): vacia, ausente o ilegible dan 422', function (?string $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = EstacionamientoSubterraneo::count();
     $carga = cargaDeRonda($fecha);
     if (! $enviarFecha) {
@@ -2627,7 +2627,7 @@ it('ESTACIONAMIENTO ronda: la fecha ahora es obligatoria (antes no se validaba):
 ]);
 
 it('ESTACIONAMIENTO ronda: una fecha dentro de ventana escribe TODAS las filas, todas con ese dia (la regla no rechaza todo)', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = EstacionamientoSubterraneo::count();
     $dia = Carbon::today()->addDays($desplazamiento)->toDateString();
 
@@ -2643,7 +2643,7 @@ it('ESTACIONAMIENTO ronda: una fecha dentro de ventana escribe TODAS las filas, 
 it('ESTACIONAMIENTO ronda: a las 19:00 de Mexico (ya es manana en UTC) hoy sigue siendo hoy y manana se rechaza', function () {
     // Cubre el servidor. El calculo del dia por omision en el navegador (`fechaHoy()` en lugar
     // de `toISOString`) NO tiene prueba: no hay corredor de pruebas JS en este proyecto.
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $this->travelTo(Carbon::parse('2026-10-07 19:00:00', 'America/Mexico_City'));
     $antes = EstacionamientoSubterraneo::count();
 
@@ -2656,7 +2656,7 @@ it('ESTACIONAMIENTO ronda: a las 19:00 de Mexico (ya es manana en UTC) hoy sigue
 });
 
 it('ESTACIONAMIENTO RONDA: lo que la regla deja pasar queda guardado dentro de la ventana en CADA fila, se lea como se lea', function (mixed $valor) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = EstacionamientoSubterraneo::count();
 
     $this->postJson('/api/EstacionamientoSubTerraneo', cargaDeRonda($valor, 4));
@@ -2675,7 +2675,7 @@ it('ESTACIONAMIENTO alerta: el campo `fecha` es una fecha de CORTE de informe y 
     // El campo se llama `fecha` como el de los formularios, pero consultar un corte antiguo es
     // legitimo. La consulta usa DATEDIFF (MySQL) y no corre en sqlite, asi que aqui solo se
     // exige lo que importa: que la validacion no lo rechace con un 422.
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $corte = Carbon::today()->addDays($dias)->toDateString();
 
     expect($this->getJson('/api/EstacionamientoSubTerraneo/alerta?fecha='.$corte)->status())->not->toBe(422);
@@ -2759,7 +2759,7 @@ function walkAroundParaEditar(string $fecha): WalkAround
 // --- Walk around: POST /api/walkarounds ---
 
 it('WALKAROUND alta: rechaza con 422 y no escribe nada con una fecha fuera de ventana', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = escrituraDeWalkAround();
 
     $respuesta = $this->postJson('/api/walkarounds', cargaDeWalkAround(Carbon::today()->addDays($desplazamiento)->toDateString()));
@@ -2774,7 +2774,7 @@ it('WALKAROUND alta: rechaza con 422 y no escribe nada con una fecha fuera de ve
 ]);
 
 it('WALKAROUND alta: no deja pasar una fecha vacia, ausente o ilegible (el required es nuevo)', function (mixed $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = escrituraDeWalkAround();
 
     $this->postJson('/api/walkarounds', cargaDeWalkAround($fecha, $enviarFecha))
@@ -2791,7 +2791,7 @@ it('WALKAROUND alta: no deja pasar una fecha vacia, ausente o ilegible (el requi
 ]);
 
 it('WALKAROUND alta: una fecha dentro de ventana escribe, con su dia exacto (la regla no rechaza todo)', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $dia = Carbon::today()->addDays($desplazamiento)->toDateString();
     $antes = WalkAround::count();
 
@@ -2808,7 +2808,7 @@ it('WALKAROUND alta: una fecha dentro de ventana escribe, con su dia exacto (la 
 it('WALKAROUND alta: la ventana se juzga ANTES que la secuencia y que cualquier escritura', function () {
     // Con una fecha fuera de ventana y el cuerpo casi vacio, lo primero que ocurre es el 422 de
     // la fecha: ni la secuencia de movimientos ni el alta de catalogo llegan a ejecutarse.
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
 
     $this->postJson('/api/walkarounds', ['metadata' => ['fecha' => Carbon::today()->addDay()->toDateString()]])
         ->assertUnprocessable()
@@ -2816,7 +2816,7 @@ it('WALKAROUND alta: la ventana se juzga ANTES que la secuencia y que cualquier 
 });
 
 it('WALKAROUND alta: a las 19:00 de Mexico (ya es manana en UTC) hoy sigue siendo hoy y manana se rechaza', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $this->travelTo(Carbon::parse('2026-10-07 19:00:00', 'America/Mexico_City'));
     $antes = escrituraDeWalkAround();
 
@@ -2831,7 +2831,7 @@ it('WALKAROUND alta: a las 19:00 de Mexico (ya es manana en UTC) hoy sigue siend
 // --- Walk around: PUT y PATCH /api/walkarounds/{id} (las dos rutas son el MISMO metodo) ---
 
 it('WALKAROUND edicion: rechaza con 422 y no modifica la fecha, por PUT y por PATCH', function (string $verbo, int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = Carbon::today()->toDateString();
     $walkAround = walkAroundParaEditar($original);
 
@@ -2849,7 +2849,7 @@ it('WALKAROUND edicion: rechaza con 422 y no modifica la fecha, por PUT y por PA
 ]);
 
 it('WALKAROUND edicion: deja corregir otros campos de un registro antiguo si no se toca su fecha', function (string $verbo) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $walkAround = walkAroundParaEditar($antigua);
 
@@ -2860,7 +2860,7 @@ it('WALKAROUND edicion: deja corregir otros campos de un registro antiguo si no 
 })->with(['PUT', 'PATCH']);
 
 it('WALKAROUND edicion: no deja pasar de una fecha antigua a OTRA antigua distinta, y la guardada no cambia', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $walkAround = walkAroundParaEditar($antigua);
 
@@ -2872,7 +2872,7 @@ it('WALKAROUND edicion: no deja pasar de una fecha antigua a OTRA antigua distin
 });
 
 it('WALKAROUND edicion: no deja que lleve una fecha ausente o ilegible', function (mixed $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = Carbon::today()->toDateString();
     $walkAround = walkAroundParaEditar($original);
 
@@ -2888,7 +2888,7 @@ it('WALKAROUND edicion: no deja que lleve una fecha ausente o ilegible', functio
 ]);
 
 it('WALKAROUND edicion: una fecha valida de hoy escribe la fecha (la edicion tiene camino feliz)', function (string $verbo) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $hoy = Carbon::today()->toDateString();
     $walkAround = walkAroundParaEditar(Carbon::today()->subDays(10)->toDateString());
 
@@ -2898,7 +2898,7 @@ it('WALKAROUND edicion: una fecha valida de hoy escribe la fecha (la edicion tie
 })->with(['PUT', 'PATCH']);
 
 it('WALKAROUND edicion: mover la fecha a un dia DENTRO de ventana escribe (la edicion no rechaza todo cambio)', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $nueva = Carbon::today()->addDays($desplazamiento)->toDateString();
     $walkAround = walkAroundParaEditar(Carbon::today()->toDateString());
 
@@ -2911,7 +2911,7 @@ it('WALKAROUND edicion: mover la fecha a un dia DENTRO de ventana escribe (la ed
 ]);
 
 it('WALKAROUND edicion: reenviar la misma fecha en otro formato cuenta como sin cambios', function (string $formato) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antigua = Carbon::today()->subDays(10)->toDateString();
     $walkAround = walkAroundParaEditar($antigua);
 
@@ -2928,7 +2928,7 @@ it('WALKAROUND edicion: reenviar la misma fecha en otro formato cuenta como sin 
 it('WALKAROUND edicion: el mismo dia con un sufijo relativo no cuenta como «sin cambios» (la columna tiene cast)', function (string $partida, string $sufijo) {
     // Comparar TEXTO aqui seria el agujero: `{hoy} +1 day` es distinto del guardado pero, si se
     // tomara por el mismo dia, se saltaria la ventana y la base guardaria manana.
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = fechaDePartida($partida);
     $walkAround = walkAroundParaEditar($original);
 
@@ -2945,7 +2945,7 @@ it('WALKAROUND edicion: el mismo dia con un sufijo relativo no cuenta como «sin
 // --- Walk around: el invariante, leyendo la columna ---
 
 it('WALKAROUND ALTA: lo que la regla deja pasar queda guardado dentro de la ventana, se lea como se lea', function (mixed $valor) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $antes = WalkAround::count();
 
     $this->postJson('/api/walkarounds', cargaDeWalkAround($valor));
@@ -2962,7 +2962,7 @@ it('WALKAROUND ALTA: lo que la regla deja pasar queda guardado dentro de la vent
 })->with(fn () => fechasHostiles());
 
 it('WALKAROUND EDICION: lo que la regla deja pasar deja la columna dentro de la ventana, o como estaba, por PUT y por PATCH', function (string $verbo, mixed $valor, string $partida) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $original = fechaDePartida($partida);
     $walkAround = walkAroundParaEditar($original);
 
@@ -3007,7 +3007,7 @@ function programadaParaEditar(string $fecha): OperacionProgramada
 }
 
 it('PROGRAMADAS alta: acepta cualquier dia, futuro o pasado (la excepcion: sin suelo y sin techo)', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioConSubdepartamento(), 'sanctum');
     $dia = Carbon::today()->addDays($desplazamiento)->toDateString();
     $antes = OperacionProgramada::count();
 
@@ -3025,7 +3025,7 @@ it('PROGRAMADAS alta: acepta cualquier dia, futuro o pasado (la excepcion: sin s
 ]);
 
 it('PROGRAMADAS edicion: tambien acepta cualquier dia, futuro o pasado (el Form Request de edicion extiende al de alta)', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioConSubdepartamento(), 'sanctum');
     $dia = Carbon::today()->addDays($desplazamiento)->toDateString();
     $programada = programadaParaEditar(Carbon::today()->toDateString());
 
@@ -3040,7 +3040,7 @@ it('PROGRAMADAS edicion: tambien acepta cualquier dia, futuro o pasado (el Form 
 ]);
 
 it('PROGRAMADAS: sigue exigiendo una fecha legible, la excepcion no la deja opcional', function (mixed $fecha, bool $enviarFecha) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioConSubdepartamento(), 'sanctum');
     $antes = OperacionProgramada::count();
 
     $this->postJson('/api/OperacionesProgramadas', cargaDeProgramada($fecha, $enviarFecha))
@@ -3055,7 +3055,7 @@ it('PROGRAMADAS: sigue exigiendo una fecha legible, la excepcion no la deja opci
 ]);
 
 it('LA EXCEPCION es una excepcion y no un agujero: la MISMA fecha futura se acepta en programadas y se rechaza en las demas', function (int $desplazamiento) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioConSubdepartamento(), 'sanctum');
     $futura = Carbon::today()->addDays($desplazamiento)->toDateString();
     $programadas = OperacionProgramada::count();
     $walkArounds = WalkAround::count();
@@ -3202,14 +3202,14 @@ function exitoQueIncluye(Illuminate\Testing\TestResponse $respuesta, string $mar
 // --- Operaciones diarias: el listado, el Excel, el PDF y la verificacion de duplicados ---
 
 it('FILTRO operaciones diarias: el listado acepta cualquier rango y encuentra lo sembrado ese dia', function (string $inicio, string $fin) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     operacionDiariaEnElDia($inicio);
 
     exitoQueIncluye(consulta('/api/OperacionesDiarias', ['fechaInicio' => $inicio, 'fechaFin' => $fin]), 'XA-FIL');
 })->with(rangosDeConsulta());
 
 it('FILTRO operaciones diarias: el selector de UN dia (solo fechaInicio) acepta cualquier dia', function (string $inicio, string $fin) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     operacionDiariaEnElDia($inicio);
 
     exitoQueIncluye(consulta('/api/OperacionesDiarias', ['fechaInicio' => $inicio]), 'XA-FIL');
@@ -3217,7 +3217,7 @@ it('FILTRO operaciones diarias: el selector de UN dia (solo fechaInicio) acepta 
 
 it('FILTRO operaciones diarias: el Excel y el PDF aceptan cualquier rango', function (string $ruta, string $inicio, string $fin) {
     funcionesDeMysqlEnSqlite();
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     operacionDiariaEnElDia($inicio);
 
     consulta($ruta, ['fechaInicio' => $inicio, 'fechaFin' => $fin])->assertSuccessful();
@@ -3229,7 +3229,7 @@ it('FILTRO operaciones diarias: el Excel y el PDF aceptan cualquier rango', func
 });
 
 it('FILTRO operaciones diarias: verificar duplicados con `fecha` antigua no es un 422 y encuentra la operacion', function (string $inicio, string $fin) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $operacion = operacionDiariaEnElDia($inicio);
     // Sin la hora que sqlite le pega al guardar un `date`: la comparacion es por texto exacto.
     DB::table('operaciones_diarias')->where('id', $operacion->id)->update(['fecha' => $inicio]);
@@ -3242,7 +3242,7 @@ it('FILTRO operaciones diarias: verificar duplicados con `fecha` antigua no es u
 // --- Operaciones programadas: el selector del dia y las pendientes ---
 
 it('FILTRO programadas: el listado de un dia acepta cualquier dia, pasado o futuro', function (string $inicio, string $fin) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     programadaParaEditar($inicio);
 
     $respuesta = consulta('/api/OperacionesProgramadas', ['fecha' => $inicio]);
@@ -3252,7 +3252,7 @@ it('FILTRO programadas: el listado de un dia acepta cualquier dia, pasado o futu
 })->with(rangosDeConsulta());
 
 it('FILTRO programadas: las pendientes filtradas por un dia antiguo siguen respondiendo', function (string $inicio, string $fin) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     programadaParaEditar($inicio);
 
     exitoQueIncluye(consulta('/api/OperacionesProgramadas/pendientes', ['modulo' => OperacionProgramada::MODULO_OPERACIONES_DIARIAS, 'fecha' => $inicio]), 'XA-PRG');
@@ -3261,7 +3261,7 @@ it('FILTRO programadas: las pendientes filtradas por un dia antiguo siguen respo
 // --- Control de medicamentos: buscar cierres, filtrar movimientos, exportar ---
 
 it('FILTRO medicamentos: buscar cierres por un dia, o por un rango, acepta cualquier fecha', function (array $parametros, string $inicio) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     controlMedicamentoParaEditar($inicio);
 
     exitoQueIncluye(consulta('/api/ControlMedicamento/index', $parametros), 'Original');
@@ -3273,7 +3273,7 @@ it('FILTRO medicamentos: buscar cierres por un dia, o por un rango, acepta cualq
 });
 
 it('FILTRO medicamentos: los filtros de movimientos (dia y rango) aceptan cualquier fecha', function (string $ruta, array $parametros) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     controlMedicamentoParaEditar($parametros['fecha'] ?? $parametros['fecha_inicio']);
 
     consulta($ruta, $parametros)->assertSuccessful();
@@ -3288,7 +3288,7 @@ it('FILTRO medicamentos: el PDF de cierres acepta un rango de hace un anio', fun
     // UNA sola peticion a proposito: la vista `pdf.control-medicamento-cierres` declara una funcion
     // global dentro del Blade, y renderizarla dos veces en el mismo proceso muere con «Cannot
     // redeclare formatoFechaPdf()». En produccion cada peticion es un proceso, pero en la suite no.
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     [$inicio, $fin] = rangosDeConsulta()['hace un anio'];
     controlMedicamentoParaEditar($inicio);
 
@@ -3299,7 +3299,7 @@ it('FILTRO medicamentos: el PDF de cierres acepta un rango de hace un anio', fun
 
 it('FILTRO pernocta: el listado por dia o por rango acepta cualquier fecha y encuentra lo sembrado', function (string $periodo, string $inicio, string $fin) {
     funcionesDeMysqlEnSqlite();
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     PernoctaDia::create(['fecha' => $inicio, 'matricula' => 'XA-FIL', 'nombre' => 'Vigilante Uno', 'ubicacion' => 'Hangar 1']);
 
     $parametros = $periodo === 'dia'
@@ -3317,14 +3317,14 @@ it('FILTRO pernocta: el listado por dia o por rango acepta cualquier fecha y enc
 // --- CSAE: el periodo y el rango de entrada y de salida ---
 
 it('FILTRO CSAE: el rango de SALIDA acepta cualquier fecha y encuentra lo sembrado ese dia', function (string $inicio, string $fin) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     movimientoCsaeParaEditar($inicio);
 
     exitoQueIncluye(consulta('/api/MovimientosCSAE', ['salida_inicio' => $inicio, 'salida_fin' => $fin]), 'XA-CSB');
 })->with(rangosDeConsulta());
 
 it('FILTRO CSAE: el rango de ENTRADA acepta cualquier fecha y encuentra lo sembrado ese dia', function (string $inicio, string $fin) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     MovimientoCSAE::create([
         'user_entrada_id' => User::factory()->create()->id,
         'fecha_hora_entrada' => $inicio.' 08:00:00',
@@ -3341,7 +3341,7 @@ it('FILTRO CSAE: el rango de ENTRADA acepta cualquier fecha y encuentra lo sembr
 
 it('FILTRO estacionamiento: la `fecha` de vehiculosMasDeCincoDias es un CORTE de informe y NO lleva ventana (encuentra la racha de ese corte)', function (int $diasAtras) {
     funcionesDeMysqlEnSqlite();
-    $this->actingAs($usuario = usuarioAdmin(), 'sanctum');
+    $this->actingAs($usuario = usuarioEmpleado(), 'sanctum');
     $corte = Carbon::today()->subDays($diasAtras);
     // Seis dias seguidos que TERMINAN en el corte: mas de cinco, asi que el informe lo lista.
     foreach (range(5, 0) as $atras) {
@@ -3367,14 +3367,14 @@ it('FILTRO estacionamiento: la `fecha` de vehiculosMasDeCincoDias es un CORTE de
 
 it('FILTRO estacionamiento: un corte FUTURO tampoco se rechaza', function (int $dias) {
     funcionesDeMysqlEnSqlite();
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
     $corte = Carbon::today()->addDays($dias)->toDateString();
 
     consulta('/api/EstacionamientoSubTerraneo/alerta', ['fecha' => $corte])->assertSuccessful()->assertJsonPath('fecha_corte', $corte);
 })->with(['manana' => [1], 'dentro de un mes' => [30]]);
 
 it('FILTRO estacionamiento: una `fecha` que no es fecha SI es un 422 (la validacion de siempre, no la ventana)', function () {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
 
     consulta('/api/EstacionamientoSubTerraneo/alerta', ['fecha' => 'no-es-una-fecha'])->assertUnprocessable()->assertJsonValidationErrors('fecha');
 });
@@ -3383,7 +3383,7 @@ it('FILTRO estacionamiento: una `fecha` que no es fecha SI es un 422 (la validac
 
 it('FILTRO del resto de modulos: sus listados e informes aceptan cualquier rango y encuentran lo sembrado', function (string $ruta, array $parametros, string $marca, string $sembrar, string $inicio) {
     funcionesDeMysqlEnSqlite();
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
 
     match ($sembrar) {
         'checklist' => checklistParaEditar($inicio),
@@ -3411,7 +3411,7 @@ it('FILTRO del resto de modulos: sus listados e informes aceptan cualquier rango
 });
 
 it('FILTRO de las bitacoras: desde/hasta acepta cualquier rango (no son fechas de registro)', function (string $ruta, string $inicio, string $fin) {
-    $this->actingAs(usuarioAdmin(), 'sanctum');
+    $this->actingAs(usuarioEmpleado(), 'sanctum');
 
     consulta($ruta, ['desde' => $inicio, 'hasta' => $fin])->assertSuccessful();
 })->with(function () {
