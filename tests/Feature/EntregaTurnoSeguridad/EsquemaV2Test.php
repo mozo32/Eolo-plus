@@ -3,6 +3,8 @@
 use App\Models\EntregaTurnoSeguridad;
 use App\Models\Firma;
 use App\Models\User;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /*
@@ -132,4 +134,65 @@ test('sin la firma de quien entrega el relevo no esta cerrado aunque firmen los 
 
     expect($relevo->firmasFaltantes())->toBe([])
         ->and($relevo->estaCerrado())->toBeFalse();
+});
+
+test('la migracion v3 reescribe el texto congelado en las dos direcciones y no toca las cifras', function () {
+    // Se siembra en crudo y con los textos NUEVOS, que es como queda un relevo
+    // tras la v3. El tercer renglón no tiene ninguna frase a cambiar y va con
+    // espacios y llaves a propósito: debe salir byte a byte igual.
+    $intacto = '{ "0": {"clave":"x", "texto":"Otra cosa", "total": 2} }';
+
+    DB::table('entregas_turno_seguridad')->insert([
+        [
+            'user_id' => User::factory()->create()->id,
+            'fecha_hora' => '2026-11-09 08:00:00',
+            'resumen' => json_encode([
+                ['clave' => 'vehiculos', 'texto' => 'No hay movimientos', 'entradas' => 0, 'salidas' => 0, 'total' => 0],
+                ['clave' => 'pernocta', 'texto' => 'No hay pernoctas', 'total' => 0],
+                ['clave' => 'aviones', 'texto' => '3 entradas y 2 salidas', 'entradas' => 3, 'salidas' => 2, 'total' => 5],
+            ]),
+        ],
+        [
+            'user_id' => User::factory()->create()->id,
+            'fecha_hora' => '2026-11-09 09:00:00',
+            'resumen' => $intacto,
+        ],
+    ]);
+
+    $leer = fn (): array => DB::table('entregas_turno_seguridad')->orderBy('id')->pluck('resumen')->all();
+    $cifras = fn (array $renglones): array => array_map(
+        fn (array $r) => array_intersect_key($r, array_flip(['entradas', 'salidas', 'total'])),
+        $renglones,
+    );
+    $antes = $cifras(json_decode($leer()[0], true));
+
+    // down() devuelve la columna y las frases viejas.
+    expect(Artisan::call('migrate:rollback', ['--step' => 1]))->toBe(0);
+
+    $enRollback = json_decode($leer()[0], true);
+
+    expect(Schema::hasColumn('entregas_turno_seguridad', 'seccion'))->toBeTrue()
+        ->and($enRollback[0]['texto'])->toBe('Sin registros')
+        ->and($enRollback[1]['texto'])->toBe('Sin pernoctas')
+        ->and($enRollback[2]['texto'])->toBe('3 entradas y 2 salidas')
+        ->and($cifras($enRollback))->toBe($antes)
+        ->and($leer()[1])->toBe($intacto);
+
+    // up() otra vez: vuelven las frases nuevas, la columna se va, el índice nuevo está.
+    expect(Artisan::call('migrate'))->toBe(0);
+
+    $despues = json_decode($leer()[0], true);
+    $nombres = collect(Schema::getIndexes('entregas_turno_seguridad'))->pluck('name');
+
+    expect(Schema::hasColumn('entregas_turno_seguridad', 'seccion'))->toBeFalse()
+        ->and($nombres)->toContain('entregas_turno_seg_fecha_idx')
+        ->and($nombres)->not->toContain('entregas_turno_seg_fecha_seccion_idx')
+        ->and($despues[0]['texto'])->toBe('No hay movimientos')
+        ->and($despues[1]['texto'])->toBe('No hay pernoctas')
+        ->and($cifras($despues))->toBe($antes)
+        ->and($despues[0]['entradas'])->toBe(0)
+        ->and($despues[2]['entradas'])->toBe(3)
+        ->and($despues[2]['salidas'])->toBe(2)
+        ->and($despues[2]['total'])->toBe(5)
+        ->and($leer()[1])->toBe($intacto);
 });

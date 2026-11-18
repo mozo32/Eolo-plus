@@ -122,6 +122,10 @@ return new class extends Migration
                     return $renglon;
                 }, $renglones);
 
+                if ($nuevos === $renglones) {
+                    return;
+                }
+
                 DB::table('entregas_turno_seguridad')
                     ->where('id', $fila->id)
                     ->update(['resumen' => json_encode($nuevos)]);
