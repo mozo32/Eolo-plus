@@ -34,12 +34,20 @@ const botonSecundario =
 export default function CamaraEvidencias({ abierto, servicioId, fotos, onCerrar, onCambio }: Props) {
     const [camaraAbierta, setCamaraAbierta] = useState(false);
     const [errorCamara, setErrorCamara] = useState('');
-    const [subiendo, setSubiendo] = useState(false);
+    // Un solo indicador para subir y borrar: el servidor calcula `orden` leyendo el máximo, así que nunca dos a la vez.
+    const [ocupado, setOcupado] = useState<'subiendo' | 'quitando' | null>(null);
     const [error, setError] = useState('');
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    // La ref cierra la carrera dentro del mismo tick (el estado aún no se ha repintado); fotosRef evita armar listas con una prop vieja.
+    const ocupadoRef = useRef(false);
+    const fotosRef = useRef(fotos);
+
+    useEffect(() => {
+        fotosRef.current = fotos;
+    }, [fotos]);
 
     const camaraDisponible = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
     // Cerrar el modal apaga la cámara aunque camaraAbierta siga en true.
@@ -96,14 +104,16 @@ export default function CamaraEvidencias({ abierto, servicioId, fotos, onCerrar,
     };
 
     const aceptarFoto = async (origen: File | Blob) => {
-        setSubiendo(true);
+        if (ocupadoRef.current) return;
+        ocupadoRef.current = true;
+        setOcupado('subiendo');
         setError('');
 
         try {
             const dataUrl = await comprimirImagen(origen);
 
             if (servicioId === null) {
-                onCambio([...fotos, { id: null, url: dataUrl }]);
+                onCambio([...fotosRef.current, { id: null, url: dataUrl }]);
                 return;
             }
 
@@ -114,32 +124,40 @@ export default function CamaraEvidencias({ abierto, servicioId, fotos, onCerrar,
                 throw new Error('El servidor no confirmó la fotografía. Inténtalo de nuevo.');
             }
 
-            onCambio([...fotos, { id: guardada.id, url: guardada.url }]);
+            onCambio([...fotosRef.current, { id: guardada.id, url: guardada.url }]);
         } catch (e) {
             setError(e instanceof Error ? e.message : 'No se pudo guardar la fotografía.');
         } finally {
-            setSubiendo(false);
+            ocupadoRef.current = false;
+            setOcupado(null);
         }
     };
 
     const quitarFoto = async (indice: number) => {
-        const foto = fotos[indice];
+        const foto = fotosRef.current[indice];
+        if (ocupadoRef.current || !foto) return;
+        ocupadoRef.current = true;
+        setOcupado('quitando');
 
-        // Una foto sin id nunca llegó al servidor: basta con sacarla de la lista.
-        if (foto.id !== null && servicioId !== null) {
-            try {
+        try {
+            // Una foto sin id nunca llegó al servidor: basta con sacarla de la lista.
+            if (foto.id !== null && servicioId !== null) {
                 await eliminarEvidenciaComisariato(servicioId, foto.id);
-            } catch (e) {
-                setError(e instanceof Error ? e.message : 'No se pudo eliminar la fotografía.');
-                return;
             }
-        }
 
-        onCambio(fotos.filter((_, i) => i !== indice));
+            onCambio(fotosRef.current.filter(f => f !== foto));
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'No se pudo eliminar la fotografía.');
+        } finally {
+            ocupadoRef.current = false;
+            setOcupado(null);
+        }
     };
 
     const tomarFotografia = () => {
         const video = videoRef.current;
+
+        if (ocupadoRef.current) return;
 
         if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
             setErrorCamara('Espera un momento a que la cámara termine de cargar.');
@@ -214,7 +232,7 @@ export default function CamaraEvidencias({ abierto, servicioId, fotos, onCerrar,
                             <button type="button" onClick={() => setCamaraAbierta(false)} className={botonSecundario}>
                                 Cancelar cámara
                             </button>
-                            <button type="button" onClick={tomarFotografia} className={`${botonPrimario} flex-1`}>
+                            <button type="button" onClick={tomarFotografia} disabled={ocupado !== null} className={`${botonPrimario} flex-1`}>
                                 <Camera size={18} />
                                 Tomar fotografía
                             </button>
@@ -222,7 +240,7 @@ export default function CamaraEvidencias({ abierto, servicioId, fotos, onCerrar,
                     </div>
                 )}
 
-                {fotos.length === 0 && !subiendo ? (
+                {fotos.length === 0 && ocupado !== 'subiendo' ? (
                     <p className="rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-4 text-center text-sm text-gray-500">
                         Aún no hay fotografías.
                     </p>
@@ -231,13 +249,11 @@ export default function CamaraEvidencias({ abierto, servicioId, fotos, onCerrar,
                         {fotos.map((foto, indice) => (
                             <div key={foto.id ?? `pendiente-${indice}`} className="relative overflow-hidden rounded-lg border border-gray-200 bg-slate-950">
                                 <img src={foto.url} alt={`Evidencia ${indice + 1}`} className="h-24 w-full object-cover" />
-                                {foto.id === null && (
-                                    <span className="absolute bottom-1 left-1 rounded-full bg-amber-500/90 px-2 py-0.5 text-[10px] font-bold text-white">Pendiente</span>
-                                )}
+                                {foto.id === null && <span className="absolute bottom-1 left-1 rounded-full bg-amber-500/90 px-2 py-0.5 text-[10px] font-bold text-white">Pendiente</span>}
                                 <button
                                     type="button"
                                     onClick={() => void quitarFoto(indice)}
-                                    disabled={subiendo}
+                                    disabled={ocupado !== null}
                                     aria-label={`Quitar evidencia ${indice + 1}`}
                                     className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white hover:bg-red-600 disabled:opacity-50"
                                 >
@@ -246,7 +262,7 @@ export default function CamaraEvidencias({ abierto, servicioId, fotos, onCerrar,
                             </div>
                         ))}
 
-                        {subiendo && (
+                        {ocupado === 'subiendo' && (
                             <div className="flex h-24 flex-col items-center justify-center gap-1 rounded-lg border border-gray-200 bg-gray-50 text-xs font-semibold text-gray-500">
                                 <Loader2 size={18} className="animate-spin" />
                                 Subiendo…
@@ -256,31 +272,17 @@ export default function CamaraEvidencias({ abierto, servicioId, fotos, onCerrar,
                 )}
 
                 <div className="space-y-2">
-                    <button type="button" onClick={anadirFoto} disabled={subiendo} className={`${botonPrimario} w-full`}>
+                    <button type="button" onClick={anadirFoto} disabled={ocupado !== null} className={`${botonPrimario} w-full`}>
                         <ImagePlus size={18} />
                         Añadir foto
                     </button>
 
-                    {!camaraDisponible && (
-                        <p className="text-xs text-gray-400">La página no está en HTTPS, por eso se usa la cámara del aparato en lugar de la cámara en vivo.</p>
-                    )}
-
-                    {servicioId === null && (
-                        <p className="text-xs text-gray-400">Las fotografías se subirán al guardar el servicio.</p>
-                    )}
+                    {!camaraDisponible && <p className="text-xs text-gray-400">La página no está en HTTPS, por eso se usa la cámara del aparato en lugar de la cámara en vivo.</p>}
+                    {servicioId === null && <p className="text-xs text-gray-400">Las fotografías se subirán al guardar el servicio.</p>}
                 </div>
 
-                {errorCamara && (
-                    <p className="text-sm font-medium text-amber-700" role="alert">
-                        {errorCamara}
-                    </p>
-                )}
-
-                {error && (
-                    <p className="text-sm font-medium text-red-600" role="alert">
-                        {error}
-                    </p>
-                )}
+                {errorCamara && <p className="text-sm font-medium text-amber-700" role="alert">{errorCamara}</p>}
+                {error && <p className="text-sm font-medium text-red-600" role="alert">{error}</p>}
 
                 <button type="button" onClick={cerrar} className={botonSecundario}>
                     Listo
