@@ -136,6 +136,24 @@ export function ComisariatoPdfDoc({ data, fotos = [] }: { data: any; fotos?: str
                     </View>
                 </View>
 
+                {/*
+                  * Las evidencias van DENTRO del recibo, entre el detalle y los
+                  * totales, y sin `break`: con dos o tres fotos —el caso normal—
+                  * el recibo entero cabe en una hoja. Con muchas, la rejilla
+                  * empuja los totales y las firmas a la página siguiente, que es
+                  * lo que el usuario eligió frente a encogerlas.
+                  */}
+                {fotos.length > 0 && (
+                    <View>
+                        <Text style={styles.sectionTitle}>Evidencias fotográficas</Text>
+                        <View style={styles.evidenciasGrid}>
+                            {fotos.map((foto, indice) => (
+                                <Image key={indice} src={foto} style={styles.evidenciaFoto} />
+                            ))}
+                        </View>
+                    </View>
+                )}
+
                 <View style={styles.totalSection}>
                     <Text style={styles.totalLabel}>Subtotal: ${data.subtotal}</Text>
                     <Text style={styles.totalValue}>Total: ${data.total}</Text>
@@ -149,17 +167,6 @@ export function ComisariatoPdfDoc({ data, fotos = [] }: { data: any; fotos?: str
                         <Text style={styles.signatureLabel}>Sello / Firma FBO</Text>
                     </View>
                 </View>
-
-                {fotos.length > 0 && (
-                    <View break>
-                        <Text style={styles.sectionTitle}>Evidencias fotográficas</Text>
-                        <View style={styles.evidenciasGrid}>
-                            {fotos.map((foto, indice) => (
-                                <Image key={indice} src={foto} style={styles.evidenciaFoto} />
-                            ))}
-                        </View>
-                    </View>
-                )}
             </Page>
         </Document>
     );
