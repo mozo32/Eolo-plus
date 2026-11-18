@@ -21,130 +21,85 @@ use Illuminate\Support\Str;
 
 class EntregaTurnoSeguridadController extends Controller
 {
-    /**
-     * La expresión del día.
-     *
-     * Vive en una constante porque la usan el agrupamiento y el filtro por
-     * estado, y tienen que ser la MISMA: si una dijera `DATE(fecha_hora)` y
-     * la otra `fecha_hora`, el filtro excluiría horas en vez de días y
-     * nadie lo notaría hasta que un día saliera a medias.
-     */
-    private const DIA = 'DATE(fecha_hora)';
-
     /** `consultaFiltrada()` sigue pidiendo un `Request`: un Form Request lo es. */
     public function index(IndexEntregaTurnoSeguridadRequest $request): JsonResponse
     {
         /*
          * El techo es tan necesario como el piso: sin él, un `per_page=100000`
-         * pide cien mil días y arrastra toda la tabla con sus firmas.
+         * arrastra toda la tabla con sus firmas.
          */
         $porPagina = min(100, max(1, (int) $request->integer('per_page', 10)));
 
-        $dias = $this->consultaFiltrada($request)
-            ->selectRaw(self::DIA.' as dia')
-            ->groupBy('dia')
-            ->orderByDesc('dia')
+        $relevos = $this->consultaFiltrada($request)
+            ->with(['usuario:id,name', 'firmas'])
+            ->orderByDesc('fecha_hora')
+            ->orderByDesc('id')
             ->paginate($porPagina);
 
-        $diasDeLaPagina = array_map(
-            static fn (mixed $fila): string => (string) (is_array($fila) ? $fila['dia'] : $fila->dia),
-            $dias->items()
-        );
-
         return response()->json([
-            'data' => $this->filasDeLosDias($diasDeLaPagina),
+            'data' => $this->renglones($relevos->getCollection()),
             'meta' => [
-                'current_page' => $dias->currentPage(),
-                'last_page' => $dias->lastPage(),
-                'per_page' => $dias->perPage(),
-                'total' => $dias->total(),
+                'current_page' => $relevos->currentPage(),
+                'last_page' => $relevos->lastPage(),
+                'per_page' => $relevos->perPage(),
+                'total' => $relevos->total(),
             ],
         ]);
     }
 
     /**
-     * Un renglón por día, con sus dos puestos.
+     * Un renglón por relevo.
      *
-     * Pide exactamente los días de la página con un `IN` sobre la misma
-     * expresión del día que usa el agrupamiento. NO usa un rango entre el
-     * día más viejo y el más nuevo: con un filtro disperso una página de
-     * diez días abarcaría casi un año.
-     *
-     * La pernocta del día se pide UNA vez para toda la página, agrupada por
-     * fecha, en vez de llamar al servicio del resumen por sección: esa
-     * llamada son nueve consultas, y por sección serían ciento ochenta para
-     * pintar diez renglones.
-     *
-     * @param  list<string>  $diasDeLaPagina
-     * @return list<array{fecha: string, caseta: ?array, plataforma: ?array}>
+     * @param  Collection<int, EntregaTurnoSeguridad>  $relevos
+     * @return list<array{id: int, fecha: string, hora: string, nombre: string, firmas_faltantes: list<string>, pernocta: int}>
      */
-    private function filasDeLosDias(array $diasDeLaPagina): array
+    private function renglones(Collection $relevos): array
     {
-        if ($diasDeLaPagina === []) {
-            return [];
-        }
+        $pernoctas = $this->pernoctasDeLaPagina($relevos);
 
-        $registros = EntregaTurnoSeguridad::activas()
-            ->with(['usuario:id,name', 'firmas'])
-            ->whereIn(DB::raw(self::DIA), $diasDeLaPagina)
-            ->get()
-            ->groupBy(
-                static fn (EntregaTurnoSeguridad $relevo): string => $relevo->fecha_hora->toDateString()
-            );
-
-        $pernoctas = PernoctaDia::query()
-            ->whereIn('fecha', $diasDeLaPagina)
-            ->selectRaw('fecha, COUNT(*) as total')
-            ->groupBy('fecha')
-            ->pluck('total', 'fecha');
-
-        return array_map(
-            fn (string $dia): array => [
-                'fecha' => $dia,
-                'caseta' => $this->seccionDelDia(
-                    $registros->get($dia, collect()),
-                    EntregaTurnoSeguridad::SECCION_CASETA,
-                    (int) ($pernoctas[$dia] ?? 0),
+        return $relevos
+            ->map(fn (EntregaTurnoSeguridad $relevo): array => [
+                'id' => $relevo->id,
+                'fecha' => $relevo->fecha_hora->toDateString(),
+                'hora' => $relevo->fecha_hora->format('H:i'),
+                'nombre' => $relevo->usuario?->name ?? '',
+                'firmas_faltantes' => $relevo->firmasFaltantes(),
+                'pernocta' => $this->pernoctaDe(
+                    $relevo,
+                    (int) ($pernoctas[$relevo->fecha_hora->toDateString()] ?? 0),
                 ),
-                'plataforma' => $this->seccionDelDia(
-                    $registros->get($dia, collect()),
-                    EntregaTurnoSeguridad::SECCION_PLATAFORMA,
-                    (int) ($pernoctas[$dia] ?? 0),
-                ),
-            ],
-            $diasDeLaPagina
-        );
+            ])
+            ->values()
+            ->all();
     }
 
     /**
-     * Lo que se enseña de un puesto, o null si ese puesto no entregó.
+     * La pernocta de cada día de la página, en UNA consulta.
      *
-     * Con más de un registro del mismo puesto ese día devuelve el MÁS
-     * RECIENTE y cuenta los demás en `extras`. No se descarta ninguno: la
-     * tabla no tiene candado de uno por día y puesto a propósito.
+     * Se pide por fecha y no por relevo a propósito: llamar al servicio del
+     * resumen por renglón son nueve consultas cada uno, noventa para pintar
+     * diez. Si la página sale vacía no se consulta nada.
      *
-     * @param  Collection<int, EntregaTurnoSeguridad>  $delDia
-     * @return array{id: int, nombre: string, hora: string, firmas_faltantes: list<string>, pernocta: int, extras: int}|null
+     * @param  Collection<int, EntregaTurnoSeguridad>  $relevos
+     * @return Collection<string, int>
      */
-    private function seccionDelDia(Collection $delDia, string $seccion, int $pernoctaEnVivo): ?array
+    private function pernoctasDeLaPagina(Collection $relevos): Collection
     {
-        $deLaSeccion = $delDia->where('seccion', $seccion)->sortByDesc('fecha_hora')->values();
+        $fechas = $relevos
+            ->map(static fn (EntregaTurnoSeguridad $relevo): string => $relevo->fecha_hora->toDateString())
+            ->unique()
+            ->values()
+            ->all();
 
-        if ($deLaSeccion->isEmpty()) {
-            return null;
+        if ($fechas === []) {
+            return collect();
         }
 
-        /** @var EntregaTurnoSeguridad $reciente */
-        $reciente = $deLaSeccion->first();
-
-        return [
-            'id' => $reciente->id,
-            'nombre' => $reciente->usuario?->name ?? '',
-            'hora' => $reciente->fecha_hora->format('H:i'),
-            'firmas_faltantes' => $reciente->firmasFaltantes(),
-            'pernocta' => $this->pernoctaDe($reciente, $pernoctaEnVivo),
-            'extras' => $deLaSeccion->count() - 1,
-        ];
+        return PernoctaDia::query()
+            ->whereIn('fecha', $fechas)
+            ->selectRaw('fecha, COUNT(*) as total')
+            ->groupBy('fecha')
+            ->pluck('total', 'fecha');
     }
 
     /**
@@ -178,10 +133,6 @@ class EntregaTurnoSeguridadController extends Controller
             );
         }
 
-        if ($request->filled('seccion')) {
-            $query->where('seccion', $request->string('seccion')->toString());
-        }
-
         if ($request->filled('fecha_inicio')) {
             $query->whereDate('fecha_hora', '>=', $request->string('fecha_inicio')->toString());
         }
@@ -192,60 +143,37 @@ class EntregaTurnoSeguridadController extends Controller
 
         $estado = $request->string('estado')->toString();
 
+        /*
+         * El estado se juzga por RELEVO y no por día. Antes se calculaba por
+         * día porque el día tenía dos puestos y uno firmado no hacía completo
+         * al otro; sin puesto, cada relevo responde por sí mismo. Los
+         * `whereHas` heredan el `wherePivot('status', 'A')` de `firmas()`, así
+         * que una firma retirada no cuenta como puesta.
+         */
         if ($estado === 'falta_jefe_area') {
-            $query->whereIn(DB::raw(self::DIA), $this->diasSinFirmaDe(EntregaTurnoSeguridad::ROL_JEFE_AREA));
+            $query->whereDoesntHave(
+                'firmas',
+                static fn (Builder $firma): Builder => $firma->where('firmables.rol', EntregaTurnoSeguridad::ROL_JEFE_AREA)
+            );
         }
 
         if ($estado === 'falta_fbo') {
-            $query->whereIn(DB::raw(self::DIA), $this->diasSinFirmaDe(EntregaTurnoSeguridad::ROL_FBO));
+            $query->whereDoesntHave(
+                'firmas',
+                static fn (Builder $firma): Builder => $firma->where('firmables.rol', EntregaTurnoSeguridad::ROL_FBO)
+            );
         }
 
         if ($estado === 'completas') {
-            $query->whereNotIn(DB::raw(self::DIA), $this->diasIncompletos());
+            foreach (EntregaTurnoSeguridad::ROLES_DE_CIERRE as $rol) {
+                $query->whereHas(
+                    'firmas',
+                    static fn (Builder $firma): Builder => $firma->where('firmables.rol', $rol)
+                );
+            }
         }
 
         return $query;
-    }
-
-    /**
-     * Los días con al menos un registro sin la firma de ese rol.
-     *
-     * Se calcula por DÍA y no por registro porque el estado es del día: un
-     * día en que la caseta firmó y la plataforma no está incompleto, y un
-     * filtro por registro lo daría por completo a través de la caseta.
-     *
-     * La base agrupa y devuelve días: traer un renglón por registro sin
-     * firmar y deduplicar en PHP crecía sin tope con el historial.
-     *
-     * @return list<string>
-     */
-    private function diasSinFirmaDe(string $rol): array
-    {
-        return EntregaTurnoSeguridad::activas()
-            ->whereDoesntHave(
-                'firmas',
-                static fn (Builder $firma): Builder => $firma->where('firmables.rol', $rol)
-            )
-            ->selectRaw(self::DIA.' as dia')
-            ->distinct()
-            ->pluck('dia')
-            ->all();
-    }
-
-    /**
-     * Los días a los que les falta CUALQUIERA de las dos firmas de cierre.
-     *
-     * Es la unión de los dos conjuntos, no su intersección: un día con el
-     * jefe firmado y el FBO sin firmar sigue sin estar completo.
-     *
-     * @return list<string>
-     */
-    private function diasIncompletos(): array
-    {
-        return array_values(array_unique(array_merge(
-            $this->diasSinFirmaDe(EntregaTurnoSeguridad::ROL_JEFE_AREA),
-            $this->diasSinFirmaDe(EntregaTurnoSeguridad::ROL_FBO),
-        )));
     }
 
     public function store(StoreEntregaTurnoSeguridadRequest $request): JsonResponse
