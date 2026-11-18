@@ -18,8 +18,6 @@ function relevoDeListado(string $dia, string $hora = '07:30', array $extra = [])
     return EntregaTurnoSeguridad::create(array_merge([
         'user_id' => User::factory()->create()->id,
         'fecha_hora' => "{$dia} {$hora}:00",
-        // La columna `seccion` sigue siendo NOT NULL hasta la migración de la v3.
-        'seccion' => EntregaTurnoSeguridad::SECCION_CASETA,
     ], $extra));
 }
 
@@ -282,4 +280,14 @@ test('la pernocta de la pagina se pide en una sola consulta', function () {
     DB::disableQueryLog();
 
     expect($consultas)->toBeLessThan(10);
+});
+
+test('un seccion en el query string ya no filtra nada ni revienta', function () {
+    // La regla se fue con la columna. Un cliente viejo que siga mandando
+    // `?seccion=caseta` debe recibir la lista completa, no un 422 ni media.
+    relevoDeListado('2026-11-09');
+    relevoDeListado('2026-11-08');
+
+    expect(listado(['seccion' => 'caseta'])->json('meta.total'))->toBe(2)
+        ->and(listado(['seccion' => 'frente'])->json('meta.total'))->toBe(2);
 });

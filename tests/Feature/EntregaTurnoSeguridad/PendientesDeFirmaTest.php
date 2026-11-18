@@ -32,12 +32,11 @@ function usuarioFboDePendientes(string $slug): User
     return $usuario;
 }
 
-function relevoEn(string $fechaHora, string $seccion, array $extra = []): EntregaTurnoSeguridad
+function relevoEn(string $fechaHora, array $extra = []): EntregaTurnoSeguridad
 {
     return EntregaTurnoSeguridad::create(array_merge([
         'user_id' => User::factory()->create()->id,
         'fecha_hora' => $fechaHora,
-        'seccion' => $seccion,
     ], $extra));
 }
 
@@ -76,8 +75,8 @@ function pendientes(): \Illuminate\Testing\TestResponse
 }
 
 test('lista solo lo que le falta firmar al FBO', function () {
-    $firmado = relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_CASETA);
-    $sinFirmar = relevoEn('2026-11-04 19:00:00', EntregaTurnoSeguridad::SECCION_PLATAFORMA);
+    $firmado = relevoEn('2026-11-04 07:30:00');
+    $sinFirmar = relevoEn('2026-11-04 19:00:00');
 
     firmarConRol($firmado, EntregaTurnoSeguridad::ROL_FBO);
 
@@ -86,7 +85,7 @@ test('lista solo lo que le falta firmar al FBO', function () {
 });
 
 test('deja de listar un relevo en cuanto se firma', function () {
-    $relevo = relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_CASETA);
+    $relevo = relevoEn('2026-11-04 07:30:00');
 
     expect(array_column(pendientes()->json('data'), 'id'))->toBe([$relevo->id]);
 
@@ -99,7 +98,7 @@ test('una firma retirada vuelve a dejarlo pendiente', function () {
     // Retirar es poner el pivote en 'N'. Si `pendientes` mirara el
     // historial en vez de las vigentes, este relevo seguiría dado por
     // firmado y nadie lo firmaría de nuevo.
-    $relevo = relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_CASETA);
+    $relevo = relevoEn('2026-11-04 07:30:00');
     firmarConRol($relevo, EntregaTurnoSeguridad::ROL_FBO);
 
     $relevo->firmasAll()->newPivotStatement()
@@ -110,14 +109,14 @@ test('una firma retirada vuelve a dejarlo pendiente', function () {
 });
 
 test('un relevo retirado no sale como pendiente', function () {
-    relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_CASETA, ['status' => 'N']);
+    relevoEn('2026-11-04 07:30:00', ['status' => 'N']);
 
     expect(pendientes()->json('data'))->toBe([]);
 });
 
 test('lo más viejo va primero: es la cola de trabajo de quien firma', function () {
-    $nuevo = relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_CASETA);
-    $viejo = relevoEn('2026-11-01 19:00:00', EntregaTurnoSeguridad::SECCION_PLATAFORMA);
+    $nuevo = relevoEn('2026-11-04 07:30:00');
+    $viejo = relevoEn('2026-11-01 19:00:00');
 
     expect(array_column(pendientes()->json('data'), 'id'))->toBe([$viejo->id, $nuevo->id]);
 });
@@ -127,38 +126,38 @@ test('la firma de quien entrega no cuenta como la del FBO', function () {
     // adjunta a todos. Sin el filtro `firmables.rol` de `pendientes()`, esa
     // firma lo daría por firmado y la cola quedaría siempre vacía: la función
     // entera muerta sin una sola prueba roja.
-    $relevo = relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_CASETA);
+    $relevo = relevoEn('2026-11-04 07:30:00');
     firmarConRol($relevo, EntregaTurnoSeguridad::ROL_QUIEN_ENTREGA);
 
     expect(array_column(pendientes()->json('data'), 'id'))->toBe([$relevo->id]);
 });
 
 test('con la misma fecha y hora el orden lo rompe el id', function () {
-    // La caseta y la plataforma del mismo relevo pueden compartir `fecha_hora`. Sin
+    // Dos relevos pueden compartir `fecha_hora`. Sin
     // un desempate, el orden lo decide la base y cambia entre corridas.
-    $primero = relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_CASETA);
-    $segundo = relevoEn('2026-11-04 07:30:00', EntregaTurnoSeguridad::SECCION_PLATAFORMA);
+    $primero = relevoEn('2026-11-04 07:30:00');
+    $segundo = relevoEn('2026-11-04 07:30:00');
 
     expect(array_column(pendientes()->json('data'), 'id'))
         ->toBe([$primero->id, $segundo->id]);
 });
 
-test('cada pendiente dice de quién, de cuándo y de qué sección es', function () {
+test('cada pendiente dice de quién y de cuándo es', function () {
     $usuario = User::factory()->create(['name' => 'Luis Gómez']);
-    relevoEn('2026-11-04 19:45:00', EntregaTurnoSeguridad::SECCION_PLATAFORMA, ['user_id' => $usuario->id]);
+    relevoEn('2026-11-04 19:45:00', ['user_id' => $usuario->id]);
 
     $pendiente = pendientes()->json('data.0');
 
     expect($pendiente['nombre'])->toBe('Luis Gómez')
         ->and($pendiente['fecha'])->toBe('2026-11-04')
         ->and($pendiente['hora'])->toBe('19:45')
-        ->and($pendiente['seccion'])->toBe(EntregaTurnoSeguridad::SECCION_PLATAFORMA);
+        ->and($pendiente)->not->toHaveKey('seccion');
 });
 
 test('el jefe de area ve lo que le falta firmar a el', function () {
-    $sinNada = relevoEn(now()->format('Y-m-d H:i:s'), EntregaTurnoSeguridad::SECCION_CASETA);
+    $sinNada = relevoEn(now()->format('Y-m-d H:i:s'));
 
-    $conJefe = relevoEn(now()->format('Y-m-d H:i:s'), EntregaTurnoSeguridad::SECCION_PLATAFORMA);
+    $conJefe = relevoEn(now()->format('Y-m-d H:i:s'));
     firmarConRol($conJefe, EntregaTurnoSeguridad::ROL_JEFE_AREA);
 
     $respuesta = $this->actingAs(usuarioFboDePendientes('jefe_area'))
@@ -170,9 +169,9 @@ test('el jefe de area ve lo que le falta firmar a el', function () {
 });
 
 test('el fbo ve lo que le falta firmar a el', function () {
-    $sinNada = relevoEn(now()->format('Y-m-d H:i:s'), EntregaTurnoSeguridad::SECCION_CASETA);
+    $sinNada = relevoEn(now()->format('Y-m-d H:i:s'));
 
-    $conFbo = relevoEn(now()->format('Y-m-d H:i:s'), EntregaTurnoSeguridad::SECCION_PLATAFORMA);
+    $conFbo = relevoEn(now()->format('Y-m-d H:i:s'));
     firmarConRol($conFbo, EntregaTurnoSeguridad::ROL_FBO);
 
     $respuesta = $this->actingAs(usuarioFboDePendientes('fbo'))
@@ -184,7 +183,7 @@ test('el fbo ve lo que le falta firmar a el', function () {
 });
 
 test('el administrador ve los dos huecos en un solo renglon', function () {
-    $relevo = relevoEn(now()->format('Y-m-d H:i:s'), EntregaTurnoSeguridad::SECCION_CASETA);
+    $relevo = relevoEn(now()->format('Y-m-d H:i:s'));
 
     $respuesta = $this->actingAs(usuarioFboDePendientes('admin'))
         ->getJson('/api/EntregaTurnoSeguridad/pendientes');
@@ -195,7 +194,7 @@ test('el administrador ve los dos huecos en un solo renglon', function () {
 });
 
 test('quien no firma nada recibe la cola vacia', function () {
-    relevoEn(now()->format('Y-m-d H:i:s'), EntregaTurnoSeguridad::SECCION_CASETA);
+    relevoEn(now()->format('Y-m-d H:i:s'));
 
     $respuesta = $this->actingAs(usuarioFboDePendientes('empleado'))
         ->getJson('/api/EntregaTurnoSeguridad/pendientes');
@@ -204,7 +203,7 @@ test('quien no firma nada recibe la cola vacia', function () {
 });
 
 test('un relevo con las dos firmas sale de la cola de todos', function () {
-    $relevo = relevoEn(now()->format('Y-m-d H:i:s'), EntregaTurnoSeguridad::SECCION_CASETA);
+    $relevo = relevoEn(now()->format('Y-m-d H:i:s'));
     firmarConRol($relevo, EntregaTurnoSeguridad::ROL_JEFE_AREA);
     firmarConRol($relevo, EntregaTurnoSeguridad::ROL_FBO);
 

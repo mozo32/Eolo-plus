@@ -2,10 +2,8 @@
 
 namespace App\Http\Requests\EntregaTurnoSeguridad;
 
-use App\Models\EntregaTurnoSeguridad;
 use App\Rules\DentroDeLaVentana;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 /**
  * Lo que se admite al crear un relevo.
@@ -28,7 +26,6 @@ class StoreEntregaTurnoSeguridadRequest extends FormRequest
     {
         return [
             'fecha_hora' => ['required', 'date', new DentroDeLaVentana('seguridad.entrega_turno')],
-            'seccion' => ['required', Rule::in(EntregaTurnoSeguridad::SECCIONES)],
             'observaciones' => ['nullable', 'string'],
             /*
              * El `=` solo se admite como relleno FINAL, y el cierre es `\z` y
@@ -59,8 +56,6 @@ class StoreEntregaTurnoSeguridadRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'seccion.required' => 'Hay que decir si el relevo es de la caseta o de la plataforma.',
-            'seccion.in' => 'La sección solo puede ser caseta o plataforma.',
             'firma_quien_entrega.required' => 'Falta la firma de quien entrega el turno.',
             'firma_quien_entrega.regex' => 'La firma de quien entrega no llegó como una imagen válida.',
         ];

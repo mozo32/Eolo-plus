@@ -8,24 +8,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 /**
- * El relevo de turno de UN puesto de Seguridad.
+ * El relevo de turno de UN día de Seguridad.
  *
- * Un día normal tiene dos filas, una de caseta y una de plataforma. No hay
- * índice único sobre día y sección a propósito: un relevo extra —un turno
- * partido, una emergencia— es un dato verdadero y el sistema no debe
- * negarse a guardarlo. Quien agrupe por día tiene que saber que una
- * sección puede traer más de una fila.
+ * Desde la v3 no hay puestos: el relevo se llena una vez y sus cifras salen
+ * de los módulos que registran cada cosa. No hay índice único sobre el día a
+ * propósito: un relevo extra —un turno partido, una emergencia— es un dato
+ * verdadero y el sistema no debe negarse a guardarlo.
  */
 class EntregaTurnoSeguridad extends Model
 {
     protected $table = 'entregas_turno_seguridad';
-
-    public const SECCION_CASETA = 'caseta';
-
-    public const SECCION_PLATAFORMA = 'plataforma';
-
-    /** @var list<string> */
-    public const SECCIONES = [self::SECCION_CASETA, self::SECCION_PLATAFORMA];
 
     public const ROL_QUIEN_ENTREGA = 'quien_entrega';
 
@@ -48,7 +40,6 @@ class EntregaTurnoSeguridad extends Model
     protected $fillable = [
         'user_id',
         'fecha_hora',
-        'seccion',
         'resumen',
         'observaciones',
         'status',

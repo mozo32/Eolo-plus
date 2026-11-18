@@ -6,7 +6,6 @@ use App\Models\EntregaTurnoSeguridad;
 use App\Rules\DentroDeLaVentana;
 use App\Support\VentanasDeFecha;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 /**
  * Lo que se admite al editar un relevo.
@@ -44,7 +43,6 @@ class UpdateEntregaTurnoSeguridadRequest extends FormRequest
             'fecha_hora' => $this->cambiaElDia()
                 ? ['sometimes', 'date', new DentroDeLaVentana('seguridad.entrega_turno')]
                 : ['sometimes', 'date'],
-            'seccion' => ['sometimes', Rule::in(EntregaTurnoSeguridad::SECCIONES)],
             'observaciones' => ['sometimes', 'nullable', 'string'],
             /*
              * La misma regla de forma que al crear, y por lo mismo: sin ella
@@ -120,7 +118,6 @@ class UpdateEntregaTurnoSeguridadRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'seccion.in' => 'La sección solo puede ser caseta o plataforma.',
             'firma_quien_entrega.regex' => 'La firma de quien entrega no llegó en un formato válido.',
             'firma_jefe_area.regex' => 'La firma del jefe de área no llegó en un formato válido.',
             'firma_fbo.regex' => 'La firma del FBO no llegó en un formato válido.',

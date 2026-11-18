@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\EntregaTurnoSeguridad;
 
-use App\Models\EntregaTurnoSeguridad;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -35,7 +34,6 @@ class IndexEntregaTurnoSeguridadRequest extends FormRequest
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer'],
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'seccion' => ['sometimes', 'nullable', Rule::in(EntregaTurnoSeguridad::SECCIONES)],
             'estado' => ['sometimes', 'nullable', Rule::in(['falta_jefe_area', 'falta_fbo', 'completas'])],
             'fecha_inicio' => ['sometimes', 'nullable', 'date'],
             'fecha_fin' => ['sometimes', 'nullable', 'date'],
@@ -46,7 +44,6 @@ class IndexEntregaTurnoSeguridadRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'seccion.in' => 'La sección solo puede ser caseta o plataforma.',
             'estado.in' => 'El estado solo puede ser «falta la firma del jefe de área», «falta la firma del FBO» o «completas».',
             'search.max' => 'El texto que se busca es demasiado largo.',
         ];

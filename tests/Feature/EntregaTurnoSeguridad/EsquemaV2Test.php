@@ -6,13 +6,16 @@ use App\Models\User;
 use Illuminate\Support\Facades\Schema;
 
 /*
- * El esquema después de la segunda versión.
+ * El esquema de la tabla tras la segunda y la tercera versión: sin casillas,
+ * sin pernocta mensual, sin puesto, con el resumen congelado y con el índice
+ * sobre la fecha sola.
  *
- * Lo que sqlite NO puede ver desde aquí: que la columna `seccion` se
- * ensanchó a 16. sqlite no aplica longitudes de varchar, así que un
- * `string('seccion', 10)` pasaría estas pruebas igual. Esa comprobación se
- * hace a mano contra MySQL al cerrar la tarea, que es la misma clase de
- * defecto que una vez dejó un índice de 69 caracteres pasar toda la suite.
+ * Lo que sqlite NO puede ver desde aquí: que el índice nuevo exista y
+ * funcione igual en MySQL, ni que su nombre quepa en los 64 caracteres que
+ * MySQL admite (eso lo vigila la prueba de nombres del modelo). La
+ * comprobación contra MySQL se hace a mano al cerrar la tarea, que es la
+ * misma clase de defecto que una vez dejó un índice de 69 caracteres pasar
+ * toda la suite.
  */
 
 function relevoDeEsquema(array $extra = []): EntregaTurnoSeguridad
@@ -20,7 +23,6 @@ function relevoDeEsquema(array $extra = []): EntregaTurnoSeguridad
     return EntregaTurnoSeguridad::create(array_merge([
         'user_id' => User::factory()->create()->id,
         'fecha_hora' => '2026-11-09 08:00:00',
-        'seccion' => EntregaTurnoSeguridad::SECCION_CASETA,
     ], $extra));
 }
 
@@ -57,21 +59,19 @@ test('la tabla guarda el resumen congelado', function () {
     expect(Schema::hasColumn('entregas_turno_seguridad', 'resumen'))->toBeTrue();
 });
 
-test('el indice de fecha y seccion sobrevive al cambio de la columna', function () {
-    // Cambiar una columna indexada hace que sqlite recree la tabla. Si el
-    // índice se perdiera por el camino, el listado seguiría funcionando y
-    // nadie lo notaría hasta que la tabla creciera.
+test('la tabla ya no guarda el puesto', function () {
+    expect(Schema::hasColumn('entregas_turno_seguridad', 'seccion'))->toBeFalse();
+});
+
+test('el indice queda sobre la fecha sola', function () {
+    // Cambiar o borrar una columna indexada hace que sqlite recree la tabla.
+    // Si el índice se perdiera por el camino, el listado seguiría funcionando
+    // y nadie lo notaría hasta que la tabla creciera.
     $nombres = collect(Schema::getIndexes('entregas_turno_seguridad'))->pluck('name');
 
     expect($nombres)->not->toBeEmpty()
-        ->and($nombres)->toContain('entregas_turno_seg_fecha_seccion_idx');
-});
-
-test('las secciones son caseta y plataforma', function () {
-    expect(EntregaTurnoSeguridad::SECCIONES)
-        ->toBe([EntregaTurnoSeguridad::SECCION_CASETA, EntregaTurnoSeguridad::SECCION_PLATAFORMA])
-        ->and(EntregaTurnoSeguridad::SECCION_CASETA)->toBe('caseta')
-        ->and(EntregaTurnoSeguridad::SECCION_PLATAFORMA)->toBe('plataforma');
+        ->and($nombres)->toContain('entregas_turno_seg_fecha_idx')
+        ->and($nombres)->not->toContain('entregas_turno_seg_fecha_seccion_idx');
 });
 
 test('los roles de cierre son el jefe de area y el fbo, en ese orden', function () {

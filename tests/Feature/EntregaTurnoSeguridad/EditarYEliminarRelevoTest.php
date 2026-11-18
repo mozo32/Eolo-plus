@@ -27,7 +27,6 @@ function relevoGuardado(array $extra = []): EntregaTurnoSeguridad
     return EntregaTurnoSeguridad::create(array_merge([
         'user_id' => User::factory()->create()->id,
         'fecha_hora' => '2026-11-04 07:30:00',
-        'seccion' => EntregaTurnoSeguridad::SECCION_CASETA,
     ], $extra));
 }
 
@@ -269,7 +268,7 @@ test('el detalle fija el contrato que lee la vista previa', function () {
         ->assertSuccessful()
         ->json('data');
 
-    foreach (['id', 'nombre', 'fecha', 'hora', 'fecha_hora', 'seccion', 'resumen', 'observaciones', 'firmas'] as $clave) {
+    foreach (['id', 'nombre', 'fecha', 'hora', 'fecha_hora', 'resumen', 'observaciones', 'firmas'] as $clave) {
         expect($datos)->toHaveKey($clave);
     }
 

@@ -22,7 +22,6 @@ function datosDeRelevo(array $extra = []): array
 {
     return array_merge([
         'fecha_hora' => Carbon::now(config('app.timezone'))->format('Y-m-d H:i:s'),
-        'seccion' => EntregaTurnoSeguridad::SECCION_CASETA,
         'firma_quien_entrega' => firmaBase64(),
     ], $extra);
 }
@@ -151,18 +150,22 @@ test('las observaciones se guardan tal como se escribieron', function () {
     expect(EntregaTurnoSeguridad::sole()->observaciones)->toBe($texto);
 });
 
-test('la seccion solo admite caseta y plataforma', function (string $seccion) {
+test('mandar una seccion ya no hace nada ni revienta', function () {
+    // La columna se fue en la v3. Un cliente viejo que la siga mandando no
+    // debe recibir un 422 por un campo que ya no existe.
     $this->actingAs(User::factory()->create())
-        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['seccion' => $seccion]))
-        ->assertSuccessful();
-})->with(['caseta', 'plataforma']);
+        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['seccion' => 'caseta']))
+        ->assertCreated();
 
-test('la seccion ya no admite los nombres viejos', function (string $seccion) {
-    $this->actingAs(User::factory()->create())
-        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo(['seccion' => $seccion]))
-        ->assertStatus(422)
-        ->assertJsonValidationErrors('seccion');
-})->with(['frente', 'atras']);
+    expect(EntregaTurnoSeguridad::count())->toBe(1);
+});
+
+test('el detalle del alta ya no trae la seccion', function () {
+    $respuesta = $this->actingAs(User::factory()->create())
+        ->postJson('/api/EntregaTurnoSeguridad', datosDeRelevo());
+
+    expect($respuesta->json('data'))->not->toHaveKey('seccion');
+});
 
 test('el detalle del alta trae el resumen del dia, en vivo', function () {
     $respuesta = $this->actingAs(User::factory()->create())

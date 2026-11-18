@@ -19,7 +19,6 @@ function relevoDeSeguridad(array $extra = []): EntregaTurnoSeguridad
     return EntregaTurnoSeguridad::create(array_merge([
         'user_id' => User::factory()->create()->id,
         'fecha_hora' => Carbon::now(config('app.timezone'))->format('Y-m-d H:i:s'),
-        'seccion' => EntregaTurnoSeguridad::SECCION_CASETA,
     ], $extra));
 }
 
@@ -99,7 +98,7 @@ test('los nombres de índice que crea la migración caben en MySQL', function ()
     $nombres = array_column(Schema::getIndexes('entregas_turno_seguridad'), 'name');
 
     expect($nombres)->not->toBeEmpty()
-        ->and($nombres)->toContain('entregas_turno_seg_fecha_seccion_idx');
+        ->and($nombres)->toContain('entregas_turno_seg_fecha_idx');
 
     foreach ($nombres as $nombre) {
         expect(strlen($nombre))->toBeLessThanOrEqual(64);

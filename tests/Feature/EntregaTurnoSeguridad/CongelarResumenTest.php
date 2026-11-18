@@ -33,7 +33,6 @@ function relevoRecienCreado(): EntregaTurnoSeguridad
     test()->actingAs(User::factory()->create())
         ->postJson('/api/EntregaTurnoSeguridad', [
             'fecha_hora' => now()->format('Y-m-d H:i:s'),
-            'seccion' => EntregaTurnoSeguridad::SECCION_CASETA,
             'firma_quien_entrega' => firmaDeCongelado(),
         ])->assertSuccessful();
 

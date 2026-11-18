@@ -325,7 +325,6 @@ class EntregaTurnoSeguridadController extends Controller
                 'nombre' => $relevo->usuario?->name ?? '',
                 'fecha' => $relevo->fecha_hora->toDateString(),
                 'hora' => $relevo->fecha_hora->format('H:i'),
-                'seccion' => $relevo->seccion,
                 'falta' => array_values(array_intersect($relevo->firmasFaltantes(), $roles)),
             ])
             ->all();
@@ -521,7 +520,6 @@ class EntregaTurnoSeguridadController extends Controller
             'fecha' => $relevo->fecha_hora->toDateString(),
             'hora' => $relevo->fecha_hora->format('H:i'),
             'fecha_hora' => $relevo->fecha_hora->format('Y-m-d H:i:s'),
-            'seccion' => $relevo->seccion,
             'resumen' => [
                 /*
                  * `congelado` sale de si la columna tiene algo, no de un
