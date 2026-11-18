@@ -40,14 +40,26 @@ export const tituloDelMes = (mes: string): string => {
     return `${MESES[Number(numero) - 1]} ${anio}`;
 };
 
-export async function descargarExcelEstacionamiento(
-    rejilla: RejillaExcelEstacionamiento,
-): Promise<void> {
+/**
+ * El nombre corto de la pestaña: '2026-09' → 'SEP-2026'.
+ *
+ * Es la convención que ya usa `ExcelPernoctaDia`, y existe porque Excel corta
+ * los nombres de hoja a 31 caracteres y prohíbe `: \ / ? * [ ]`. Dentro de la
+ * hoja, el título de la fila 1 sigue siendo el largo —'SEPTIEMBRE 2026'—, que
+ * es lo que el usuario lee.
+ */
+const nombreDeHoja = (mes: string): string => {
+    const [anio, numero] = mes.split('-');
+
+    return `${MESES[Number(numero) - 1].substring(0, 3)}-${anio}`;
+};
+
+/** Añade al libro una hoja con la rejilla de UN mes. */
+function crearHojaMes(libro: ExcelJS.Workbook, rejilla: RejillaExcelEstacionamiento): void {
     const titulo = tituloDelMes(rejilla.mes);
     const totalColumnas = COLUMNAS_FIJAS.length + rejilla.dias + 1;
 
-    const libro = new ExcelJS.Workbook();
-    const hoja = libro.addWorksheet(titulo);
+    const hoja = libro.addWorksheet(nombreDeHoja(rejilla.mes));
 
     COLUMNAS_FIJAS.forEach((columna, indice) => {
         hoja.getColumn(indice + 1).width = columna.ancho;
@@ -118,6 +130,39 @@ export async function descargarExcelEstacionamiento(
     // Fija el encabezado y las cinco columnas de identificación: al llegar al día 28 se
     // sigue viendo de qué placa es la fila.
     hoja.views = [{ state: 'frozen', xSplit: COLUMNAS_FIJAS.length, ySplit: 2 }];
+}
+
+/** '2026-01' y '2026-03' → 'estacionamiento-2026-01_a_2026-03.xlsx'. */
+const nombreDelArchivo = (meses: string[]): string => {
+    if (meses.length === 1) {
+        return `estacionamiento-${meses[0]}.xlsx`;
+    }
+
+    const ordenados = [...meses].sort();
+
+    return `estacionamiento-${ordenados[0]}_a_${ordenados[ordenados.length - 1]}.xlsx`;
+};
+
+/**
+ * Un libro con una hoja por mes, en el orden en que llegan las rejillas.
+ *
+ * Varios meses no caben en una hoja plana porque las columnas SON los días del
+ * mes: febrero tiene 28 y marzo 31, así que compartir encabezado obligaría a
+ * mentir en uno de los dos. Una hoja por mes es lo que hace `ExcelPernoctaDia`
+ * con el mismo problema.
+ */
+export async function descargarExcelEstacionamiento(
+    rejillas: RejillaExcelEstacionamiento[],
+): Promise<void> {
+    const conFilas = rejillas.filter(rejilla => rejilla.filas.length > 0);
+
+    if (conFilas.length === 0) {
+        return;
+    }
+
+    const libro = new ExcelJS.Workbook();
+
+    conFilas.forEach(rejilla => crearHojaMes(libro, rejilla));
 
     const buffer = await libro.xlsx.writeBuffer();
 
@@ -125,6 +170,6 @@ export async function descargarExcelEstacionamiento(
         new Blob([buffer as ArrayBuffer], {
             type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         }),
-        `estacionamiento-${rejilla.mes}.xlsx`,
+        nombreDelArchivo(conFilas.map(rejilla => rejilla.mes)),
     );
 }

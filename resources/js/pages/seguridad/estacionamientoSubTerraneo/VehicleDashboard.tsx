@@ -37,7 +37,27 @@ const VehicleDashboard = () => {
     const [isDetailOpen, setIsDetailOpen] = useState(false);
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [isVehiclesAlertOpen, setIsVehiclesAlertOpen] = useState(false);
-    const [mesParaExcel, setMesParaExcel] = useState<string | null>(null);
+    /*
+     * Los meses que irán al libro. Un solo mes cuando se pulsa el icono de su
+     * renglón; varios cuando se usan las casillas. El modal no distingue: recibe
+     * siempre una lista.
+     */
+    const [mesesParaExcel, setMesesParaExcel] = useState<string[] | null>(null);
+    /*
+     * La selección NO se borra al cambiar los filtros de mes o año: marcar tres
+     * meses, filtrar para encontrar un cuarto y perder los tres sería peor que
+     * tener marcas fuera de la vista. El contador del botón es lo que impide que
+     * una marca escondida pase desapercibida.
+     */
+    const [seleccionados, setSeleccionados] = useState<string[]>([]);
+
+    const alternarSeleccion = (valor: string) => {
+        setSeleccionados(actuales =>
+            actuales.includes(valor)
+                ? actuales.filter(mes => mes !== valor)
+                : [...actuales, valor],
+        );
+    };
 
     const cargarMeses = async () => {
         try {
@@ -147,6 +167,27 @@ const VehicleDashboard = () => {
                     </div>
 
                     <div className="flex gap-2 items-center">
+                        {seleccionados.length > 0 && (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => setMesesParaExcel(seleccionados)}
+                                    className="flex items-center gap-2 text-[10px] font-black px-4 py-2 rounded border border-emerald-600 bg-emerald-600 text-white transition-all hover:bg-emerald-700 active:scale-95"
+                                >
+                                    <FileSpreadsheet size={14} />
+                                    <span>DESCARGAR SELECCIONADOS ({seleccionados.length})</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSeleccionados([])}
+                                    className="text-[10px] font-black px-3 py-2 rounded border border-slate-200 bg-white text-slate-500 transition-all hover:bg-slate-50"
+                                    title="Quitar la selección"
+                                >
+                                    LIMPIAR
+                                </button>
+                            </>
+                        )}
+
                         <button
                             type="button"
                             onClick={() => setFiltersOpen(!filtersOpen)}
@@ -175,6 +216,32 @@ const VehicleDashboard = () => {
                         <table className="w-full text-left border-collapse min-w-[800px]">
                             <thead>
                                 <tr className="bg-white border-b border-slate-100">
+                                    <th className="px-3 py-4 w-10 text-center">
+                                        {/* Marca o desmarca los meses VISIBLES, no todos: con un filtro
+                                            puesto, marcar lo que no se ve sería una sorpresa. */}
+                                        <input
+                                            type="checkbox"
+                                            className="h-4 w-4 cursor-pointer accent-emerald-600"
+                                            title="Seleccionar los meses visibles"
+                                            checked={
+                                                mesesFiltrados.length > 0 &&
+                                                mesesFiltrados.every(mes =>
+                                                    seleccionados.includes(mes.valor),
+                                                )
+                                            }
+                                            onChange={e => {
+                                                const visibles = mesesFiltrados.map(mes => mes.valor);
+
+                                                setSeleccionados(actuales =>
+                                                    e.target.checked
+                                                        ? [...new Set([...actuales, ...visibles])]
+                                                        : actuales.filter(
+                                                              mes => !visibles.includes(mes),
+                                                          ),
+                                                );
+                                            }}
+                                        />
+                                    </th>
                                     <th className="px-4 py-4 text-[9px] font-black uppercase text-slate-400 text-center w-24">
                                         Periodo
                                     </th>
@@ -193,6 +260,8 @@ const VehicleDashboard = () => {
                                 </tr>
 
                                 <tr className={`bg-slate-50 transition-all duration-300 ease-in-out ${filtersOpen ? 'opacity-100' : 'opacity-0 hidden'}`}>
+                                    <td className="px-3 py-2 border-b border-slate-200" />
+
                                     <td className="px-2 py-2 border-b border-slate-200">
                                         <div className="w-full flex items-center justify-center gap-1 text-[10px] border border-slate-200 p-1.5 rounded bg-white text-slate-500 font-bold uppercase">
                                             <Calendar size={12} className="text-indigo-500" />
@@ -252,7 +321,7 @@ const VehicleDashboard = () => {
                             <tbody>
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={5} className="px-6 py-20 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        <td colSpan={6} className="px-6 py-20 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
                                             Cargando datos...
                                         </td>
                                     </tr>
@@ -263,6 +332,19 @@ const VehicleDashboard = () => {
                                             className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors cursor-pointer"
                                             onClick={() => handleOpenDetail(mes)}
                                         >
+                                            {/* El clic de la casilla no debe abrir el detalle del mes. */}
+                                            <td
+                                                className="px-3 py-4 text-center"
+                                                onClick={e => e.stopPropagation()}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    className="h-4 w-4 cursor-pointer accent-emerald-600"
+                                                    checked={seleccionados.includes(mes.valor)}
+                                                    onChange={() => alternarSeleccion(mes.valor)}
+                                                />
+                                            </td>
+
                                             <td className="px-4 py-4 text-center font-black text-[10px] text-slate-700">
                                                 {mes.valor}
                                             </td>
@@ -302,7 +384,7 @@ const VehicleDashboard = () => {
                                                         type="button"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            setMesParaExcel(mes.valor);
+                                                            setMesesParaExcel([mes.valor]);
                                                         }}
                                                         className="p-2 rounded transition-colors text-slate-400 hover:text-emerald-600"
                                                         title="Descargar Excel del mes"
@@ -326,7 +408,7 @@ const VehicleDashboard = () => {
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={5} className="px-6 py-20 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        <td colSpan={6} className="px-6 py-20 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
                                             No hay registros disponibles
                                         </td>
                                     </tr>
@@ -410,10 +492,10 @@ const VehicleDashboard = () => {
                     </div>
                 </div>
             )}
-            {mesParaExcel !== null && (
+            {mesesParaExcel !== null && (
                 <ModalExcelEstacionamiento
-                    mes={mesParaExcel}
-                    onClose={() => setMesParaExcel(null)}
+                    meses={mesesParaExcel}
+                    onClose={() => setMesesParaExcel(null)}
                 />
             )}
         </div>

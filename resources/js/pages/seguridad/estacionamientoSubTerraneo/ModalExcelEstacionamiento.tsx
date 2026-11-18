@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X, FileSpreadsheet, Download } from 'lucide-react';
 import {
     obtenerExcelEstacionamiento,
@@ -11,15 +11,25 @@ import {
 } from './excelEstacionamientoService';
 
 interface Props {
-    mes: string;
+    /** Uno o varios meses en formato '2026-09'. El libro lleva una hoja por cada uno. */
+    meses: string[];
     onClose: () => void;
 }
 
-export default function ModalExcelEstacionamiento({ mes, onClose }: Props) {
-    const [rejilla, setRejilla] = useState<RejillaExcelEstacionamiento | null>(null);
+export default function ModalExcelEstacionamiento({ meses, onClose }: Props) {
+    const [rejillas, setRejillas] = useState<RejillaExcelEstacionamiento[]>([]);
+    const [fallidos, setFallidos] = useState<string[]>([]);
+    const [mesActivo, setMesActivo] = useState(0);
     const [cargando, setCargando] = useState(true);
     const [descargando, setDescargando] = useState(false);
     const [error, setError] = useState('');
+
+    /*
+     * La dependencia es la clave de texto y no el arreglo: si el padre arma
+     * `meses` en el render, su identidad cambia cada vez y el efecto consultaría
+     * el servidor en bucle.
+     */
+    const clave = meses.join(',');
 
     useEffect(() => {
         let vigente = true;
@@ -27,36 +37,62 @@ export default function ModalExcelEstacionamiento({ mes, onClose }: Props) {
         const consultar = async () => {
             setCargando(true);
             setError('');
+            setFallidos([]);
+            setMesActivo(0);
 
-            try {
-                const resultado = await obtenerExcelEstacionamiento(mes);
+            /*
+             * `allSettled` y no `all`: con varios meses, uno que falle no debe
+             * tirar los demás. Se enseña lo que llegó y se dice cuáles no.
+             */
+            const resultados = await Promise.allSettled(
+                meses.map(mes => obtenerExcelEstacionamiento(mes)),
+            );
 
-                if (vigente) {
-                    setRejilla(resultado);
-                }
-            } catch (e: any) {
-                if (vigente) {
-                    setRejilla(null);
-                    setError(e?.message || 'No fue posible consultar los registros del mes.');
-                }
-            } finally {
-                if (vigente) {
-                    setCargando(false);
-                }
+            if (!vigente) {
+                return;
             }
+
+            const llegaron: RejillaExcelEstacionamiento[] = [];
+            const noLlegaron: string[] = [];
+
+            resultados.forEach((resultado, indice) => {
+                if (resultado.status === 'fulfilled') {
+                    llegaron.push(resultado.value);
+                } else {
+                    noLlegaron.push(meses[indice]);
+                }
+            });
+
+            setRejillas(llegaron);
+            setFallidos(noLlegaron);
+
+            if (llegaron.length === 0) {
+                setError('No fue posible consultar los registros de ningún mes.');
+            }
+
+            setCargando(false);
         };
 
-        consultar();
+        void consultar();
 
-        // Si el modal se cierra antes de que llegue la respuesta, no se toca el estado
-        // de un componente ya desmontado.
+        // Si el modal se cierra antes de que lleguen las respuestas, no se toca el
+        // estado de un componente ya desmontado.
         return () => {
             vigente = false;
         };
-    }, [mes]);
+    }, [clave]);
+
+    const conFilas = useMemo(
+        () => rejillas.filter(rejilla => rejilla.filas.length > 0),
+        [rejillas],
+    );
+
+    const rejilla = rejillas[mesActivo] ?? null;
+    const hayAlgoQueDescargar = conFilas.length > 0;
+    const dias = rejilla ? Array.from({ length: rejilla.dias }, (_, i) => i + 1) : [];
 
     const descargar = async () => {
-        if (!rejilla || rejilla.filas.length === 0) {
+        if (!hayAlgoQueDescargar) {
             return;
         }
 
@@ -64,7 +100,7 @@ export default function ModalExcelEstacionamiento({ mes, onClose }: Props) {
         setError('');
 
         try {
-            await descargarExcelEstacionamiento(rejilla);
+            await descargarExcelEstacionamiento(conFilas);
         } catch (e: any) {
             setError(e?.message || 'No fue posible generar el archivo de Excel.');
         } finally {
@@ -72,8 +108,10 @@ export default function ModalExcelEstacionamiento({ mes, onClose }: Props) {
         }
     };
 
-    const hayFilas = rejilla !== null && rejilla.filas.length > 0;
-    const dias = rejilla ? Array.from({ length: rejilla.dias }, (_, i) => i + 1) : [];
+    const encabezado =
+        meses.length === 1
+            ? `Vista previa del Excel: ${tituloDelMes(meses[0])}`
+            : `Vista previa del Excel: ${meses.length} meses`;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -81,9 +119,7 @@ export default function ModalExcelEstacionamiento({ mes, onClose }: Props) {
                 <div className="p-4 border-b flex justify-between items-center bg-slate-50">
                     <div className="flex items-center gap-2">
                         <FileSpreadsheet className="text-emerald-600" size={20} />
-                        <h3 className="font-bold text-slate-800">
-                            Vista previa del Excel: {tituloDelMes(mes)}
-                        </h3>
+                        <h3 className="font-bold text-slate-800">{encabezado}</h3>
                     </div>
                     <button
                         onClick={onClose}
@@ -93,6 +129,27 @@ export default function ModalExcelEstacionamiento({ mes, onClose }: Props) {
                     </button>
                 </div>
 
+                {/* Una pestaña por mes, como en la vista previa de Pernocta del día. */}
+                {!cargando && rejillas.length > 1 && (
+                    <div className="flex gap-1 overflow-x-auto border-b bg-white px-4 pt-3">
+                        {rejillas.map((cada, indice) => (
+                            <button
+                                key={cada.mes}
+                                type="button"
+                                onClick={() => setMesActivo(indice)}
+                                className={`whitespace-nowrap rounded-t-lg px-4 py-2 text-xs font-bold transition-colors ${
+                                    indice === mesActivo
+                                        ? 'bg-emerald-600 text-white'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                            >
+                                {tituloDelMes(cada.mes)}
+                                {cada.filas.length === 0 && ' (vacío)'}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
                 <div className="overflow-auto flex-1 bg-white p-4">
                     {error && (
                         <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 text-red-700 text-xs font-medium">
@@ -100,8 +157,20 @@ export default function ModalExcelEstacionamiento({ mes, onClose }: Props) {
                         </div>
                     )}
 
+                    {fallidos.length > 0 && (
+                        <div className="mb-3 px-3 py-2 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium">
+                            No se pudieron consultar {fallidos.length}{' '}
+                            {fallidos.length === 1 ? 'mes' : 'meses'} (
+                            {fallidos.map(tituloDelMes).join(', ')}); el resto sí está.
+                        </div>
+                    )}
+
                     {cargando && (
-                        <p className="text-sm text-slate-400 italic">Consultando el mes...</p>
+                        <p className="text-sm text-slate-400 italic">
+                            {meses.length === 1
+                                ? 'Consultando el mes...'
+                                : `Consultando ${meses.length} meses...`}
+                        </p>
                     )}
 
                     {!cargando && rejilla !== null && rejilla.filas.length === 0 && (
@@ -110,12 +179,12 @@ export default function ModalExcelEstacionamiento({ mes, onClose }: Props) {
                         </p>
                     )}
 
-                    {!cargando && hayFilas && (
+                    {!cargando && rejilla !== null && rejilla.filas.length > 0 && (
                         <>
                             <p className="mb-3 text-xs text-slate-500">
-                                {rejilla!.filas.length}{' '}
-                                {rejilla!.filas.length === 1 ? 'placa' : 'placas'} en{' '}
-                                {rejilla!.dias} días.
+                                {rejilla.filas.length}{' '}
+                                {rejilla.filas.length === 1 ? 'placa' : 'placas'} en{' '}
+                                {rejilla.dias} días.
                             </p>
                             <table className="text-left text-[11px] border-collapse">
                                 <thead className="bg-slate-100">
@@ -142,7 +211,7 @@ export default function ModalExcelEstacionamiento({ mes, onClose }: Props) {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {rejilla!.filas.map(fila => {
+                                    {rejilla.filas.map(fila => {
                                         const presentes = new Set(fila.dias);
 
                                         return (
@@ -179,21 +248,30 @@ export default function ModalExcelEstacionamiento({ mes, onClose }: Props) {
                     )}
                 </div>
 
-                <div className="p-4 border-t bg-slate-50 flex justify-end gap-2">
-                    <button
-                        onClick={onClose}
-                        className="px-6 py-2 bg-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-300 transition-colors"
-                    >
-                        Cerrar
-                    </button>
-                    <button
-                        onClick={descargar}
-                        disabled={!hayFilas || descargando}
-                        className="flex items-center gap-2 px-6 py-2 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                        <Download size={16} />
-                        {descargando ? 'Generando...' : 'Descargar Excel'}
-                    </button>
+                <div className="p-4 border-t bg-slate-50 flex justify-between items-center gap-2">
+                    <p className="text-xs text-slate-500">
+                        {hayAlgoQueDescargar && rejillas.length > 1
+                            ? `El archivo llevará ${conFilas.length} ${
+                                  conFilas.length === 1 ? 'hoja' : 'hojas'
+                              }; los meses vacíos no se incluyen.`
+                            : ''}
+                    </p>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={onClose}
+                            className="px-6 py-2 bg-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-300 transition-colors"
+                        >
+                            Cerrar
+                        </button>
+                        <button
+                            onClick={descargar}
+                            disabled={!hayAlgoQueDescargar || descargando}
+                            className="flex items-center gap-2 px-6 py-2 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                            <Download size={16} />
+                            {descargando ? 'Generando...' : 'Descargar Excel'}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
