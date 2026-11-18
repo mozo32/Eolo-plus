@@ -158,16 +158,17 @@ export default function ServicioComisariatoForm({ isEdit, data, onSuccess }: Pro
             const pendientes = fotos.filter(foto => foto.id === null);
             const fallidas: number[] = [];
 
-            if (pendientes.length > 0 && !servicioId) {
-                throw new Error("El servicio se guardó, pero el servidor no devolvió su id para adjuntar las fotografías; puedes volver a tomarlas desde la tabla.");
-            }
-
-            // Una por una: el servidor asigna `orden` leyendo el máximo, y en paralelo dos peticiones pedirían el mismo sitio.
-            for (const [indice, foto] of pendientes.entries()) {
-                try {
-                    await subirEvidenciaComisariato(servicioId, foto.url);
-                } catch {
-                    fallidas.push(indice + 1);
+            // Sin id no hay dónde colgar las fotos: todas cuentan como fallidas, pero el servicio ya está guardado.
+            if (!servicioId) {
+                pendientes.forEach((_, indice) => fallidas.push(indice + 1));
+            } else {
+                // Una por una: el servidor asigna `orden` leyendo el máximo, y en paralelo dos peticiones pedirían el mismo sitio.
+                for (const [indice, foto] of pendientes.entries()) {
+                    try {
+                        await subirEvidenciaComisariato(servicioId, foto.url);
+                    } catch {
+                        fallidas.push(indice + 1);
+                    }
                 }
             }
 
